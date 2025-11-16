@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 # Python
 __pycache__/
 __init__
@@ -26,4 +27,34 @@ budget_familiare.db
 
 # OS generated files
 .DS_Store
+=======
+# Python
+__pycache__/
+__init__
+*.pyc
+*.pyo
+*.pyd
+*.log
+venv/
+.venv/
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# Credentials and sensitive data (CRITICAL!)
+credentials.json
+token.json
+budget_familiare.db
+
+# IDE and editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS generated files
+.DS_Store
+>>>>>>> Stashed changes
 Thumbs.db
