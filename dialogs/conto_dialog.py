@@ -1,0 +1,284 @@
+import flet as ft
+import datetime
+import traceback
+from db.gestione_db import (
+    aggiungi_conto,
+    modifica_conto,
+    compra_asset,
+    aggiungi_transazione,
+    imposta_conto_default_utente,
+    ottieni_conto_default_utente,
+    ottieni_conti_utente  # Importa per popolare il dropdown
+)
+
+
+class ContoDialog(ft.AlertDialog):
+    def __init__(self, controller):
+        super().__init__()
+        self.controller = controller
+        self.page = controller.page
+        self.loc = controller.loc
+
+        # Controlli del dialogo
+        self.txt_conto_nome = ft.TextField()
+        self.dd_conto_tipo = ft.Dropdown(on_change=self._cambia_tipo_conto_in_dialog)
+        self.txt_conto_iban = ft.TextField()
+        self.txt_conto_saldo_iniziale = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
+
+        self.container_saldo_iniziale = ft.Container(
+            content=ft.Column([
+                ft.Text(weight="bold"),
+                self.txt_conto_saldo_iniziale
+            ]),
+            visible=True
+        )
+
+        self.lv_asset_iniziali = ft.Column(scroll=ft.ScrollMode.ADAPTIVE, spacing=10, height=200)
+        self.btn_aggiungi_riga_asset = ft.TextButton(icon=ft.Icons.ADD, on_click=self._aggiungi_riga_asset_iniziale)
+
+        self.container_asset_iniziali = ft.Container(
+            content=ft.Column([
+                ft.Text(weight="bold"),
+                ft.Text(size=12, color=ft.Colors.GREY_500),
+                self.lv_asset_iniziali,
+                self.btn_aggiungi_riga_asset
+            ]),
+            visible=False
+        )
+
+        self.chk_conto_default = ft.Checkbox(value=False)
+
+        # Struttura del dialogo
+        self.modal = True
+        self.title = ft.Text()
+        self.content = ft.Column(
+            [
+                self.txt_conto_nome,
+                self.dd_conto_tipo,
+                self.txt_conto_iban,
+                ft.Divider(),
+                self.container_saldo_iniziale,
+                self.container_asset_iniziali,
+                self.chk_conto_default
+            ],
+            tight=True,
+            spacing=10,
+            height=550,
+            width=650,
+            scroll=ft.ScrollMode.ADAPTIVE
+        )
+        self.actions = [
+            ft.TextButton(on_click=self._chiudi_dialog_conto),
+            ft.TextButton(on_click=self._salva_conto),
+        ]
+        self.actions_alignment = ft.MainAxisAlignment.END
+
+    def _update_texts(self):
+        """Aggiorna tutti i testi fissi con le traduzioni correnti."""
+        loc = self.loc
+        self.title.value = loc.get("manage_account")
+        self.txt_conto_nome.label = loc.get("account_name_placeholder")
+        self.dd_conto_tipo.label = loc.get("account_type")
+        self.dd_conto_tipo.options = [
+            ft.dropdown.Option("Corrente"), ft.dropdown.Option("Risparmio"),
+            ft.dropdown.Option("Investimento"), ft.dropdown.Option("Fondo Pensione"),
+            ft.dropdown.Option("Contanti"), ft.dropdown.Option("Altro"),
+        ]
+        self.txt_conto_iban.label = loc.get("iban_optional")
+        self.container_saldo_iniziale.content.controls[0].value = loc.get("set_initial_balance")
+        self.txt_conto_saldo_iniziale.label = loc.get("initial_balance_optional")
+        self.txt_conto_saldo_iniziale.prefix_text = loc.currencies[loc.currency]['symbol']
+
+        self.container_asset_iniziali.content.controls[0].value = loc.get("initial_assets")
+        self.container_asset_iniziali.content.controls[1].value = loc.get("initial_assets_desc")
+        self.btn_aggiungi_riga_asset.text = loc.get("add_initial_asset")
+
+        self.chk_conto_default.label = loc.get("set_as_default_account")
+
+        self.actions[0].text = loc.get("cancel")
+        self.actions[1].text = loc.get("save")
+
+    def _aggiungi_riga_asset_iniziale(self, e=None):
+        loc = self.loc
+        riga = ft.Row(
+            [
+                ft.TextField(label=loc.get("ticker"), width=100, data="ticker"),
+                ft.TextField(label=loc.get("asset_name"), expand=True, data="nome"),
+                ft.TextField(label=loc.get("quantity"), width=100, keyboard_type=ft.KeyboardType.NUMBER,
+                             data="quantita"),
+                ft.TextField(label=loc.get("current_unit_price"), prefix=loc.currencies[loc.currency]['symbol'],
+                             width=110, keyboard_type=ft.KeyboardType.NUMBER, data="prezzo_attuale"),
+                ft.TextField(label=loc.get("past_gain_loss"), prefix=loc.currencies[loc.currency]['symbol'], width=100,
+                             keyboard_type=ft.KeyboardType.NUMBER, data="gainloss", value="0"),
+                ft.IconButton(
+                    icon=ft.Icons.REMOVE_CIRCLE_OUTLINE,
+                    icon_color=ft.Colors.RED_400,
+                    tooltip=loc.get("remove_asset"),
+                    on_click=lambda e: self._rimuovi_riga_asset_iniziale(e.control.parent)
+                )
+            ],
+            spacing=5,
+            vertical_alignment=ft.CrossAxisAlignment.START
+        )
+        self.lv_asset_iniziali.controls.append(riga)
+        if self.open:
+            self.content.update()
+
+    def _rimuovi_riga_asset_iniziale(self, riga_control):
+        self.lv_asset_iniziali.controls.remove(riga_control)
+        if self.open:
+            self.content.update()
+
+    def _cambia_tipo_conto_in_dialog(self, e):
+        tipo = self.dd_conto_tipo.value
+        self.chk_conto_default.visible = (tipo not in ['Investimento', 'Fondo Pensione'])
+        if tipo == 'Investimento':
+            self.txt_conto_iban.visible = True
+            self.container_saldo_iniziale.visible = False
+            self.container_asset_iniziali.visible = True
+        elif tipo == 'Contanti':
+            self.txt_conto_iban.visible = False
+            self.container_saldo_iniziale.visible = True
+            self.container_asset_iniziali.visible = False
+        else:
+            self.txt_conto_iban.visible = True
+            self.container_saldo_iniziale.visible = True
+            self.container_asset_iniziali.visible = False
+        if self.open:
+            self.content.update()
+
+    def _chiudi_dialog_conto(self, e):
+        self.open = False
+        self.page.update()
+
+    def apri_dialog_conto(self, e, conto_data=None):
+        self._update_texts()
+        self.txt_conto_nome.error_text = None
+        self.txt_conto_iban.error_text = None
+        self.txt_conto_saldo_iniziale.error_text = None
+        self.lv_asset_iniziali.controls.clear()
+        self._aggiungi_riga_asset_iniziale()
+
+        id_utente = self.controller.get_user_id()
+        conto_default = ottieni_conto_default_utente(id_utente)
+        conto_default_id = conto_default['id'] if conto_default and conto_default['tipo'] == 'personale' else None
+
+        if conto_data:
+            self.title.value = self.loc.get("edit_account")
+            self.data = conto_data['id_conto']
+            self.txt_conto_nome.value = conto_data['nome_conto']
+            self.dd_conto_tipo.value = conto_data['tipo']
+            self.txt_conto_iban.value = conto_data['iban']
+            self.container_saldo_iniziale.visible = False
+            self.container_asset_iniziali.visible = False
+            self.chk_conto_default.visible = (conto_data['tipo'] not in ['Investimento', 'Fondo Pensione'])
+            self.txt_conto_iban.visible = (conto_data['tipo'] != 'Contanti')
+            self.chk_conto_default.value = (conto_data['id_conto'] == conto_default_id)
+        else:
+            self.title.value = self.loc.get("add_account")
+            self.data = None
+            self.txt_conto_nome.value = ""
+            self.dd_conto_tipo.value = "Corrente"
+            self.txt_conto_iban.value = ""
+            self.txt_conto_iban.visible = True
+            self.txt_conto_saldo_iniziale.value = ""
+            self.container_saldo_iniziale.visible = True
+            self.container_asset_iniziali.visible = False
+            self.chk_conto_default.visible = True
+            self.chk_conto_default.value = False
+
+        self.page.dialog = self
+        self.open = True
+        self.page.update()
+
+    def _salva_conto(self, e):
+        try:
+            is_valid = True
+            self.txt_conto_nome.error_text = None
+            self.txt_conto_iban.error_text = None
+            self.txt_conto_saldo_iniziale.error_text = None
+
+            nome = self.txt_conto_nome.value
+            tipo = self.dd_conto_tipo.value
+            iban = self.txt_conto_iban.value if self.txt_conto_iban.visible else None
+
+            if not nome:
+                self.txt_conto_nome.error_text = self.loc.get("fill_all_fields")
+                is_valid = False
+
+            id_conto_da_modificare = self.data
+            saldo_iniziale = 0.0
+            lista_asset_iniziali = []
+
+            if not id_conto_da_modificare:
+                if tipo == 'Investimento':
+                    for riga in self.lv_asset_iniziali.controls:
+                        fields = {ctrl.data: ctrl for ctrl in riga.controls if
+                                  isinstance(ctrl, ft.TextField) and ctrl.data}
+                        # ... (logica asset)
+                else:
+                    saldo_str = self.txt_conto_saldo_iniziale.value.replace(",", ".")
+                    if saldo_str:
+                        try:
+                            saldo_iniziale = float(saldo_str)
+                        except ValueError:
+                            self.txt_conto_saldo_iniziale.error_text = self.loc.get("invalid_amount")
+                            is_valid = False
+
+            if not is_valid:
+                self.content.update()
+                return
+
+            utente_id = self.controller.get_user_id()
+            success = False
+            messaggio = ""
+            new_conto_id = None
+
+            if id_conto_da_modificare:
+                success = modifica_conto(id_conto_da_modificare, utente_id, nome, tipo, iban)
+                messaggio = "modificato" if success else "errore modifica"
+                new_conto_id = id_conto_da_modificare
+            else:
+                new_conto_id = aggiungi_conto(utente_id, nome, tipo, iban)
+                if new_conto_id:
+                    success = True
+                    messaggio = "aggiunto"
+                    if saldo_iniziale != 0:
+                        aggiungi_transazione(new_conto_id, datetime.date.today().strftime('%Y-%m-%d'),
+                                             "Saldo Iniziale", saldo_iniziale)
+                    for asset in lista_asset_iniziali:
+                        compra_asset(
+                            id_conto_investimento=new_conto_id,
+                            ticker=asset['ticker'], nome_asset=asset['nome'], quantita=asset['quantita'],
+                            costo_unitario_nuovo=asset['prezzo_attuale'], tipo_mov='INIZIALE',
+                            prezzo_attuale_override=asset['prezzo_attuale']
+                        )
+                else:
+                    success = False
+                    messaggio = "errore aggiunta"
+
+            if success:
+                # Gestisci il conto di default
+                if self.chk_conto_default.value and new_conto_id:
+                    imposta_conto_default_utente(utente_id, id_conto_personale=new_conto_id)
+                else:
+                    conto_default = ottieni_conto_default_utente(utente_id)
+                    if conto_default and conto_default.get('id') == new_conto_id:
+                        imposta_conto_default_utente(utente_id, None)
+
+                self.controller.show_snack_bar(f"Conto {messaggio} con successo!", success=True)
+                self.open = False
+                self.controller.update_all_views()
+                self.page.update()
+            else:
+                if not id_conto_da_modificare:
+                    self.txt_conto_iban.error_text = self.loc.get("iban_in_use_or_invalid")
+                    self.content.update()
+                self.page.update()
+                return
+
+        except Exception as ex:
+            print(f"Errore salvataggio conto: {ex}")
+            traceback.print_exc()
+            self.controller.show_snack_bar(f"Errore inaspettato: {ex}", success=False)
+            self.page.update()
