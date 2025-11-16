@@ -58,6 +58,15 @@ class PrestitiTab(ft.Container):
 
     def _crea_widget_prestito(self, prestito, theme):
         loc = self.controller.loc
+        
+        # Calcolo progresso
+        mesi_totali = prestito['numero_mesi_totali']
+        rate_pagate = prestito.get('rate_pagate', 0)
+        progresso = rate_pagate / mesi_totali if mesi_totali > 0 else 0
+        mesi_rimanenti = mesi_totali - rate_pagate
+
+        progress_bar = ft.ProgressBar(value=progresso, width=200, color=theme.primary, bgcolor=theme.surface_variant)
+        
         return ft.Container(
             content=ft.Column([
                 ft.Row([
@@ -76,8 +85,15 @@ class PrestitiTab(ft.Container):
                 ft.Row([
                     self._crea_info_prestito(loc.get("monthly_installment"),
                                              loc.format_currency(prestito['importo_rata']), theme),
-                    self._crea_info_prestito(loc.get("total_months"), prestito['numero_mesi_totali'], theme),
+                    self._crea_info_prestito(loc.get("total_installments"), mesi_totali, theme),
                 ]),
+                ft.Column([
+                    ft.Row([
+                        ft.Text(f"{loc.get('paid_installments')}: {rate_pagate}/{mesi_totali}"),
+                        ft.Text(f"{loc.get('remaining_installments')}: {mesi_rimanenti}")
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    progress_bar
+                ], spacing=5),
                 ft.Row([
                     ft.ElevatedButton(loc.get("pay_installment"), icon=ft.Icons.PAYMENT,
                                       on_click=lambda e, p=prestito: self.controller.prestito_dialogs.apri_dialog_paga_rata(

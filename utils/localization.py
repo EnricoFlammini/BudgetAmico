@@ -187,6 +187,8 @@ STRINGS = {
         "payment_category": "Categoria di Pagamento",
         "execute_payment": "Esegui Pagamento",
         "total_installments": "Totale Rate",
+        "paid_installments": "Rate Pagate",
+        "remaining_installments": "Rate Rimanenti",
 
         # Scheda Conti Personali
         "net_worth": "Patrimonio Netto",
