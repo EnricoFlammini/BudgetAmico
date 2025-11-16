@@ -104,7 +104,7 @@ class PrestitoDialogs:
         self.dd_conto_pagamento.label = loc.get("payment_account")
         self.dd_categoria_pagamento.label = loc.get("payment_category")
 
-    def apri_dialog_prestito(self, prestito_data=None):
+    def apri_dialog_prestito(self, prestito_data=None, tipo_default=None):
         self._update_texts()
         self._reset_fields_prestito()
         self._popola_dropdowns_prestito()
@@ -127,6 +127,8 @@ class PrestitoDialogs:
         else:
             self.dialog_prestito.title.value = self.loc.get("add_loan")
             self.prestito_in_modifica = None
+            if tipo_default:
+                self.dd_tipo.value = tipo_default
 
         self.page.dialog = self.dialog_prestito
         self.dialog_prestito.open = True
@@ -144,6 +146,9 @@ class PrestitoDialogs:
         self.dd_giorno_scadenza.value = "1"
         self.dd_conto_default.value = None
         self.dd_categoria_default.value = None
+        # Reset errori
+        for field in [self.txt_nome, self.txt_numero_rate, self.txt_importo_finanziato, self.txt_importo_rata]:
+            field.error_text = None
 
     def _popola_dropdowns_prestito(self):
         id_famiglia = self.controller.get_family_id()
@@ -163,8 +168,67 @@ class PrestitoDialogs:
         self.page.update()
 
     def _salva_prestito_cliccato(self, e):
-        # Logica di salvataggio... (già implementata)
-        pass
+        try:
+            # Validazione
+            is_valid = True
+            for field in [self.txt_nome, self.txt_numero_rate, self.txt_importo_finanziato, self.txt_importo_rata]:
+                if not field.value:
+                    field.error_text = self.loc.get("required_field")
+                    is_valid = False
+
+            if not is_valid:
+                self.page.update()
+                return
+
+            # Raccolta dati
+            id_famiglia = self.controller.get_family_id()
+            nome = self.txt_nome.value
+            tipo = self.dd_tipo.value
+            descrizione = self.txt_descrizione.value
+            data_inizio = self.txt_data_inizio.value
+            numero_rate = int(self.txt_numero_rate.value)
+            importo_finanziato = float(self.txt_importo_finanziato.value.replace(",", "."))
+            importo_interessi = float(
+                self.txt_importo_interessi.value.replace(",", ".")) if self.txt_importo_interessi.value else 0.0
+            importo_rata = float(self.txt_importo_rata.value.replace(",", "."))
+            giorno_scadenza = int(self.dd_giorno_scadenza.value)
+            id_conto = self.dd_conto_default.value
+            id_categoria = self.dd_categoria_default.value
+
+            success = False
+            if self.prestito_in_modifica:
+                success = modifica_prestito(
+                    id_prestito=self.prestito_in_modifica['id_prestito'],
+                    nome=nome, tipo=tipo, descrizione=descrizione, data_inizio=data_inizio,
+                    numero_mesi_totali=numero_rate, importo_finanziato=importo_finanziato,
+                    importo_interessi=importo_interessi, importo_rata=importo_rata,
+                    giorno_scadenza_rata=giorno_scadenza, id_conto_default=id_conto,
+                    id_categoria_default=id_categoria, importo_residuo=self.prestito_in_modifica['importo_residuo']
+                )
+            else:
+                success = aggiungi_prestito(
+                    id_famiglia=id_famiglia, nome=nome, tipo=tipo, descrizione=descrizione,
+                    data_inizio=data_inizio, numero_mesi_totali=numero_rate,
+                    importo_finanziato=importo_finanziato, importo_interessi=importo_interessi,
+                    importo_rata=importo_rata, giorno_scadenza_rata=giorno_scadenza,
+                    id_conto_default=id_conto, id_categoria_default=id_categoria, importo_residuo=importo_finanziato
+                )
+
+            if success:
+                self.controller.show_snack_bar("Prestito salvato con successo!", success=True)
+                self.dialog_prestito.open = False
+                self.controller.db_write_operation()
+            else:
+                self.controller.show_snack_bar("Errore durante il salvataggio del prestito.", success=False)
+
+        except ValueError:
+            self.controller.show_snack_bar(self.loc.get("invalid_amount"), success=False)
+        except Exception as ex:
+            print(f"Errore salvataggio prestito: {ex}")
+            traceback.print_exc()
+            self.controller.show_snack_bar(f"Errore inaspettato: {ex}", success=False)
+
+        self.page.update()
 
     def apri_dialog_paga_rata(self, prestito_data):
         self._update_texts()

@@ -19,7 +19,7 @@ class ImmobileDialog(ft.AlertDialog):
         self.txt_valore_acquisto = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.txt_valore_attuale = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.chk_nuda_proprieta = ft.Checkbox()
-        self.dd_prestito_collegato = ft.Dropdown()
+        self.dd_prestito_collegato = ft.Dropdown(on_change=self._on_prestito_change)
 
         self.content = ft.Column(
             [
@@ -92,10 +92,21 @@ class ImmobileDialog(ft.AlertDialog):
     def _popola_dropdown_prestiti(self):
         id_famiglia = self.controller.get_family_id()
         prestiti = ottieni_prestiti_famiglia(id_famiglia)
-        self.dd_prestito_collegato.options = [ft.dropdown.Option(key=None, text="Nessuno")]
+        self.dd_prestito_collegato.options = [
+            ft.dropdown.Option(key=None, text="Nessuno"),
+            ft.dropdown.Option(key="__new__", text=self.loc.get("create_new_mortgage"))
+        ]
         self.dd_prestito_collegato.options.extend(
             [ft.dropdown.Option(key=p['id_prestito'], text=p['nome']) for p in prestiti if p['tipo'] == 'Mutuo']
         )
+
+    def _on_prestito_change(self, e):
+        if self.dd_prestito_collegato.value == "__new__":
+            # Chiudi questo dialogo e apri quello per creare un prestito
+            self.open = False
+            self.controller.page.update()
+            self.controller.prestito_dialogs.apri_dialog_prestito(tipo_default='Mutuo')
+
 
     def chiudi_dialog(self, e):
         self.open = False

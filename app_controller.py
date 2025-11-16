@@ -46,7 +46,7 @@ class AppController:
         # Controlli UI
         self.txt_nome_famiglia = ft.TextField(label="Nome della tua Famiglia", autofocus=True)
         self.txt_errore_setup = ft.Text(value="", visible=False)
-        
+
         # Inizializza tutti i dialoghi e le viste
         self._init_dialogs_and_views()
 
@@ -102,7 +102,7 @@ class AppController:
             actions=[ft.TextButton("Chiudi", on_click=self._chiudi_info_dialog)],
             actions_alignment=ft.MainAxisAlignment.END,
         )
-        
+
         self.page.overlay.extend([
             self.transaction_dialog, self.conto_dialog, self.admin_dialogs.dialog_modifica_cat,
             self.admin_dialogs.dialog_modifica_ruolo, self.admin_dialogs.dialog_invito_membri,
@@ -119,7 +119,8 @@ class AppController:
         try:
             file_data = self.page.session.get("excel_export_data")
             if e.path and file_data:
-                with open(e.path, "wb") as f: f.write(file_data)
+                with open(e.path, "wb") as f:
+                    f.write(file_data)
                 self.show_snack_bar(f"File salvato in: {e.path}", success=True)
                 self.page.session.remove("excel_export_data")
             else:
@@ -182,14 +183,19 @@ class AppController:
         if id_famiglia:
             pagamenti_fatti = check_e_paga_rate_scadute(id_famiglia)
             spese_fisse_eseguite = check_e_processa_spese_fisse(id_famiglia)
-            if pagamenti_fatti > 0: self.show_snack_bar(f"{pagamenti_fatti} pagamenti rata automatici eseguiti.", success=True)
-            if spese_fisse_eseguite > 0: self.show_snack_bar(f"{spese_fisse_eseguite} spese fisse automatiche eseguite.", success=True)
+            if pagamenti_fatti > 0: self.show_snack_bar(f"{pagamenti_fatti} pagamenti rata automatici eseguiti.",
+                                                        success=True)
+            if spese_fisse_eseguite > 0: self.show_snack_bar(
+                f"{spese_fisse_eseguite} spese fisse automatiche eseguite.", success=True)
 
         self.update_all_views(is_initial_load=True)
         self.page.update()
 
-    def _download_confirmato(self, e): pass
-    def _download_rifiutato(self, e): pass
+    def _download_confirmato(self, e):
+        pass
+
+    def _download_rifiutato(self, e):
+        pass
 
     def backup_dati_clicked(self):
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -332,8 +338,10 @@ class AppController:
                 self.txt_nome_famiglia,
                 self.txt_errore_setup,
                 ft.Container(height=10),
-                ft.ElevatedButton("Crea Famiglia e Continua", icon=ft.Icons.ROCKET_LAUNCH, on_click=self._completa_setup_admin, width=350),
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER, expand=True, width=350)
+                ft.ElevatedButton("Crea Famiglia e Continua", icon=ft.Icons.ROCKET_LAUNCH,
+                                  on_click=self._completa_setup_admin, width=350),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER, expand=True,
+                width=350)
         ], vertical_alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
     def _completa_setup_admin(self, e):
@@ -352,7 +360,7 @@ class AppController:
         try:
             new_family_id = crea_famiglia_e_admin(nome_famiglia, utente['id'])
             if not new_family_id: raise Exception("Creazione famiglia fallita. Nome duplicato?")
-            
+
             aggiungi_categorie_iniziali(new_family_id)
             self.page.session.set("id_famiglia", new_family_id)
             self.page.session.set("ruolo_utente", "admin")
@@ -372,11 +380,14 @@ class AppController:
                 ft.Icon(ft.Icons.TIMER, size=60, color=theme.secondary),
                 ft.Text(f"Ciao, {username}!", size=30, weight=ft.FontWeight.BOLD),
                 ft.Text("La tua registrazione è completata."),
-                ft.Text("Chiedi all'amministratore della tua famiglia di aggiungerti.", text_align=ft.TextAlign.CENTER, width=300),
-                ft.Text(f"L'amministratore dovrà cercarti usando il tuo username: '{username}'", text_align=ft.TextAlign.CENTER, weight=ft.FontWeight.BOLD, width=300),
+                ft.Text("Chiedi all'amministratore della tua famiglia di aggiungerti.", text_align=ft.TextAlign.CENTER,
+                        width=300),
+                ft.Text(f"L'amministratore dovrà cercarti usando il tuo username: '{username}'",
+                        text_align=ft.TextAlign.CENTER, weight=ft.FontWeight.BOLD, width=300),
                 ft.Container(height=20),
                 ft.TextButton("Logout", icon=ft.Icons.LOGOUT, on_click=self.logout)
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER, expand=True, spacing=10)
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER, expand=True,
+                spacing=10)
         ], vertical_alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
     def logout(self, e=None):
