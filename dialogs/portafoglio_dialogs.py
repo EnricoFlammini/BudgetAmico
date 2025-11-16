@@ -168,9 +168,9 @@ class PortafoglioDialogs:
                     ft.DataCell(ft.Text(f"{asset['quantita']:.4f}")),
                     ft.DataCell(ft.Text(loc.format_currency(asset['prezzo_attuale_manuale']))),
                     ft.DataCell(ft.Text(loc.format_currency(asset['gain_loss_unitario']),
-                                        color=ft.colors.GREEN if asset['gain_loss_unitario'] >= 0 else ft.colors.RED)),
+                                        color=ft.Colors.GREEN if asset['gain_loss_unitario'] >= 0 else ft.Colors.RED)),
                     ft.DataCell(ft.Text(loc.format_currency(asset['gain_loss_totale']),
-                                        color=ft.colors.GREEN if asset['gain_loss_totale'] >= 0 else ft.colors.RED)),
+                                        color=ft.Colors.GREEN if asset['gain_loss_totale'] >= 0 else ft.Colors.RED)),
                     ft.DataCell(ft.Row([
                         ft.IconButton(icon=ft.Icons.EDIT, tooltip=loc.get("edit"), data=asset,
                                       on_click=self._apri_dialog_modifica_asset),
@@ -181,7 +181,7 @@ class PortafoglioDialogs:
             )
         self.txt_valore_totale.value = loc.format_currency(valore_totale)
         self.txt_gain_loss_totale.value = loc.format_currency(gain_loss_totale)
-        self.txt_gain_loss_totale.color = ft.colors.GREEN if gain_loss_totale >= 0 else ft.colors.RED
+        self.txt_gain_loss_totale.color = ft.Colors.GREEN if gain_loss_totale >= 0 else ft.Colors.RED
 
         if self.dialog_portafoglio.open:
             self.dialog_portafoglio.update()
