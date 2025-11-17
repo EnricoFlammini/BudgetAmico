@@ -17,6 +17,7 @@ class ImmobiliTab(ft.Container):
         self.content = ft.Column(expand=True, spacing=10)
 
     def update_view_data(self, is_initial_load=False):
+        theme = self.page.theme.color_scheme if self.page and self.page.theme else ft.ColorScheme()
         self.content.controls = self.build_controls()
 
         id_famiglia = self.controller.get_family_id()
@@ -30,7 +31,7 @@ class ImmobiliTab(ft.Container):
             self.lv_immobili.controls.append(ft.Text(self.controller.loc.get("no_properties")))
         else:
             for immobile in immobili:
-                self.lv_immobili.controls.append(self._crea_widget_immobile(immobile))
+                self.lv_immobili.controls.append(self._crea_widget_immobile(immobile, theme))
 
         if self.page:
             self.page.update()
@@ -55,7 +56,7 @@ class ImmobiliTab(ft.Container):
             self.lv_immobili
         ]
 
-    def _crea_widget_immobile(self, immobile):
+    def _crea_widget_immobile(self, immobile, theme):
         loc = self.controller.loc
         valore_netto = immobile['valore_attuale'] - (immobile.get('valore_mutuo_residuo') or 0)
 
@@ -64,39 +65,39 @@ class ImmobiliTab(ft.Container):
                 ft.Row([
                     ft.Text(immobile['nome'], weight=ft.FontWeight.BOLD, size=18),
                     ft.Text(f"{immobile['via']}, {immobile['citta']}", size=12, italic=True,
-                            color=ft.colors.GREY_500)
+                            color=theme.on_surface_variant)
                 ]),
                 ft.Divider(height=5),
                 ft.Row([
                     self._crea_info_immobile(loc.get("purchase_value"),
-                                             loc.format_currency(immobile['valore_acquisto'])),
+                                             loc.format_currency(immobile['valore_acquisto']), theme),
                     self._crea_info_immobile(loc.get("current_value"),
                                              loc.format_currency(immobile['valore_attuale']),
-                                             ft.colors.AMBER),
+                                             theme, colore_valore=theme.secondary),
                 ]),
                 ft.Row([
                     self._crea_info_immobile(loc.get("residual_mortgage"),
-                                             loc.format_currency(immobile.get('valore_mutuo_residuo') or 0)),
-                    self._crea_info_immobile("Valore Netto", loc.format_currency(valore_netto), ft.colors.GREEN),
+                                             loc.format_currency(immobile.get('valore_mutuo_residuo') or 0), theme),
+                    self._crea_info_immobile("Valore Netto", loc.format_currency(valore_netto), theme, colore_valore=theme.primary),
                 ]),
                 ft.Row([
                     ft.IconButton(icon=ft.Icons.EDIT, tooltip=loc.get("edit"), data=immobile,
                                   on_click=lambda e: self.controller.immobile_dialog.apri_dialog_immobile(
                                       e.control.data)),
-                    ft.IconButton(icon=ft.Icons.DELETE, tooltip=loc.get("delete"), icon_color=ft.colors.RED,
+                    ft.IconButton(icon=ft.Icons.DELETE, tooltip=loc.get("delete"), icon_color=theme.error,
                                   data=immobile['id_immobile'],
                                   on_click=lambda e: self.controller.open_confirm_delete_dialog(
                                       partial(self.elimina_cliccato, e))),
                 ], alignment=ft.MainAxisAlignment.END)
             ]),
             padding=10,
-            border=ft.border.all(1, ft.colors.GREY_800),
+            border=ft.border.all(1, theme.outline),
             border_radius=5
         )
 
-    def _crea_info_immobile(self, etichetta, valore, colore_valore=None):
+    def _crea_info_immobile(self, etichetta, valore, theme, colore_valore=None):
         return ft.Column([
-            ft.Text(etichetta, size=10, color=ft.colors.GREY_500),
+            ft.Text(etichetta, size=10, color=theme.on_surface_variant),
             ft.Text(valore, size=16, weight=ft.FontWeight.BOLD, color=colore_valore)
         ], horizontal_alignment=ft.CrossAxisAlignment.START)
 
