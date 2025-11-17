@@ -11,54 +11,50 @@ from db.gestione_db import (
 )
 
 
-class TransactionDialog(ft.Container):
+class TransactionDialog(ft.AlertDialog):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
         self.page = controller.page
         self.loc = controller.loc
 
-        # Inizializza i controlli senza testo fisso
-        self.dialog_title = ft.Text(size=20, weight="bold")
+        self.modal = True
+        self.title = ft.Text(size=20, weight="bold")
+
+        # Controlli del dialogo
         self.txt_data_selezionata = ft.Text(size=16)
         self.radio_tipo_transazione = ft.RadioGroup(content=ft.Row())
         self.txt_descrizione_dialog = ft.TextField()
         self.txt_importo_dialog = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.dd_conto_dialog = ft.Dropdown()
         self.dd_categoria_dialog = ft.Dropdown()
-        self.btn_annulla = ft.TextButton(on_click=self.chiudi_dialog)
-        self.btn_salva = ft.TextButton(on_click=self._salva_nuova_transazione)
-
-        self.content = ft.Container(
-            content=ft.Column(
-                [
-                    self.dialog_title,
-                    ft.Row([
-                        ft.Text(),  # Etichetta "Data:"
-                        self.txt_data_selezionata,
-                        ft.IconButton(icon=ft.Icons.CALENDAR_MONTH, on_click=self.apri_date_picker),
-                    ], alignment=ft.MainAxisAlignment.START),
-                    self.radio_tipo_transazione,
-                    self.txt_descrizione_dialog,
-                    self.txt_importo_dialog,
-                    self.dd_conto_dialog,
-                    self.dd_categoria_dialog,
-                    ft.Row([self.btn_annulla, self.btn_salva], alignment=ft.MainAxisAlignment.END)
-                ],
-                tight=True, height=520, width=400,
-            ),
-            width=400, bgcolor=ft.Colors.GREY_900, border_radius=10, padding=20
+        
+        self.content = ft.Column(
+            [
+                ft.Row([
+                    ft.Text(),  # Etichetta "Data:"
+                    self.txt_data_selezionata,
+                    ft.IconButton(icon=ft.Icons.CALENDAR_MONTH, on_click=self.apri_date_picker),
+                ], alignment=ft.MainAxisAlignment.START),
+                self.radio_tipo_transazione,
+                self.txt_descrizione_dialog,
+                self.txt_importo_dialog,
+                self.dd_conto_dialog,
+                self.dd_categoria_dialog,
+            ],
+            tight=True, height=420, width=400,
         )
 
-        self.alignment = ft.alignment.center
-        self.expand = True
-        self.bgcolor = ft.Colors.with_opacity(0.5, "black")
-        self.visible = False
+        self.actions = [
+            ft.TextButton(on_click=self.chiudi_dialog),
+            ft.TextButton(on_click=self._salva_nuova_transazione),
+        ]
+        self.actions_alignment = ft.MainAxisAlignment.END
 
     def _update_texts(self):
         """Aggiorna tutti i testi fissi con le traduzioni correnti."""
-        self.dialog_title.value = self.loc.get("new_transaction")
-        self.content.content.controls[1].controls[0].value = self.loc.get("date") + ":"
+        self.title.value = self.loc.get("new_transaction")
+        self.content.controls[0].controls[0].value = self.loc.get("date") + ":"
         self.radio_tipo_transazione.content.controls = [
             ft.Radio(value="Spesa", label=self.loc.get("expense")),
             ft.Radio(value="Incasso", label=self.loc.get("income")),
@@ -68,8 +64,8 @@ class TransactionDialog(ft.Container):
         self.txt_importo_dialog.prefix_text = self.loc.currencies[self.loc.currency]['symbol']
         self.dd_conto_dialog.label = self.loc.get("account")
         self.dd_categoria_dialog.label = self.loc.get("category_optional")
-        self.btn_annulla.text = self.loc.get("cancel")
-        self.btn_salva.text = self.loc.get("save")
+        self.actions[0].text = self.loc.get("cancel")
+        self.actions[1].text = self.loc.get("save")
 
     def apri_date_picker(self, e):
         self.page.open(self.controller.date_picker)
@@ -77,12 +73,12 @@ class TransactionDialog(ft.Container):
     def on_date_picker_change(self, e):
         if self.controller.date_picker.value:
             self.txt_data_selezionata.value = self.controller.date_picker.value.strftime('%Y-%m-%d')
-            self.txt_data_selezionata.update()
+            if self.page: self.page.update()
 
     def chiudi_dialog(self, e=None):
-        self.visible = False
+        self.open = False
         self.page.session.set("transazione_in_modifica", None)
-        self.page.update()
+        if self.page: self.page.update()
 
     def _popola_dropdowns(self):
         utente_id = self.controller.get_user_id()
@@ -127,8 +123,9 @@ class TransactionDialog(ft.Container):
             if conto_default_info:
                 self.dd_conto_dialog.value = f"{conto_default_info['tipo'][0].upper()}{conto_default_info['id']}"
 
-            self.visible = True
-            self.page.update()
+            self.page.dialog = self
+            self.open = True
+            if self.page: self.page.update()
         except Exception as ex:
             print(f"Errore apertura dialog nuova transazione: {ex}")
             traceback.print_exc()
@@ -137,7 +134,7 @@ class TransactionDialog(ft.Container):
     def apri_dialog_modifica_transazione(self, transazione_dati):
         try:
             self._update_texts()
-            self.dialog_title.value = self.loc.get("edit") + " " + self.loc.get("new_transaction")
+            self.title.value = self.loc.get("edit") + " " + self.loc.get("new_transaction")
             self._popola_dropdowns()
             self._reset_campi()
 
@@ -155,8 +152,9 @@ class TransactionDialog(ft.Container):
             self.dd_categoria_dialog.value = transazione_dati['id_categoria']
 
             self.page.session.set("transazione_in_modifica", transazione_dati)
-            self.visible = True
-            self.page.update()
+            self.page.dialog = self
+            self.open = True
+            if self.page: self.page.update()
         except Exception as ex:
             print(f"Errore apertura dialog modifica transazione: {ex}")
             traceback.print_exc()
@@ -187,7 +185,7 @@ class TransactionDialog(ft.Container):
                 is_valid = False
 
             if not is_valid:
-                self.page.update()
+                if self.page: self.page.update()
                 return
 
             data = self.txt_data_selezionata.value
@@ -224,7 +222,7 @@ class TransactionDialog(ft.Container):
 
             if success:
                 self.controller.db_write_operation()
-                self.visible = False
+                self.open = False
                 self.controller.show_snack_bar(f"Transazione {messaggio} con successo!", success=True)
             else:
                 self.controller.show_snack_bar(f"❌ {messaggio.capitalize()}.", success=False)
@@ -233,3 +231,5 @@ class TransactionDialog(ft.Container):
             print(f"Errore salvataggio transazione: {ex}")
             traceback.print_exc()
             self.controller.show_snack_bar(f"Errore inaspettato: {ex}", success=False)
+        
+        if self.page: self.page.update()

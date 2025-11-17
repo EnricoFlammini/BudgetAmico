@@ -1558,7 +1558,9 @@ def ottieni_prestiti_famiglia(id_famiglia):
             con.row_factory = sqlite3.Row
             cur = con.cursor()
             cur.execute("""
-                        SELECT P.*, C.nome_categoria AS nome_categoria_default
+                        SELECT P.*, 
+                               C.nome_categoria AS nome_categoria_default,
+                               (SELECT COUNT(*) FROM StoricoPagamentiRate WHERE id_prestito = P.id_prestito) as rate_pagate
                         FROM Prestiti P
                                  LEFT JOIN Categorie C ON P.id_categoria_pagamento_default = C.id_categoria
                         WHERE P.id_famiglia = ?
