@@ -23,42 +23,13 @@ Il progetto è strutturato attorno a un dashboard a schede che organizza le dive
   - Storico e Filtri: Le viste delle transazioni e del budget permettono di filtrare i dati per mese e anno.
 6. Gestione Dati e Impostazioni:
   - Backup e Ripristino: Funzionalità per creare un backup locale del database SQLite e per ripristinarlo.
-◦
-Sincronizzazione con Google Drive (prevista): Il codice include le basi per l'autenticazione con Google e la sincronizzazione del database su Google Drive, per garantire la portabilità dei dati.
-◦
-Esportazione Dati: Possibilità di esportare i dati finanziari in formato Excel.
-◦
-Localizzazione: Il sistema è predisposto per supportare più lingue e valute, utilizzando un gestore di localizzazione (LocalizationManager).
+  - Sincronizzazione con Google Drive (prevista): Il codice include le basi per l'autenticazione con Google e la sincronizzazione del database su Google Drive, per garantire la portabilità dei dati.
+  - Esportazione Dati: Possibilità di esportare i dati finanziari in formato Excel.
+  - Localizzazione: Il sistema è predisposto per supportare più lingue e valute, utilizzando un gestore di localizzazione (LocalizationManager).
 Architettura Tecnica
-•
-Framework UI: Flet, un framework Python che permette di creare applicazioni multi-piattaforma (desktop, web, mobile) con un'interfaccia utente moderna.
-•
-Linguaggio: Python per tutta la logica applicativa.
-•
-Database: SQLite come database locale (budget_familiare.db), gestito tramite la libreria standard sqlite3. Questo lo rende un'applicazione serverless e facilmente portabile.
-•
-API Esterne:
-◦
-Google Drive API: Per le funzionalità di backup e sincronizzazione del database.
-◦
-Gmail API: Per l'invio delle email di invito ai nuovi membri della famiglia.
-Struttura del Progetto
-Il codice è organizzato in modo modulare per separare le responsabilità:
-•
-main.py: Punto di ingresso dell'applicazione, imposta la pagina Flet e avvia il controller principale.
-•
-app_controller.py: Il "cervello" dell'applicazione. Gestisce il routing, lo stato della sessione, e coordina l'interazione tra le viste, i dialoghi e il database.
-•
-views/: Contiene le classi per le schermate principali (es. DashboardView, AuthView).
-•
-tabs/: Ogni file definisce una delle schede visualizzate nel dashboard (es. tab_conti.py, tab_prestiti.py).
-•
-dialogs/: Contiene le classi per tutte le finestre di dialogo modali usate per creare o modificare dati (es. TransactionDialog, ImmobileDialog).
-•
-db/: Moduli per l'interazione con il database.
-◦
-gestione_db.py: Contiene tutte le funzioni per leggere e scrivere dati (CRUD).
-◦
-crea_database.py: Definisce lo schema del database e lo crea se non esiste.
-•
-utils/: Moduli di utilità, come localization.py per la gestione delle lingue.
+  - Framework UI: Flet, un framework Python che permette di creare applicazioni multi-piattaforma (desktop, web, mobile) con un'interfaccia utente moderna.
+  - Linguaggio: Python per tutta la logica applicativa.
+  - Database: SQLite come database locale (budget_familiare.db), gestito tramite la libreria standard sqlite3. Questo lo rende un'applicazione serverless e facilmente portabile.
+  - API Esterne:
+  - Google Drive API: Per le funzionalità di backup e sincronizzazione del database.
+  - Gmail API: Per l'invio delle email di invito ai nuovi membri della famiglia.
