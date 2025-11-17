@@ -5,7 +5,7 @@ import os
 
 def main(page: ft.Page):
     # Impostazioni iniziali della pagina
-    page.title = "Budget Familiare"
+    page.title = "Budget Amico"
     page.window_width = 600
     page.window_height = 700
     page.window_max_width = 600  # Forza la larghezza massima

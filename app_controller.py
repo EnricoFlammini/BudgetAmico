@@ -52,9 +52,12 @@ class AppController:
 
     def _get_current_theme_scheme(self):
         """Restituisce lo schema di colori corrente in modo sicuro."""
-        if self.page.theme_mode == ft.ThemeMode.DARK:
+        if self.page.theme_mode == ft.ThemeMode.DARK and self.page.dark_theme:
             return self.page.dark_theme.color_scheme
-        return self.page.theme.color_scheme
+        if self.page.theme:
+            return self.page.theme.color_scheme
+        # Fallback di emergenza se nessun tema è ancora stato impostato
+        return ft.ColorScheme()
 
     def _init_dialogs_and_views(self):
         # Inizializza i dialoghi
