@@ -35,7 +35,7 @@ from db.gestione_db import (
 )
 
 URL_BASE = os.environ.get("FLET_APP_URL", "http://localhost:8550")
-VERSION = "0.4.0"
+VERSION = "1.0.0"
 
 
 class AppController:
@@ -273,7 +273,7 @@ class AppController:
 
     def open_info_dialog(self, e):
         db_version = ottieni_versione_db()
-        self.info_dialog.content.value = f"Versione App: {VERSION}\nVersione Database: {db_version}\n\nSviluppato da Iscavar79."
+        self.info_dialog.content.value = f"Versione App: {VERSION}\nVersione Database: {db_version}\n\nSviluppato da Enrico Flammini."
         self.page.dialog = self.info_dialog
         self.info_dialog.open = True
         self.page.update()
