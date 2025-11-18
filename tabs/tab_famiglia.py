@@ -45,12 +45,12 @@ class FamigliaTab(ft.Container):
         self.content = self.main_content
 
     def update_view_data(self, is_initial_load=False):
-        theme = self.page.theme.color_scheme if self.page and self.page.theme else ft.ColorScheme()
+        theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
         
         self.main_content.controls = self.build_controls(theme)
         
         self.txt_patrimonio_totale_famiglia.color = theme.primary
-        self.dt_transazioni_famiglia.heading_row_color = theme.primary_container # This might need to be a string color
+        self.dt_transazioni_famiglia.heading_row_color = theme.primary_container
         self.dt_transazioni_famiglia.data_row_color = {"hovered": theme.secondary_container}
         self.dt_transazioni_famiglia.border = ft.border.all(1, theme.outline)
 

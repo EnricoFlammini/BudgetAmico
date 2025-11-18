@@ -35,7 +35,7 @@ from db.gestione_db import (
 )
 
 URL_BASE = os.environ.get("FLET_APP_URL", "http://localhost:8550")
-VERSION = "0.2.0"
+VERSION = "1.0.0"
 
 
 class AppController:
@@ -113,7 +113,8 @@ class AppController:
         )
         
         self.page.overlay.extend([
-            self.transaction_dialog, self.conto_dialog, self.admin_dialogs.dialog_modifica_cat,
+            self.transaction_dialog, self.conto_dialog, self.conto_dialog.dialog_rettifica_saldo,
+            self.admin_dialogs.dialog_modifica_cat, self.admin_dialogs.dialog_sottocategoria,
             self.admin_dialogs.dialog_modifica_ruolo, self.admin_dialogs.dialog_invito_membri,
             self.admin_dialogs.dialog_imposta_budget, self.portafoglio_dialogs.dialog_portafoglio,
             self.portafoglio_dialogs.dialog_operazione_asset, self.portafoglio_dialogs.dialog_aggiorna_prezzo,

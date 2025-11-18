@@ -87,6 +87,9 @@ class ContiTab(ft.Container):
         is_investimento = conto['tipo'] == 'Investimento'
         is_fondo_pensione = conto['tipo'] == 'Fondo Pensione'
 
+        is_admin = self.controller.get_user_role() == 'admin'
+        is_corrente = conto['tipo'] in ['Corrente', 'Risparmio']
+
         label_saldo = self.controller.loc.get("value") if is_investimento or is_fondo_pensione else self.controller.loc.get("current_balance")
         colore_saldo = theme.secondary if is_investimento or is_fondo_pensione else (theme.primary if conto['saldo_calcolato'] >= 0 else theme.error)
 
@@ -105,6 +108,8 @@ class ContiTab(ft.Container):
                               on_click=lambda e: self.controller.portafoglio_dialogs.apri_dialog_portafoglio(e, e.control.data), visible=is_investimento),
                 ft.IconButton(icon=ft.Icons.MANAGE_ACCOUNTS, tooltip=self.controller.loc.get("manage_pension_fund"), icon_color=theme.secondary, data=conto,
                               on_click=lambda e: self.controller.fondo_pensione_dialog.apri_dialog(e.control.data), visible=is_fondo_pensione),
+                ft.IconButton(icon=ft.Icons.EDIT_NOTE, tooltip="Rettifica Saldo (Admin)", data=conto,
+                              on_click=lambda e: self.controller.conto_dialog.apri_dialog_rettifica_saldo(e.control.data), visible=is_admin and is_corrente),
                 ft.IconButton(icon=ft.Icons.EDIT, tooltip=self.controller.loc.get("edit_account"), data=conto,
                               on_click=lambda e: self.controller.conto_dialog.apri_dialog_conto(e, e.control.data)),
                 ft.IconButton(icon=ft.Icons.DELETE, tooltip=self.controller.loc.get("delete_account"), icon_color=theme.error, data=conto['id_conto'],
