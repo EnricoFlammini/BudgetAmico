@@ -1,4 +1,4 @@
-# BudgetAmico
+# BudgetAmico (v0.2)
 BudgetAmico è un'applicazione desktop completa per la gestione delle finanze personali e familiari. L'obiettivo principale è fornire agli utenti uno strumento unico e centralizzato per tracciare entrate e uscite, monitorare l'andamento del proprio patrimonio, gestire debiti e investimenti, e collaborare alla gestione del budget familiare.
 L'applicazione è progettata per essere multi-utente, con un sistema di "famiglie" che permette a più persone di condividere la visibilità su conti e spese comuni, pur mantenendo la privacy sui conti personali.
 Funzionalità Principali
