@@ -1,7 +1,7 @@
 import flet as ft
 from functools import partial
 from db.gestione_db import (
-    ottieni_categorie,
+    ottieni_categorie_e_sottocategorie,
     ottieni_membri_famiglia,
     rimuovi_utente_da_famiglia,
     modifica_ruolo_utente
@@ -16,7 +16,7 @@ class AdminTab(ft.Container):
         self.page = controller.page
 
         # Controlli per la gestione categorie
-        self.lv_categorie = ft.ListView(expand=True, spacing=10)
+        self.lv_categorie = ft.Column(scroll=ft.ScrollMode.ADAPTIVE, expand=True, spacing=10)
 
         # Controlli per la gestione membri
         self.lv_membri = ft.ListView(expand=True, spacing=10)
@@ -109,48 +109,55 @@ class AdminTab(ft.Container):
 
     def update_tab_categorie(self):
         loc = self.controller.loc
+        theme = self.controller._get_current_theme_scheme()
         id_famiglia = self.controller.get_family_id()
         if not id_famiglia: return
 
         self.lv_categorie.controls.clear()
-        categorie = ottieni_categorie(id_famiglia)
+        categorie_data = ottieni_categorie_e_sottocategorie(id_famiglia)
 
-        if not categorie:
+        if not categorie_data:
             self.lv_categorie.controls.append(ft.Text(loc.get("no_categories_found")))
         else:
-            for cat in categorie:
+            for cat_id, cat_info in categorie_data.items():
+                sottocategorie_list = ft.Column()
+                for sub in cat_info['sottocategorie']:
+                    sottocategorie_list.controls.append(
+                        ft.Row([
+                            ft.Icon(ft.Icons.SUBDIRECTORY_ARROW_RIGHT, size=16),
+                            ft.Text(sub['nome_sottocategoria'], expand=True),
+                            ft.IconButton(icon=ft.Icons.EDIT, icon_size=16, tooltip=loc.get("edit"), data=sub, on_click=lambda e: self.controller.admin_dialogs.apri_dialog_sottocategoria(sub_cat_data=e.control.data)),
+                            ft.IconButton(icon=ft.Icons.DELETE, icon_size=16, tooltip=loc.get("delete"), icon_color=theme.error, data=sub['id_sottocategoria'], on_click=lambda e: self.controller.open_confirm_delete_dialog(partial(self.controller.admin_dialogs.elimina_sottocategoria_cliccato, e))),
+                        ])
+                    )
+                
                 self.lv_categorie.controls.append(
-                    ft.Container(
-                        content=ft.Row(
-                            [
-                                ft.Text(cat['nome_categoria'], expand=True),
-                                ft.IconButton(
-                                    icon=ft.Icons.EDIT,
-                                    tooltip=loc.get("edit"),
-                                    data=cat,
-                                    on_click=lambda e: self.controller.admin_dialogs.apri_dialog_categoria(
-                                        e.control.data)
-                                ),
-                                ft.IconButton(
-                                    icon=ft.Icons.DELETE,
-                                    tooltip=loc.get("delete"),
-                                    icon_color=ft.Colors.RED,
-                                    data=cat['id_categoria'],
-                                    on_click=lambda e: self.controller.open_confirm_delete_dialog(
-                                        partial(self.controller.admin_dialogs.elimina_categoria_cliccato, e)
-                                    )
+                    ft.ExpansionPanelList(
+                        expand_icon_color=theme.primary,
+                        elevation=4,
+                        divider_color=theme.outline,
+                        controls=[
+                            ft.ExpansionPanel(
+                                header=ft.Row([
+                                    ft.Text(cat_info['nome_categoria'], weight=ft.FontWeight.BOLD),
+                                    ft.Row([
+                                        ft.IconButton(icon=ft.Icons.ADD, tooltip=loc.get("add_subcategory"), data=cat_id, on_click=lambda e: self.controller.admin_dialogs.apri_dialog_sottocategoria(id_categoria=e.control.data)),
+                                        ft.IconButton(icon=ft.Icons.EDIT, tooltip=loc.get("edit"), data={'id_categoria': cat_id, 'nome_categoria': cat_info['nome_categoria']}, on_click=lambda e: self.controller.admin_dialogs.apri_dialog_categoria(e.control.data)),
+                                        ft.IconButton(icon=ft.Icons.DELETE, tooltip=loc.get("delete"), icon_color=theme.error, data=cat_id, on_click=lambda e: self.controller.open_confirm_delete_dialog(partial(self.controller.admin_dialogs.elimina_categoria_cliccato, e))),
+                                    ])
+                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                content=ft.Container(
+                                    content=sottocategorie_list,
+                                    padding=ft.padding.only(left=15)
                                 )
-                            ],
-                            vertical_alignment=ft.CrossAxisAlignment.CENTER
-                        ),
-                        padding=ft.padding.symmetric(vertical=5, horizontal=15),
-                        border=ft.border.all(1, ft.Colors.GREY_800),
-                        border_radius=5
+                            )
+                        ]
                     )
                 )
 
     def update_tab_membri(self):
         loc = self.controller.loc
+        theme = self.controller._get_current_theme_scheme()
         id_famiglia = self.controller.get_family_id()
         current_user_id = self.controller.get_user_id()
         if not id_famiglia: return
@@ -173,7 +180,7 @@ class AdminTab(ft.Container):
                                 ft.Column(
                                     [
                                         ft.Text(membro['nome_visualizzato'], weight=ft.FontWeight.BOLD),
-                                        ft.Text(membro['ruolo'], color=ft.Colors.GREY_500)
+                                        ft.Text(membro['ruolo'], color=theme.on_surface_variant)
                                     ],
                                     expand=True
                                 ),
@@ -187,7 +194,7 @@ class AdminTab(ft.Container):
                                 ft.IconButton(
                                     icon=ft.Icons.DELETE,
                                     tooltip=loc.get("remove_from_family"),
-                                    icon_color=ft.Colors.RED,
+                                    icon_color=theme.error,
                                     data=membro,
                                     on_click=lambda e: self.controller.open_confirm_delete_dialog(
                                         partial(self.rimuovi_membro_cliccato, e)
@@ -197,7 +204,7 @@ class AdminTab(ft.Container):
                             vertical_alignment=ft.CrossAxisAlignment.CENTER
                         ),
                         padding=ft.padding.symmetric(vertical=5, horizontal=15),
-                        border=ft.border.all(1, ft.Colors.GREY_800),
+                        border=ft.border.all(1, theme.outline),
                         border_radius=5
                     )
                 )
@@ -215,6 +222,7 @@ class AdminTab(ft.Container):
     def update_tab_google(self):
         """Aggiorna la scheda delle impostazioni Google."""
         loc = self.controller.loc
+        theme = self.controller._get_current_theme_scheme()
         is_auth = google_auth_manager.is_authenticated()
         self.controller.page.session.set("google_auth_token_present", is_auth)
 
@@ -225,13 +233,13 @@ class AdminTab(ft.Container):
 
         if is_auth:
             self.google_status_text.value = loc.get("status_connected")
-            self.google_status_text.color = ft.Colors.GREEN
+            self.google_status_text.color = theme.primary
             self.google_auth_button.text = loc.get("disconnect_google_account")
             self.google_auth_button.on_click = self.controller.logout_google
             self.sync_button.visible = True
         else:
             self.google_status_text.value = loc.get("status_disconnected")
-            self.google_status_text.color = ft.Colors.RED
+            self.google_status_text.color = theme.error
             self.google_auth_button.text = loc.get("connect_google_account")
             self.google_auth_button.on_click = self.controller.auth_view.login_google
             self.sync_button.visible = False

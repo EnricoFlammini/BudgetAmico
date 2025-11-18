@@ -5,7 +5,7 @@ from db.gestione_db import (
     aggiungi_transazione,
     modifica_transazione,
     ottieni_tutti_i_conti_utente,
-    ottieni_categorie,
+    ottieni_categorie_e_sottocategorie,
     ottieni_conto_default_utente,
     aggiungi_transazione_condivisa
 )
@@ -27,7 +27,7 @@ class TransactionDialog(ft.AlertDialog):
         self.txt_descrizione_dialog = ft.TextField()
         self.txt_importo_dialog = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.dd_conto_dialog = ft.Dropdown()
-        self.dd_categoria_dialog = ft.Dropdown()
+        self.dd_sottocategoria_dialog = ft.Dropdown()
         
         self.content = ft.Column(
             [
@@ -40,7 +40,7 @@ class TransactionDialog(ft.AlertDialog):
                 self.txt_descrizione_dialog,
                 self.txt_importo_dialog,
                 self.dd_conto_dialog,
-                self.dd_categoria_dialog,
+                self.dd_sottocategoria_dialog,
             ],
             tight=True, height=420, width=400,
         )
@@ -63,7 +63,7 @@ class TransactionDialog(ft.AlertDialog):
         self.txt_importo_dialog.label = self.loc.get("amount")
         self.txt_importo_dialog.prefix_text = self.loc.currencies[self.loc.currency]['symbol']
         self.dd_conto_dialog.label = self.loc.get("account")
-        self.dd_categoria_dialog.label = self.loc.get("category_optional")
+        self.dd_sottocategoria_dialog.label = self.loc.get("subcategory")
         self.actions[0].text = self.loc.get("cancel")
         self.actions[1].text = self.loc.get("save")
 
@@ -94,11 +94,14 @@ class TransactionDialog(ft.AlertDialog):
             opzioni_conto.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']} {suffix}"))
         self.dd_conto_dialog.options = opzioni_conto
 
-        self.dd_categoria_dialog.options = [ft.dropdown.Option(key=None, text=self.loc.get("no_category"))]
+        self.dd_sottocategoria_dialog.options = [ft.dropdown.Option(key=None, text=self.loc.get("no_category"))]
         if famiglia_id:
-            categorie_famiglia = ottieni_categorie(famiglia_id)
-            self.dd_categoria_dialog.options.extend(
-                [ft.dropdown.Option(key=c['id_categoria'], text=c['nome_categoria']) for c in categorie_famiglia])
+            categorie = ottieni_categorie_e_sottocategorie(famiglia_id)
+            for cat_id, cat_data in categorie.items():
+                for sub_cat in cat_data['sottocategorie']:
+                    self.dd_sottocategoria_dialog.options.append(
+                        ft.dropdown.Option(key=sub_cat['id_sottocategoria'], text=f"{cat_data['nome_categoria']} - {sub_cat['nome_sottocategoria']}")
+                    )
 
     def _reset_campi(self):
         self.txt_descrizione_dialog.error_text = None
@@ -109,7 +112,7 @@ class TransactionDialog(ft.AlertDialog):
         self.txt_descrizione_dialog.value = ""
         self.txt_importo_dialog.value = ""
         self.dd_conto_dialog.value = None
-        self.dd_categoria_dialog.value = None
+        self.dd_sottocategoria_dialog.value = None
 
     def apri_dialog_nuova_transazione(self, e=None):
         try:
@@ -149,7 +152,7 @@ class TransactionDialog(ft.AlertDialog):
             prefix = "C" if transazione_dati.get('id_transazione_condivisa', 0) > 0 else "P"
             self.dd_conto_dialog.value = f"{prefix}{transazione_dati['id_conto']}"
 
-            self.dd_categoria_dialog.value = transazione_dati['id_categoria']
+            self.dd_sottocategoria_dialog.value = transazione_dati.get('id_sottocategoria')
 
             self.page.session.set("transazione_in_modifica", transazione_dati)
             self.page.dialog = self
@@ -196,7 +199,7 @@ class TransactionDialog(ft.AlertDialog):
             selected_conto_value = self.dd_conto_dialog.value
             tipo_conto_prefix = selected_conto_value[0]
             id_conto = int(selected_conto_value[1:])
-            id_categoria = self.dd_categoria_dialog.value
+            id_sottocategoria = self.dd_sottocategoria_dialog.value
             transazione_in_modifica = self.page.session.get("transazione_in_modifica")
 
             success = False
@@ -210,13 +213,13 @@ class TransactionDialog(ft.AlertDialog):
                 # Logica di aggiunta
                 if tipo_conto_prefix == 'P':
                     success = aggiungi_transazione(id_conto=id_conto, data=data, descrizione=descrizione,
-                                                   importo=importo, id_categoria=id_categoria) is not None
+                                                   importo=importo, id_sottocategoria=id_sottocategoria) is not None
                 elif tipo_conto_prefix == 'C':
                     id_utente_autore = self.controller.get_user_id()
                     success = aggiungi_transazione_condivisa(id_utente_autore=id_utente_autore,
                                                              id_conto_condiviso=id_conto, data=data,
                                                              descrizione=descrizione, importo=importo,
-                                                             id_categoria=id_categoria) is not None
+                                                             id_sottocategoria=id_sottocategoria) is not None
 
                 messaggio = "aggiunta" if success else "errore nell'aggiunta"
 
