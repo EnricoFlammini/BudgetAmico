@@ -22,7 +22,7 @@ class AdminDialogs:
         # Dialogo Categoria
         self.txt_nome_cat = ft.TextField()
         self.id_cat_in_modifica = None
-        self.dialog_categoria = ft.AlertDialog(
+        self.dialog_modifica_cat = ft.AlertDialog(
             modal=True,
             title=ft.Text(),
             content=self.txt_nome_cat,
@@ -89,24 +89,24 @@ class AdminDialogs:
     def apri_dialog_categoria(self, cat_data=None):
         loc = self.loc
         if cat_data:
-            self.dialog_categoria.title.value = loc.get("edit_category")
+            self.dialog_modifica_cat.title.value = loc.get("edit_category")
             self.txt_nome_cat.value = cat_data['nome_categoria']
             self.id_cat_in_modifica = cat_data['id_categoria']
         else:
-            self.dialog_categoria.title.value = loc.get("add_category")
+            self.dialog_modifica_cat.title.value = loc.get("add_category")
             self.txt_nome_cat.value = ""
             self.id_cat_in_modifica = None
         
-        self.dialog_categoria.actions[0].text = loc.get("cancel")
-        self.dialog_categoria.actions[1].text = loc.get("save")
+        self.dialog_modifica_cat.actions[0].text = loc.get("cancel")
+        self.dialog_modifica_cat.actions[1].text = loc.get("save")
         self.txt_nome_cat.label = loc.get("category_name")
         
-        self.page.dialog = self.dialog_categoria
-        self.dialog_categoria.open = True
+        self.page.dialog = self.dialog_modifica_cat
+        self.dialog_modifica_cat.open = True
         self.page.update()
 
     def chiudi_dialog_categoria(self, e):
-        self.dialog_categoria.open = False
+        self.dialog_modifica_cat.open = False
         self.page.update()
 
     def salva_categoria_cliccato(self, e):
@@ -124,7 +124,7 @@ class AdminDialogs:
 
         if success:
             self.controller.show_snack_bar(self.loc.get("category_saved_successfully"), success=True)
-            self.dialog_categoria.open = False
+            self.dialog_modifica_cat.open = False
             self.controller.db_write_operation()
         else:
             self.controller.show_snack_bar(self.loc.get("category_save_error"), success=False)

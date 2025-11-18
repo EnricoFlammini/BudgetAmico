@@ -449,6 +449,26 @@ def elimina_conto(id_conto, id_utente):
         print(f"❌ Errore generico durante l'eliminazione del conto: {e}")
         return False
 
+def admin_imposta_saldo_conto_corrente(id_conto, nuovo_saldo):
+    try:
+        with sqlite3.connect(DB_FILE) as con:
+            cur = con.cursor()
+            cur.execute("BEGIN TRANSACTION;")
+            # 1. Cancella tutte le transazioni esistenti per questo conto
+            cur.execute("DELETE FROM Transazioni WHERE id_conto = ?", (id_conto,))
+            # 2. Inserisce una nuova transazione di "saldo iniziale"
+            data_oggi = datetime.date.today().strftime('%Y-%m-%d')
+            descrizione = "Rettifica Saldo (Admin)"
+            cur.execute(
+                "INSERT INTO Transazioni (id_conto, data, descrizione, importo) VALUES (?, ?, ?, ?)",
+                (id_conto, data_oggi, descrizione, nuovo_saldo)
+            )
+            con.commit()
+            return True
+    except Exception as e:
+        print(f"❌ Errore durante la rettifica del saldo: {e}")
+        if con: con.rollback()
+        return False
 
 # --- Funzioni Conti Condivisi ---
 def crea_conto_condiviso(id_famiglia, nome_conto, tipo_conto, tipo_condivisione, lista_utenti_ids=None):

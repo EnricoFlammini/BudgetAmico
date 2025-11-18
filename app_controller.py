@@ -21,7 +21,6 @@ from dialogs.fondo_pensione_dialog import FondoPensioneDialog
 from dialogs.giroconto_dialog import GirocontoDialog
 from dialogs.conto_condiviso_dialog import ContoCondivisoDialog
 from dialogs.spesa_fissa_dialog import SpesaFissaDialog
-from utils.gmail_sender import send_email_via_gmail_api
 from utils.localization import LocalizationManager
 from db.migration_manager import migra_database
 from db.crea_database import setup_database
@@ -32,12 +31,11 @@ from db.gestione_db import (
     ottieni_prima_famiglia_utente, ottieni_ruolo_utente, check_e_paga_rate_scadute,
     check_e_processa_spese_fisse, get_user_count, crea_famiglia_e_admin,
     aggiungi_categorie_iniziali, cerca_utente_per_username, aggiungi_utente_a_famiglia,
-    ottieni_versione_db, crea_invito, ottieni_invito_per_token, DB_FILE,
-    trova_utente_per_email
+    ottieni_versione_db, crea_invito, ottieni_invito_per_token, DB_FILE
 )
 
 URL_BASE = os.environ.get("FLET_APP_URL", "http://localhost:8550")
-VERSION = "0.2.0"
+VERSION = "0.4.0"
 
 
 class AppController:
@@ -113,28 +111,17 @@ class AppController:
             actions=[ft.TextButton("Chiudi", on_click=self._chiudi_info_dialog)],
             actions_alignment=ft.MainAxisAlignment.END,
         )
-        self.confirm_download_dialog = ft.AlertDialog(
-            modal=True,
-            title=ft.Text("Versione più recente trovata"),
-            content=ft.Text(
-                "Su Google Drive è presente una versione più recente del database.\n\nVuoi scaricarla e sovrascrivere i dati locali?"),
-            actions=[
-                ft.TextButton("Sì, Scarica", on_click=self._download_confirmato),
-                ft.TextButton("No, ignora", on_click=self._download_rifiutato),
-            ], actions_alignment=ft.MainAxisAlignment.END
-        )
         
         self.page.overlay.extend([
-            self.transaction_dialog, self.conto_dialog, self.admin_dialogs.dialog_categoria,
-            self.admin_dialogs.dialog_sottocategoria,
+            self.transaction_dialog, self.conto_dialog, self.conto_dialog.dialog_rettifica_saldo,
+            self.admin_dialogs.dialog_modifica_cat, self.admin_dialogs.dialog_sottocategoria,
             self.admin_dialogs.dialog_modifica_ruolo, self.admin_dialogs.dialog_invito_membri,
             self.admin_dialogs.dialog_imposta_budget, self.portafoglio_dialogs.dialog_portafoglio,
             self.portafoglio_dialogs.dialog_operazione_asset, self.portafoglio_dialogs.dialog_aggiorna_prezzo,
             self.portafoglio_dialogs.dialog_modifica_asset, self.date_picker, self.file_picker_salva_excel,
             self.prestito_dialogs.dialog_prestito, self.prestito_dialogs.dialog_paga_rata,
             self.immobile_dialog, self.fondo_pensione_dialog, self.giroconto_dialog,
-            self.conto_condiviso_dialog, self.spesa_fissa_dialog, self.confirm_download_dialog,
-            self.confirm_delete_dialog,
+            self.conto_condiviso_dialog, self.spesa_fissa_dialog, self.confirm_delete_dialog,
             self.file_picker_salva_backup, self.file_picker_apri_backup, self.error_dialog, self.info_dialog
         ])
 
@@ -211,24 +198,8 @@ class AppController:
         self.update_all_views(is_initial_load=True)
         self.page.update()
 
-    def _download_confirmato(self, e):
-        """Avvia il download del DB da Drive dopo la conferma dell'utente."""
-        self.confirm_download_dialog.open = False
-        self.page.update()
-        self.show_snack_bar("Download in corso...", success=True)
-
-        def run_download():
-            success = google_drive_manager.download_db(self)
-            if success:
-                self.show_snack_bar("Download completato. Ricarica l'app per vedere le modifiche.", success=True)
-                # Potresti anche forzare un ricaricamento automatico
-                # time.sleep(2)
-                # self.page.go("/")
-        threading.Thread(target=run_download).start()
-
-    def _download_rifiutato(self, e):
-        self.confirm_download_dialog.open = False
-        self.page.update()
+    def _download_confirmato(self, e): pass
+    def _download_rifiutato(self, e): pass
 
     def backup_dati_clicked(self):
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -302,7 +273,7 @@ class AppController:
 
     def open_info_dialog(self, e):
         db_version = ottieni_versione_db()
-        self.info_dialog.content.value = f"Versione App: {VERSION}\nVersione Database: {db_version}\n\nSviluppato da Enrico Flammini."
+        self.info_dialog.content.value = f"Versione App: {VERSION}\nVersione Database: {db_version}\n\nSviluppato da Iscavar79."
         self.page.dialog = self.info_dialog
         self.info_dialog.open = True
         self.page.update()
@@ -422,42 +393,6 @@ class AppController:
         self.page.session.clear()
         self.page.go("/")
 
-    def gestisci_invito_o_sblocco(self, username_or_email, ruolo):
-        """
-        Gestisce l'aggiunta di un nuovo membro.
-        - Se l'utente esiste e non ha famiglia, lo aggiunge direttamente.
-        - Se l'utente non esiste, crea e invia un invito via email.
-        """
-        loc = self.loc
-        id_famiglia = self.get_family_id()
-
-        # Prova a trovare l'utente per username (se è già registrato ma senza famiglia)
-        utente_da_sbloccare = cerca_utente_per_username(username_or_email)
-        if utente_da_sbloccare:
-            success = aggiungi_utente_a_famiglia(id_famiglia, utente_da_sbloccare['id_utente'], ruolo)
-            if success:
-                return loc.get("user_unlocked_successfully").format(username=utente_da_sbloccare['username']), True
-            else:
-                return loc.get("user_unlock_error"), False
-
-        # Se non è da sbloccare, prova a inviare un invito via email
-        # Controlla se un utente con quella email è già in una famiglia
-        utente_esistente = trova_utente_per_email(username_or_email)
-        if utente_esistente and ottieni_prima_famiglia_utente(utente_esistente['id_utente']):
-            return loc.get("user_already_in_family"), False
-
-        # Crea il token di invito
-        token = crea_invito(id_famiglia, username_or_email, ruolo)
-        if not token:
-            return loc.get("invite_creation_error"), False
-
-        # Invia l'email (logica da implementare/verificare in gmail_sender)
-        link_registrazione = f"{URL_BASE}/registrazione?token={token}"
-        email_body = f"Ciao!\n\nSei stato invitato a unirti a una famiglia su BudgetAmico.\nClicca qui per registrarti: {link_registrazione}"
-        email_subject = "Invito a BudgetAmico"
-        send_email_via_gmail_api(self, username_or_email, email_subject, email_body)
-        return loc.get("invite_sent_successfully").format(email=username_or_email), True
-
     def logout_google(self, e):
         """Esegue il logout da Google, revocando il token."""
         success = google_auth_manager.logout()
@@ -479,13 +414,12 @@ class AppController:
         self.trigger_auto_sync()
 
     def trigger_auto_sync(self):
-        """Avvia la logica di sincronizzazione intelligente con Google Drive."""
         if self.page.session.get("google_auth_token_present"):
             if self.dashboard_view.sync_status_icon:
                 self.dashboard_view.sync_status_icon.icon = ft.Icons.SYNC
                 self.dashboard_view.sync_status_icon.rotate = ft.Rotate(angle=0, alignment=ft.alignment.center)
                 self.page.update()
-            threading.Thread(target=google_drive_manager.sync_database_with_drive, args=(self,)).start()
+            threading.Thread(target=google_drive_manager.upload_db, args=(self,)).start()
 
     def show_snack_bar(self, messaggio, success=True):
         theme = self._get_current_theme_scheme()
