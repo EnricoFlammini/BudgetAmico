@@ -6,6 +6,7 @@ from db.gestione_db import (
     modifica_conto,
     compra_asset,
     aggiungi_transazione,
+    admin_imposta_saldo_conto_corrente,
     imposta_conto_default_utente,
     ottieni_conto_default_utente,
     ottieni_conti_utente  # Importa per popolare il dropdown
@@ -18,6 +19,19 @@ class ContoDialog(ft.AlertDialog):
         self.controller = controller
         self.page = controller.page
         self.loc = controller.loc
+        self.conto_id_in_modifica = None
+
+        # Dialogo Rettifica Saldo (Admin)
+        self.txt_nuovo_saldo = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
+        self.dialog_rettifica_saldo = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Rettifica Saldo Conto"),
+            content=self.txt_nuovo_saldo,
+            actions=[
+                ft.TextButton("Annulla", on_click=self._chiudi_dialog_rettifica),
+                ft.TextButton("Salva", on_click=self._salva_rettifica_saldo)
+            ]
+        )
 
         # Controlli del dialogo
         self.txt_conto_nome = ft.TextField()
@@ -106,10 +120,10 @@ class ContoDialog(ft.AlertDialog):
                 ft.TextField(label=loc.get("asset_name"), expand=True, data="nome"),
                 ft.TextField(label=loc.get("quantity"), width=100, keyboard_type=ft.KeyboardType.NUMBER,
                              data="quantita"),
+                ft.TextField(label=loc.get("avg_purchase_price"), prefix=loc.currencies[loc.currency]['symbol'],
+                             width=120, keyboard_type=ft.KeyboardType.NUMBER, data="costo_medio"),
                 ft.TextField(label=loc.get("current_unit_price"), prefix=loc.currencies[loc.currency]['symbol'],
-                             width=110, keyboard_type=ft.KeyboardType.NUMBER, data="prezzo_attuale"),
-                ft.TextField(label=loc.get("past_gain_loss"), prefix=loc.currencies[loc.currency]['symbol'], width=100,
-                             keyboard_type=ft.KeyboardType.NUMBER, data="gainloss", value="0"),
+                             width=120, keyboard_type=ft.KeyboardType.NUMBER, data="prezzo_attuale"),
                 ft.IconButton(
                     icon=ft.Icons.REMOVE_CIRCLE_OUTLINE,
                     icon_color=ft.Colors.RED_400,
@@ -165,7 +179,7 @@ class ContoDialog(ft.AlertDialog):
 
         if conto_data:
             self.title.value = self.loc.get("edit_account")
-            self.data = conto_data['id_conto']
+            self.conto_id_in_modifica = conto_data['id_conto']
             self.txt_conto_nome.value = conto_data['nome_conto']
             self.dd_conto_tipo.value = conto_data['tipo']
             self.txt_conto_iban.value = conto_data['iban']
@@ -176,7 +190,7 @@ class ContoDialog(ft.AlertDialog):
             self.chk_conto_default.value = (conto_data['id_conto'] == conto_default_id)
         else:
             self.title.value = self.loc.get("add_account")
-            self.data = None
+            self.conto_id_in_modifica = None
             self.txt_conto_nome.value = ""
             self.dd_conto_tipo.value = "Corrente"
             self.txt_conto_iban.value = ""
@@ -206,16 +220,39 @@ class ContoDialog(ft.AlertDialog):
                 self.txt_conto_nome.error_text = self.loc.get("fill_all_fields")
                 is_valid = False
 
-            id_conto_da_modificare = self.data
             saldo_iniziale = 0.0
             lista_asset_iniziali = []
 
-            if not id_conto_da_modificare:
+            if not self.conto_id_in_modifica:
                 if tipo == 'Investimento':
                     for riga in self.lv_asset_iniziali.controls:
                         fields = {ctrl.data: ctrl for ctrl in riga.controls if
                                   isinstance(ctrl, ft.TextField) and ctrl.data}
-                        # ... (logica asset)
+                        
+                        ticker = fields['ticker'].value.strip().upper()
+                        if not ticker: continue # Salta righe vuote
+
+                        try:
+                            asset = {
+                                'ticker': ticker,
+                                'nome': fields['nome'].value.strip(),
+                                'quantita': float(fields['quantita'].value.replace(",", ".")),
+                                'costo_medio': float(fields['costo_medio'].value.replace(",", ".")),
+                                'prezzo_attuale': float(fields['prezzo_attuale'].value.replace(",", "."))
+                            }
+                            if not asset['nome'] or asset['quantita'] <= 0 or asset['costo_medio'] <= 0 or asset['prezzo_attuale'] <= 0:
+                                raise ValueError("Campi asset non validi")
+                            
+                            lista_asset_iniziali.append(asset)
+
+                        except (ValueError, TypeError):
+                            is_valid = False
+                            for field in fields.values():
+                                if not field.value:
+                                    field.error_text = "!"
+                            self.controller.show_snack_bar("Errore: controlla i dati degli asset.", success=False)
+                            break # Esce dal ciclo for
+
                 else:
                     saldo_str = self.txt_conto_saldo_iniziale.value.replace(",", ".")
                     if saldo_str:
@@ -234,10 +271,10 @@ class ContoDialog(ft.AlertDialog):
             messaggio = ""
             new_conto_id = None
 
-            if id_conto_da_modificare:
-                success = modifica_conto(id_conto_da_modificare, utente_id, nome, tipo, iban)
+            if self.conto_id_in_modifica:
+                success = modifica_conto(self.conto_id_in_modifica, utente_id, nome, tipo, iban)
                 messaggio = "modificato" if success else "errore modifica"
-                new_conto_id = id_conto_da_modificare
+                new_conto_id = self.conto_id_in_modifica
             else:
                 new_conto_id = aggiungi_conto(utente_id, nome, tipo, iban)
                 if new_conto_id:
@@ -249,8 +286,8 @@ class ContoDialog(ft.AlertDialog):
                     for asset in lista_asset_iniziali:
                         compra_asset(
                             id_conto_investimento=new_conto_id,
-                            ticker=asset['ticker'], nome_asset=asset['nome'], quantita=asset['quantita'],
-                            costo_unitario_nuovo=asset['prezzo_attuale'], tipo_mov='INIZIALE',
+                            ticker=asset['ticker'], nome_asset=asset['nome'], quantita=asset['quantita'], costo_unitario_nuovo=asset['costo_medio'], 
+                            tipo_mov='INIZIALE',
                             prezzo_attuale_override=asset['prezzo_attuale']
                         )
                 else:
@@ -271,7 +308,7 @@ class ContoDialog(ft.AlertDialog):
                 self.controller.update_all_views()
                 self.page.update()
             else:
-                if not id_conto_da_modificare:
+                if not self.conto_id_in_modifica and not new_conto_id:
                     self.txt_conto_iban.error_text = self.loc.get("iban_in_use_or_invalid")
                     self.content.update()
                 self.page.update()
@@ -282,3 +319,35 @@ class ContoDialog(ft.AlertDialog):
             traceback.print_exc()
             self.controller.show_snack_bar(f"Errore inaspettato: {ex}", success=False)
             self.page.update()
+
+    # --- Logica per Rettifica Saldo (Admin) ---
+
+    def apri_dialog_rettifica_saldo(self, conto_data):
+        self.conto_id_in_modifica = conto_data['id_conto'] # Usiamo lo stesso attributo
+        self.dialog_rettifica_saldo.title.value = f"Rettifica: {conto_data['nome_conto']}"
+        self.txt_nuovo_saldo.label = "Nuovo Saldo Reale"
+        self.txt_nuovo_saldo.value = f"{conto_data['saldo_calcolato']:.2f}"
+        self.txt_nuovo_saldo.error_text = None
+
+        self.page.dialog = self.dialog_rettifica_saldo
+        self.dialog_rettifica_saldo.open = True
+        self.page.update()
+
+    def _chiudi_dialog_rettifica(self, e):
+        self.dialog_rettifica_saldo.open = False
+        self.page.update()
+
+    def _salva_rettifica_saldo(self, e):
+        try:
+            nuovo_saldo = float(self.txt_nuovo_saldo.value.replace(",", "."))
+            id_conto = self.conto_id_in_modifica
+
+            if admin_imposta_saldo_conto_corrente(id_conto, nuovo_saldo):
+                self.controller.show_snack_bar("Saldo rettificato con successo!", success=True)
+                self.controller.db_write_operation()
+                self._chiudi_dialog_rettifica(e)
+            else:
+                self.controller.show_snack_bar("Errore durante la rettifica del saldo.", success=False)
+        except (ValueError, TypeError):
+            self.txt_nuovo_saldo.error_text = "Inserire un importo numerico valido."
+            self.dialog_rettifica_saldo.update()

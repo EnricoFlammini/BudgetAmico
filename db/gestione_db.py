@@ -19,12 +19,9 @@ if parent_dir not in sys.path:
 from db.crea_database import setup_database
 
 # --- GESTIONE PERCORSI PER ESEGUIBILE ---
-# Crea una cartella dedicata in AppData per i file dell'applicazione
 APP_DATA_DIR = os.path.join(os.getenv('APPDATA'), 'BudgetFamiliare')
 if not os.path.exists(APP_DATA_DIR):
     os.makedirs(APP_DATA_DIR)
-
-# Definisci il percorso del database all'interno della cartella AppData
 DB_FILE = os.path.join(APP_DATA_DIR, 'budget_familiare.db')
 # --- FINE GESTIONE PERCORSI ---
 
@@ -174,14 +171,20 @@ def aggiungi_saldo_iniziale(id_conto, saldo_iniziale):
     data_oggi = datetime.date.today().strftime('%Y-%m-%d')
     descrizione = "SALDO INIZIALE - Setup App"
     return aggiungi_transazione(id_conto=id_conto, data=data_oggi, descrizione=descrizione, importo=saldo_iniziale,
-                                id_categoria=None)
+                                id_sottocategoria=None)
 
 
 def aggiungi_categorie_iniziali(id_famiglia):
-    categorie_base = ["STIPENDIO", "BONUS", "REGALI_ENTRATA", "CIBO", "AFFITTO/MUTUO", "UTENZE", "TRASPORTI", "SVAGO",
-                      "VIAGGI", "SALUTE", "RISPARMI", "INVESTIMENTI"]
-    for nome_cat in categorie_base:
-        aggiungi_categoria(id_famiglia, nome_cat)
+    categorie_base = {
+        "ENTRATE": ["STIPENDIO", "BONUS", "REGALI"],
+        "SPESE": ["CIBO", "AFFITTO/MUTUO", "UTENZE", "TRASPORTI", "SVAGO", "VIAGGI", "SALUTE"],
+        "FINANZA": ["RISPARMI", "INVESTIMENTI", "TASSE"]
+    }
+    for nome_cat, sottocategorie in categorie_base.items():
+        id_cat = aggiungi_categoria(id_famiglia, nome_cat)
+        if id_cat:
+            for nome_sottocat in sottocategorie:
+                aggiungi_sottocategoria(id_cat, nome_sottocat)
 
 
 def aggiungi_utente_a_famiglia(id_famiglia, id_utente, ruolo):
@@ -446,6 +449,26 @@ def elimina_conto(id_conto, id_utente):
         print(f"❌ Errore generico durante l'eliminazione del conto: {e}")
         return False
 
+def admin_imposta_saldo_conto_corrente(id_conto, nuovo_saldo):
+    try:
+        with sqlite3.connect(DB_FILE) as con:
+            cur = con.cursor()
+            cur.execute("BEGIN TRANSACTION;")
+            # 1. Cancella tutte le transazioni esistenti per questo conto
+            cur.execute("DELETE FROM Transazioni WHERE id_conto = ?", (id_conto,))
+            # 2. Inserisce una nuova transazione di "saldo iniziale"
+            data_oggi = datetime.date.today().strftime('%Y-%m-%d')
+            descrizione = "Rettifica Saldo (Admin)"
+            cur.execute(
+                "INSERT INTO Transazioni (id_conto, data, descrizione, importo) VALUES (?, ?, ?, ?)",
+                (id_conto, data_oggi, descrizione, nuovo_saldo)
+            )
+            con.commit()
+            return True
+    except Exception as e:
+        print(f"❌ Errore durante la rettifica del saldo: {e}")
+        if con: con.rollback()
+        return False
 
 # --- Funzioni Conti Condivisi ---
 def crea_conto_condiviso(id_famiglia, nome_conto, tipo_conto, tipo_condivisione, lista_utenti_ids=None):
@@ -748,41 +771,121 @@ def ottieni_categorie(id_famiglia):
         print(f"❌ Errore generico durante il recupero categorie: {e}")
         return []
 
+# --- Funzioni Sottocategorie ---
+def aggiungi_sottocategoria(id_categoria, nome_sottocategoria):
+    try:
+        with sqlite3.connect(DB_FILE) as con:
+            cur = con.cursor()
+            cur.execute("INSERT INTO Sottocategorie (id_categoria, nome_sottocategoria) VALUES (?, ?)",
+                        (id_categoria, nome_sottocategoria.upper()))
+            return cur.lastrowid
+    except sqlite3.IntegrityError:
+        return None
+    except Exception as e:
+        print(f"❌ Errore durante l'aggiunta della sottocategoria: {e}")
+        return None
+
+def modifica_sottocategoria(id_sottocategoria, nuovo_nome):
+    try:
+        with sqlite3.connect(DB_FILE) as con:
+            cur = con.cursor()
+            cur.execute("UPDATE Sottocategorie SET nome_sottocategoria = ? WHERE id_sottocategoria = ?",
+                        (nuovo_nome.upper(), id_sottocategoria))
+            return cur.rowcount > 0
+    except sqlite3.IntegrityError:
+        return False
+    except Exception as e:
+        print(f"❌ Errore durante la modifica della sottocategoria: {e}")
+        return False
+
+def elimina_sottocategoria(id_sottocategoria):
+    try:
+        with sqlite3.connect(DB_FILE) as con:
+            cur = con.cursor()
+            cur.execute("PRAGMA foreign_keys = ON;")
+            cur.execute("DELETE FROM Sottocategorie WHERE id_sottocategoria = ?", (id_sottocategoria,))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"❌ Errore durante l'eliminazione della sottocategoria: {e}")
+        return False
+
+def ottieni_sottocategorie(id_categoria):
+    try:
+        with sqlite3.connect(DB_FILE) as con:
+            con.row_factory = sqlite3.Row
+            cur = con.cursor()
+            cur.execute("SELECT id_sottocategoria, nome_sottocategoria FROM Sottocategorie WHERE id_categoria = ?", (id_categoria,))
+            return [dict(row) for row in cur.fetchall()]
+    except Exception as e:
+        print(f"❌ Errore durante il recupero sottocategorie: {e}")
+        return []
+
+def ottieni_categorie_e_sottocategorie(id_famiglia):
+    try:
+        with sqlite3.connect(DB_FILE) as con:
+            con.row_factory = sqlite3.Row
+            cur = con.cursor()
+            cur.execute("""
+                SELECT C.id_categoria, C.nome_categoria, S.id_sottocategoria, S.nome_sottocategoria
+                FROM Categorie C
+                LEFT JOIN Sottocategorie S ON C.id_categoria = S.id_categoria
+                WHERE C.id_famiglia = ?
+                ORDER BY C.nome_categoria, S.nome_sottocategoria
+            """, (id_famiglia,))
+            
+            categorie = {}
+            for row in cur.fetchall():
+                if row['id_categoria'] not in categorie:
+                    categorie[row['id_categoria']] = {
+                        'nome_categoria': row['nome_categoria'],
+                        'sottocategorie': []
+                    }
+                if row['id_sottocategoria']:
+                    categorie[row['id_categoria']]['sottocategorie'].append({
+                        'id_sottocategoria': row['id_sottocategoria'],
+                        'nome_sottocategoria': row['nome_sottocategoria'],
+                        'id_categoria': row['id_categoria']
+                    })
+            return categorie
+    except Exception as e:
+        print(f"❌ Errore durante il recupero di categorie e sottocategorie: {e}")
+        return {}
+
 
 # --- Funzioni Transazioni Personali ---
-def aggiungi_transazione(id_conto, data, descrizione, importo, id_categoria=None, cursor=None):
+def aggiungi_transazione(id_conto, data, descrizione, importo, id_sottocategoria=None, cursor=None):
     # Permette di passare un cursore esistente per le transazioni atomiche
     if cursor:
         cursor.execute(
-            "INSERT INTO Transazioni (id_conto, id_categoria, data, descrizione, importo) VALUES (?, ?, ?, ?, ?)",
-            (id_conto, id_categoria, data, descrizione, importo))
+            "INSERT INTO Transazioni (id_conto, id_sottocategoria, data, descrizione, importo) VALUES (?, ?, ?, ?, ?)",
+            (id_conto, id_sottocategoria, data, descrizione, importo))
         return cursor.lastrowid
     else:
         try:
             with sqlite3.connect(DB_FILE) as con:
                 cur = con.cursor()
                 cur.execute(
-                    "INSERT INTO Transazioni (id_conto, id_categoria, data, descrizione, importo) VALUES (?, ?, ?, ?, ?)",
-                    (id_conto, id_categoria, data, descrizione, importo))
+                    "INSERT INTO Transazioni (id_conto, id_sottocategoria, data, descrizione, importo) VALUES (?, ?, ?, ?, ?)",
+                    (id_conto, id_sottocategoria, data, descrizione, importo))
                 return cur.lastrowid
         except Exception as e:
             print(f"❌ Errore generico: {e}")
             return None
 
 
-def modifica_transazione(id_transazione, data, descrizione, importo, id_categoria=None, id_conto=None):
+def modifica_transazione(id_transazione, data, descrizione, importo, id_sottocategoria=None, id_conto=None):
     try:
         with sqlite3.connect(DB_FILE) as con:
             cur = con.cursor()
             cur.execute("PRAGMA foreign_keys = ON;")
             if id_conto is not None:
                 cur.execute(
-                    "UPDATE Transazioni SET data = ?, descrizione = ?, importo = ?, id_categoria = ?, id_conto = ? WHERE id_transazione = ?",
-                    (data, descrizione, importo, id_categoria, id_conto, id_transazione))
+                    "UPDATE Transazioni SET data = ?, descrizione = ?, importo = ?, id_sottocategoria = ?, id_conto = ? WHERE id_transazione = ?",
+                    (data, descrizione, importo, id_sottocategoria, id_conto, id_transazione))
             else:
                 cur.execute(
-                    "UPDATE Transazioni SET data = ?, descrizione = ?, importo = ?, id_categoria = ? WHERE id_transazione = ?",
-                    (data, descrizione, importo, id_categoria, id_transazione))
+                    "UPDATE Transazioni SET data = ?, descrizione = ?, importo = ?, id_sottocategoria = ? WHERE id_transazione = ?",
+                    (data, descrizione, importo, id_sottocategoria, id_transazione))
             return cur.rowcount > 0
     except Exception as e:
         print(f"❌ Errore generico durante la modifica: {e}")
@@ -819,12 +922,14 @@ def ottieni_transazioni_utente(id_utente, anno, mese):
                                C.nome_conto,
                                C.id_conto,
                                Cat.nome_categoria,
-                               Cat.id_categoria,
+                               SCat.nome_sottocategoria,
+                               SCat.id_sottocategoria,
                                'personale' AS tipo_transazione,
                                0           AS id_transazione_condivisa -- Placeholder
                         FROM Transazioni T
                                  JOIN Conti C ON T.id_conto = C.id_conto
-                                 LEFT JOIN Categorie Cat ON T.id_categoria = Cat.id_categoria
+                                 LEFT JOIN Sottocategorie SCat ON T.id_sottocategoria = SCat.id_sottocategoria
+                                 LEFT JOIN Categorie Cat ON SCat.id_categoria = Cat.id_categoria
                         WHERE C.id_utente = ?
                           AND C.tipo != 'Fondo Pensione' AND T.data BETWEEN ? AND ?
 
@@ -838,14 +943,16 @@ def ottieni_transazioni_utente(id_utente, anno, mese):
                                CC.nome_conto,
                                CC.id_conto_condiviso AS id_conto,
                                Cat.nome_categoria,
-                               Cat.id_categoria,
+                               SCat.nome_sottocategoria,
+                               SCat.id_sottocategoria,
                                'condivisa'           AS tipo_transazione,
                                TC.id_transazione_condivisa
                         FROM TransazioniCondivise TC
                                  JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
                                  LEFT JOIN PartecipazioneContoCondiviso PCC
                                            ON CC.id_conto_condiviso = PCC.id_conto_condiviso
-                                 LEFT JOIN Categorie Cat ON TC.id_categoria = Cat.id_categoria
+                                 LEFT JOIN Sottocategorie SCat ON TC.id_sottocategoria = SCat.id_sottocategoria
+                                 LEFT JOIN Categorie Cat ON SCat.id_categoria = Cat.id_categoria
                         WHERE (PCC.id_utente = ? AND CC.tipo_condivisione = 'utenti')
                            OR (CC.id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = ?) AND
                                CC.tipo_condivisione = 'famiglia') AND TC.data BETWEEN ? AND ?
@@ -859,28 +966,28 @@ def ottieni_transazioni_utente(id_utente, anno, mese):
 
 
 # --- Funzioni Transazioni Condivise ---
-def aggiungi_transazione_condivisa(id_utente_autore, id_conto_condiviso, data, descrizione, importo, id_categoria=None,
+def aggiungi_transazione_condivisa(id_utente_autore, id_conto_condiviso, data, descrizione, importo, id_sottocategoria=None,
                                    cursor=None):
     # Permette di passare un cursore esistente per le transazioni atomiche
     if cursor:
         cursor.execute(
-            "INSERT INTO TransazioniCondivise (id_utente_autore, id_conto_condiviso, id_categoria, data, descrizione, importo) VALUES (?, ?, ?, ?, ?, ?)",
-            (id_utente_autore, id_conto_condiviso, id_categoria, data, descrizione, importo))
+            "INSERT INTO TransazioniCondivise (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, descrizione, importo) VALUES (?, ?, ?, ?, ?, ?)",
+            (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, descrizione, importo))
         return cursor.lastrowid
     else:
         try:
             with sqlite3.connect(DB_FILE) as con:
                 cur = con.cursor()
                 cur.execute(
-                    "INSERT INTO TransazioniCondivise (id_utente_autore, id_conto_condiviso, id_categoria, data, descrizione, importo) VALUES (?, ?, ?, ?, ?, ?)",
-                    (id_utente_autore, id_conto_condiviso, id_categoria, data, descrizione, importo))
+                    "INSERT INTO TransazioniCondivise (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, descrizione, importo) VALUES (?, ?, ?, ?, ?, ?)",
+                    (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, descrizione, importo))
                 return cur.lastrowid
         except Exception as e:
             print(f"❌ Errore generico durante l'aggiunta transazione condivisa: {e}")
             return None
 
 
-def modifica_transazione_condivisa(id_transazione_condivisa, data, descrizione, importo, id_categoria=None):
+def modifica_transazione_condivisa(id_transazione_condivisa, data, descrizione, importo, id_sottocategoria=None):
     try:
         with sqlite3.connect(DB_FILE) as con:
             cur = con.cursor()
@@ -890,9 +997,9 @@ def modifica_transazione_condivisa(id_transazione_condivisa, data, descrizione, 
                         SET data         = ?,
                             descrizione  = ?,
                             importo      = ?,
-                            id_categoria = ?
+                            id_sottocategoria = ?
                         WHERE id_transazione_condivisa = ?
-                        """, (data, descrizione, importo, id_categoria, id_transazione_condivisa))
+                        """, (data, descrizione, importo, id_sottocategoria, id_transazione_condivisa))
             return cur.rowcount > 0
     except Exception as e:
         print(f"❌ Errore generico durante la modifica transazione condivisa: {e}")
@@ -925,12 +1032,14 @@ def ottieni_transazioni_condivise_utente(id_utente):
                                CC.nome_conto,
                                CC.id_conto_condiviso,
                                Cat.nome_categoria,
-                               Cat.id_categoria
+                               SCat.nome_sottocategoria,
+                               SCat.id_sottocategoria
                         FROM TransazioniCondivise TC
                                  JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
                                  LEFT JOIN PartecipazioneContoCondiviso PCC
                                            ON CC.id_conto_condiviso = PCC.id_conto_condiviso
-                                 LEFT JOIN Categorie Cat ON TC.id_categoria = Cat.id_categoria
+                                 LEFT JOIN Sottocategorie SCat ON TC.id_sottocategoria = SCat.id_sottocategoria
+                                 LEFT JOIN Categorie Cat ON SCat.id_categoria = Cat.id_categoria
                         WHERE (PCC.id_utente = ? AND CC.tipo_condivisione = 'utenti')
                            OR (CC.id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = ?) AND
                                CC.tipo_condivisione = 'famiglia')
@@ -955,10 +1064,12 @@ def ottieni_transazioni_condivise_famiglia(id_famiglia):
                                CC.nome_conto AS nome_conto,
                                CC.id_conto_condiviso,
                                Cat.nome_categoria,
-                               Cat.id_categoria
+                               SCat.nome_sottocategoria,
+                               SCat.id_sottocategoria
                         FROM TransazioniCondivise TC
                                  JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
-                                 LEFT JOIN Categorie Cat ON TC.id_categoria = Cat.id_categoria
+                                 LEFT JOIN Sottocategorie SCat ON TC.id_sottocategoria = SCat.id_sottocategoria
+                                 LEFT JOIN Categorie Cat ON SCat.id_categoria = Cat.id_categoria
                         WHERE CC.id_famiglia = ?
                           AND CC.tipo_condivisione = 'famiglia'
                         ORDER BY TC.data DESC, TC.id_transazione_condivisa DESC
@@ -1208,7 +1319,8 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese):
                                  JOIN Conti C ON T.id_conto = C.id_conto
                                  JOIN Utenti U ON C.id_utente = U.id_utente
                                  JOIN Appartenenza_Famiglia AF ON U.id_utente = AF.id_utente
-                                 LEFT JOIN Categorie Cat ON T.id_categoria = Cat.id_categoria
+                                 LEFT JOIN Sottocategorie SCat ON T.id_sottocategoria = SCat.id_sottocategoria
+                                 LEFT JOIN Categorie Cat ON SCat.id_categoria = Cat.id_categoria
                         WHERE AF.id_famiglia = ?
                           AND C.tipo != 'Fondo Pensione' AND T.data BETWEEN ? AND ? AND UPPER(T.descrizione) NOT LIKE '%SALDO INIZIALE%'
                         UNION ALL
@@ -1223,7 +1335,8 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese):
                                  JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
                                  LEFT JOIN Utenti U
                                            ON TC.id_utente_autore = U.id_utente -- Join per ottenere il nome dell'autore
-                                 LEFT JOIN Categorie Cat ON TC.id_categoria = Cat.id_categoria
+                                 LEFT JOIN Sottocategorie SCat ON TC.id_sottocategoria = SCat.id_sottocategoria
+                                 LEFT JOIN Categorie Cat ON SCat.id_categoria = Cat.id_categoria
                         WHERE CC.id_famiglia = ?
                           AND TC.data BETWEEN ? AND ?
                           AND UPPER(TC.descrizione) NOT LIKE '%SALDO INIZIALE%' -- Include tutti i conti condivisi della famiglia
@@ -1328,16 +1441,16 @@ def esegui_operazione_fondo_pensione(id_fondo_pensione, tipo_operazione, importo
 
 
 # --- Funzioni Budget ---
-def imposta_budget(id_famiglia, id_categoria, importo_limite):
+def imposta_budget(id_famiglia, id_sottocategoria, importo_limite):
     try:
         with sqlite3.connect(DB_FILE) as con:
             cur = con.cursor()
             cur.execute("PRAGMA foreign_keys = ON;")
             cur.execute("""
-                        INSERT INTO Budget (id_famiglia, id_categoria, importo_limite, periodo)
-                        VALUES (?, ?, ?, 'Mensile') ON CONFLICT(id_famiglia, id_categoria, periodo) DO
+                        INSERT INTO Budget (id_famiglia, id_sottocategoria, importo_limite, periodo)
+                        VALUES (?, ?, ?, 'Mensile') ON CONFLICT(id_famiglia, id_sottocategoria, periodo) DO
                         UPDATE SET importo_limite = excluded.importo_limite
-                        """, (id_famiglia, id_categoria, importo_limite))
+                        """, (id_famiglia, id_sottocategoria, importo_limite))
             return True
     except Exception as e:
         print(f"❌ Errore generico durante l'impostazione del budget: {e}")
@@ -1350,12 +1463,13 @@ def ottieni_budget_famiglia(id_famiglia):
             con.row_factory = sqlite3.Row
             cur = con.cursor()
             cur.execute("""
-                        SELECT B.id_budget, B.id_categoria, C.nome_categoria, B.importo_limite
+                        SELECT B.id_budget, B.id_sottocategoria, C.nome_categoria, S.nome_sottocategoria, B.importo_limite
                         FROM Budget B
-                                 JOIN Categorie C ON B.id_categoria = C.id_categoria
+                                 JOIN Sottocategorie S ON B.id_sottocategoria = S.id_sottocategoria
+                                 JOIN Categorie C ON S.id_categoria = C.id_categoria
                         WHERE B.id_famiglia = ?
                           AND B.periodo = 'Mensile'
-                        ORDER BY C.nome_categoria
+                        ORDER BY C.nome_categoria, S.nome_sottocategoria
                         """, (id_famiglia,))
             return [dict(row) for row in cur.fetchall()]
     except Exception as e:
@@ -1372,40 +1486,71 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese):
             con.row_factory = sqlite3.Row
             cur = con.cursor()
             cur.execute("""
-                SELECT B.id_categoria,
-                       C.nome_categoria,
-                       B.importo_limite,
-                       COALESCE(
-                           (SELECT SUM(T.importo)
-                            FROM Transazioni T
-                                     JOIN Conti CO ON T.id_conto = CO.id_conto
-                                     JOIN Appartenenza_Famiglia AF ON CO.id_utente = AF.id_utente
-                            WHERE AF.id_famiglia = ?
-                              AND T.id_categoria = B.id_categoria
-                              AND T.importo < 0
-                              AND T.data BETWEEN ? AND ?), 0.0)
-                       +
-                       COALESCE(
-                           (SELECT SUM(TC.importo)
-                            FROM TransazioniCondivise TC
-                                     JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
-                            WHERE CC.id_famiglia = ?
-                              AND TC.id_categoria = B.id_categoria
-                              AND TC.importo < 0
-                              AND TC.data BETWEEN ? AND ?), 0.0)
-                           AS spesa_totale
-                FROM Budget B JOIN Categorie C ON B.id_categoria = C.id_categoria
-                        WHERE B.id_famiglia = ?
-                          AND B.periodo = 'Mensile'
-                        ORDER BY C.nome_categoria;""",
-                        (id_famiglia, data_inizio, data_fine, id_famiglia, data_inizio, data_fine, id_famiglia))
-            riepilogo = [dict(row) for row in cur.fetchall()]
-            for item in riepilogo:
-                item['rimanente'] = item['importo_limite'] - abs(item['spesa_totale'])
+                SELECT
+                    C.id_categoria,
+                    C.nome_categoria,
+                    S.id_sottocategoria,
+                    S.nome_sottocategoria,
+                    COALESCE(B.importo_limite, 0.0) as importo_limite,
+                    COALESCE(T_SPESE.spesa_totale, 0.0) as spesa_totale
+                FROM Categorie C
+                JOIN Sottocategorie S ON C.id_categoria = S.id_categoria
+                LEFT JOIN Budget B ON S.id_sottocategoria = B.id_sottocategoria AND B.id_famiglia = C.id_famiglia AND B.periodo = 'Mensile'
+                LEFT JOIN (
+                    SELECT
+                        T.id_sottocategoria,
+                        SUM(T.importo) as spesa_totale
+                    FROM Transazioni T
+                    JOIN Conti CO ON T.id_conto = CO.id_conto
+                    JOIN Appartenenza_Famiglia AF ON CO.id_utente = AF.id_utente
+                    WHERE AF.id_famiglia = ? AND T.importo < 0 AND T.data BETWEEN ? AND ?
+                    GROUP BY T.id_sottocategoria
+                    UNION ALL
+                    SELECT
+                        TC.id_sottocategoria,
+                        SUM(TC.importo) as spesa_totale
+                    FROM TransazioniCondivise TC
+                    JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
+                    WHERE CC.id_famiglia = ? AND TC.importo < 0 AND TC.data BETWEEN ? AND ?
+                    GROUP BY TC.id_sottocategoria
+                ) AS T_SPESE ON S.id_sottocategoria = T_SPESE.id_sottocategoria
+                WHERE C.id_famiglia = ?
+                ORDER BY C.nome_categoria, S.nome_sottocategoria;
+            """, (id_famiglia, data_inizio, data_fine, id_famiglia, data_inizio, data_fine, id_famiglia))
+            
+            riepilogo = {}
+            for row in cur.fetchall():
+                cat_id = row['id_categoria']
+                if cat_id not in riepilogo:
+                    riepilogo[cat_id] = {
+                        'nome_categoria': row['nome_categoria'],
+                        'importo_limite_totale': 0,
+                        'spesa_totale_categoria': 0,
+                        'sottocategorie': []
+                    }
+                
+                spesa = abs(row['spesa_totale'])
+                limite = row['importo_limite']
+                riepilogo[cat_id]['importo_limite_totale'] += limite
+                riepilogo[cat_id]['spesa_totale_categoria'] += spesa
+                
+                riepilogo[cat_id]['sottocategorie'].append({
+                    'id_sottocategoria': row['id_sottocategoria'],
+                    'nome_sottocategoria': row['nome_sottocategoria'],
+                    'importo_limite': limite,
+                    'spesa_totale': spesa,
+                    'rimanente': limite - spesa
+                })
+            
+            # Calcola il rimanente totale per categoria
+            for cat_id in riepilogo:
+                riepilogo[cat_id]['rimanente_totale'] = riepilogo[cat_id]['importo_limite_totale'] - riepilogo[cat_id]['spesa_totale_categoria']
+
             return riepilogo
+
     except Exception as e:
         print(f"❌ Errore generico durante il recupero riepilogo budget: {e}")
-        return []
+        return {}
 
 
 def salva_budget_mese_corrente(id_famiglia, anno, mese):
@@ -1416,14 +1561,19 @@ def salva_budget_mese_corrente(id_famiglia, anno, mese):
         with sqlite3.connect(DB_FILE) as con:
             cur = con.cursor()
             cur.execute("PRAGMA foreign_keys = ON;")
-            dati_da_salvare = [
-                (id_famiglia, item['id_categoria'], item['nome_categoria'], anno, mese, item['importo_limite'],
-                 abs(item['spesa_totale'])) for item in riepilogo_corrente]
+            dati_da_salvare = []
+            for cat_id, cat_data in riepilogo_corrente.items():
+                for sub_data in cat_data['sottocategorie']:
+                    dati_da_salvare.append((
+                        id_famiglia, sub_data['id_sottocategoria'], sub_data['nome_sottocategoria'],
+                        anno, mese, sub_data['importo_limite'], abs(sub_data['spesa_totale'])
+                    ))
+            
             cur.executemany("""
-                            INSERT INTO Budget_Storico (id_famiglia, id_categoria, nome_categoria, anno, mese,
+                            INSERT INTO Budget_Storico (id_famiglia, id_sottocategoria, nome_sottocategoria, anno, mese,
                                                         importo_limite, importo_speso)
-                            VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id_famiglia, id_categoria, anno, mese) DO
-                            UPDATE SET importo_limite = excluded.importo_limite, importo_speso = excluded.importo_speso, nome_categoria = excluded.nome_categoria
+                            VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id_famiglia, id_sottocategoria, anno, mese) DO
+                            UPDATE SET importo_limite = excluded.importo_limite, importo_speso = excluded.importo_speso, nome_sottocategoria = excluded.nome_sottocategoria
                             """, dati_da_salvare)
             return True
     except Exception as e:
@@ -1606,7 +1756,7 @@ def effettua_pagamento_rata(id_prestito, id_conto_pagamento, importo_pagato, dat
                         (importo_pagato, id_prestito))
             descrizione = f"Pagamento rata {nome_prestito} (Prestito ID: {id_prestito})"
             cur.execute(
-                "INSERT INTO Transazioni (id_conto, id_categoria, data, descrizione, importo) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO Transazioni (id_conto, id_sottocategoria, data, descrizione, importo) VALUES (?, ?, ?, ?, ?)",
                 (id_conto_pagamento, categoria_pagamento_id, data_pagamento, descrizione, -abs(importo_pagato)))
             data_dt = parse_date(data_pagamento)
             cur.execute(
