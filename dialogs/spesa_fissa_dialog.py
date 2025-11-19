@@ -2,7 +2,7 @@ import flet as ft
 import traceback
 from db.gestione_db import (
     ottieni_tutti_i_conti_famiglia,
-    ottieni_categorie,
+    ottieni_categorie_e_sottocategorie,
     aggiungi_spesa_fissa,
     modifica_spesa_fissa
 )
@@ -13,27 +13,27 @@ class SpesaFissaDialog(ft.AlertDialog):
         super().__init__()
         self.controller = controller
         self.page = controller.page
+        self.loc = controller.loc
         self.modal = True
         self.title = ft.Text("Gestisci Spesa Fissa")
 
         self.id_spesa_fissa_in_modifica = None
 
-        self.txt_nome = ft.TextField(label="Nome Spesa (es. Abbonamento Netflix)")
-        self.txt_importo = ft.TextField(label="Importo", prefix="€", keyboard_type=ft.KeyboardType.NUMBER)
-        self.dd_conto_addebito = ft.Dropdown(label="Conto di Addebito")
-        self.dd_categoria = ft.Dropdown(label="Categoria")
+        self.txt_nome = ft.TextField()
+        self.txt_importo = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
+        self.dd_conto_addebito = ft.Dropdown()
+        self.dd_sottocategoria = ft.Dropdown()
         self.dd_giorno_addebito = ft.Dropdown(
-            label="Giorno del Mese per l'Addebito",
             options=[ft.dropdown.Option(str(i)) for i in range(1, 29)]  # Fino a 28 per sicurezza
         )
-        self.sw_attiva = ft.Switch(label="Attiva", value=True)
+        self.sw_attiva = ft.Switch(value=True)
 
         self.content = ft.Column(
             [
                 self.txt_nome,
                 self.txt_importo,
                 self.dd_conto_addebito,
-                self.dd_categoria,
+                self.dd_sottocategoria,
                 self.dd_giorno_addebito,
                 self.sw_attiva
             ],
@@ -49,7 +49,21 @@ class SpesaFissaDialog(ft.AlertDialog):
         ]
         self.actions_alignment = ft.MainAxisAlignment.END
 
+    def _update_texts(self):
+        """Aggiorna i testi fissi con le traduzioni."""
+        loc = self.loc
+        self.txt_nome.label = loc.get("name")
+        self.txt_importo.label = loc.get("amount")
+        self.txt_importo.prefix_text = loc.currencies[loc.currency]['symbol']
+        self.dd_conto_addebito.label = loc.get("debit_account")
+        self.dd_sottocategoria.label = loc.get("subcategory")
+        self.dd_giorno_addebito.label = loc.get("debit_day_of_month")
+        self.sw_attiva.label = loc.get("active")
+        self.actions[0].text = loc.get("cancel")
+        self.actions[1].text = loc.get("save")
+
     def apri_dialog(self, spesa_fissa_data=None):
+        self._update_texts()
         self._reset_campi()
         self._popola_dropdowns()
 
@@ -62,7 +76,7 @@ class SpesaFissaDialog(ft.AlertDialog):
             conto_key = f"{'C' if spesa_fissa_data['id_conto_condiviso_addebito'] else 'P'}{spesa_fissa_data['id_conto_personale_addebito'] or spesa_fissa_data['id_conto_condiviso_addebito']}"
             self.dd_conto_addebito.value = conto_key
 
-            self.dd_categoria.value = spesa_fissa_data['id_categoria']
+            self.dd_sottocategoria.value = spesa_fissa_data.get('id_sottocategoria')
             self.dd_giorno_addebito.value = str(spesa_fissa_data['giorno_addebito'])
             self.sw_attiva.value = bool(spesa_fissa_data['attiva'])
         else:
@@ -74,7 +88,7 @@ class SpesaFissaDialog(ft.AlertDialog):
         self.page.update()
 
     def _reset_campi(self):
-        for field in [self.txt_nome, self.txt_importo, self.dd_conto_addebito, self.dd_categoria,
+        for field in [self.txt_nome, self.txt_importo, self.dd_conto_addebito, self.dd_sottocategoria,
                       self.dd_giorno_addebito]:
             field.error_text = None
             if isinstance(field, ft.TextField):
@@ -97,10 +111,15 @@ class SpesaFissaDialog(ft.AlertDialog):
             opzioni_conto.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}{owner}"))
         self.dd_conto_addebito.options = opzioni_conto
 
-        # Popola categorie
-        categorie = ottieni_categorie(id_famiglia)
-        self.dd_categoria.options = [ft.dropdown.Option(key=cat['id_categoria'], text=cat['nome_categoria']) for cat in
-                                     categorie]
+        # Popola sottocategorie raggruppate per categoria
+        categorie_con_sottocategorie = ottieni_categorie_e_sottocategorie(id_famiglia)
+        opzioni_sottocategoria = []
+        for cat_id, cat_data in categorie_con_sottocategorie.items():
+            if cat_data['sottocategorie']:
+                opzioni_sottocategoria.append(ft.dropdown.Option(key=f"cat_{cat_id}", text=cat_data['nome_categoria'], disabled=True))
+                for sub in cat_data['sottocategorie']:
+                    opzioni_sottocategoria.append(ft.dropdown.Option(key=sub['id_sottocategoria'], text=f"  - {sub['nome_sottocategoria']}"))
+        self.dd_sottocategoria.options = opzioni_sottocategoria
 
     def _chiudi_dialog(self, e):
         self.open = False
@@ -112,7 +131,7 @@ class SpesaFissaDialog(ft.AlertDialog):
                 nome = self.txt_nome.value
                 importo = abs(float(self.txt_importo.value.replace(",", ".")))
                 conto_key = self.dd_conto_addebito.value
-                id_categoria = self.dd_categoria.value
+                id_sottocategoria = self.dd_sottocategoria.value
                 giorno_addebito = int(self.dd_giorno_addebito.value)
                 attiva = self.sw_attiva.value
 
@@ -127,13 +146,13 @@ class SpesaFissaDialog(ft.AlertDialog):
                 if self.id_spesa_fissa_in_modifica:
                     success = modifica_spesa_fissa(
                         self.id_spesa_fissa_in_modifica, nome, importo, id_conto_personale, id_conto_condiviso,
-                        id_categoria, giorno_addebito, attiva
+                        id_sottocategoria, giorno_addebito, attiva
                     )
                 else:
                     id_famiglia = self.controller.get_family_id()
                     success = aggiungi_spesa_fissa(
                         id_famiglia, nome, importo, id_conto_personale, id_conto_condiviso,
-                        id_categoria, giorno_addebito, attiva
+                        id_sottocategoria, giorno_addebito, attiva
                     )
 
                 if success:
@@ -148,12 +167,12 @@ class SpesaFissaDialog(ft.AlertDialog):
         except Exception as ex:
             print(f"Errore salvataggio spesa fissa: {ex}")
             traceback.print_exc()
-            self.controller.show_snack_bar(f"Errore inaspettato: {ex}", success=False)
+            self.controller.show_error_dialog(f"Errore inaspettato: {ex}")
             self.page.update()
 
     def _valida_campi(self):
         is_valid = True
-        for field in [self.txt_nome, self.txt_importo, self.dd_conto_addebito, self.dd_categoria,
+        for field in [self.txt_nome, self.txt_importo, self.dd_conto_addebito, self.dd_sottocategoria,
                       self.dd_giorno_addebito]:
             field.error_text = None
             if not field.value:
