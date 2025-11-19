@@ -16,6 +16,7 @@ class BudgetTab(ft.Container):
         )
         self.content = ft.Column(expand=True, spacing=10)
 
+
     def update_view_data(self, is_initial_load=False):
         theme = self.page.theme.color_scheme if self.page and self.page.theme else ft.ColorScheme()
         self.content.controls = self.build_controls()
