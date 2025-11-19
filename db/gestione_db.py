@@ -388,9 +388,8 @@ def ottieni_dettagli_conti_utente(id_utente):
                                        THEN (SELECT COALESCE(SUM(A.quantita * A.prezzo_attuale_manuale), 0.0)
                                              FROM Asset A
                                              WHERE A.id_conto = C.id_conto)
-                                   ELSE (SELECT COALESCE(SUM(T.importo), 0.0)
-                                         FROM Transazioni T
-                                         WHERE T.id_conto = C.id_conto)
+                                   ELSE (SELECT COALESCE(SUM(T.importo), 0.0) FROM Transazioni T WHERE T.id_conto = C.id_conto) +
+                                        COALESCE(C.rettifica_saldo, 0.0)
                                    END AS saldo_calcolato
                         FROM Conti C
                         WHERE C.id_utente = ?
@@ -422,52 +421,56 @@ def elimina_conto(id_conto, id_utente):
     try:
         with sqlite3.connect(DB_FILE) as con:
             cur = con.cursor()
-            cur.execute("SELECT tipo, valore_manuale FROM Conti WHERE id_conto = ? AND id_utente = ?", (id_conto,))
+            cur.execute("SELECT tipo, valore_manuale FROM Conti WHERE id_conto = ? AND id_utente = ?", (id_conto, id_utente))
             res = cur.fetchone()
             if not res: return False
             tipo, valore_manuale = res
 
-            saldo = 0
+            saldo = 0.0
+            num_transazioni = 0
+
             if tipo == 'Fondo Pensione':
                 saldo = valore_manuale if valore_manuale else 0
             elif tipo == 'Investimento':
                 cur.execute(
-                    "SELECT COALESCE(SUM(quantita * prezzo_attuale_manuale), 0.0) FROM Asset WHERE id_conto = ?",
+                    "SELECT COALESCE(SUM(quantita * prezzo_attuale_manuale), 0.0), COUNT(*) FROM Asset WHERE id_conto = ?",
                     (id_conto,))
-                saldo = cur.fetchone()[0]
+                saldo, num_transazioni = cur.fetchone()
             else:
-                cur.execute("SELECT COALESCE(SUM(importo), 0.0) FROM Transazioni T WHERE T.id_conto = ?", (id_conto,))
-                saldo = cur.fetchone()[0]
+                cur.execute("SELECT COALESCE(SUM(importo), 0.0), COUNT(*) FROM Transazioni T WHERE T.id_conto = ?", (id_conto,))
+                saldo, num_transazioni = cur.fetchone()
 
             if abs(saldo) > 1e-9:
                 return "SALDO_NON_ZERO"
+            
+            # Nuovo controllo: impedisce la cancellazione se ci sono transazioni/asset, anche se il saldo è zero.
+            if num_transazioni > 0:
+                return "CONTO_NON_VUOTO"
 
             cur.execute("PRAGMA foreign_keys = ON;")
             cur.execute("DELETE FROM Conti WHERE id_conto = ? AND id_utente = ?", (id_conto, id_utente))
             return cur.rowcount > 0
     except Exception as e:
-        print(f"❌ Errore generico durante l'eliminazione del conto: {e}")
-        return False
+        error_message = f"Errore generico durante l'eliminazione del conto: {e}"
+        print(f"❌ {error_message}")
+        return False, error_message
 
 def admin_imposta_saldo_conto_corrente(id_conto, nuovo_saldo):
+    """
+    [SOLO ADMIN] Calcola e imposta la rettifica per forzare un nuovo saldo, senza cancellare le transazioni.
+    """
     try:
         with sqlite3.connect(DB_FILE) as con:
             cur = con.cursor()
-            cur.execute("BEGIN TRANSACTION;")
-            # 1. Cancella tutte le transazioni esistenti per questo conto
-            cur.execute("DELETE FROM Transazioni WHERE id_conto = ?", (id_conto,))
-            # 2. Inserisce una nuova transazione di "saldo iniziale"
-            data_oggi = datetime.date.today().strftime('%Y-%m-%d')
-            descrizione = "Rettifica Saldo (Admin)"
-            cur.execute(
-                "INSERT INTO Transazioni (id_conto, data, descrizione, importo) VALUES (?, ?, ?, ?)",
-                (id_conto, data_oggi, descrizione, nuovo_saldo)
-            )
-            con.commit()
-            return True
+            # Calcola il saldo corrente basato solo sulle transazioni
+            cur.execute("SELECT COALESCE(SUM(importo), 0.0) FROM Transazioni WHERE id_conto = ?", (id_conto,))
+            saldo_transazioni = cur.fetchone()[0]
+            # La rettifica è la differenza tra il nuovo saldo desiderato e il saldo delle transazioni
+            rettifica = nuovo_saldo - saldo_transazioni
+            cur.execute("UPDATE Conti SET rettifica_saldo = ? WHERE id_conto = ?", (rettifica, id_conto))
+            return cur.rowcount > 0
     except Exception as e:
-        print(f"❌ Errore durante la rettifica del saldo: {e}")
-        if con: con.rollback()
+        print(f"❌ Errore in admin_imposta_saldo_conto_corrente: {e}")
         return False
 
 # --- Funzioni Conti Condivisi ---
@@ -921,7 +924,7 @@ def ottieni_transazioni_utente(id_utente, anno, mese):
                                T.importo,
                                C.nome_conto,
                                C.id_conto,
-                               Cat.nome_categoria,
+                               COALESCE(Cat.nome_categoria || ' - ' || SCat.nome_sottocategoria, Cat.nome_categoria, SCat.nome_sottocategoria) AS nome_sottocategoria,
                                SCat.nome_sottocategoria,
                                SCat.id_sottocategoria,
                                'personale' AS tipo_transazione,
@@ -942,7 +945,7 @@ def ottieni_transazioni_utente(id_utente, anno, mese):
                                TC.importo,
                                CC.nome_conto,
                                CC.id_conto_condiviso AS id_conto,
-                               Cat.nome_categoria,
+                               COALESCE(Cat.nome_categoria || ' - ' || SCat.nome_sottocategoria, Cat.nome_categoria, SCat.nome_sottocategoria) AS nome_sottocategoria,
                                SCat.nome_sottocategoria,
                                SCat.id_sottocategoria,
                                'condivisa'           AS tipo_transazione,
@@ -1150,7 +1153,7 @@ def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese):
             print(
                 f"DEBUG (ottieni_riepilogo_patrimonio_famiglia_aggregato): Calcolo patrimonio per famiglia {id_famiglia}")
 
-            # 1. Liquidità totale (Conti personali di tutti gli utenti + Conti condivisi della famiglia)
+            # 1. Liquidità totale (Conti personali + Conti condivisi + Rettifiche personali)
             cur.execute("""
                         SELECT (SELECT COALESCE(SUM(T.importo), 0.0)
                                 FROM Transazioni T
@@ -1164,8 +1167,14 @@ def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese):
                                 FROM TransazioniCondivise TC
                                          JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
                                 WHERE CC.id_famiglia = ?
-                                  AND TC.data <= ?) AS liquidita_totale
-                        """, (id_famiglia, data_fine, id_famiglia, data_fine))
+                                  AND TC.data <= ?)
+                                   +
+                               (SELECT COALESCE(SUM(C.rettifica_saldo), 0.0)
+                                FROM Conti C
+                                         JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
+                                WHERE AF.id_famiglia = ?
+                                  AND C.tipo NOT IN ('Investimento', 'Fondo Pensione')) AS liquidita_totale
+                        """, (id_famiglia, data_fine, id_famiglia, data_fine, id_famiglia))
             liquidita_totale = cur.fetchone()[0] or 0.0
             print(f"DEBUG (ottieni_riepilogo_patrimonio_famiglia_aggregato): Liquidità totale: {liquidita_totale}")
 
@@ -1219,7 +1228,16 @@ def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese):
                           AND C.tipo NOT IN ('Investimento', 'Fondo Pensione')
                           AND T.data <= ?
                         """, (id_utente, data_fine))
-            liquidita_personale = cur.fetchone()[0] or 0.0
+            liquidita_transazioni = cur.fetchone()[0] or 0.0
+
+            cur.execute("""
+                        SELECT COALESCE(SUM(rettifica_saldo), 0.0)
+                        FROM Conti
+                        WHERE id_utente = ?
+                          AND tipo NOT IN ('Investimento', 'Fondo Pensione')
+                        """, (id_utente,))
+            rettifiche_personali = cur.fetchone()[0] or 0.0
+            liquidita_personale = liquidita_transazioni + rettifiche_personali
             print(
                 f"DEBUG (ottieni_riepilogo_patrimonio_utente): Liquidità personale (solo conti privati): {liquidita_personale}")
 
@@ -1312,7 +1330,7 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese):
                         SELECT COALESCE(U.nome || ' ' || U.cognome, U.username) AS utente_nome,
                                T.data,
                                T.descrizione,
-                               Cat.nome_categoria,
+                               COALESCE(Cat.nome_categoria || ' - ' || SCat.nome_sottocategoria, Cat.nome_categoria, SCat.nome_sottocategoria) AS nome_sottocategoria,
                                C.nome_conto                                     AS conto_nome,
                                T.importo
                         FROM Transazioni T
@@ -1328,7 +1346,7 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese):
                         SELECT COALESCE(U.nome || ' ' || U.cognome, U.username) AS utente_nome,
                                TC.data,
                                TC.descrizione,
-                               Cat.nome_categoria,
+                               COALESCE(Cat.nome_categoria || ' - ' || SCat.nome_sottocategoria, Cat.nome_categoria, SCat.nome_sottocategoria) AS nome_sottocategoria,
                                CC.nome_conto                                    AS conto_nome,
                                TC.importo
                         FROM TransazioniCondivise TC

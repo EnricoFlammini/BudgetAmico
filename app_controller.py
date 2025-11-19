@@ -293,7 +293,7 @@ class AppController:
         self.page.update()
 
     def open_confirm_delete_dialog(self, delete_callback):
-        theme = self._get_current_theme_scheme()
+        theme = self._get_current_theme_scheme() or ft.ColorScheme()
         self.confirm_delete_dialog.actions[0].style = ft.ButtonStyle(color=theme.error)
         self.page.session.set("delete_callback", delete_callback)
         self.page.dialog = self.confirm_delete_dialog
@@ -331,7 +331,7 @@ class AppController:
     def build_setup_view(self) -> ft.View:
         self.txt_nome_famiglia.value = ""
         self.txt_errore_setup.visible = False
-        theme = self._get_current_theme_scheme()
+        theme = self._get_current_theme_scheme() or ft.ColorScheme()
         self.txt_errore_setup.color = theme.error
 
         return ft.View("/setup-admin", [
@@ -376,7 +376,7 @@ class AppController:
     def build_attesa_view(self) -> ft.View:
         utente = self.page.session.get("utente_loggato")
         username = utente['username'] if utente else "utente"
-        theme = self._get_current_theme_scheme()
+        theme = self._get_current_theme_scheme() or ft.ColorScheme()
         return ft.View("/in-attesa", [
             ft.Column([
                 ft.Icon(ft.Icons.TIMER, size=60, color=theme.secondary),
@@ -422,7 +422,7 @@ class AppController:
             threading.Thread(target=google_drive_manager.upload_db, args=(self,)).start()
 
     def show_snack_bar(self, messaggio, success=True):
-        theme = self._get_current_theme_scheme()
+        theme = self._get_current_theme_scheme() or ft.ColorScheme()
         self.page.snack_bar = ft.SnackBar(
             ft.Text(messaggio),
             bgcolor=theme.primary_container if success else theme.error_container

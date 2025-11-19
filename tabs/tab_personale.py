@@ -98,9 +98,8 @@ class PersonaleTab(ft.Container):
                             ft.Column([
                                 ft.Text(self.controller.loc.format_currency(t['importo']), size=14,
                                         color=ft.Colors.GREEN_500 if t['importo'] > 0 else ft.Colors.RED_500),
-                                ft.Text(t['nome_categoria'] if t['nome_categoria'] else self.controller.loc.get(
-                                    "no_category"), size=10,
-                                        color=ft.Colors.GREY_500)
+                                ft.Text(t.get('nome_sottocategoria') or self.controller.loc.get("no_category"),
+                                        size=10, color=ft.Colors.GREY_500)
                             ], horizontal_alignment=ft.CrossAxisAlignment.END),
                             azioni
                         ],

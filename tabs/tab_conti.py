@@ -80,7 +80,7 @@ class ContiTab(ft.Container):
                 )
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ft.Divider(),
-            self.lv_conti_personali,
+            ft.Container(content=self.lv_conti_personali, expand=True),
         ]
 
     def _crea_widget_conto_personale(self, conto: dict, theme) -> ft.Container:
@@ -139,5 +139,10 @@ class ContiTab(ft.Container):
             self.controller.db_write_operation()
         elif risultato == "SALDO_NON_ZERO":
             self.controller.show_snack_bar("❌ Errore: Il saldo/valore del conto non è 0.", success=False)
+        elif risultato == "CONTO_NON_VUOTO":
+            self.controller.show_snack_bar("❌ Errore: Non puoi eliminare un conto con transazioni o asset.", success=False)
+        elif isinstance(risultato, tuple) and not risultato[0]:
+            # Nuovo: gestisce l'errore restituito dal DB e mostra il popup
+            self.controller.show_error_dialog(risultato[1])
         else:
-            self.controller.show_snack_bar("❌ Errore sconosciuto durante l'eliminazione.", success=False)
+            self.controller.show_error_dialog("Si è verificato un errore sconosciuto durante l'eliminazione del conto.")

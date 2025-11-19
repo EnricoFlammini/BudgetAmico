@@ -7,7 +7,10 @@ from db.gestione_db import (
     ottieni_tutti_i_conti_utente,
     ottieni_categorie_e_sottocategorie,
     ottieni_conto_default_utente,
-    aggiungi_transazione_condivisa
+    aggiungi_transazione_condivisa,
+    modifica_transazione_condivisa,
+    elimina_transazione,
+    elimina_transazione_condivisa
 )
 
 
@@ -163,7 +166,7 @@ class TransactionDialog(ft.AlertDialog):
             traceback.print_exc()
             self.controller.show_snack_bar(f"Errore: {ex}", success=False)
 
-    def _salva_nuova_transazione(self, e):
+    def _valida_e_raccogli_dati(self):
         try:
             is_valid = True
             self.txt_descrizione_dialog.error_text = None
@@ -196,31 +199,71 @@ class TransactionDialog(ft.AlertDialog):
             if self.radio_tipo_transazione.value == "Spesa":
                 importo = -importo
 
-            selected_conto_value = self.dd_conto_dialog.value
-            tipo_conto_prefix = selected_conto_value[0]
-            id_conto = int(selected_conto_value[1:])
-            id_sottocategoria = self.dd_sottocategoria_dialog.value
-            transazione_in_modifica = self.page.session.get("transazione_in_modifica")
+            return {
+                "data": data, "descrizione": descrizione, "importo": importo,
+                "id_sottocategoria": self.dd_sottocategoria_dialog.value,
+                "id_conto": int(self.dd_conto_dialog.value[1:]),
+                "is_nuovo_conto_condiviso": self.dd_conto_dialog.value.startswith('C')
+            }
+        except Exception as ex:
+            print(f"Errore validazione dati transazione: {ex}")
+            traceback.print_exc()
+            return None
 
-            success = False
-            messaggio = ""
+    def _esegui_modifica(self, dati_nuovi, transazione_originale):
+        is_originale_condivisa = transazione_originale.get('id_transazione_condivisa', 0) > 0
+        is_nuova_condivisa = dati_nuovi['is_nuovo_conto_condiviso']
 
-            if transazione_in_modifica:
-                # Logica di modifica
-                self.controller.show_snack_bar("La modifica non è ancora implementata.", success=False)
-                return
+        # Caso 1: Il tipo di conto non è cambiato (Personale -> Personale o Condiviso -> Condiviso)
+        if is_originale_condivisa == is_nuova_condivisa:
+            if is_originale_condivisa:
+                id_trans = transazione_originale['id_transazione_condivisa']
+                return modifica_transazione_condivisa(id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], dati_nuovi['id_sottocategoria'])
             else:
-                # Logica di aggiunta
-                if tipo_conto_prefix == 'P':
-                    success = aggiungi_transazione(id_conto=id_conto, data=data, descrizione=descrizione,
-                                                   importo=importo, id_sottocategoria=id_sottocategoria) is not None
-                elif tipo_conto_prefix == 'C':
-                    id_utente_autore = self.controller.get_user_id()
-                    success = aggiungi_transazione_condivisa(id_utente_autore=id_utente_autore,
-                                                             id_conto_condiviso=id_conto, data=data,
-                                                             descrizione=descrizione, importo=importo,
-                                                             id_sottocategoria=id_sottocategoria) is not None
+                id_trans = transazione_originale['id_transazione']
+                return modifica_transazione(id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], dati_nuovi['id_sottocategoria'], dati_nuovi['id_conto'])
+        
+        # Caso 2: Il tipo di conto è cambiato (es. da Personale a Condiviso)
+        # Trattiamo come un'operazione di "elimina e crea"
+        else:
+            # Elimina la vecchia transazione
+            if is_originale_condivisa:
+                elimina_transazione_condivisa(transazione_originale['id_transazione_condivisa'])
+            else:
+                elimina_transazione(transazione_originale['id_transazione'])
+            
+            # Crea la nuova transazione
+            return self._esegui_aggiunta(dati_nuovi)
 
+    def _esegui_aggiunta(self, dati):
+        if dati['is_nuovo_conto_condiviso']:
+            id_utente_autore = self.controller.get_user_id()
+            return aggiungi_transazione_condivisa(
+                id_utente_autore=id_utente_autore, id_conto_condiviso=dati['id_conto'],
+                data=dati['data'], descrizione=dati['descrizione'], importo=dati['importo'],
+                id_sottocategoria=dati['id_sottocategoria']
+            ) is not None
+        else:
+            return aggiungi_transazione(
+                id_conto=dati['id_conto'], data=dati['data'], descrizione=dati['descrizione'],
+                importo=dati['importo'], id_sottocategoria=dati['id_sottocategoria']
+            ) is not None
+
+    def _salva_nuova_transazione(self, e):
+        dati_validati = self._valida_e_raccogli_dati()
+        if not dati_validati:
+            return
+
+        transazione_in_modifica = self.page.session.get("transazione_in_modifica")
+        success = False
+        messaggio = ""
+
+        try:
+            if transazione_in_modifica:
+                success = self._esegui_modifica(dati_validati, transazione_in_modifica)
+                messaggio = "modificata" if success else "errore nella modifica"
+            else:
+                success = self._esegui_aggiunta(dati_validati)
                 messaggio = "aggiunta" if success else "errore nell'aggiunta"
 
             if success:
@@ -233,6 +276,6 @@ class TransactionDialog(ft.AlertDialog):
         except Exception as ex:
             print(f"Errore salvataggio transazione: {ex}")
             traceback.print_exc()
-            self.controller.show_snack_bar(f"Errore inaspettato: {ex}", success=False)
-        
+            self.controller.show_error_dialog(f"Errore inaspettato durante il salvataggio: {ex}")
+
         if self.page: self.page.update()

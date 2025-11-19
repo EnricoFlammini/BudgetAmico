@@ -127,8 +127,8 @@ class FamigliaTab(ft.Container):
                         ft.DataRow(cells=[
                             ft.DataCell(ft.Text(t.get('utente_nome') or self.controller.loc.get("shared"))),
                             ft.DataCell(ft.Text(t.get('data') or "N/A")),
-                            ft.DataCell(ft.Text(t.get('descrizione') or "N/A")),
-                            ft.DataCell(ft.Text(t.get('nome_categoria') or "N/A")),
+                            ft.DataCell(ft.Text(t.get('descrizione') or "N/A", tooltip=t.get('descrizione'))),
+                            ft.DataCell(ft.Text(t.get('nome_sottocategoria') or "N/A")),
                             ft.DataCell(ft.Text(t.get('conto_nome') or "N/A")),
                             ft.DataCell(ft.Text(self.controller.loc.format_currency(t.get('importo', 0)),
                                                 color=theme.primary if t.get('importo', 0) >= 0 else theme.error)),
@@ -143,7 +143,7 @@ class FamigliaTab(ft.Container):
         self.dd_mese_filtro.label = loc.get("filter_by_month")
         self.dt_transazioni_famiglia.columns = [
             ft.DataColumn(ft.Text(loc.get("user"))), ft.DataColumn(ft.Text(loc.get("date"))),
-            ft.DataColumn(ft.Text(loc.get("description"))), ft.DataColumn(ft.Text(loc.get("category"))),
+            ft.DataColumn(ft.Text(loc.get("description"))), ft.DataColumn(ft.Text(loc.get("subcategory"))),
             ft.DataColumn(ft.Text(loc.get("account"))), ft.DataColumn(ft.Text(loc.get("amount")), numeric=True),
         ]
 

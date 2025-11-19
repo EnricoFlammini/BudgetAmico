@@ -114,27 +114,37 @@ class ContoDialog(ft.AlertDialog):
 
     def _aggiungi_riga_asset_iniziale(self, e=None):
         loc = self.loc
-        riga = ft.Row(
+        # Layout migliorato su due righe per dare più spazio ai campi
+        riga_asset = ft.Column(
             [
-                ft.TextField(label=loc.get("ticker"), width=100, data="ticker"),
-                ft.TextField(label=loc.get("asset_name"), expand=True, data="nome"),
-                ft.TextField(label=loc.get("quantity"), width=100, keyboard_type=ft.KeyboardType.NUMBER,
-                             data="quantita"),
-                ft.TextField(label=loc.get("avg_purchase_price"), prefix=loc.currencies[loc.currency]['symbol'],
-                             width=120, keyboard_type=ft.KeyboardType.NUMBER, data="costo_medio"),
-                ft.TextField(label=loc.get("current_unit_price"), prefix=loc.currencies[loc.currency]['symbol'],
-                             width=120, keyboard_type=ft.KeyboardType.NUMBER, data="prezzo_attuale"),
-                ft.IconButton(
-                    icon=ft.Icons.REMOVE_CIRCLE_OUTLINE,
-                    icon_color=ft.Colors.RED_400,
-                    tooltip=loc.get("remove_asset"),
-                    on_click=lambda e: self._rimuovi_riga_asset_iniziale(e.control.parent)
-                )
-            ],
-            spacing=5,
-            vertical_alignment=ft.CrossAxisAlignment.START
+                ft.Row([
+                    ft.TextField(label=loc.get("ticker"), width=100, data="ticker"),
+                    ft.TextField(label=loc.get("asset_name"), expand=True, data="nome"),
+                    ft.IconButton(
+                        icon=ft.Icons.REMOVE_CIRCLE_OUTLINE,
+                        icon_color=ft.Colors.RED_400,
+                        tooltip=loc.get("remove_asset"),
+                        on_click=lambda e: self._rimuovi_riga_asset_iniziale(e.control.data)
+                    )
+                ]),
+                ft.Row([
+                    ft.TextField(label=loc.get("quantity"), width=100, keyboard_type=ft.KeyboardType.NUMBER,
+                                 data="quantita"),
+                    ft.TextField(label=loc.get("current_unit_price"), prefix=loc.currencies[loc.currency]['symbol'],
+                                 width=140, keyboard_type=ft.KeyboardType.NUMBER, data="prezzo_attuale"),
+                    ft.TextField(label=loc.get("avg_purchase_price"), prefix=loc.currencies[loc.currency]['symbol'],
+                                 width=140, keyboard_type=ft.KeyboardType.NUMBER, data="costo_medio",
+                                 tooltip=loc.get("avg_purchase_price_tooltip")),
+                    ft.TextField(label=loc.get("past_gain_loss"), prefix=loc.currencies[loc.currency]['symbol'],
+                                 width=140, keyboard_type=ft.KeyboardType.NUMBER, data="gain_loss",
+                                 tooltip=loc.get("past_gain_loss_tooltip")),
+                ], spacing=5)
+            ], spacing=5
         )
-        self.lv_asset_iniziali.controls.append(riga)
+        # Assegna il controllo Column al pulsante di rimozione per una facile identificazione
+        riga_asset.controls[0].controls[2].data = riga_asset
+
+        self.lv_asset_iniziali.controls.append(riga_asset)
         if self.open:
             self.content.update()
 
@@ -233,12 +243,24 @@ class ContoDialog(ft.AlertDialog):
                         if not ticker: continue # Salta righe vuote
 
                         try:
+                            quantita = float(fields['quantita'].value.replace(",", "."))
+                            prezzo_attuale = float(fields['prezzo_attuale'].value.replace(",", "."))
+                            costo_medio_str = fields['costo_medio'].value.replace(",", ".")
+                            gain_loss_str = fields['gain_loss'].value.replace(",", ".")
+
+                            costo_medio = 0.0
+                            if costo_medio_str:
+                                costo_medio = float(costo_medio_str)
+                            elif gain_loss_str:
+                                gain_loss = float(gain_loss_str)
+                                costo_medio = prezzo_attuale - (gain_loss / quantita)
+
                             asset = {
                                 'ticker': ticker,
                                 'nome': fields['nome'].value.strip(),
-                                'quantita': float(fields['quantita'].value.replace(",", ".")),
-                                'costo_medio': float(fields['costo_medio'].value.replace(",", ".")),
-                                'prezzo_attuale': float(fields['prezzo_attuale'].value.replace(",", "."))
+                                'quantita': quantita,
+                                'costo_medio': costo_medio,
+                                'prezzo_attuale': prezzo_attuale
                             }
                             if not asset['nome'] or asset['quantita'] <= 0 or asset['costo_medio'] <= 0 or asset['prezzo_attuale'] <= 0:
                                 raise ValueError("Campi asset non validi")

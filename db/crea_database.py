@@ -59,7 +59,8 @@ TABLES = {
             nome_conto TEXT NOT NULL,
             tipo TEXT NOT NULL,
             iban TEXT,
-            valore_manuale REAL DEFAULT 0.0
+            valore_manuale REAL DEFAULT 0.0,
+            rettifica_saldo REAL DEFAULT 0.0
         );
     """,
     "ContiCondivisi": """

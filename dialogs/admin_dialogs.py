@@ -4,7 +4,8 @@ from db.gestione_db import (
     modifica_categoria,
     elimina_categoria,
     modifica_ruolo_utente,
-    ottieni_categorie,
+    # ottieni_categorie, # Non più necessario qui
+    ottieni_categorie_e_sottocategorie, # Usiamo questo
     imposta_budget,
     aggiungi_sottocategoria,
     modifica_sottocategoria
@@ -91,14 +92,14 @@ class AdminDialogs:
         )
 
         # --- NUOVO DIALOGO: IMPOSTA BUDGET ---
-        self.dd_budget_categorie = ft.Dropdown(label=self.loc.get("category"))
+        self.dd_budget_sottocategorie = ft.Dropdown(label=self.loc.get("subcategory"))
         self.txt_budget_limite = ft.TextField(label=self.loc.get("limit_amount"),
                                               prefix=self.loc.currencies[self.loc.currency]['symbol'])
 
         self.dialog_imposta_budget = ft.AlertDialog(
             modal=True,
             title=ft.Text(self.loc.get("set_monthly_budget")),
-            content=ft.Column([self.dd_budget_categorie, self.txt_budget_limite], tight=True),
+            content=ft.Column([self.dd_budget_sottocategorie, self.txt_budget_limite], tight=True),
             actions=[
                 ft.TextButton(self.loc.get("cancel"), on_click=self._chiudi_dialog_imposta_budget),
                 ft.TextButton(self.loc.get("save"), on_click=self._salva_budget_cliccato),
@@ -268,11 +269,17 @@ class AdminDialogs:
         if not id_famiglia:
             return
 
-        # Popola categorie
-        categorie = ottieni_categorie(id_famiglia)
-        self.dd_budget_categorie.options = [ft.dropdown.Option(key=c['id_categoria'], text=c['nome_categoria']) for c in
-                                            categorie]
-        self.dd_budget_categorie.value = None
+        # Popola il dropdown con le sottocategorie
+        categorie_con_sottocategorie = ottieni_categorie_e_sottocategorie(id_famiglia)
+        opzioni = []
+        for cat_id, cat_data in categorie_con_sottocategorie.items():
+            if cat_data['sottocategorie']:
+                opzioni.append(ft.dropdown.Option(key=f"cat_{cat_id}", text=cat_data['nome_categoria'], disabled=True))
+                for sub in cat_data['sottocategorie']:
+                    opzioni.append(ft.dropdown.Option(key=sub['id_sottocategoria'], text=f"  - {sub['nome_sottocategoria']}"))
+
+        self.dd_budget_sottocategorie.options = opzioni
+        self.dd_budget_sottocategorie.value = None
         self.txt_budget_limite.value = ""
         self.txt_budget_limite.error_text = None
 
@@ -290,13 +297,13 @@ class AdminDialogs:
     def _salva_budget_cliccato(self, e):
         loc = self.loc
         id_famiglia = self.controller.get_family_id()
-        id_categoria = self.dd_budget_categorie.value
+        id_sottocategoria = self.dd_budget_sottocategorie.value
         limite_str = self.txt_budget_limite.value
 
-        if id_categoria and limite_str:
+        if id_sottocategoria and limite_str:
             try:
                 limite = float(limite_str.replace(",", "."))
-                imposta_budget(id_famiglia, id_categoria, limite)
+                imposta_budget(id_famiglia, id_sottocategoria, limite)
 
                 self.dialog_imposta_budget.open = False
                 self.controller.show_snack_bar(loc.get("budget_saved"), success=True)
