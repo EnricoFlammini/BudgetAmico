@@ -101,7 +101,7 @@ class AuthView:
         self.txt_reg_username.label = loc.get("username")
         self.txt_reg_email.label = loc.get("email")
         self.txt_reg_nome.label = loc.get("name")
-        self.txt_reg_cognome.label = "Cognome"
+        self.txt_reg_cognome.label = loc.get("Cognome")
         self.txt_reg_password.label = "Password"
         self.txt_reg_conferma_password.label = loc.get("confirm_new_password")
 
@@ -266,7 +266,7 @@ class AuthView:
                         <p>Al prossimo accesso ti verrà chiesto di impostare una nuova password personale.</p>
                     </body></html>
                     """
-                send_email_via_gmail_api(email, "Password Temporanea - Budget Familiare", body)
+                send_email_via_gmail_api(email, "Password Temporanea - Budget Amico", body)
 
         # Mostra un messaggio generico per motivi di sicurezza
         self.recovery_status_text.value = self.loc.get("reset_link_sent_confirmation")
