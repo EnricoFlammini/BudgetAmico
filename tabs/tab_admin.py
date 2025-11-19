@@ -109,7 +109,7 @@ class AdminTab(ft.Container):
 
     def update_tab_categorie(self):
         loc = self.controller.loc
-        theme = self.controller._get_current_theme_scheme()
+        theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
         id_famiglia = self.controller.get_family_id()
         if not id_famiglia: return
 
@@ -157,7 +157,7 @@ class AdminTab(ft.Container):
 
     def update_tab_membri(self):
         loc = self.controller.loc
-        theme = self.controller._get_current_theme_scheme()
+        theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
         id_famiglia = self.controller.get_family_id()
         current_user_id = self.controller.get_user_id()
         if not id_famiglia: return
@@ -222,7 +222,7 @@ class AdminTab(ft.Container):
     def update_tab_google(self):
         """Aggiorna la scheda delle impostazioni Google."""
         loc = self.controller.loc
-        theme = self.controller._get_current_theme_scheme()
+        theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
         is_auth = google_auth_manager.is_authenticated()
         self.controller.page.session.set("google_auth_token_present", is_auth)
 
