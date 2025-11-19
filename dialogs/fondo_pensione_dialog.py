@@ -1,6 +1,7 @@
 import flet as ft
 from db.gestione_db import (
     aggiorna_valore_fondo_pensione,
+    modifica_conto,
     esegui_operazione_fondo_pensione,
     ottieni_conti_utente
 )
@@ -11,10 +12,10 @@ class FondoPensioneDialog(ft.AlertDialog):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
+        self.page = controller.page
         self.loc = controller.loc
         self.modal = True
         self.title = ft.Text()
-        self.content = ft.Column(spacing=20)
         self.actions = [
             ft.TextButton(on_click=self.chiudi_dialog)
         ]
@@ -23,13 +24,13 @@ class FondoPensioneDialog(ft.AlertDialog):
         # Controlli del dialogo
         self.conto_selezionato = None
         self.txt_valore_attuale = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
-        self.btn_aggiorna_valore = ft.ElevatedButton(on_click=self.aggiorna_valore_cliccato)
+        self.btn_aggiorna_valore = ft.ElevatedButton(on_click=self._aggiorna_valore_cliccato)
 
         self.txt_importo_operazione = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.dd_conto_collegato = ft.Dropdown()
-        self.btn_versa_da_conto = ft.ElevatedButton(on_click=self.versa_da_conto_cliccato)
-        self.btn_versa_esterno = ft.ElevatedButton(on_click=self.versa_esterno_cliccato)
-        self.btn_preleva = ft.ElevatedButton(on_click=self.preleva_cliccato)
+        self.btn_versa_da_conto = ft.ElevatedButton(on_click=lambda e: self._esegui_operazione('VERSAMENTO'))
+        self.btn_versa_esterno = ft.ElevatedButton(on_click=lambda e: self._esegui_operazione('VERSAMENTO_ESTERNO'))
+        self.btn_preleva = ft.ElevatedButton(on_click=lambda e: self._esegui_operazione('PRELIEVO'))
 
     def _update_texts(self):
         """Aggiorna tutti i testi fissi con le traduzioni correnti."""
@@ -56,6 +57,7 @@ class FondoPensioneDialog(ft.AlertDialog):
         self.title.value = self.loc.get("manage_pension_fund_for", conto_data['nome_conto'])
         self.txt_valore_attuale.value = f"{conto_data.get('saldo_calcolato', 0.0):.2f}"
         self.txt_importo_operazione.value = ""
+        self.txt_valore_attuale.error_text = None
         self.txt_importo_operazione.error_text = None
 
         # Popola dropdown con conti validi
@@ -66,24 +68,28 @@ class FondoPensioneDialog(ft.AlertDialog):
         ]
         self.dd_conto_collegato.value = None
 
-        self.content.controls = [
+        # Imposta il contenuto del dialogo dinamicamente
+        self.content = ft.Column([
             ft.Text(self.loc.get("update_total_value")),
             ft.Row([self.txt_valore_attuale, self.btn_aggiorna_valore], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ft.Divider(),
             ft.Text(self.loc.get("perform_operation")),
             self.txt_importo_operazione,
             self.dd_conto_collegato,
-            ft.Row([self.btn_versa_da_conto, self.btn_versa_esterno, self.btn_preleva],
-                   alignment=ft.MainAxisAlignment.SPACE_AROUND)
-        ]
+            ft.Row(
+                [self.btn_versa_da_conto, self.btn_versa_esterno, self.btn_preleva],
+                alignment=ft.MainAxisAlignment.SPACE_AROUND
+            )
+        ], spacing=15, tight=True)
+
         self.open = True
-        self.controller.page.update()
+        if self.page: self.page.update()
 
     def chiudi_dialog(self, e=None):
         self.open = False
-        self.controller.page.update()
+        if self.page: self.page.update()
 
-    def aggiorna_valore_cliccato(self, e):
+    def _aggiorna_valore_cliccato(self, e):
         try:
             nuovo_valore = float(self.txt_valore_attuale.value.replace(",", "."))
             success = aggiorna_valore_fondo_pensione(self.conto_selezionato['id_conto'], nuovo_valore)
@@ -95,48 +101,45 @@ class FondoPensioneDialog(ft.AlertDialog):
                 self.controller.show_snack_bar(self.loc.get("error_updating_value"), success=False)
         except (ValueError, TypeError):
             self.txt_valore_attuale.error_text = self.loc.get("invalid_amount")
-            self.controller.page.update()
+            if self.page: self.page.update()
 
     def _esegui_operazione(self, tipo_operazione):
+        self.txt_importo_operazione.error_text = None
+        self.dd_conto_collegato.error_text = None
+        is_valid = True
+
         try:
             importo = float(self.txt_importo_operazione.value.replace(",", "."))
             if importo <= 0:
-                raise ValueError("Importo deve essere positivo")
-
-            id_conto_collegato = None
-            if tipo_operazione != 'VERSAMENTO_ESTERNO':
-                id_conto_collegato = self.dd_conto_collegato.value
-                if not id_conto_collegato:
-                    self.dd_conto_collegato.error_text = self.loc.get("select_an_account")
-                    self.controller.page.update()
-                    return
-
-            data_operazione = datetime.date.today().strftime('%Y-%m-%d')
-
-            success = esegui_operazione_fondo_pensione(
-                id_fondo_pensione=self.conto_selezionato['id_conto'],
-                tipo_operazione=tipo_operazione,
-                importo=importo,
-                data=data_operazione,
-                id_conto_collegato=id_conto_collegato
-            )
-
-            if success:
-                self.controller.show_snack_bar(self.loc.get("pension_fund_op_success"), success=True)
-                self.controller.update_all_views()
-                self.chiudi_dialog()
-            else:
-                self.controller.show_snack_bar(self.loc.get("pension_fund_op_error"), success=False)
-
+                self.txt_importo_operazione.error_text = self.loc.get("amount_not_zero")
+                is_valid = False
         except (ValueError, TypeError):
             self.txt_importo_operazione.error_text = self.loc.get("invalid_amount")
-            self.controller.page.update()
+            is_valid = False
 
-    def versa_da_conto_cliccato(self, e):
-        self._esegui_operazione('VERSAMENTO')
+        id_conto_collegato = None
+        if tipo_operazione != 'VERSAMENTO_ESTERNO':
+            id_conto_collegato = self.dd_conto_collegato.value
+            if not id_conto_collegato:
+                self.dd_conto_collegato.error_text = self.loc.get("select_an_account")
+                is_valid = False
 
-    def versa_esterno_cliccato(self, e):
-        self._esegui_operazione('VERSAMENTO_ESTERNO')
+        if not is_valid:
+            if self.page: self.page.update()
+            return
 
-    def preleva_cliccato(self, e):
-        self._esegui_operazione('PRELIEVO')
+        data_operazione = datetime.date.today().strftime('%Y-%m-%d')
+        success = esegui_operazione_fondo_pensione(
+            id_fondo_pensione=self.conto_selezionato['id_conto'],
+            tipo_operazione=tipo_operazione,
+            importo=importo,
+            data=data_operazione,
+            id_conto_collegato=id_conto_collegato
+        )
+
+        if success:
+            self.controller.show_snack_bar(self.loc.get("pension_fund_op_success"), success=True)
+            self.controller.db_write_operation()
+            self.chiudi_dialog()
+        else:
+            self.controller.show_snack_bar(self.loc.get("pension_fund_op_error"), success=False)

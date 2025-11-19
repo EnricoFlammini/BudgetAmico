@@ -33,7 +33,7 @@ class ContoDialog(ft.AlertDialog):
             ]
         )
 
-        # Controlli del dialogo
+        # Controlli del dialogo principale
         self.txt_conto_nome = ft.TextField()
         self.dd_conto_tipo = ft.Dropdown(on_change=self._cambia_tipo_conto_in_dialog)
         self.txt_conto_iban = ft.TextField()
@@ -124,7 +124,7 @@ class ContoDialog(ft.AlertDialog):
                         icon=ft.Icons.REMOVE_CIRCLE_OUTLINE,
                         icon_color=ft.Colors.RED_400,
                         tooltip=loc.get("remove_asset"),
-                        on_click=lambda e: self._rimuovi_riga_asset_iniziale(e.control.data)
+                        on_click=lambda ev: self._rimuovi_riga_asset_iniziale(ev.control.data)
                     )
                 ]),
                 ft.Row([
@@ -177,32 +177,39 @@ class ContoDialog(ft.AlertDialog):
 
     def apri_dialog_conto(self, e, conto_data=None):
         self._update_texts()
+        # Reset errori
         self.txt_conto_nome.error_text = None
         self.txt_conto_iban.error_text = None
         self.txt_conto_saldo_iniziale.error_text = None
         self.lv_asset_iniziali.controls.clear()
-        self._aggiungi_riga_asset_iniziale()
 
         id_utente = self.controller.get_user_id()
         conto_default = ottieni_conto_default_utente(id_utente)
         conto_default_id = conto_default['id'] if conto_default and conto_default['tipo'] == 'personale' else None
 
         if conto_data:
+            # --- MODALITÀ MODIFICA ---
             self.title.value = self.loc.get("edit_account")
             self.conto_id_in_modifica = conto_data['id_conto']
             self.txt_conto_nome.value = conto_data['nome_conto']
             self.dd_conto_tipo.value = conto_data['tipo']
+            self.dd_conto_tipo.disabled = True  # Non si può cambiare il tipo di un conto esistente
             self.txt_conto_iban.value = conto_data['iban']
+
+            # Nascondi sezioni non pertinenti in modifica
             self.container_saldo_iniziale.visible = False
             self.container_asset_iniziali.visible = False
+
             self.chk_conto_default.visible = (conto_data['tipo'] not in ['Investimento', 'Fondo Pensione'])
             self.txt_conto_iban.visible = (conto_data['tipo'] != 'Contanti')
             self.chk_conto_default.value = (conto_data['id_conto'] == conto_default_id)
         else:
+            # --- MODALITÀ CREAZIONE ---
             self.title.value = self.loc.get("add_account")
             self.conto_id_in_modifica = None
             self.txt_conto_nome.value = ""
             self.dd_conto_tipo.value = "Corrente"
+            self.dd_conto_tipo.disabled = False
             self.txt_conto_iban.value = ""
             self.txt_conto_iban.visible = True
             self.txt_conto_saldo_iniziale.value = ""
@@ -210,6 +217,7 @@ class ContoDialog(ft.AlertDialog):
             self.container_asset_iniziali.visible = False
             self.chk_conto_default.visible = True
             self.chk_conto_default.value = False
+            self._aggiungi_riga_asset_iniziale()  # Aggiungi una riga vuota per gli asset
 
         self.page.dialog = self
         self.open = True
@@ -233,14 +241,18 @@ class ContoDialog(ft.AlertDialog):
             saldo_iniziale = 0.0
             lista_asset_iniziali = []
 
+            # La validazione del saldo iniziale e degli asset avviene solo in modalità creazione
             if not self.conto_id_in_modifica:
                 if tipo == 'Investimento':
-                    for riga in self.lv_asset_iniziali.controls:
-                        fields = {ctrl.data: ctrl for ctrl in riga.controls if
-                                  isinstance(ctrl, ft.TextField) and ctrl.data}
-                        
+                    for riga_asset_widget in self.lv_asset_iniziali.controls:
+                        # Estrai i campi di testo dalla riga
+                        fields_list = [c for c in
+                                       riga_asset_widget.controls[0].controls + riga_asset_widget.controls[1].controls
+                                       if isinstance(c, ft.TextField)]
+                        fields = {ctrl.data: ctrl for ctrl in fields_list}
+
                         ticker = fields['ticker'].value.strip().upper()
-                        if not ticker: continue # Salta righe vuote
+                        if not ticker: continue  # Salta righe vuote
 
                         try:
                             quantita = float(fields['quantita'].value.replace(",", "."))
@@ -251,7 +263,7 @@ class ContoDialog(ft.AlertDialog):
                             costo_medio = 0.0
                             if costo_medio_str:
                                 costo_medio = float(costo_medio_str)
-                            elif gain_loss_str:
+                            elif gain_loss_str and quantita > 0:
                                 gain_loss = float(gain_loss_str)
                                 costo_medio = prezzo_attuale - (gain_loss / quantita)
 
@@ -262,9 +274,10 @@ class ContoDialog(ft.AlertDialog):
                                 'costo_medio': costo_medio,
                                 'prezzo_attuale': prezzo_attuale
                             }
-                            if not asset['nome'] or asset['quantita'] <= 0 or asset['costo_medio'] <= 0 or asset['prezzo_attuale'] <= 0:
+                            if not asset['nome'] or asset['quantita'] <= 0 or asset['costo_medio'] <= 0 or asset[
+                                'prezzo_attuale'] <= 0:
                                 raise ValueError("Campi asset non validi")
-                            
+
                             lista_asset_iniziali.append(asset)
 
                         except (ValueError, TypeError):
@@ -273,9 +286,8 @@ class ContoDialog(ft.AlertDialog):
                                 if not field.value:
                                     field.error_text = "!"
                             self.controller.show_snack_bar("Errore: controlla i dati degli asset.", success=False)
-                            break # Esce dal ciclo for
-
-                else:
+                            break
+                else:  # Per tutti gli altri tipi di conto
                     saldo_str = self.txt_conto_saldo_iniziale.value.replace(",", ".")
                     if saldo_str:
                         try:
@@ -298,17 +310,21 @@ class ContoDialog(ft.AlertDialog):
                 messaggio = "modificato" if success else "errore modifica"
                 new_conto_id = self.conto_id_in_modifica
             else:
-                new_conto_id = aggiungi_conto(utente_id, nome, tipo, iban)
+                # Passa il saldo_iniziale come valore_manuale solo se il tipo è 'Fondo Pensione'
+                valore_manuale_iniziale = saldo_iniziale if tipo == 'Fondo Pensione' else 0.0
+                new_conto_id = aggiungi_conto(utente_id, nome, tipo, iban, valore_manuale=valore_manuale_iniziale)
                 if new_conto_id:
                     success = True
                     messaggio = "aggiunto"
-                    if saldo_iniziale != 0:
+                    # Crea la transazione di saldo iniziale solo per i conti che non sono Fondi Pensione
+                    if saldo_iniziale != 0 and tipo != 'Fondo Pensione':
                         aggiungi_transazione(new_conto_id, datetime.date.today().strftime('%Y-%m-%d'),
                                              "Saldo Iniziale", saldo_iniziale)
                     for asset in lista_asset_iniziali:
                         compra_asset(
                             id_conto_investimento=new_conto_id,
-                            ticker=asset['ticker'], nome_asset=asset['nome'], quantita=asset['quantita'], costo_unitario_nuovo=asset['costo_medio'], 
+                            ticker=asset['ticker'], nome_asset=asset['nome'], quantita=asset['quantita'],
+                            costo_unitario_nuovo=asset['costo_medio'],
                             tipo_mov='INIZIALE',
                             prezzo_attuale_override=asset['prezzo_attuale']
                         )
@@ -321,31 +337,33 @@ class ContoDialog(ft.AlertDialog):
                 if self.chk_conto_default.value and new_conto_id:
                     imposta_conto_default_utente(utente_id, id_conto_personale=new_conto_id)
                 else:
+                    # Se l'utente deseleziona il conto che era di default, lo rimuove
                     conto_default = ottieni_conto_default_utente(utente_id)
                     if conto_default and conto_default.get('id') == new_conto_id:
                         imposta_conto_default_utente(utente_id, None)
 
                 self.controller.show_snack_bar(f"Conto {messaggio} con successo!", success=True)
                 self.open = False
-                self.controller.update_all_views()
-                self.page.update()
+                self.controller.db_write_operation()  # Aggiorna tutte le viste e sincronizza
             else:
                 if not self.conto_id_in_modifica and not new_conto_id:
                     self.txt_conto_iban.error_text = self.loc.get("iban_in_use_or_invalid")
                     self.content.update()
-                self.page.update()
+                else:
+                    self.controller.show_snack_bar(f"Errore durante l'operazione sul conto.", success=False)
                 return
 
         except Exception as ex:
             print(f"Errore salvataggio conto: {ex}")
             traceback.print_exc()
-            self.controller.show_snack_bar(f"Errore inaspettato: {ex}", success=False)
-            self.page.update()
+            self.controller.show_error_dialog(f"Errore inaspettato: {ex}")
+        finally:
+            if self.page: self.page.update()
 
     # --- Logica per Rettifica Saldo (Admin) ---
 
     def apri_dialog_rettifica_saldo(self, conto_data):
-        self.conto_id_in_modifica = conto_data['id_conto'] # Usiamo lo stesso attributo
+        self.conto_id_in_modifica = conto_data['id_conto']
         self.dialog_rettifica_saldo.title.value = f"Rettifica: {conto_data['nome_conto']}"
         self.txt_nuovo_saldo.label = "Nuovo Saldo Reale"
         self.txt_nuovo_saldo.value = f"{conto_data['saldo_calcolato']:.2f}"
