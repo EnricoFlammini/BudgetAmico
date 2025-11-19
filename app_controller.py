@@ -83,7 +83,6 @@ class AppController:
     def _init_global_dialogs(self):
         # Aggiungi gli overlay globali una sola volta
         self.date_picker = ft.DatePicker(
-            on_change=self.transaction_dialog.on_date_picker_change,
             first_date=datetime.datetime(2020, 1, 1),
             last_date=datetime.datetime(2030, 12, 31),
             value=datetime.datetime.now()

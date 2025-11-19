@@ -71,6 +71,7 @@ class TransactionDialog(ft.AlertDialog):
         self.actions[1].text = self.loc.get("save")
 
     def apri_date_picker(self, e):
+        self.controller.date_picker.on_change = self.on_date_picker_change
         self.page.open(self.controller.date_picker)
 
     def on_date_picker_change(self, e):

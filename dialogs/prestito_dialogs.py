@@ -22,7 +22,13 @@ class PrestitoDialogs:
         self.txt_nome = ft.TextField()
         self.dd_tipo = ft.Dropdown()
         self.txt_descrizione = ft.TextField(multiline=True, min_lines=2)
-        self.txt_data_inizio = ft.TextField(read_only=True, on_focus=self._apri_date_picker_inizio)
+        self.txt_data_inizio = ft.TextField(
+            read_only=True,
+            suffix=ft.IconButton(
+                icon=ft.Icons.CALENDAR_MONTH,
+                on_click=self._apri_date_picker_inizio
+            )
+        )
         self.txt_numero_rate = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.txt_importo_finanziato = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.txt_importo_interessi = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
@@ -325,11 +331,13 @@ class PrestitoDialogs:
 
     def _apri_date_picker_inizio(self, e):
         self.controller.date_picker.on_change = lambda ev: self._on_date_picker_change(ev, self.txt_data_inizio)
-        self.page.open(self.controller.date_picker)
+        self.controller.date_picker.open = True
+        self.page.update()
 
     def _apri_date_picker_pagamento(self, e):
         self.controller.date_picker.on_change = lambda ev: self._on_date_picker_change(ev, self.txt_data_pagamento)
-        self.page.open(self.controller.date_picker)
+        self.controller.date_picker.open = True
+        self.page.update()
 
     def _on_date_picker_change(self, e, target_field):
         if self.controller.date_picker.value:
