@@ -15,9 +15,9 @@ class PortafoglioDialogs:
         self.loc = controller.loc
         self.conto_selezionato = None
 
-        # Dialogo principale del portafoglio
+        # --- Dialogo principale del portafoglio ---
         self.dt_portafoglio = ft.DataTable(
-            columns=[ft.DataColumn(ft.Text("..."))],  # <-- CORREZIONE QUI
+            columns=[ft.DataColumn(ft.Text("..."))],
             rows=[],
             expand=True
         )
@@ -42,7 +42,8 @@ class PortafoglioDialogs:
             ]
         )
 
-        # Dialogo per operazione (compra/vendi)
+        # --- Dialogo per operazione (compra/vendi) ---
+        self.dd_asset_esistenti = ft.Dropdown(on_change=self._on_asset_selezionato)
         self.txt_ticker = ft.TextField()
         self.txt_nome_asset = ft.TextField()
         self.txt_quantita = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
@@ -52,19 +53,20 @@ class PortafoglioDialogs:
             modal=True,
             title=ft.Text(),
             content=ft.Column([
+                self.dd_asset_esistenti,
                 self.txt_ticker,
                 self.txt_nome_asset,
                 self.txt_quantita,
                 self.txt_prezzo_unitario,
                 self.radio_operazione
-            ], tight=True, spacing=10),
+            ], tight=True, spacing=10, height=450, width=400),
             actions=[
                 ft.TextButton(on_click=self._chiudi_dialog_operazione),
                 ft.TextButton(on_click=self._salva_operazione)
             ]
         )
 
-        # Dialogo per aggiornare il prezzo
+        # --- Dialogo per aggiornare il prezzo ---
         self.txt_nuovo_prezzo = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.asset_da_aggiornare = None
         self.dialog_aggiorna_prezzo = ft.AlertDialog(
@@ -77,7 +79,7 @@ class PortafoglioDialogs:
             ]
         )
 
-        # Dialogo per modificare dettagli asset
+        # --- Dialogo per modificare dettagli asset ---
         self.txt_modifica_ticker = ft.TextField()
         self.txt_modifica_nome = ft.TextField()
         self.asset_da_modificare = None
@@ -112,6 +114,7 @@ class PortafoglioDialogs:
 
         # Dialogo Operazione
         self.dialog_operazione_asset.title.value = loc.get("add_operation")
+        self.dd_asset_esistenti.label = loc.get("select_existing_asset_optional")
         self.txt_ticker.label = loc.get("ticker")
         self.txt_nome_asset.label = loc.get("asset_name")
         self.txt_quantita.label = loc.get("quantity")
@@ -188,11 +191,26 @@ class PortafoglioDialogs:
 
     def _apri_dialog_operazione(self, e):
         self._update_texts()
+        # Reset dei campi
         self.txt_ticker.value = ""
         self.txt_nome_asset.value = ""
         self.txt_quantita.value = ""
         self.txt_prezzo_unitario.value = ""
         self.radio_operazione.value = "COMPRA"
+        self.txt_ticker.read_only = False
+        self.txt_nome_asset.read_only = False
+
+        # Popola il dropdown degli asset esistenti
+        portafoglio_attuale = ottieni_portafoglio(self.conto_selezionato['id_conto'])
+        self.dd_asset_esistenti.options = [
+            ft.dropdown.Option(
+                key=asset['id_asset'],
+                text=f"{asset['ticker']} - {asset['nome_asset']}",
+                data=asset  # Memorizziamo l'intero dizionario dell'asset
+            ) for asset in portafoglio_attuale
+        ]
+        self.dd_asset_esistenti.value = None
+
         self.page.dialog = self.dialog_operazione_asset
         self.dialog_operazione_asset.open = True
         self.page.update()
@@ -202,23 +220,47 @@ class PortafoglioDialogs:
         self.page.dialog = self.dialog_portafoglio
         self.page.update()
 
+    def _on_asset_selezionato(self, e):
+        """Chiamato quando un asset viene selezionato dal dropdown."""
+        selected_option = next((opt for opt in self.dd_asset_esistenti.options if opt.key == e.control.value), None)
+        if selected_option and selected_option.data:
+            asset_data = selected_option.data
+            self.txt_ticker.value = asset_data['ticker']
+            self.txt_nome_asset.value = asset_data['nome_asset']
+            self.txt_ticker.read_only = True
+            self.txt_nome_asset.read_only = True
+        else:
+            # Se l'utente deseleziona (sceglie l'opzione vuota), resetta
+            self.txt_ticker.value = ""
+            self.txt_nome_asset.value = ""
+            self.txt_ticker.read_only = False
+            self.txt_nome_asset.read_only = False
+
+        if self.dialog_operazione_asset.open:
+            self.dialog_operazione_asset.update()
+
     def _salva_operazione(self, e):
         try:
             tipo_op = self.radio_operazione.value
             quantita = float(self.txt_quantita.value.replace(",", "."))
             prezzo = float(self.txt_prezzo_unitario.value.replace(",", "."))
+            ticker = self.txt_ticker.value.strip().upper()
+            nome_asset = self.txt_nome_asset.value.strip()
+
+            if not all([ticker, nome_asset, quantita > 0, prezzo > 0]):
+                self.controller.show_snack_bar(self.loc.get("fill_all_fields"), success=False)
+                return
 
             if tipo_op == "COMPRA":
-                compra_asset(self.conto_selezionato['id_conto'], self.txt_ticker.value, self.txt_nome_asset.value,
-                             quantita, prezzo)
+                compra_asset(self.conto_selezionato['id_conto'], ticker, nome_asset, quantita, prezzo)
             elif tipo_op == "VENDI":
-                vendi_asset(self.conto_selezionato['id_conto'], self.txt_ticker.value, quantita, prezzo)
+                vendi_asset(self.conto_selezionato['id_conto'], ticker, quantita, prezzo)
 
             self.controller.db_write_operation()
             self._aggiorna_tabella_portafoglio()
             self._chiudi_dialog_operazione(e)
         except (ValueError, TypeError):
-            self.controller.show_snack_bar(self.loc.get("invalid_amount"), success=False)
+            self.controller.show_snack_bar(self.loc.get("invalid_amount_or_quantity"), success=False)
 
     def _apri_dialog_aggiorna_prezzo(self, e):
         self.asset_da_aggiornare = e.control.data
@@ -258,8 +300,8 @@ class PortafoglioDialogs:
         self.page.update()
 
     def _salva_modifica_asset(self, e):
-        nuovo_ticker = self.txt_modifica_ticker.value
-        nuovo_nome = self.txt_modifica_nome.value
+        nuovo_ticker = self.txt_modifica_ticker.value.strip().upper()
+        nuovo_nome = self.txt_modifica_nome.value.strip()
         if nuovo_ticker and nuovo_nome:
             modifica_asset_dettagli(self.asset_da_modificare['id_asset'], nuovo_ticker, nuovo_nome)
             self.controller.db_write_operation()
