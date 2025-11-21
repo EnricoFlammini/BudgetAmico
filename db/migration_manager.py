@@ -36,7 +36,7 @@ def _migra_da_v1_a_v2(con: sqlite3.Connection):
             id_sottocat_nuova = cur.lastrowid
             
             # Aggiorna le transazioni che usavano la vecchia categoria
-            cur.execute("UPDATE Transazioni SET id_sottocategoria = ? WHERE id_categoria = ?", (id_sottocat_nuova, id_cat))
+            cur.execute("UPDATE Transazioni SET id_sottocategoria = ? WHERE id_categoria = ?",(id_sottocat_nuova, id_cat))
             cur.execute("UPDATE TransazioniCondivise SET id_sottocategoria = ? WHERE id_categoria = ?", (id_sottocat_nuova, id_cat))
 
         # 4. Ricrea la tabella Budget
@@ -103,6 +103,34 @@ def _migra_da_v2_a_v3(con: sqlite3.Connection):
         return False
 
 
+
+
+def _migra_da_v3_a_v4(con: sqlite3.Connection):
+    """
+    Logica specifica per migrare un DB dalla versione 3 alla 4.
+    - Aggiunge id_conto_condiviso_pagamento_default alla tabella Prestiti.
+    """
+    print("Esecuzione migrazione da v3 a v4...")
+    try:
+        cur = con.cursor()
+
+        # Aggiungi colonna id_conto_condiviso_pagamento_default
+        print("  - Aggiunta colonna id_conto_condiviso_pagamento_default a Prestiti...")
+        try:
+            cur.execute("ALTER TABLE Prestiti ADD COLUMN id_conto_condiviso_pagamento_default INTEGER REFERENCES ContiCondivisi(id_conto_condiviso) ON DELETE SET NULL")
+        except sqlite3.OperationalError:
+            print("    Colonna id_conto_condiviso_pagamento_default già esistente (ignorato).")
+
+        con.commit()
+        print("Migrazione a v4 completata con successo.")
+        return True
+
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v3 a v4: {e}")
+        con.rollback()
+        return False
+
+
 def migra_database(db_path, versione_vecchia, versione_nuova):
     """
     Funzione principale che gestisce il processo di migrazione.
@@ -127,11 +155,15 @@ def migra_database(db_path, versione_vecchia, versione_nuova):
                     raise Exception("Migrazione da v1 a v2 fallita.")
                 versione_vecchia = 2
             
-            # Aggiungi qui futuri blocchi di migrazione (es. da v2 a v3)
             if versione_vecchia == 2 and versione_nuova >= 3:
                 if not _migra_da_v2_a_v3(con):
                     raise Exception("Migrazione da v2 a v3 fallita.")
                 versione_vecchia = 3
+            
+            if versione_vecchia == 3 and versione_nuova >= 4:
+                if not _migra_da_v3_a_v4(con):
+                    raise Exception("Migrazione da v3 a v4 fallita.")
+                versione_vecchia = 4
 
             # Se tutto è andato bene, aggiorna la versione del DB
             cur.execute(f"PRAGMA user_version = {versione_nuova}")

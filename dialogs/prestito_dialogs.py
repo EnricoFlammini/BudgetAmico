@@ -116,8 +116,8 @@ class PrestitoDialogs:
 
     def apri_dialog_prestito(self, prestito_data=None, tipo_default=None):
         self._update_texts()
-        self._reset_fields_prestito()
         self._popola_dropdowns_prestito()
+        self._reset_fields_prestito()
 
         if prestito_data:
             self.dialog_prestito.title.value = self.loc.get("edit_loan")
@@ -132,7 +132,14 @@ class PrestitoDialogs:
             self.txt_importo_interessi.value = str(prestito_data['importo_interessi'])
             self.txt_importo_rata.value = str(prestito_data['importo_rata'])
             self.dd_giorno_scadenza.value = str(prestito_data['giorno_scadenza_rata'])
-            self.dd_conto_default.value = prestito_data.get('id_conto_pagamento_default')
+            # Imposta il valore del dropdown in base al tipo di conto
+            if prestito_data.get('id_conto_pagamento_default'):
+                self.dd_conto_default.value = f"p_{prestito_data['id_conto_pagamento_default']}"
+            elif prestito_data.get('id_conto_condiviso_pagamento_default'):
+                self.dd_conto_default.value = f"s_{prestito_data['id_conto_condiviso_pagamento_default']}"
+            else:
+                self.dd_conto_default.value = None
+            
             self.dd_sottocategoria_default.value = prestito_data.get('id_sottocategoria_pagamento_default')
             self.cb_addebito_automatico.value = bool(prestito_data.get('addebito_automatico', False))
 
@@ -174,11 +181,22 @@ class PrestitoDialogs:
         id_famiglia = self.controller.get_family_id()
         id_utente = self.controller.get_user_id()
 
-        conti = ottieni_tutti_i_conti_utente(id_utente)
-        conti_filtrati = [c for c in conti if
-                          c['tipo'] not in ['Investimento', 'Fondo Pensione']]
-        self.dd_conto_default.options = [ft.dropdown.Option(key=c['id_conto'], text=c['nome_conto']) for c in
-                                         conti_filtrati]
+        # Popola dropdown con conti personali E condivisi
+        from db.gestione_db import ottieni_conti_condivisi_utente, ottieni_dettagli_conti_utente
+        
+        conti_personali = ottieni_dettagli_conti_utente(id_utente)  # Solo conti personali
+        conti_personali_filtrati = [c for c in conti_personali if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
+        
+        conti_condivisi = ottieni_conti_condivisi_utente(id_utente)
+        conti_condivisi_filtrati = [c for c in conti_condivisi if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
+        
+        opzioni_conti = []
+        for c in conti_personali_filtrati:
+            opzioni_conti.append(ft.dropdown.Option(key=f"p_{c['id_conto']}", text=f"{c['nome_conto']} (Personale)"))
+        for c in conti_condivisi_filtrati:
+            opzioni_conti.append(ft.dropdown.Option(key=f"s_{c['id_conto']}", text=f"{c['nome_conto']} (Condiviso)"))
+        
+        self.dd_conto_default.options = opzioni_conti
 
         categorie_con_sottocategorie = ottieni_categorie_e_sottocategorie(id_famiglia)
         opzioni = []
@@ -211,7 +229,15 @@ class PrestitoDialogs:
                 self.txt_importo_interessi.value.replace(",", ".")) if self.txt_importo_interessi.value else 0.0
             importo_rata = float(self.txt_importo_rata.value.replace(",", "."))
             giorno_scadenza = int(self.dd_giorno_scadenza.value)
-            id_conto_default = self.dd_conto_default.value
+            # Estrai il tipo di conto e l'ID dal valore del dropdown
+            id_conto_default = None
+            id_conto_condiviso_default = None
+            if self.dd_conto_default.value:
+                if self.dd_conto_default.value.startswith('p_'):
+                    id_conto_default = int(self.dd_conto_default.value[2:])
+                elif self.dd_conto_default.value.startswith('s_'):
+                    id_conto_condiviso_default = int(self.dd_conto_default.value[2:])
+            
             id_sottocategoria_default = self.dd_sottocategoria_default.value
             addebito_automatico = self.cb_addebito_automatico.value
 
@@ -233,6 +259,7 @@ class PrestitoDialogs:
                     numero_mesi_totali=numero_rate, importo_finanziato=importo_finanziato,
                     importo_interessi=importo_interessi, importo_rata=importo_rata,
                     giorno_scadenza_rata=giorno_scadenza, id_conto_default=id_conto_default,
+                    id_conto_condiviso_default=id_conto_condiviso_default,
                     id_sottocategoria_default=id_sottocategoria_default,
                     importo_residuo=importo_residuo, addebito_automatico=addebito_automatico
                 )
@@ -246,7 +273,8 @@ class PrestitoDialogs:
                     data_inizio=data_inizio, numero_mesi_totali=numero_rate,
                     importo_finanziato=importo_finanziato, importo_interessi=importo_interessi,
                     importo_rata=importo_rata, giorno_scadenza_rata=giorno_scadenza,
-                    id_conto_default=id_conto_default, id_sottocategoria_default=id_sottocategoria_default,
+                    id_conto_default=id_conto_default, id_conto_condiviso_default=id_conto_condiviso_default,
+                    id_sottocategoria_default=id_sottocategoria_default,
                     importo_residuo=importo_residuo, addebito_automatico=addebito_automatico
                 )
 
