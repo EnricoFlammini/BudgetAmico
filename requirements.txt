@@ -1,0 +1,22 @@
+# Budget Amico - Requirements
+# Framework GUI
+flet>=0.28.0
+flet-desktop>=0.28.0
+
+# Google API
+google-api-python-client>=2.187.0
+google-auth>=2.41.0
+google-auth-httplib2>=0.2.0
+google-auth-oauthlib>=1.2.0
+
+# Data Processing & Export
+pandas>=2.3.0
+openpyxl>=3.1.0
+numpy>=2.3.0
+
+# Utilities
+python-dateutil>=2.9.0
+requests>=2.32.0
+
+# Build Tools (optional, for creating executables)
+pyinstaller>=6.16.0
