@@ -1805,7 +1805,13 @@ def effettua_pagamento_rata(id_prestito, id_conto_pagamento, importo_pagato, dat
 # --- Funzioni Immobili ---
 def aggiungi_immobile(id_famiglia, nome, via, citta, valore_acquisto, valore_attuale, nuda_proprieta,
                       id_prestito_collegato=None):
-    db_id_prestito = id_prestito_collegato if isinstance(id_prestito_collegato, int) else None
+    # Converti il valore del dropdown in int se necessario
+    db_id_prestito = None
+    if id_prestito_collegato is not None and id_prestito_collegato != "None":
+        try:
+            db_id_prestito = int(id_prestito_collegato)
+        except (ValueError, TypeError):
+            db_id_prestito = None
     try:
         with sqlite3.connect(DB_FILE) as con:
             cur = con.cursor()
@@ -1825,7 +1831,13 @@ def aggiungi_immobile(id_famiglia, nome, via, citta, valore_acquisto, valore_att
 
 def modifica_immobile(id_immobile, nome, via, citta, valore_acquisto, valore_attuale, nuda_proprieta,
                       id_prestito_collegato=None):
-    db_id_prestito = id_prestito_collegato if isinstance(id_prestito_collegato, int) else None
+    # Converti il valore del dropdown in int se necessario
+    db_id_prestito = None
+    if id_prestito_collegato is not None and id_prestito_collegato != "None":
+        try:
+            db_id_prestito = int(id_prestito_collegato)
+        except (ValueError, TypeError):
+            db_id_prestito = None
     try:
         with sqlite3.connect(DB_FILE) as con:
             cur = con.cursor()
