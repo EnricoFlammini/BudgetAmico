@@ -37,20 +37,6 @@ Budget Amico è un'applicazione cross-platform costruita con Python e Flet che t
     -   Invita i membri della tua famiglia via email.
     -   Assegna ruoli diversi (`Admin`, `Livello 1`, `Livello 2`, `Livello 3`) per controllare l'accesso ai dati familiari.
     -   Visualizza le transazioni di tutti i membri della famiglia in un unico posto (per i ruoli autorizzati).
-
--   **Sincronizzazione e Backup**:
-    -   **Sincronizzazione con Google Drive**: Utilizza il tuo account Google per sincronizzare il database dell'applicazione e usare Budget Amico su più dispositivi.
-    -   **Backup e Ripristino Locale**: Crea backup manuali del tuo database e ripristinali in qualsiasi momento.
-
--   **Automazioni**:
-    -   Gestione automatica delle **spese fisse** mensili.
-    -   Pagamento automatico delle **rate dei prestiti** alla data di scadenza.
-
--   **Esportazione Dati**:
-    -   Esporta i riepiloghi dei conti, i dettagli dei portafogli e lo storico delle transazioni in formato Excel per analisi più approfondite.
-
----
-
 ## 📋 Prerequisiti
 
 Prima di iniziare, assicurati di avere installato:
