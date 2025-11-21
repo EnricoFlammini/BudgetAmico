@@ -4,6 +4,7 @@ from db.gestione_db import (
     ottieni_conti_condivisi_utente,
     elimina_conto_condiviso
 )
+from utils.styles import AppStyles, AppColors
 
 
 class ContiCondivisiTab(ft.Container):
@@ -32,44 +33,43 @@ class ContiCondivisiTab(ft.Container):
 
         conti_condivisi = ottieni_conti_condivisi_utente(utente_id)
         if not conti_condivisi:
-            self.lv_conti_condivisi.controls.append(ft.Text(self.controller.loc.get("no_shared_accounts")))
+            self.lv_conti_condivisi.controls.append(AppStyles.body_text(self.controller.loc.get("no_shared_accounts")))
         else:
             for conto in conti_condivisi:
                 tipo_condivisione_text = self.controller.loc.get(
                     "shared_type_family") if conto['tipo_condivisione'] == 'famiglia' else self.controller.loc.get(
                     "shared_type_users")
+                
+                content = ft.Row(
+                    [
+                        ft.Column([
+                            AppStyles.subheader_text(conto['nome_conto']),
+                            ft.Text(f"{conto['tipo']} ({tipo_condivisione_text})", size=12,
+                                    color=AppColors.TEXT_SECONDARY)
+                        ], expand=True),
+                        ft.Column([
+                            AppStyles.caption_text(self.controller.loc.get("current_balance")),
+                            ft.Text(self.controller.loc.format_currency(conto['saldo_calcolato']), size=16,
+                                    weight=ft.FontWeight.BOLD,
+                                    color=AppColors.SUCCESS if conto['saldo_calcolato'] >= 0 else AppColors.ERROR)
+                        ], horizontal_alignment=ft.CrossAxisAlignment.END),
+                        ft.IconButton(icon=ft.Icons.EDIT, tooltip="Gestisci Conto Condiviso", data=conto,
+                                      icon_color=AppColors.PRIMARY,
+                                      on_click=lambda e: self.controller.conto_condiviso_dialog.apri_dialog(
+                                          e.control.data)),
+                        ft.IconButton(icon=ft.Icons.DELETE,
+                                      tooltip=self.controller.loc.get("delete_account"),
+                                      icon_color=AppColors.ERROR, data=conto['id_conto'],
+                                      on_click=lambda e: self.controller.open_confirm_delete_dialog(partial(
+                                          self.elimina_conto_condiviso_cliccato,
+                                          e))
+                                      )
+                    ],
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                )
+                
                 self.lv_conti_condivisi.controls.append(
-                    ft.Container(
-                        content=ft.Row(
-                            [
-                                ft.Column([
-                                    ft.Text(conto['nome_conto'], weight=ft.FontWeight.BOLD, size=18),
-                                    ft.Text(f"{conto['tipo']} ({tipo_condivisione_text})", size=12,
-                                            color=ft.Colors.GREY_500)
-                                ], expand=True),
-                                ft.Column([
-                                    ft.Text(self.controller.loc.get("current_balance"), size=10,
-                                            color=ft.Colors.GREY_500),
-                                    ft.Text(self.controller.loc.format_currency(conto['saldo_calcolato']), size=16,
-                                            weight=ft.FontWeight.BOLD,
-                                            color=ft.Colors.GREEN_500 if conto[
-                                                                              'saldo_calcolato'] >= 0 else ft.Colors.RED_500)
-                                ], horizontal_alignment=ft.CrossAxisAlignment.END),
-                                ft.IconButton(icon=ft.Icons.EDIT, tooltip="Gestisci Conto Condiviso", data=conto,
-                                              on_click=lambda e: self.controller.conto_condiviso_dialog.apri_dialog(
-                                                  e.control.data)),
-                                ft.IconButton(icon=ft.Icons.DELETE,
-                                              tooltip=self.controller.loc.get("delete_account"),
-                                              icon_color=ft.Colors.RED_400, data=conto['id_conto'],
-                                              on_click=lambda e: self.controller.open_confirm_delete_dialog(partial(
-                                                  self.elimina_conto_condiviso_cliccato,
-                                                  e))
-                                              )
-                            ],
-                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                        ),
-                        padding=10, border_radius=5, border=ft.border.all(1, ft.Colors.GREY_800)
-                    )
+                    AppStyles.card_container(content, padding=10)
                 )
 
         if self.page:
@@ -80,16 +80,17 @@ class ContiCondivisiTab(ft.Container):
         return [
             ft.Row(
                 [
-                    ft.Text(self.controller.loc.get("shared_accounts"), size=24, weight=ft.FontWeight.BOLD),
+                    AppStyles.header_text(self.controller.loc.get("shared_accounts")),
                     ft.IconButton(
                         icon=ft.Icons.GROUP_ADD,
                         tooltip=self.controller.loc.get("manage_shared_account"),
+                        icon_color=AppColors.PRIMARY,
                         on_click=lambda e: self.controller.conto_condiviso_dialog.apri_dialog()
                     )
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN
             ),
-            ft.Divider(),
+            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
             self.lv_conti_condivisi
         ]
 

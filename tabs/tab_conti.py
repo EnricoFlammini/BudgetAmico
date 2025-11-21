@@ -6,6 +6,7 @@ from db.gestione_db import (
     ottieni_riepilogo_patrimonio_utente
 )
 import datetime
+from utils.styles import AppStyles, AppColors
 
 
 class ContiTab(ft.Container):
@@ -15,9 +16,10 @@ class ContiTab(ft.Container):
         self.page = controller.page
 
         # Controlli UI
-        self.txt_patrimonio_netto = ft.Text(size=22, weight=ft.FontWeight.BOLD)
-        self.txt_liquidita = ft.Text(size=16)
-        self.txt_investimenti = ft.Text(size=16)
+        self.txt_patrimonio_netto = AppStyles.header_text("")
+        self.txt_liquidita = AppStyles.body_text("")
+        self.txt_investimenti = AppStyles.body_text("")
+        
         self.lv_conti_personali = ft.Column(expand=True, scroll=ft.ScrollMode.ADAPTIVE, spacing=10)
         self.content = ft.Column(expand=True, spacing=10)
 
@@ -34,7 +36,11 @@ class ContiTab(ft.Container):
 
         oggi = datetime.date.today()
         riepilogo = ottieni_riepilogo_patrimonio_utente(utente_id, oggi.year, oggi.month)
-        self.txt_patrimonio_netto.value = self.controller.loc.format_currency(riepilogo.get('patrimonio_netto', 0))
+        
+        val_patrimonio = riepilogo.get('patrimonio_netto', 0)
+        self.txt_patrimonio_netto.value = self.controller.loc.format_currency(val_patrimonio)
+        self.txt_patrimonio_netto.color = AppColors.SUCCESS if val_patrimonio >= 0 else AppColors.ERROR
+        
         self.txt_liquidita.value = self.controller.loc.format_currency(riepilogo.get('liquidita', 0))
         self.txt_investimenti.value = self.controller.loc.format_currency(riepilogo.get('investimenti', 0))
         self.txt_investimenti.visible = riepilogo.get('investimenti', 0) > 0
@@ -51,35 +57,33 @@ class ContiTab(ft.Container):
             self.page.update()
 
     def build_controls(self, theme):
-        on_surface_variant = theme.on_surface_variant
-        outline = theme.outline
-
         return [
-            ft.Container(
+            AppStyles.card_container(
                 content=ft.Row([
                     ft.Column([
-                        ft.Text(self.controller.loc.get("net_worth"), size=12, color=on_surface_variant),
+                        AppStyles.caption_text(self.controller.loc.get("net_worth")),
                         self.txt_patrimonio_netto
                     ]),
                     ft.Column([
-                        ft.Text(self.controller.loc.get("liquidity"), size=12, color=on_surface_variant),
+                        AppStyles.caption_text(self.controller.loc.get("liquidity")),
                         self.txt_liquidita,
-                        ft.Text(self.controller.loc.get("investments"), size=12, color=on_surface_variant,
+                        ft.Text(self.controller.loc.get("investments"), size=12, color=AppColors.TEXT_SECONDARY,
                                 visible=self.txt_investimenti.visible),
                         self.txt_investimenti
                     ], spacing=5, horizontal_alignment=ft.CrossAxisAlignment.END)
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                padding=10, border=ft.border.all(1, outline), border_radius=5
+                padding=15
             ),
             ft.Row([
-                ft.Text(self.controller.loc.get("my_personal_accounts"), size=24, weight=ft.FontWeight.BOLD),
+                AppStyles.subheader_text(self.controller.loc.get("my_personal_accounts")),
                 ft.IconButton(
                     icon=ft.Icons.ADD_CARD,
                     tooltip=self.controller.loc.get("add_personal_account"),
-                    on_click=lambda e: self.controller.conto_dialog.apri_dialog_conto(e)
+                    on_click=lambda e: self.controller.conto_dialog.apri_dialog_conto(e),
+                    icon_color=theme.primary
                 )
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            ft.Divider(),
+            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
             ft.Container(content=self.lv_conti_personali, expand=True),
         ]
 
@@ -92,42 +96,43 @@ class ContiTab(ft.Container):
 
         label_saldo = self.controller.loc.get(
             "value") if is_investimento or is_fondo_pensione else self.controller.loc.get("current_balance")
+        
+        # Usa AppColors per coerenza
         colore_saldo = theme.secondary if is_investimento or is_fondo_pensione else (
-            theme.primary if conto['saldo_calcolato'] >= 0 else theme.error)
+            AppColors.SUCCESS if conto['saldo_calcolato'] >= 0 else AppColors.ERROR)
 
-        return ft.Container(
-            content=ft.Row([
-                ft.Column([
-                    ft.Text(conto['nome_conto'], weight=ft.FontWeight.BOLD, size=18),
-                    ft.Text(f"{conto['tipo']}" + (f" - IBAN: {conto['iban']}" if conto['iban'] else ""),
-                            size=12, color=theme.on_surface_variant)
-                ], expand=True),
-                ft.Column([
-                    ft.Text(label_saldo, size=10, color=theme.on_surface_variant),
-                    ft.Text(self.controller.loc.format_currency(conto['saldo_calcolato']), size=16,
-                            weight=ft.FontWeight.BOLD, color=colore_saldo)
-                ], horizontal_alignment=ft.CrossAxisAlignment.END),
-                ft.IconButton(icon=ft.Icons.INSIGHTS, tooltip=self.controller.loc.get("manage_portfolio"),
-                              icon_color=theme.primary, data=conto,
-                              on_click=lambda e: self.controller.portafoglio_dialogs.apri_dialog_portafoglio(e,
-                                                                                                             e.control.data),
-                              visible=is_investimento),
-                ft.IconButton(icon=ft.Icons.MANAGE_ACCOUNTS, tooltip=self.controller.loc.get("manage_pension_fund"),
-                              icon_color=theme.secondary, data=conto,
-                              on_click=lambda e: self.controller.fondo_pensione_dialog.apri_dialog(e.control.data),
-                              visible=is_fondo_pensione),
-                ft.IconButton(icon=ft.Icons.EDIT_NOTE, tooltip="Rettifica Saldo (Admin)", data=conto,
-                              on_click=lambda e: self.controller.conto_dialog.apri_dialog_rettifica_saldo(
-                                  e.control.data), visible=is_admin and is_corrente),
-                ft.IconButton(icon=ft.Icons.EDIT, tooltip=self.controller.loc.get("edit_account"), data=conto,
-                              on_click=lambda e: self.controller.conto_dialog.apri_dialog_conto(e, e.control.data)),
-                ft.IconButton(icon=ft.Icons.DELETE, tooltip=self.controller.loc.get("delete_account"),
-                              icon_color=theme.error, data=conto['id_conto'],
-                              on_click=lambda e: self.controller.open_confirm_delete_dialog(
-                                  partial(self.elimina_conto_personale_cliccato, e))),
-            ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            padding=10, border_radius=5, border=ft.border.all(1, theme.outline)
-        )
+        content = ft.Row([
+            ft.Column([
+                AppStyles.subheader_text(conto['nome_conto']),
+                AppStyles.caption_text(f"{conto['tipo']}" + (f" - IBAN: {conto['iban']}" if conto['iban'] else ""))
+            ], expand=True),
+            ft.Column([
+                AppStyles.caption_text(label_saldo),
+                ft.Text(self.controller.loc.format_currency(conto['saldo_calcolato']), size=16,
+                        weight=ft.FontWeight.BOLD, color=colore_saldo)
+            ], horizontal_alignment=ft.CrossAxisAlignment.END),
+            ft.IconButton(icon=ft.Icons.INSIGHTS, tooltip=self.controller.loc.get("manage_portfolio"),
+                          icon_color=theme.primary, data=conto,
+                          on_click=lambda e: self.controller.portafoglio_dialogs.apri_dialog_portafoglio(e,
+                                                                                                         e.control.data),
+                          visible=is_investimento),
+            ft.IconButton(icon=ft.Icons.MANAGE_ACCOUNTS, tooltip=self.controller.loc.get("manage_pension_fund"),
+                          icon_color=theme.secondary, data=conto,
+                          on_click=lambda e: self.controller.fondo_pensione_dialog.apri_dialog(e.control.data),
+                          visible=is_fondo_pensione),
+            ft.IconButton(icon=ft.Icons.EDIT_NOTE, tooltip="Rettifica Saldo (Admin)", data=conto,
+                          on_click=lambda e: self.controller.conto_dialog.apri_dialog_rettifica_saldo(
+                              e.control.data), visible=is_admin and is_corrente),
+            ft.IconButton(icon=ft.Icons.EDIT, tooltip=self.controller.loc.get("edit_account"), data=conto,
+                          on_click=lambda e: self.controller.conto_dialog.apri_dialog_conto(e, e.control.data),
+                          icon_color=AppColors.INFO),
+            ft.IconButton(icon=ft.Icons.DELETE, tooltip=self.controller.loc.get("delete_account"),
+                          icon_color=AppColors.ERROR, data=conto['id_conto'],
+                          on_click=lambda e: self.controller.open_confirm_delete_dialog(
+                              partial(self.elimina_conto_personale_cliccato, e))),
+        ], vertical_alignment=ft.CrossAxisAlignment.CENTER)
+
+        return AppStyles.card_container(content, padding=15)
 
     def elimina_conto_personale_cliccato(self, e):
         id_conto = e.control.data

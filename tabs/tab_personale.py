@@ -8,6 +8,7 @@ from db.gestione_db import (
     ottieni_anni_mesi_storicizzati  # Per popolare il filtro
 )
 import datetime
+from utils.styles import AppStyles, AppColors
 
 
 class PersonaleTab(ft.Container):
@@ -17,13 +18,16 @@ class PersonaleTab(ft.Container):
         self.controller = controller
         self.page = controller.page
 
-        self.txt_bentornato = ft.Text(size=16)
-        self.txt_patrimonio = ft.Text(size=24, weight=ft.FontWeight.BOLD)
-        self.txt_liquidita = ft.Text(size=14, color=ft.Colors.GREY_500)
+        self.txt_bentornato = AppStyles.subheader_text("")
+        self.txt_patrimonio = AppStyles.header_text("")
+        self.txt_liquidita = AppStyles.caption_text("")
 
         # Filtro per mese
         self.dd_mese_filtro = ft.Dropdown(
-            on_change=self._filtro_mese_cambiato
+            on_change=self._filtro_mese_cambiato,
+            border_color=ft.Colors.OUTLINE,
+            text_size=14,
+            content_padding=10
         )
 
         self.lista_transazioni = ft.Column(
@@ -60,7 +64,10 @@ class PersonaleTab(ft.Container):
         liquidita_totale = riepilogo_patrimonio.get('liquidita', 0.0)
 
         self.txt_bentornato.value = self.controller.loc.get("welcome_back", utente['nome'])
+        
+        # Aggiorna il testo del patrimonio con formattazione valuta
         self.txt_patrimonio.value = f"{self.controller.loc.get('total_wealth')}: {self.controller.loc.format_currency(patrimonio_totale)}"
+        self.txt_patrimonio.color = AppColors.SUCCESS if patrimonio_totale >= 0 else AppColors.ERROR
 
         data_formattata = datetime.date(anno, mese, 1).strftime('%d/%m/%Y')
         self.txt_liquidita.value = self.controller.loc.get("liquidity_details",
@@ -80,35 +87,31 @@ class PersonaleTab(ft.Container):
                 ft.IconButton(icon=ft.Icons.EDIT, tooltip=self.controller.loc.get("edit"), data=t,
                               on_click=lambda e: self.controller.transaction_dialog.apri_dialog_modifica_transazione(
                                   e.control.data),
-                              icon_color=ft.Colors.BLUE_400, icon_size=16),
+                              icon_color=AppColors.INFO, icon_size=20),
                 ft.IconButton(icon=ft.Icons.DELETE, tooltip=self.controller.loc.get("delete"), data=t,
                               on_click=lambda e: self.controller.open_confirm_delete_dialog(
                                   partial(self.elimina_cliccato, e)),
-                              icon_color=ft.Colors.RED_400, icon_size=16)
+                              icon_color=AppColors.ERROR, icon_size=20)
             ], spacing=0)
 
+            # Usa AppStyles.card_container per creare la card della transazione
+            card_content = ft.Row(
+                [
+                    ft.Column([
+                        AppStyles.body_text(t['descrizione']),
+                        AppStyles.caption_text(f"{t['data']} - {t['nome_conto']}"),
+                    ], expand=True),
+                    ft.Column([
+                        AppStyles.currency_text(t['importo'], self.controller.loc),
+                        AppStyles.caption_text(t.get('nome_sottocategoria') or self.controller.loc.get("no_category"))
+                    ], horizontal_alignment=ft.CrossAxisAlignment.END),
+                    azioni
+                ],
+                vertical_alignment=ft.CrossAxisAlignment.CENTER
+            )
+            
             self.lista_transazioni.controls.append(
-                ft.Container(
-                    content=ft.Row(
-                        [
-                            ft.Column([
-                                ft.Text(t['descrizione'], weight=ft.FontWeight.BOLD),
-                                ft.Text(f"{t['data']} - {t['nome_conto']}", size=10, color=ft.Colors.GREY_500),
-                            ], expand=True),
-                            ft.Column([
-                                ft.Text(self.controller.loc.format_currency(t['importo']), size=14,
-                                        color=ft.Colors.GREEN_500 if t['importo'] > 0 else ft.Colors.RED_500),
-                                ft.Text(t.get('nome_sottocategoria') or self.controller.loc.get("no_category"),
-                                        size=10, color=ft.Colors.GREY_500)
-                            ], horizontal_alignment=ft.CrossAxisAlignment.END),
-                            azioni
-                        ],
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER
-                    ),
-                    padding=10,
-                    border=ft.border.all(1, ft.Colors.GREY_800),
-                    border_radius=5
-                )
+                AppStyles.card_container(card_content, padding=10)
             )
 
         if self.page:
@@ -119,12 +122,23 @@ class PersonaleTab(ft.Container):
         self.dd_mese_filtro.label = self.controller.loc.get("filter_by_month")
 
         return [
-            self.txt_bentornato,
-            self.txt_patrimonio,
-            self.txt_liquidita,
-            self.dd_mese_filtro,
-            ft.Divider(),
-            ft.Text(self.controller.loc.get("latest_transactions"), size=20),
+            ft.Container(
+                content=ft.Column([
+                    self.txt_bentornato,
+                    self.txt_patrimonio,
+                    self.txt_liquidita,
+                ], spacing=5),
+                padding=10
+            ),
+            ft.Container(
+                content=self.dd_mese_filtro,
+                padding=ft.padding.only(left=10, right=10)
+            ),
+            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+            ft.Container(
+                content=AppStyles.subheader_text(self.controller.loc.get("latest_transactions")),
+                padding=ft.padding.only(left=10, bottom=10)
+            ),
             self.lista_transazioni
         ]
 

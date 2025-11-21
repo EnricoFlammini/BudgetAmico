@@ -5,6 +5,7 @@ from db.gestione_db import (
     elimina_spesa_fissa,
     modifica_stato_spesa_fissa
 )
+from utils.styles import AppStyles, AppColors
 
 
 class SpeseFisseTab(ft.Container):
@@ -17,14 +18,17 @@ class SpeseFisseTab(ft.Container):
         self.dt_spese_fisse = ft.DataTable(
             columns=[ft.DataColumn(ft.Text("..."))],
             rows=[],
-            expand=True
+            expand=True,
+            heading_row_height=40,
+            data_row_max_height=60,
+            border_radius=10
         )
         
         self.no_data_view = ft.Container(
-            content=ft.Text(self.controller.loc.get("no_fixed_expenses"), text_align=ft.TextAlign.CENTER),
+            content=AppStyles.body_text(self.controller.loc.get("no_fixed_expenses")),
             alignment=ft.alignment.center,
             expand=True,
-            visible=False  # Nascosto di default
+            visible=False
         )
 
         # Stack per alternare tra tabella e messaggio "nessun dato"
@@ -57,15 +61,16 @@ class SpeseFisseTab(ft.Container):
             for spesa in spese_fisse:
                 self.dt_spese_fisse.rows.append(
                     ft.DataRow(cells=[
-                        ft.DataCell(ft.Text(spesa['nome'])),
+                        ft.DataCell(ft.Text(spesa['nome'], weight=ft.FontWeight.BOLD)),
                         ft.DataCell(ft.Text(self.controller.loc.format_currency(spesa['importo']))),
                         ft.DataCell(ft.Text(spesa['nome_conto'])),
-                        ft.DataCell(ft.Text(spesa['giorno_addebito'])),
+                        ft.DataCell(ft.Text(str(spesa['giorno_addebito']))),
                         ft.DataCell(ft.Switch(value=bool(spesa['attiva']), data=spesa['id_spesa_fissa'], on_change=self._cambia_stato_attiva)),
                         ft.DataCell(ft.Row([
                             ft.IconButton(icon=ft.Icons.EDIT, tooltip=self.controller.loc.get("edit"), data=spesa,
+                                          icon_color=AppColors.PRIMARY,
                                           on_click=lambda e: self.controller.spesa_fissa_dialog.apri_dialog(e.control.data)),
-                            ft.IconButton(icon=ft.Icons.DELETE, tooltip=self.controller.loc.get("delete"), icon_color=theme.error,
+                            ft.IconButton(icon=ft.Icons.DELETE, tooltip=self.controller.loc.get("delete"), icon_color=AppColors.ERROR,
                                           data=spesa['id_spesa_fissa'],
                                           on_click=lambda e: self.controller.open_confirm_delete_dialog(partial(self.elimina_cliccato, e))),
                         ])),
@@ -77,27 +82,31 @@ class SpeseFisseTab(ft.Container):
     def build_controls(self, theme):
         loc = self.controller.loc
         
-        self.dt_spese_fisse.heading_row_color = theme.primary_container
+        self.dt_spese_fisse.heading_row_color = AppColors.SURFACE_VARIANT
+        self.dt_spese_fisse.data_row_color = {"hovered": ft.Colors.with_opacity(0.1, theme.primary)}
+        self.dt_spese_fisse.border = ft.border.all(1, ft.Colors.OUTLINE_VARIANT)
+        
         self.dt_spese_fisse.columns = [
-            ft.DataColumn(ft.Text(loc.get("name"))),
-            ft.DataColumn(ft.Text(loc.get("amount")), numeric=True),
-            ft.DataColumn(ft.Text(loc.get("account"))),
-            ft.DataColumn(ft.Text(loc.get("debit_day"))),
-            ft.DataColumn(ft.Text(loc.get("active"))),
-            ft.DataColumn(ft.Text(loc.get("actions"))),
+            ft.DataColumn(ft.Text(loc.get("name"), weight=ft.FontWeight.BOLD)),
+            ft.DataColumn(ft.Text(loc.get("amount"), weight=ft.FontWeight.BOLD), numeric=True),
+            ft.DataColumn(ft.Text(loc.get("account"), weight=ft.FontWeight.BOLD)),
+            ft.DataColumn(ft.Text(loc.get("debit_day"), weight=ft.FontWeight.BOLD)),
+            ft.DataColumn(ft.Text(loc.get("active"), weight=ft.FontWeight.BOLD)),
+            ft.DataColumn(ft.Text(loc.get("actions"), weight=ft.FontWeight.BOLD)),
         ]
 
         return [
             ft.Row([
-                ft.Text(loc.get("fixed_expenses_management"), size=24, weight=ft.FontWeight.BOLD),
+                AppStyles.header_text(loc.get("fixed_expenses_management")),
                 ft.IconButton(
                     icon=ft.Icons.ADD,
                     tooltip=loc.get("add_fixed_expense"),
+                    icon_color=AppColors.PRIMARY,
                     on_click=lambda e: self.controller.spesa_fissa_dialog.apri_dialog()
                 )
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            ft.Text(loc.get("fixed_expenses_description")),
-            ft.Divider(),
+            AppStyles.body_text(loc.get("fixed_expenses_description")),
+            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
             self.data_stack
         ]
 

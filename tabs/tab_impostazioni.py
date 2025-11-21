@@ -1,6 +1,7 @@
 import flet as ft
 from db.gestione_db import (ottieni_tutti_i_conti_utente, imposta_conto_default_utente, ottieni_conto_default_utente,
                           ottieni_dettagli_utente, aggiorna_profilo_utente, cambia_password, hash_password)
+from utils.styles import AppStyles, AppColors
 
 
 class ImpostazioniTab(ft.Container):
@@ -102,71 +103,77 @@ class ImpostazioniTab(ft.Container):
                 ft.dropdown.Option("de", "Deutsch"),
             ],
             value=self.controller.loc.language,
-            on_change=self._lingua_cambiata
+            on_change=self._lingua_cambiata,
+            border_color=ft.Colors.OUTLINE
         )
         self.dd_valuta = ft.Dropdown(
             label=loc.get("currency"),
             options=[ft.dropdown.Option(key, f"{key} ({info['symbol']})") for key, info in
                      self.controller.loc.currencies.items()],
             value=self.controller.loc.currency,
-            on_change=self._valuta_cambiata
+            on_change=self._valuta_cambiata,
+            border_color=ft.Colors.OUTLINE
         )
 
         # Controlli Conto Predefinito
-        self.dd_conto_default = ft.Dropdown(label=loc.get("account"))
+        self.dd_conto_default = ft.Dropdown(label=loc.get("account"), border_color=ft.Colors.OUTLINE)
         self.btn_salva_conto_default = ft.ElevatedButton(
             loc.get("save_default_account"),
             icon=ft.Icons.SAVE,
-            on_click=self._salva_conto_default_cliccato
+            on_click=self._salva_conto_default_cliccato,
+            bgcolor=AppColors.PRIMARY,
+            color=AppColors.ON_PRIMARY
         )
 
         # --- NUOVI CONTROLLI PROFILO UTENTE ---
-        self.txt_username = ft.TextField(label=loc.get("username"))
-        self.txt_email = ft.TextField(label=loc.get("email"))
-        self.txt_nome = ft.TextField(label=loc.get("name"))
-        self.txt_cognome = ft.TextField(label="Cognome")
-        self.txt_data_nascita = ft.TextField(label=loc.get("date_of_birth"))
-        self.txt_codice_fiscale = ft.TextField(label=loc.get("tax_code"))
-        self.txt_indirizzo = ft.TextField(label=loc.get("address"))
-        self.txt_nuova_password = ft.TextField(label=loc.get("new_password"), password=True, can_reveal_password=True)
-        self.txt_conferma_password = ft.TextField(label=loc.get("confirm_new_password"), password=True, can_reveal_password=True)
+        self.txt_username = ft.TextField(label=loc.get("username"), border_color=ft.Colors.OUTLINE)
+        self.txt_email = ft.TextField(label=loc.get("email"), border_color=ft.Colors.OUTLINE)
+        self.txt_nome = ft.TextField(label=loc.get("name"), border_color=ft.Colors.OUTLINE)
+        self.txt_cognome = ft.TextField(label="Cognome", border_color=ft.Colors.OUTLINE)
+        self.txt_data_nascita = ft.TextField(label=loc.get("date_of_birth"), border_color=ft.Colors.OUTLINE)
+        self.txt_codice_fiscale = ft.TextField(label=loc.get("tax_code"), border_color=ft.Colors.OUTLINE)
+        self.txt_indirizzo = ft.TextField(label=loc.get("address"), border_color=ft.Colors.OUTLINE)
+        self.txt_nuova_password = ft.TextField(label=loc.get("new_password"), password=True, can_reveal_password=True, border_color=ft.Colors.OUTLINE)
+        self.txt_conferma_password = ft.TextField(label=loc.get("confirm_new_password"), password=True, can_reveal_password=True, border_color=ft.Colors.OUTLINE)
         self.btn_salva_profilo = ft.ElevatedButton(
             loc.get("save_profile"),
             icon=ft.Icons.SAVE,
-            on_click=self._salva_profilo_cliccato
+            on_click=self._salva_profilo_cliccato,
+            bgcolor=AppColors.PRIMARY,
+            color=AppColors.ON_PRIMARY
         )
         # --- FINE NUOVI CONTROLLI ---
 
         return [
-            ft.Text(loc.get("language_and_currency"), size=24, weight=ft.FontWeight.BOLD),
-            ft.Text(loc.get("language_and_currency_desc")),
-            ft.Divider(),
+            AppStyles.header_text(loc.get("language_and_currency")),
+            AppStyles.body_text(loc.get("language_and_currency_desc")),
+            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
             ft.Row([
                 self.dd_lingua,
                 self.dd_valuta,
             ], spacing=10),
 
-            ft.Divider(height=30),
+            ft.Divider(height=30, color=ft.Colors.TRANSPARENT),
 
-            ft.Text(loc.get("default_account"), size=24, weight=ft.FontWeight.BOLD),
-            ft.Text(loc.get("default_account_desc")),
-            ft.Divider(),
+            AppStyles.header_text(loc.get("default_account")),
+            AppStyles.body_text(loc.get("default_account_desc")),
+            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
             ft.Row([
                 self.dd_conto_default,
                 self.btn_salva_conto_default
             ], spacing=10),
 
-            ft.Divider(height=30),
+            ft.Divider(height=30, color=ft.Colors.TRANSPARENT),
 
-            ft.Text(loc.get("user_profile"), size=24, weight=ft.FontWeight.BOLD),
-            ft.Text(loc.get("user_profile_desc")),
-            ft.Divider(),
+            AppStyles.header_text(loc.get("user_profile")),
+            AppStyles.body_text(loc.get("user_profile_desc")),
+            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
             ft.Row([self.txt_username, self.txt_email], spacing=10),
             ft.Row([self.txt_nome, self.txt_cognome], spacing=10),
             ft.Row([self.txt_data_nascita, self.txt_codice_fiscale], spacing=10),
             self.txt_indirizzo,
-            ft.Divider(height=20),
-            ft.Text(loc.get("change_password"), weight=ft.FontWeight.BOLD),
+            ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
+            AppStyles.subheader_text(loc.get("change_password")),
             self.txt_nuova_password,
             self.txt_conferma_password,
             ft.Row(
@@ -174,18 +181,18 @@ class ImpostazioniTab(ft.Container):
                 alignment=ft.MainAxisAlignment.END
             ),
 
-            ft.Divider(height=30),
+            ft.Divider(height=30, color=ft.Colors.TRANSPARENT),
 
-            ft.Text(loc.get("backup_and_restore"), size=24, weight=ft.FontWeight.BOLD),
-            ft.Text(loc.get("backup_and_restore_desc")),
-            ft.Divider(),
+            AppStyles.header_text(loc.get("backup_and_restore")),
+            AppStyles.body_text(loc.get("backup_and_restore_desc")),
+            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
             ft.Row(
                 [
                     ft.ElevatedButton(
                         loc.get("create_backup"),
                         icon=ft.Icons.SAVE,
                         on_click=lambda e: self.controller.backup_dati_clicked(),
-                        bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE
+                        bgcolor=AppColors.PRIMARY, color=AppColors.ON_PRIMARY
                     ),
                     ft.ElevatedButton(loc.get("restore_from_backup"), icon=ft.Icons.RESTORE,
                                       on_click=lambda e: self.controller.ripristina_dati_clicked()),

@@ -1,6 +1,7 @@
 import flet as ft
 from functools import partial
 from db.gestione_db import ottieni_prestiti_famiglia, elimina_prestito
+from utils.styles import AppStyles, AppColors
 
 
 class PrestitiTab(ft.Container):
@@ -28,7 +29,7 @@ class PrestitiTab(ft.Container):
         self.lv_prestiti.controls.clear()
 
         if not prestiti:
-            self.lv_prestiti.controls.append(ft.Text(self.controller.loc.get("no_loans")))
+            self.lv_prestiti.controls.append(AppStyles.body_text(self.controller.loc.get("no_loans")))
         else:
             for prestito in prestiti:
                 self.lv_prestiti.controls.append(self._crea_widget_prestito(prestito, theme))
@@ -42,17 +43,18 @@ class PrestitiTab(ft.Container):
         return [
             ft.Row(
                 [
-                    ft.Text(loc.get("loans_management"), size=24, weight=ft.FontWeight.BOLD),
+                    AppStyles.header_text(loc.get("loans_management")),
                     ft.IconButton(
                         icon=ft.Icons.ADD,
                         tooltip=loc.get("add_loan"),
+                        icon_color=AppColors.PRIMARY,
                         on_click=lambda e: self.controller.prestito_dialogs.apri_dialog_prestito()
                     )
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN
             ),
-            ft.Text(loc.get("loans_description")),
-            ft.Divider(),
+            AppStyles.body_text(loc.get("loans_description")),
+            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
             self.lv_prestiti
         ]
 
@@ -65,58 +67,56 @@ class PrestitiTab(ft.Container):
         progresso = rate_pagate / mesi_totali if mesi_totali > 0 else 0
         mesi_rimanenti = mesi_totali - rate_pagate
 
-        progress_bar = ft.ProgressBar(value=progresso, width=200, color=theme.primary, bgcolor=theme.surface_variant)
+        progress_bar = ft.ProgressBar(value=progresso, width=200, color=AppColors.PRIMARY, bgcolor=AppColors.SURFACE_VARIANT)
         
-        return ft.Container(
-            content=ft.Column([
-                ft.Row([
-                    ft.Text(prestito['nome'], weight=ft.FontWeight.BOLD, size=18),
-                    ft.Text(prestito['tipo'], size=12, italic=True, color=theme.on_surface_variant)
-                ]),
-                ft.Text(prestito['descrizione'] if prestito['descrizione'] else ""),
-                ft.Divider(height=5),
-                ft.Row([
-                    self._crea_info_prestito(loc.get("financed_amount"),
-                                             loc.format_currency(prestito['importo_finanziato']), theme),
-                    self._crea_info_prestito(loc.get("remaining_amount"),
-                                             loc.format_currency(prestito['importo_residuo']),
-                                             theme, colore_valore=theme.secondary),
-                ]),
-                ft.Row([
-                    self._crea_info_prestito(loc.get("monthly_installment"),
-                                             loc.format_currency(prestito['importo_rata']), theme),
-                    self._crea_info_prestito(loc.get("total_installments"), mesi_totali, theme),
-                ]),
-                ft.Column([
-                    ft.Row([
-                        ft.Text(f"{loc.get('paid_installments')}: {rate_pagate}/{mesi_totali}"),
-                        ft.Text(f"{loc.get('remaining_installments')}: {mesi_rimanenti}")
-                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                    progress_bar
-                ], spacing=5),
-                ft.Row([
-                    ft.ElevatedButton(loc.get("pay_installment"), icon=ft.Icons.PAYMENT,
-                                      on_click=lambda e, p=prestito: self.controller.prestito_dialogs.apri_dialog_paga_rata(
-                                          p),
-                                      disabled=prestito['importo_residuo'] <= 0),
-                    ft.IconButton(icon=ft.Icons.EDIT, tooltip=loc.get("edit"), data=prestito,
-                                  on_click=lambda e: self.controller.prestito_dialogs.apri_dialog_prestito(
-                                      e.control.data)),
-                    ft.IconButton(icon=ft.Icons.DELETE, tooltip=loc.get("delete"), icon_color=theme.error,
-                                  data=prestito['id_prestito'],
-                                  on_click=lambda e: self.controller.open_confirm_delete_dialog(
-                                      partial(self.elimina_cliccato, e))),
-                ], alignment=ft.MainAxisAlignment.END)
+        content = ft.Column([
+            ft.Row([
+                AppStyles.subheader_text(prestito['nome']),
+                ft.Text(prestito['tipo'], size=12, italic=True, color=AppColors.TEXT_SECONDARY)
             ]),
-            padding=10,
-            border=ft.border.all(1, theme.outline),
-            border_radius=5
-        )
+            ft.Text(prestito['descrizione'] if prestito['descrizione'] else "", size=14),
+            ft.Divider(height=5, color=ft.Colors.TRANSPARENT),
+            ft.Row([
+                self._crea_info_prestito(loc.get("financed_amount"),
+                                         loc.format_currency(prestito['importo_finanziato']), theme),
+                self._crea_info_prestito(loc.get("remaining_amount"),
+                                         loc.format_currency(prestito['importo_residuo']),
+                                         theme, colore_valore=AppColors.ERROR),
+            ]),
+            ft.Row([
+                self._crea_info_prestito(loc.get("monthly_installment"),
+                                         loc.format_currency(prestito['importo_rata']), theme),
+                self._crea_info_prestito(loc.get("total_installments"), mesi_totali, theme),
+            ]),
+            ft.Column([
+                ft.Row([
+                    ft.Text(f"{loc.get('paid_installments')}: {rate_pagate}/{mesi_totali}", size=12),
+                    ft.Text(f"{loc.get('remaining_installments')}: {mesi_rimanenti}", size=12)
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                progress_bar
+            ], spacing=5),
+            ft.Row([
+                ft.ElevatedButton(loc.get("pay_installment"), icon=ft.Icons.PAYMENT,
+                                  on_click=lambda e, p=prestito: self.controller.prestito_dialogs.apri_dialog_paga_rata(
+                                      p),
+                                  disabled=prestito['importo_residuo'] <= 0),
+                ft.IconButton(icon=ft.Icons.EDIT, tooltip=loc.get("edit"), data=prestito,
+                              icon_color=AppColors.PRIMARY,
+                              on_click=lambda e: self.controller.prestito_dialogs.apri_dialog_prestito(
+                                  e.control.data)),
+                ft.IconButton(icon=ft.Icons.DELETE, tooltip=loc.get("delete"), icon_color=AppColors.ERROR,
+                              data=prestito['id_prestito'],
+                              on_click=lambda e: self.controller.open_confirm_delete_dialog(
+                                  partial(self.elimina_cliccato, e))),
+            ], alignment=ft.MainAxisAlignment.END)
+        ])
+        
+        return AppStyles.card_container(content, padding=15)
 
     def _crea_info_prestito(self, etichetta, valore, theme, colore_valore=None):
         return ft.Column([
-            ft.Text(etichetta, size=10, color=theme.on_surface_variant),
-            ft.Text(valore, size=16, weight=ft.FontWeight.BOLD, color=colore_valore)
+            AppStyles.caption_text(etichetta),
+            ft.Text(str(valore), size=16, weight=ft.FontWeight.BOLD, color=colore_valore)
         ], horizontal_alignment=ft.CrossAxisAlignment.START)
 
     def elimina_cliccato(self, e):

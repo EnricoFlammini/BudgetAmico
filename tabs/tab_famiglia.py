@@ -6,6 +6,7 @@ from db.gestione_db import (
     ottieni_anni_mesi_storicizzati
 )
 import datetime
+from utils.styles import AppStyles, AppColors
 
 
 class FamigliaTab(ft.Container):
@@ -15,19 +16,28 @@ class FamigliaTab(ft.Container):
         self.page = controller.page
 
         # Controlli UI
-        self.txt_patrimonio_totale_famiglia = ft.Text(size=22, weight=ft.FontWeight.BOLD)
-        self.txt_liquidita_totale_famiglia = ft.Text(size=16)
-        self.txt_investimenti_totali_famiglia = ft.Text(size=16)
-        self.dd_mese_filtro = ft.Dropdown(on_change=self._filtro_mese_cambiato)
+        self.txt_patrimonio_totale_famiglia = AppStyles.header_text("")
+        self.txt_liquidita_totale_famiglia = AppStyles.body_text("")
+        self.txt_investimenti_totali_famiglia = AppStyles.body_text("")
+        
+        self.dd_mese_filtro = ft.Dropdown(
+            on_change=self._filtro_mese_cambiato,
+            border_color=ft.Colors.OUTLINE,
+            text_size=14,
+            content_padding=10
+        )
+        
         self.dt_transazioni_famiglia = ft.DataTable(
             columns=[ft.DataColumn(ft.Text("..."))],
             rows=[],
             expand=True,
-            border_radius=5
+            border_radius=10,
+            heading_row_height=40,
+            data_row_max_height=60
         )
         
         self.no_data_view = ft.Container(
-            content=ft.Text(self.controller.loc.get("no_transactions_found_family"), text_align=ft.TextAlign.CENTER),
+            content=AppStyles.body_text(self.controller.loc.get("no_transactions_found_family")),
             alignment=ft.alignment.center,
             expand=True,
             visible=False
@@ -50,9 +60,9 @@ class FamigliaTab(ft.Container):
         self.main_content.controls = self.build_controls(theme)
         
         self.txt_patrimonio_totale_famiglia.color = theme.primary
-        self.dt_transazioni_famiglia.heading_row_color = theme.primary_container
-        self.dt_transazioni_famiglia.data_row_color = {"hovered": theme.secondary_container}
-        self.dt_transazioni_famiglia.border = ft.border.all(1, theme.outline)
+        self.dt_transazioni_famiglia.heading_row_color = AppColors.SURFACE_VARIANT
+        self.dt_transazioni_famiglia.data_row_color = {"hovered": ft.Colors.with_opacity(0.1, theme.primary)}
+        self.dt_transazioni_famiglia.border = ft.border.all(1, ft.Colors.OUTLINE_VARIANT)
 
         if is_initial_load:
             self._popola_filtro_mese()
@@ -69,8 +79,8 @@ class FamigliaTab(ft.Container):
         if not famiglia_id:
             self.main_content.controls = [ft.Column(
                 [
-                    ft.Icon(ft.Icons.INFO_OUTLINE, size=50, color=theme.on_surface_variant),
-                    ft.Text(self.controller.loc.get("not_in_family"), size=18)
+                    ft.Icon(ft.Icons.INFO_OUTLINE, size=50, color=AppColors.TEXT_SECONDARY),
+                    AppStyles.subheader_text(self.controller.loc.get("not_in_family"))
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER, expand=True
             )]
@@ -79,8 +89,8 @@ class FamigliaTab(ft.Container):
         if ruolo == 'livello3':
             self.main_content.controls = [ft.Column(
                 [
-                    ft.Icon(ft.Icons.LOCK, size=50, color=theme.on_surface_variant),
-                    ft.Text(self.controller.loc.get("no_family_access_permission"), size=18)
+                    ft.Icon(ft.Icons.LOCK, size=50, color=AppColors.TEXT_SECONDARY),
+                    AppStyles.subheader_text(self.controller.loc.get("no_family_access_permission"))
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER, expand=True
             )]
@@ -89,19 +99,20 @@ class FamigliaTab(ft.Container):
         if ruolo == 'livello2':
             self.main_content.controls.clear()
             self.main_content.controls.extend([
-                ft.Text(self.controller.loc.get("wealth_by_member"), size=24, weight=ft.FontWeight.BOLD),
-                ft.Divider()
+                AppStyles.header_text(self.controller.loc.get("wealth_by_member")),
+                ft.Divider(color=ft.Colors.OUTLINE_VARIANT)
             ])
             totali = ottieni_totali_famiglia(famiglia_id)
             for m in totali:
                 self.main_content.controls.append(
-                    ft.Container(
+                    AppStyles.card_container(
                         content=ft.Row([
-                            ft.Text(m['nome_visualizzato'], weight=ft.FontWeight.BOLD, size=16, expand=True),
+                            AppStyles.subheader_text(m['nome_visualizzato']),
                             ft.Text(self.controller.loc.format_currency(m['saldo_totale']), size=16,
-                                    color=theme.primary if m['saldo_totale'] >= 0 else theme.error)
-                        ]),
-                        padding=10, border=ft.border.all(1, theme.outline), border_radius=5
+                                    weight=ft.FontWeight.BOLD,
+                                    color=AppColors.SUCCESS if m['saldo_totale'] >= 0 else AppColors.ERROR)
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        padding=15
                     )
                 )
             return
@@ -109,7 +120,11 @@ class FamigliaTab(ft.Container):
         if ruolo in ['admin', 'livello1']:
             anno, mese = self._get_anno_mese_selezionato()
             riepilogo = ottieni_riepilogo_patrimonio_famiglia_aggregato(famiglia_id, anno, mese)
-            self.txt_patrimonio_totale_famiglia.value = self.controller.loc.format_currency(riepilogo.get('patrimonio_netto', 0))
+            
+            val_patrimonio = riepilogo.get('patrimonio_netto', 0)
+            self.txt_patrimonio_totale_famiglia.value = self.controller.loc.format_currency(val_patrimonio)
+            self.txt_patrimonio_totale_famiglia.color = AppColors.SUCCESS if val_patrimonio >= 0 else AppColors.ERROR
+            
             self.txt_liquidita_totale_famiglia.value = self.controller.loc.format_currency(riepilogo.get('liquidita', 0))
             self.txt_investimenti_totali_famiglia.value = self.controller.loc.format_currency(riepilogo.get('investimenti', 0))
             self.txt_investimenti_totali_famiglia.visible = riepilogo.get('investimenti', 0) > 0
@@ -131,43 +146,45 @@ class FamigliaTab(ft.Container):
                             ft.DataCell(ft.Text(t.get('nome_sottocategoria') or "N/A")),
                             ft.DataCell(ft.Text(t.get('conto_nome') or "N/A")),
                             ft.DataCell(ft.Text(self.controller.loc.format_currency(t.get('importo', 0)),
-                                                color=theme.primary if t.get('importo', 0) >= 0 else theme.error)),
+                                                color=AppColors.SUCCESS if t.get('importo', 0) >= 0 else AppColors.ERROR,
+                                                weight=ft.FontWeight.BOLD)),
                         ])
                     )
 
     def build_controls(self, theme):
         loc = self.controller.loc
-        on_surface_variant = theme.on_surface_variant
-        outline = theme.outline
-
+        
         self.dd_mese_filtro.label = loc.get("filter_by_month")
         self.dt_transazioni_famiglia.columns = [
-            ft.DataColumn(ft.Text(loc.get("user"))), ft.DataColumn(ft.Text(loc.get("date"))),
-            ft.DataColumn(ft.Text(loc.get("description"))), ft.DataColumn(ft.Text(loc.get("subcategory"))),
-            ft.DataColumn(ft.Text(loc.get("account"))), ft.DataColumn(ft.Text(loc.get("amount")), numeric=True),
+            ft.DataColumn(ft.Text(loc.get("user"), weight=ft.FontWeight.BOLD)), 
+            ft.DataColumn(ft.Text(loc.get("date"), weight=ft.FontWeight.BOLD)),
+            ft.DataColumn(ft.Text(loc.get("description"), weight=ft.FontWeight.BOLD)), 
+            ft.DataColumn(ft.Text(loc.get("subcategory"), weight=ft.FontWeight.BOLD)),
+            ft.DataColumn(ft.Text(loc.get("account"), weight=ft.FontWeight.BOLD)), 
+            ft.DataColumn(ft.Text(loc.get("amount"), weight=ft.FontWeight.BOLD), numeric=True),
         ]
 
         return [
-            ft.Container(
+            AppStyles.card_container(
                 content=ft.Row([
                     ft.Column([
-                        ft.Text(loc.get("total_family_wealth"), size=12, color=on_surface_variant),
+                        AppStyles.caption_text(loc.get("total_family_wealth")),
                         self.txt_patrimonio_totale_famiglia
                     ]),
                     ft.Column([
-                        ft.Text(loc.get("total_liquidity"), size=12, color=on_surface_variant),
+                        AppStyles.caption_text(loc.get("total_liquidity")),
                         self.txt_liquidita_totale_famiglia,
-                        ft.Text(loc.get("total_investments"), size=12, color=on_surface_variant,
+                        ft.Text(loc.get("total_investments"), size=12, color=AppColors.TEXT_SECONDARY,
                                 visible=self.txt_investimenti_totali_famiglia.visible),
                         self.txt_investimenti_totali_famiglia
                     ], spacing=5, horizontal_alignment=ft.CrossAxisAlignment.END)
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                padding=10, border=ft.border.all(1, outline), border_radius=5
+                padding=15
             ),
-            self.dd_mese_filtro,
-            ft.Divider(height=20),
-            ft.Text(loc.get("all_family_transactions"), size=24, weight=ft.FontWeight.BOLD),
-            ft.Divider(),
+            ft.Container(content=self.dd_mese_filtro, padding=ft.padding.symmetric(horizontal=10)),
+            ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
+            AppStyles.header_text(loc.get("all_family_transactions")),
+            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
             self.data_stack
         ]
 

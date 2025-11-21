@@ -1,6 +1,7 @@
 import flet as ft
 from db.gestione_db import ottieni_riepilogo_budget_mensile
 import datetime
+from utils.styles import AppStyles, AppColors
 
 
 class BudgetTab(ft.Container):
@@ -43,9 +44,9 @@ class BudgetTab(ft.Container):
         """Costruisce e restituisce la lista di controlli per la scheda."""
         loc = self.controller.loc
         return [
-            ft.Text(loc.get("budget_management"), size=24, weight=ft.FontWeight.BOLD),
-            ft.Text(loc.get("budget_description")),
-            ft.Divider(),
+            AppStyles.header_text(loc.get("budget_management")),
+            AppStyles.body_text(loc.get("budget_description")),
+            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
             self.lv_budget
         ]
 
@@ -60,36 +61,33 @@ class BudgetTab(ft.Container):
         
         colore_cat = theme.primary
         if percentuale_cat > 0.9:
-            colore_cat = theme.error
+            colore_cat = AppColors.ERROR
         elif percentuale_cat > 0.7:
-            colore_cat = theme.secondary
+            colore_cat = AppColors.WARNING
 
         # Creazione dei widget per le sottocategorie
         sottocategorie_widgets = []
         for sub_data in cat_data['sottocategorie']:
             sottocategorie_widgets.append(self._crea_widget_sottocategoria(sub_data, theme))
 
-        return ft.Container(
-            content=ft.Column([
-                ft.Row([
-                    ft.Text(cat_data['nome_categoria'], weight=ft.FontWeight.BOLD, size=18),
-                    ft.Text(
-                        f"{loc.get('remaining')}: {loc.format_currency(rimanente_cat)}",
-                        size=16,
-                        weight=ft.FontWeight.BOLD,
-                        color=colore_cat
-                    )
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+        content = ft.Column([
+            ft.Row([
+                AppStyles.subheader_text(cat_data['nome_categoria']),
                 ft.Text(
-                    f"{loc.get('spent')} {loc.format_currency(spesa_cat)} {loc.get('of')} {loc.format_currency(limite_cat)}"),
-                ft.ProgressBar(value=percentuale_cat, color=colore_cat, bgcolor=theme.surface_variant),
-                ft.Divider(height=10),
-                ft.Column(sottocategorie_widgets, spacing=8)
-            ]),
-            padding=15,
-            border=ft.border.all(1, theme.outline),
-            border_radius=10
-        )
+                    f"{loc.get('remaining')}: {loc.format_currency(rimanente_cat)}",
+                    size=16,
+                    weight=ft.FontWeight.BOLD,
+                    color=colore_cat
+                )
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            AppStyles.caption_text(
+                f"{loc.get('spent')} {loc.format_currency(spesa_cat)} {loc.get('of')} {loc.format_currency(limite_cat)}"),
+            ft.ProgressBar(value=percentuale_cat, color=colore_cat, bgcolor=AppColors.SURFACE_VARIANT),
+            ft.Divider(height=10, color=ft.Colors.OUTLINE_VARIANT),
+            ft.Column(sottocategorie_widgets, spacing=8)
+        ])
+        
+        return AppStyles.card_container(content, padding=15)
 
     def _crea_widget_sottocategoria(self, sub_data, theme):
         loc = self.controller.loc
@@ -100,14 +98,14 @@ class BudgetTab(ft.Container):
 
         colore_progress = theme.primary
         if percentuale > 0.9:
-            colore_progress = theme.error
+            colore_progress = AppColors.ERROR
         elif percentuale > 0.7:
-            colore_progress = theme.secondary
+            colore_progress = AppColors.WARNING
 
         return ft.Column([
             ft.Row([
-                ft.Text(sub_data['nome_sottocategoria'], size=14),
-                ft.Text(f"{loc.format_currency(rimanente)}", color=colore_progress)
+                AppStyles.body_text(sub_data['nome_sottocategoria']),
+                ft.Text(f"{loc.format_currency(rimanente)}", color=colore_progress, size=14)
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            ft.ProgressBar(value=percentuale, color=colore_progress, bgcolor=theme.surface_variant, height=5)
+            ft.ProgressBar(value=percentuale, color=colore_progress, bgcolor=AppColors.SURFACE_VARIANT, height=5)
         ])
