@@ -1482,15 +1482,210 @@ STRINGS = {
         "start_date": "Startdatum",
         "required_field": "Pflichtfeld",
         "delete_account": "Konto löschen",
+        "select_source_account": "Wählen Sie ein Quellkonto",
+        "select_destination_account": "Wählen Sie ein Zielkonto",
+        "execute_transfer": "Überweisung ausführen",
+
+        # Dialogo Spese Fisse
+        "manage_fixed_expense": "Fixkosten verwalten",
+        "add_fixed_expense": "Fixkosten hinzufügen",
+        "edit_fixed_expense": "Fixkosten bearbeiten",
+        "expense_name_placeholder": "Ausgabenname (z.B. Netflix-Abo)",
+        "debit_account": "Belastungskonto",
+        "debit_day": "Tag des Monats für die Belastung",
+
+        # Dialogo Fondo Pensione
+        "manage_pension_fund_dialog": "Pensionsfondsverwaltung",
+        "manage_pension_fund_for": "Verwaltung: {0}",
+        "update_total_value": "Aktualisieren Sie den Gesamtwert des Fonds:",
+        "current_total_value": "Aktueller Gesamtwert",
+        "update_value": "Wert aktualisieren",
+        "perform_operation": "Eine Operation durchführen:",
+        "operation_amount": "Betrag der Operation",
+        "linked_account": "Konto für Einzahlung/Auszahlung",
+        "deposit_from_account": "Vom Konto einzahlen",
+        "deposit_from_external": "Von extern einzahlen",
+        "deposit_from_external_tooltip": "Z.B. vom Arbeitgeber",
+        "withdraw_to_account": "Auf Konto abheben",
+        "pension_fund_value_updated": "Pensionsfondswert aktualisiert!",
+        "error_updating_value": "Fehler beim Aktualisieren.",
+        "pension_fund_op_success": "Pensionsfondsoperation erfasst!",
+        "pension_fund_op_error": "Fehler beim Erfassen der Operation.",
+
+        # Dialogo Immobili
+        "manage_property_dialog": "Immobilienverwaltung",
+        "add_property": "Immobilie hinzufügen",
+        "edit_property": "Immobilie bearbeiten",
+        "property_name": "Immobilienname",
+        "address": "Adresse",
+        "city": "Stadt",
+        "bare_ownership": "Nacktes Eigentum",
+        "linked_mortgage": "Verbundene Hypothek",
+
+        # Dialogo Portafoglio
+        "manage_portfolio_dialog": "Portfolioverwaltung",
+        "total_portfolio_value": "Gesamter Portfoliowert",
+        "total_gain_loss": "Gesamtgewinn/-verlust",
+        "add_operation": "Operation hinzufügen",
+        "unit_price": "Stückpreis",
+        "buy": "Kaufen",
+        "sell": "Verkaufen",
+        "update_price": "Preis aktualisieren",
+        "new_price": "Neuer Preis",
+        "edit_asset_details": "Anlagedetails bearbeiten",
+
+        # Dialogo Prestiti
+        "manage_loan_dialog": "Kreditverwaltung",
+        "edit_loan": "Kredit bearbeiten",
+        "loan_name": "Kreditname",
+        "loan_type": "Typ",
+        "interest_amount": "Zinsbetrag",
+        "installment_due_day": "Fälligkeitstag der Rate",
+        "default_payment_account": "Standard-Zahlungskonto",
+        "default_payment_category": "Standard-Zahlungskategorie",
+        "pay_installment_dialog_title": "Rate zahlen",
+        "payment_amount": "Zahlungsbetrag",
+        "payment_date": "Zahlungsdatum",
+        "payment_account": "Zahlungskonto",
+        "payment_category": "Zahlungskategorie",
+        "execute_payment": "Zahlung ausführen",
+
+        # Scheda Conti Personali
+        "net_worth": "Nettovermögen",
+        "liquidity": "Liquidität",
+        "investments": "Anlagen",
+        "my_personal_accounts": "Meine Persönlichen Konten",
+        "add_personal_account": "Neues persönliches Konto hinzufügen",
+        "no_personal_accounts": "Sie haben noch keine persönlichen Konten hinzugefügt.",
+        "current_balance": "Aktueller Saldo",
+        "value": "Wert",
+        "manage_portfolio": "Portfolio Verwalten",
+        "manage_pension_fund": "Pensionsfonds Verwalten",
+
+        # Scheda Conti Condivisi
+        "no_shared_accounts": "Sie sind noch keinem geteilten Konto beigetreten.",
+        "shared_type_family": "Ganze Familie",
+        "shared_type_users": "Bestimmte Benutzer",
+
+        # Scheda Personale (I Miei Dati)
+        "welcome_back": "Willkommen zurück, {0}!",
+        "total_wealth": "Gesamtvermögen",
+        "liquidity_details": "({0} an Liquidität zum {1})",
+        "latest_transactions": "Letzte Transaktionen (Liquidität)",
+        "filter_by_month": "Nach Monat filtern",
+
+        # Scheda Famiglia
+        "wealth_by_member": "Vermögen pro Mitglied",
+        "total_family_wealth": "Gesamtvermögen der Familie",
+        "total_liquidity": "Gesamtliquidität",
+        "total_investments": "Gesamtanlagen",
+        "all_family_transactions": "Alle Familientransaktionen",
+        "user": "Benutzer",
+        "date": "Datum",
+        "description": "Beschreibung",
+        "account": "Konto",
+        "amount": "Betrag",
+        "no_transactions_found_family": "Keine Transaktionen für die Familie gefunden.",
+        "shared": "Geteilt",
+        "no_family_access_permission": "Sie haben keine Berechtigung, diesen Bereich anzuzeigen.",
+        "not_in_family": "Sie wurden noch keiner Familie hinzugefügt.",
+
+        # Scheda Budget
+        "budget_management": "Budgetverwaltung",
+        "budget_description": "Legen Sie monatliche Ausgabenlimits pro Kategorie fest und überwachen Sie sie.",
+        "set_budget": "Budget festlegen",
+        "no_budget_set": "Kein Budget festgelegt. Klicken Sie auf '+', um zu beginnen.",
+        "spent": "Ausgegeben",
+        "of": "von",
+        "remaining": "Verbleibend",
+        "set_monthly_budget": "Monatliches Budget festlegen",
+        "limit_amount": "Limitbetrag",
+        "budget_saved": "Budget erfolgreich gespeichert!",
+
+        # Scheda Spese Fisse
+        "fixed_expenses_management": "Verwaltung der Fixkosten",
+        "fixed_expenses_description": "Richten Sie hier Ihre wiederkehrenden Ausgaben ein (z. B. Miete, Abonnements). Sie werden jeden Monat automatisch abgebucht.",
+        "name": "Name",
+        "active": "Aktiv",
+        "actions": "Aktionen",
+        "no_fixed_expenses": "Keine Fixkosten konfiguriert.",
+
+        # Scheda Prestiti
+        "loans_management": "Kreditverwaltung",
+        "loans_description": "Verfolgen Sie Hypotheken, Finanzierungen und Kredite.",
+        "add_loan": "Kredit hinzufügen",
+        "pay_installment": "Rate zahlen",
+        "financed_amount": "Finanzierter Betrag",
+        "remaining_amount": "Restbetrag",
+        "monthly_installment": "Monatliche Rate",
+        "total_months": "Gesamtmonate",
+        "no_loans": "Keine Kredite eingegeben.",
+
+        # Scheda Immobili
+        "properties_management": "Immobilienverwaltung",
+        "properties_description": "Verwalten Sie den Wert und die zugehörigen Hypotheken Ihrer Immobilien.",
+        "add_property": "Immobilie hinzufügen",
+        "purchase_value": "Kaufwert",
+        "current_value": "Aktueller Wert",
+        "residual_mortgage": "Restschuld",
+        "no_properties": "Keine Immobilien eingegeben.",
+
+        # Scheda Impostazioni - Profilo Utente
+        "user_profile": "Benutzerprofil",
+        "user_profile_desc": "Bearbeiten Sie Ihre persönlichen Informationen und Ihr Passwort.",
+        "date_of_birth": "Geburtsdatum",
+        "tax_code": "Steuernummer",
+        "address": "Adresse",
+        "change_password": "Passwort ändern",
+        "save_profile": "Profil speichern",
+        "profile_saved_success": "Profil erfolgreich gespeichert!",
+
+        # Scheda Impostazioni
+        "google_settings": "Google-Einstellungen",
+        "google_settings_desc": "Verbinden Sie Ihr Google-Konto, um die Datenbank mit Google Drive zu synchronisieren.",
+        "status_connected": "Status: Verbunden",
+        "status_disconnected": "Status: Nicht verbunden",
+        "connect_google_account": "Google-Konto verbinden",
+        "disconnect_google_account": "Google-Konto trennen",
+        "sync_db_drive": "Datenbank synchronisieren",
+        "sync_db_drive_tooltip": "Lokale DB auf Google Drive hochladen (überschreibt)",
+        "language_and_currency": "Sprache und Währung",
+        "language_and_currency_desc": "Wählen Sie die Sprache und Währung für die Anwendung.",
+        "language": "Sprache",
+        "currency": "Währung",
+        "default_account": "Standardkonto",
+        "default_account_desc": "Wählen Sie ein Standardkonto für neue Transaktionen.",
+        "save_default_account": "Standardkonto speichern",
+        "backup_and_restore": "Sicherung und Wiederherstellung",
+        "backup_and_restore_desc": "Speichern Sie eine Sicherungskopie Ihrer Daten oder stellen Sie sie aus einer früheren Sicherung wieder her.",
+        "create_backup": "Datensicherung erstellen",
+        "restore_from_backup": "Aus Sicherung wiederherstellen",
+
+        #dati da sistemare e riorganizzare de
+        "subcategory": "Unterkategorie",
+        "category": "Kategorie",
+        "edit_role_for": "Rolle bearbeiten für",
+        "avg_purchase_price": "Durchschnittlicher Kaufpreis",
+        "avg_purchase_price_tooltip": "Gewichteter durchschnittlicher Kaufpreis der Vermögenswerte",
+        "past_gain_loss_tooltip": "Gesamter vergangener Gewinn/Verlust (vor Eingabe ins System)",
+        "manage_shared_account": "Gemeinsames Konto verwalten",
+        "debit_day_of_month": "Tag des Monats",
+        "select_existing_asset_optional": "Vorhandenen Vermögenswert auswählen (optional)",
+        "invalid_amount_or_quantity": "Ungültiger Betrag oder Menge",
+        "create_new_mortgage": "Neue Hypothek erstellen",
+        "default_payment_subcategory": "Standard-Zahlungsunterkategorie",
+        "start_date": "Startdatum",
+        "required_field": "Pflichtfeld",
+        "delete_account": "Konto löschen",
         "auto_debit": "Automatische Abbuchung",
         "auto_debit_desc": "Wählen Sie aus, ob die Abbuchung automatisch jeden Monat ausgeführt werden soll.",
     },
 }
 
 CURRENCIES = {
-    "EUR": {"symbol": "€", "format": "{amount:.2f} {symbol}"},
-    "USD": {"symbol": "$", "format": "{symbol}{amount:.2f}"},
-    "GBP": {"symbol": "£", "format": "{symbol}{amount:.2f}"},
+    "EUR": {"symbol": "€", "format": "{amount} {symbol}"},
+    "USD": {"symbol": "$", "format": "{symbol}{amount}"},
+    "GBP": {"symbol": "£", "format": "{symbol}{amount}"},
 
 }
 
@@ -1534,4 +1729,13 @@ class LocalizationManager:
     def format_currency(self, amount):
         """Formatta un importo numerico con il simbolo e il formato della valuta corrente."""
         currency_info = self.currencies.get(self.currency, self.currencies["EUR"])
-        return currency_info["format"].format(amount=amount, symbol=currency_info["symbol"])
+        
+        # Formatta con separatore delle migliaia (virgola) e decimali (punto) standard Python
+        # Esempio: 1234.56 -> "1,234.56"
+        formatted_amount = "{:,.2f}".format(amount)
+        
+        # Sostituisci per ottenere il formato europeo: 1.234,56
+        # "1,234.56" -> "1X234.56" -> "1X234,56" -> "1.234,56"
+        formatted_amount = formatted_amount.replace(",", "X").replace(".", ",").replace("X", ".")
+        
+        return currency_info["format"].format(amount=formatted_amount, symbol=currency_info["symbol"])
