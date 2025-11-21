@@ -163,6 +163,13 @@ class AppController:
                 return
             self.export_view.update_view_data()
             self.page.views.append(self.export_view.build_view())
+        elif route_path == "/password-recovery":
+            self.page.views.append(self.auth_view.get_password_recovery_view())
+        elif route_path == "/force-change-password":
+            if not self.get_user_id():
+                self.page.go("/")
+                return
+            self.page.views.append(self.auth_view.get_force_change_password_view())
         else:
             self.page.go("/")
         self.page.update()
