@@ -522,6 +522,18 @@ STRINGS = {
         "start_date": "Data Inizio",
         "required_field": "Campo obbligatorio",
         "delete_account": "Elimina Conto",
+        "auto_debit": "Addebito Automatico",
+        "auto_debit_desc": "Seleziona se l'addebito deve essere eseguito automaticamente ogni mese.",
+        "manage_shared_account": "Gestisci Conto Condiviso",
+        "debit_day_of_month": "Giorno del Mese",
+        "select_existing_asset_optional": "Seleziona Asset Esistente (opzionale)",
+        "invalid_amount_or_quantity": "Importo o quantità non validi",
+        "create_new_mortgage": "Crea Nuovo Mutuo",
+        "default_payment_subcategory": "Sottocategoria Pagamento Predefinita",
+        "start_date": "Data Inizio",
+        "required_field": "Campo obbligatorio",
+        "delete_account": "Elimina Conto",
+
     },
     "en": {
         # Generali
@@ -837,6 +849,9 @@ STRINGS = {
         "start_date": "Start Date",
         "required_field": "Required field",
         "delete_account": "Delete Account",
+        "auto_debit": "Auto Debit",
+        "auto_debit_desc": "Select if the debit should be executed automatically every month.",
+
     },
     "es": {
         # Generali
@@ -1151,6 +1166,8 @@ STRINGS = {
         "start_date": "Fecha de Inicio",
         "required_field": "Campo obligatorio",
         "delete_account": "Eliminar Cuenta",
+        "auto_debit": "Débito Automático",
+        "auto_debit_desc": "Selecciona si el débito debe ser ejecutado automáticamente cada mes.",
     },
     "de": {
         # Generali
@@ -1465,6 +1482,8 @@ STRINGS = {
         "start_date": "Startdatum",
         "required_field": "Pflichtfeld",
         "delete_account": "Konto löschen",
+        "auto_debit": "Automatische Abbuchung",
+        "auto_debit_desc": "Wählen Sie aus, ob die Abbuchung automatisch jeden Monat ausgeführt werden soll.",
     },
 }
 
@@ -1472,8 +1491,8 @@ CURRENCIES = {
     "EUR": {"symbol": "€", "format": "{amount:.2f} {symbol}"},
     "USD": {"symbol": "$", "format": "{symbol}{amount:.2f}"},
     "GBP": {"symbol": "£", "format": "{symbol}{amount:.2f}"},
-}
 
+}
 
 class LocalizationManager:
     def __init__(self, default_lang="it", default_currency="EUR"):

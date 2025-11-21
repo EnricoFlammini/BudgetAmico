@@ -61,7 +61,7 @@ class SpesaFissaDialog(ft.AlertDialog):
         self.dd_sottocategoria.label = loc.get("subcategory")
         self.dd_giorno_addebito.label = loc.get("debit_day_of_month")
         self.sw_attiva.label = loc.get("active")
-        self.cb_addebito_automatico.label = "Addebito Automatico"
+        self.cb_addebito_automatico.label = loc.get("auto_debit")
         self.actions[0].text = loc.get("cancel")
         self.actions[1].text = loc.get("save")
 
