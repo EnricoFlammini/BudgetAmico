@@ -131,6 +131,62 @@ def _migra_da_v3_a_v4(con: sqlite3.Connection):
         return False
 
 
+
+
+def _migra_da_v4_a_v5(con: sqlite3.Connection):
+    """
+    Logica specifica per migrare un DB dalla versione 4 alla 5.
+    - Aggiunge addebito_automatico alla tabella SpeseFisse.
+    """
+    print("Esecuzione migrazione da v4 a v5...")
+    try:
+        cur = con.cursor()
+
+        # Aggiungi colonna addebito_automatico
+        print("  - Aggiunta colonna addebito_automatico a SpeseFisse...")
+        try:
+            cur.execute("ALTER TABLE SpeseFisse ADD COLUMN addebito_automatico BOOLEAN DEFAULT 0")
+        except sqlite3.OperationalError:
+            print("    Colonna addebito_automatico già esistente (ignorato).")
+
+        con.commit()
+        print("Migrazione a v5 completata con successo.")
+        return True
+
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v4 a v5: {e}")
+        con.rollback()
+        return False
+
+
+
+
+def _migra_da_v5_a_v6(con: sqlite3.Connection):
+    """
+    Logica specifica per migrare un DB dalla versione 5 alla 6.
+    - Aggiunge id_sottocategoria alla tabella SpeseFisse.
+    """
+    print("Esecuzione migrazione da v5 a v6...")
+    try:
+        cur = con.cursor()
+
+        # Aggiungi colonna id_sottocategoria
+        print("  - Aggiunta colonna id_sottocategoria a SpeseFisse...")
+        try:
+            cur.execute("ALTER TABLE SpeseFisse ADD COLUMN id_sottocategoria INTEGER REFERENCES Sottocategorie(id_sottocategoria) ON DELETE SET NULL")
+        except sqlite3.OperationalError:
+            print("    Colonna id_sottocategoria già esistente (ignorato).")
+
+        con.commit()
+        print("Migrazione a v6 completata con successo.")
+        return True
+
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v5 a v6: {e}")
+        con.rollback()
+        return False
+
+
 def migra_database(db_path, versione_vecchia, versione_nuova):
     """
     Funzione principale che gestisce il processo di migrazione.
@@ -164,6 +220,16 @@ def migra_database(db_path, versione_vecchia, versione_nuova):
                 if not _migra_da_v3_a_v4(con):
                     raise Exception("Migrazione da v3 a v4 fallita.")
                 versione_vecchia = 4
+            
+            if versione_vecchia == 4 and versione_nuova >= 5:
+                if not _migra_da_v4_a_v5(con):
+                    raise Exception("Migrazione da v4 a v5 fallita.")
+                versione_vecchia = 5
+            
+            if versione_vecchia == 5 and versione_nuova >= 6:
+                if not _migra_da_v5_a_v6(con):
+                    raise Exception("Migrazione da v5 a v6 fallita.")
+                versione_vecchia = 6
 
             # Se tutto è andato bene, aggiorna la versione del DB
             cur.execute(f"PRAGMA user_version = {versione_nuova}")

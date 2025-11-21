@@ -3,9 +3,12 @@ from functools import partial
 from db.gestione_db import (
     ottieni_spese_fisse_famiglia,
     elimina_spesa_fissa,
-    modifica_stato_spesa_fissa
+    modifica_stato_spesa_fissa,
+    aggiungi_transazione,
+    aggiungi_transazione_condivisa
 )
 from utils.styles import AppStyles, AppColors
+from datetime import datetime
 
 
 class SpeseFisseTab(ft.Container):
@@ -67,6 +70,9 @@ class SpeseFisseTab(ft.Container):
                         ft.DataCell(ft.Text(str(spesa['giorno_addebito']))),
                         ft.DataCell(ft.Switch(value=bool(spesa['attiva']), data=spesa['id_spesa_fissa'], on_change=self._cambia_stato_attiva)),
                         ft.DataCell(ft.Row([
+                            ft.IconButton(icon=ft.Icons.PAYMENT, tooltip="Paga", data=spesa,
+                                          icon_color=AppColors.SUCCESS,
+                                          on_click=self._paga_spesa_fissa),
                             ft.IconButton(icon=ft.Icons.EDIT, tooltip=self.controller.loc.get("edit"), data=spesa,
                                           icon_color=AppColors.PRIMARY,
                                           on_click=lambda e: self.controller.spesa_fissa_dialog.apri_dialog(e.control.data)),
@@ -128,3 +134,46 @@ class SpeseFisseTab(ft.Container):
             e.control.value = not nuovo_stato
             if self.page:
                 self.page.update()
+
+    def _paga_spesa_fissa(self, e):
+        """Crea una transazione per pagare la spesa fissa."""
+        spesa = e.control.data
+        try:
+            # Prepara i dati per la transazione
+            data_oggi = datetime.now().strftime("%Y-%m-%d")
+            descrizione = f"Pagamento: {spesa['nome']}"
+            importo = -abs(spesa['importo'])  # Negativo perché è un'uscita
+            id_sottocategoria = spesa.get('id_sottocategoria')
+            
+            # Determina se è un conto personale o condiviso
+            success = False
+            if spesa['id_conto_personale_addebito']:
+                # Transazione su conto personale
+                success = aggiungi_transazione(
+                    id_conto=spesa['id_conto_personale_addebito'],
+                    data=data_oggi,
+                    descrizione=descrizione,
+                    importo=importo,
+                    id_sottocategoria=id_sottocategoria
+                )
+            elif spesa['id_conto_condiviso_addebito']:
+                # Transazione su conto condiviso
+                id_utente = self.controller.get_user_id()
+                success = aggiungi_transazione_condivisa(
+                    id_utente_autore=id_utente,
+                    id_conto_condiviso=spesa['id_conto_condiviso_addebito'],
+                    data=data_oggi,
+                    descrizione=descrizione,
+                    importo=importo,
+                    id_sottocategoria=id_sottocategoria
+                )
+            
+            if success:
+                self.controller.show_snack_bar(f"✅ Pagamento registrato: {spesa['nome']}", success=True)
+                self.controller.db_write_operation()
+            else:
+                self.controller.show_snack_bar("❌ Errore durante la registrazione del pagamento.", success=False)
+                
+        except Exception as ex:
+            print(f"Errore pagamento spesa fissa: {ex}")
+            self.controller.show_snack_bar(f"❌ Errore: {ex}", success=False)

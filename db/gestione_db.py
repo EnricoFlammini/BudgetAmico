@@ -2114,33 +2114,43 @@ def ottieni_prima_famiglia_utente(id_utente):
 
 
 # --- NUOVE FUNZIONI PER SPESE FISSE ---
-def aggiungi_spesa_fissa(id_famiglia, nome, importo, id_conto_personale, id_conto_condiviso, id_categoria,
-                        giorno_addebito, attiva):
+def aggiungi_spesa_fissa(id_famiglia, nome, importo, id_conto_personale, id_conto_condiviso, id_sottocategoria,
+                        giorno_addebito, attiva, addebito_automatico=False):
     try:
         with sqlite3.connect(DB_FILE) as con:
             cur = con.cursor()
+            # Ottieni id_categoria dalla sottocategoria
+            cur.execute("SELECT id_categoria FROM Sottocategorie WHERE id_sottocategoria = ?", (id_sottocategoria,))
+            result = cur.fetchone()
+            id_categoria = result[0] if result else None
+            
             cur.execute("""
-                INSERT INTO SpeseFisse (id_famiglia, nome, importo, id_conto_personale_addebito, id_conto_condiviso_addebito, id_categoria, giorno_addebito, attiva)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (id_famiglia, nome, importo, id_conto_personale, id_conto_condiviso, id_categoria, giorno_addebito,
-                  1 if attiva else 0))
+                INSERT INTO SpeseFisse (id_famiglia, nome, importo, id_conto_personale_addebito, id_conto_condiviso_addebito, id_categoria, id_sottocategoria, giorno_addebito, attiva, addebito_automatico)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (id_famiglia, nome, importo, id_conto_personale, id_conto_condiviso, id_categoria, id_sottocategoria, giorno_addebito,
+                  1 if attiva else 0, 1 if addebito_automatico else 0))
             return cur.lastrowid
     except Exception as e:
         print(f"❌ Errore durante l'aggiunta della spesa fissa: {e}")
         return None
 
 
-def modifica_spesa_fissa(id_spesa_fissa, nome, importo, id_conto_personale, id_conto_condiviso, id_categoria,
-                        giorno_addebito, attiva):
+def modifica_spesa_fissa(id_spesa_fissa, nome, importo, id_conto_personale, id_conto_condiviso, id_sottocategoria,
+                        giorno_addebito, attiva, addebito_automatico=False):
     try:
         with sqlite3.connect(DB_FILE) as con:
             cur = con.cursor()
+            # Ottieni id_categoria dalla sottocategoria
+            cur.execute("SELECT id_categoria FROM Sottocategorie WHERE id_sottocategoria = ?", (id_sottocategoria,))
+            result = cur.fetchone()
+            id_categoria = result[0] if result else None
+            
             cur.execute("""
                 UPDATE SpeseFisse
-                SET nome = ?, importo = ?, id_conto_personale_addebito = ?, id_conto_condiviso_addebito = ?, id_categoria = ?, giorno_addebito = ?, attiva = ?
+                SET nome = ?, importo = ?, id_conto_personale_addebito = ?, id_conto_condiviso_addebito = ?, id_categoria = ?, id_sottocategoria = ?, giorno_addebito = ?, attiva = ?, addebito_automatico = ?
                 WHERE id_spesa_fissa = ?
-            """, (nome, importo, id_conto_personale, id_conto_condiviso, id_categoria, giorno_addebito,
-                  1 if attiva else 0, id_spesa_fissa))
+            """, (nome, importo, id_conto_personale, id_conto_condiviso, id_categoria, id_sottocategoria, giorno_addebito,
+                  1 if attiva else 0, 1 if addebito_automatico else 0, id_spesa_fissa))
             return cur.rowcount > 0
     except Exception as e:
         print(f"❌ Errore durante la modifica della spesa fissa: {e}")
@@ -2183,6 +2193,7 @@ def ottieni_spese_fisse_famiglia(id_famiglia):
                     SF.id_conto_personale_addebito,
                     SF.id_conto_condiviso_addebito,
                     SF.id_categoria,
+                    SF.id_sottocategoria,
                     SF.giorno_addebito,
                     SF.attiva,
                     COALESCE(CP.nome_conto, CC.nome_conto) as nome_conto

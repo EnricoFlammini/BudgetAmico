@@ -27,6 +27,7 @@ class SpesaFissaDialog(ft.AlertDialog):
             options=[ft.dropdown.Option(str(i)) for i in range(1, 29)]  # Fino a 28 per sicurezza
         )
         self.sw_attiva = ft.Switch(value=True)
+        self.cb_addebito_automatico = ft.Checkbox(value=False)
 
         self.content = ft.Column(
             [
@@ -35,7 +36,8 @@ class SpesaFissaDialog(ft.AlertDialog):
                 self.dd_conto_addebito,
                 self.dd_sottocategoria,
                 self.dd_giorno_addebito,
-                self.sw_attiva
+                self.sw_attiva,
+                self.cb_addebito_automatico
             ],
             tight=True,
             spacing=10,
@@ -59,6 +61,7 @@ class SpesaFissaDialog(ft.AlertDialog):
         self.dd_sottocategoria.label = loc.get("subcategory")
         self.dd_giorno_addebito.label = loc.get("debit_day_of_month")
         self.sw_attiva.label = loc.get("active")
+        self.cb_addebito_automatico.label = "Addebito Automatico"
         self.actions[0].text = loc.get("cancel")
         self.actions[1].text = loc.get("save")
 
@@ -79,6 +82,7 @@ class SpesaFissaDialog(ft.AlertDialog):
             self.dd_sottocategoria.value = spesa_fissa_data.get('id_sottocategoria')
             self.dd_giorno_addebito.value = str(spesa_fissa_data['giorno_addebito'])
             self.sw_attiva.value = bool(spesa_fissa_data['attiva'])
+            self.cb_addebito_automatico.value = bool(spesa_fissa_data.get('addebito_automatico', False))
         else:
             self.title.value = "Aggiungi Spesa Fissa"
             self.id_spesa_fissa_in_modifica = None
@@ -96,6 +100,7 @@ class SpesaFissaDialog(ft.AlertDialog):
             else:
                 field.value = None
         self.sw_attiva.value = True
+        self.cb_addebito_automatico.value = False
 
     def _popola_dropdowns(self):
         id_famiglia = self.controller.get_family_id()
@@ -134,6 +139,7 @@ class SpesaFissaDialog(ft.AlertDialog):
                 id_sottocategoria = self.dd_sottocategoria.value
                 giorno_addebito = int(self.dd_giorno_addebito.value)
                 attiva = self.sw_attiva.value
+                addebito_automatico = self.cb_addebito_automatico.value
 
                 id_conto_personale = None
                 id_conto_condiviso = None
@@ -146,13 +152,13 @@ class SpesaFissaDialog(ft.AlertDialog):
                 if self.id_spesa_fissa_in_modifica:
                     success = modifica_spesa_fissa(
                         self.id_spesa_fissa_in_modifica, nome, importo, id_conto_personale, id_conto_condiviso,
-                        id_sottocategoria, giorno_addebito, attiva
+                        id_sottocategoria, giorno_addebito, attiva, addebito_automatico
                     )
                 else:
                     id_famiglia = self.controller.get_family_id()
                     success = aggiungi_spesa_fissa(
                         id_famiglia, nome, importo, id_conto_personale, id_conto_condiviso,
-                        id_sottocategoria, giorno_addebito, attiva
+                        id_sottocategoria, giorno_addebito, attiva, addebito_automatico
                     )
 
                 if success:
