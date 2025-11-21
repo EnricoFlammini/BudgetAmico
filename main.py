@@ -45,4 +45,4 @@ def main(page: ft.Page):
 
 # Avvio dell'applicazione
 if __name__ == "__main__":
-    ft.app(target=main, view=ft.AppView.FLET_APP)
+    ft.app(target=main)

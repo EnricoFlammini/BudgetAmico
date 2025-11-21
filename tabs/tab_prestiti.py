@@ -65,6 +65,8 @@ class PrestitiTab(ft.Container):
         mesi_totali = prestito['numero_mesi_totali']
         rate_pagate = prestito.get('rate_pagate', 0)
         progresso = rate_pagate / mesi_totali if mesi_totali > 0 else 0
+        # Clamp progresso between 0 and 1 to avoid errors
+        progresso = max(0.0, min(1.0, progresso))
         mesi_rimanenti = mesi_totali - rate_pagate
 
         progress_bar = ft.ProgressBar(value=progresso, width=200, color=AppColors.PRIMARY, bgcolor=AppColors.SURFACE_VARIANT)

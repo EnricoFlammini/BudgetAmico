@@ -30,6 +30,7 @@ class PrestitoDialogs:
             )
         )
         self.txt_numero_rate = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
+        self.txt_rate_residue = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.txt_importo_finanziato = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.txt_importo_interessi = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.txt_importo_rata = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
@@ -43,7 +44,7 @@ class PrestitoDialogs:
             content=ft.Column(
                 [
                     self.txt_nome, self.dd_tipo, self.txt_descrizione, self.txt_data_inizio,
-                    self.txt_numero_rate, self.txt_importo_finanziato, self.txt_importo_interessi,
+                    self.txt_numero_rate, self.txt_rate_residue, self.txt_importo_finanziato, self.txt_importo_interessi,
                     self.txt_importo_rata, self.dd_giorno_scadenza, self.dd_conto_default,
                     self.dd_sottocategoria_default
                 ],
@@ -85,11 +86,12 @@ class PrestitoDialogs:
         self.txt_nome.label = loc.get("loan_name")
         self.dd_tipo.label = loc.get("loan_type")
         self.dd_tipo.options = [
-            ft.dropdown.Option("Prestito"), ft.dropdown.Option("Finanziamento"), ft.dropdown.Option("Mutuo")
+            ft.dropdown.Option("Finanziamento"), ft.dropdown.Option("Mutuo")
         ]
         self.txt_descrizione.label = loc.get("description")
         self.txt_data_inizio.label = loc.get("start_date")
         self.txt_numero_rate.label = loc.get("total_installments")
+        self.txt_rate_residue.label = loc.get("remaining_installments_label")
         self.txt_importo_finanziato.label = loc.get("financed_amount")
         self.txt_importo_finanziato.prefix_text = loc.currencies[loc.currency]['symbol']
         self.txt_importo_interessi.label = loc.get("interest_amount")
@@ -130,6 +132,13 @@ class PrestitoDialogs:
             self.dd_giorno_scadenza.value = str(prestito_data['giorno_scadenza_rata'])
             self.dd_conto_default.value = prestito_data.get('id_conto_pagamento_default')
             self.dd_sottocategoria_default.value = prestito_data.get('id_sottocategoria_pagamento_default')
+
+            # Calcola e imposta le rate residue visualizzate
+            if prestito_data['importo_rata'] > 0:
+                rate_residue_calc = int(prestito_data['importo_residuo'] / prestito_data['importo_rata'])
+                self.txt_rate_residue.value = str(rate_residue_calc)
+            else:
+                self.txt_rate_residue.value = ""
         else:
             self.dialog_prestito.title.value = self.loc.get("add_loan")
             self.prestito_in_modifica = None
@@ -142,10 +151,11 @@ class PrestitoDialogs:
 
     def _reset_fields_prestito(self):
         self.txt_nome.value = ""
-        self.dd_tipo.value = "Prestito"
+        self.dd_tipo.value = "Finanziamento"
         self.txt_descrizione.value = ""
         self.txt_data_inizio.value = datetime.date.today().strftime('%Y-%m-%d')
         self.txt_numero_rate.value = ""
+        self.txt_rate_residue.value = ""
         self.txt_importo_finanziato.value = ""
         self.txt_importo_interessi.value = ""
         self.txt_importo_rata.value = ""
@@ -153,7 +163,7 @@ class PrestitoDialogs:
         self.dd_conto_default.value = None
         self.dd_sottocategoria_default.value = None
         # Reset errori
-        for field in [self.txt_nome, self.txt_numero_rate, self.txt_importo_finanziato, self.txt_importo_rata]:
+        for field in [self.txt_nome, self.txt_numero_rate, self.txt_rate_residue, self.txt_importo_finanziato, self.txt_importo_rata]:
             field.error_text = None
 
     def _popola_dropdowns_prestito(self):
@@ -200,8 +210,18 @@ class PrestitoDialogs:
             id_conto_default = self.dd_conto_default.value
             id_sottocategoria_default = self.dd_sottocategoria_default.value
 
+            # Calcolo importo residuo
+            importo_residuo = None
+            if self.txt_rate_residue.value:
+                rate_residue = int(self.txt_rate_residue.value)
+                importo_residuo = rate_residue * importo_rata
+            
             success = False
             if self.prestito_in_modifica:
+                # Se importo_residuo non è stato ricalcolato (campo vuoto), usa quello esistente
+                if importo_residuo is None:
+                    importo_residuo = self.prestito_in_modifica['importo_residuo']
+                
                 success = modifica_prestito(
                     id_prestito=self.prestito_in_modifica['id_prestito'],
                     nome=nome, tipo=tipo, descrizione=descrizione, data_inizio=data_inizio,
@@ -209,16 +229,20 @@ class PrestitoDialogs:
                     importo_interessi=importo_interessi, importo_rata=importo_rata,
                     giorno_scadenza_rata=giorno_scadenza, id_conto_default=id_conto_default,
                     id_sottocategoria_default=id_sottocategoria_default,
-                    importo_residuo=self.prestito_in_modifica['importo_residuo']
+                    importo_residuo=importo_residuo
                 )
             else:
+                # Se nuovo prestito e rate residue non specificate, residuo = finanziato
+                if importo_residuo is None:
+                    importo_residuo = importo_finanziato
+
                 success = aggiungi_prestito(
                     id_famiglia=id_famiglia, nome=nome, tipo=tipo, descrizione=descrizione,
                     data_inizio=data_inizio, numero_mesi_totali=numero_rate,
                     importo_finanziato=importo_finanziato, importo_interessi=importo_interessi,
                     importo_rata=importo_rata, giorno_scadenza_rata=giorno_scadenza,
                     id_conto_default=id_conto_default, id_sottocategoria_default=id_sottocategoria_default,
-                    importo_residuo=importo_finanziato
+                    importo_residuo=importo_residuo
                 )
 
             if success:
@@ -253,6 +277,16 @@ class PrestitoDialogs:
                 if field.value:
                     field.error_text = self.loc.get("invalid_amount")
                     is_valid = False
+        
+        # Validazione opzionale per rate residue
+        if self.txt_rate_residue.value:
+            try:
+                if int(self.txt_rate_residue.value) < 0:
+                     self.txt_rate_residue.error_text = "Non può essere negativo"
+                     is_valid = False
+            except ValueError:
+                self.txt_rate_residue.error_text = self.loc.get("invalid_amount")
+                is_valid = False
 
         self.page.update()
         return is_valid

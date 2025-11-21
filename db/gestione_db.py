@@ -1732,10 +1732,14 @@ def ottieni_prestiti_famiglia(id_famiglia):
         with sqlite3.connect(DB_FILE) as con:
             con.row_factory = sqlite3.Row
             cur = con.cursor()
+            # Calcoliamo le rate pagate basandoci sul residuo, per gestire anche modifiche manuali
             cur.execute("""
                         SELECT P.*, 
                                C.nome_categoria AS nome_categoria_default,
-                               (SELECT COUNT(*) FROM StoricoPagamentiRate WHERE id_prestito = P.id_prestito) as rate_pagate
+                               CASE 
+                                   WHEN P.importo_rata > 0 THEN CAST((P.importo_finanziato - P.importo_residuo) / P.importo_rata AS INTEGER)
+                                   ELSE 0 
+                               END as rate_pagate
                         FROM Prestiti P
                                  LEFT JOIN Categorie C ON P.id_categoria_pagamento_default = C.id_categoria
                         WHERE P.id_famiglia = ?
