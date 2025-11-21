@@ -37,6 +37,7 @@ class PrestitoDialogs:
         self.dd_giorno_scadenza = ft.Dropdown(options=[ft.dropdown.Option(str(i)) for i in range(1, 29)])
         self.dd_conto_default = ft.Dropdown()
         self.dd_sottocategoria_default = ft.Dropdown()
+        self.cb_addebito_automatico = ft.Checkbox()
 
         self.dialog_prestito = ft.AlertDialog(
             modal=True,
@@ -46,7 +47,7 @@ class PrestitoDialogs:
                     self.txt_nome, self.dd_tipo, self.txt_descrizione, self.txt_data_inizio,
                     self.txt_numero_rate, self.txt_rate_residue, self.txt_importo_finanziato, self.txt_importo_interessi,
                     self.txt_importo_rata, self.dd_giorno_scadenza, self.dd_conto_default,
-                    self.dd_sottocategoria_default
+                    self.dd_sottocategoria_default, self.cb_addebito_automatico
                 ],
                 tight=True, spacing=10, height=600, width=500, scroll=ft.ScrollMode.ADAPTIVE
             ),
@@ -101,6 +102,7 @@ class PrestitoDialogs:
         self.dd_giorno_scadenza.label = loc.get("installment_due_day")
         self.dd_conto_default.label = loc.get("default_payment_account")
         self.dd_sottocategoria_default.label = loc.get("default_payment_subcategory")
+        self.cb_addebito_automatico.label = loc.get("automatic_debit")
 
         # Dialogo Paga Rata
         self.dialog_paga_rata.title.value = loc.get("pay_installment_dialog_title")
@@ -132,6 +134,7 @@ class PrestitoDialogs:
             self.dd_giorno_scadenza.value = str(prestito_data['giorno_scadenza_rata'])
             self.dd_conto_default.value = prestito_data.get('id_conto_pagamento_default')
             self.dd_sottocategoria_default.value = prestito_data.get('id_sottocategoria_pagamento_default')
+            self.cb_addebito_automatico.value = bool(prestito_data.get('addebito_automatico', False))
 
             # Calcola e imposta le rate residue visualizzate
             if prestito_data['importo_rata'] > 0:
@@ -162,6 +165,7 @@ class PrestitoDialogs:
         self.dd_giorno_scadenza.value = "1"
         self.dd_conto_default.value = None
         self.dd_sottocategoria_default.value = None
+        self.cb_addebito_automatico.value = False
         # Reset errori
         for field in [self.txt_nome, self.txt_numero_rate, self.txt_rate_residue, self.txt_importo_finanziato, self.txt_importo_rata]:
             field.error_text = None
@@ -209,6 +213,7 @@ class PrestitoDialogs:
             giorno_scadenza = int(self.dd_giorno_scadenza.value)
             id_conto_default = self.dd_conto_default.value
             id_sottocategoria_default = self.dd_sottocategoria_default.value
+            addebito_automatico = self.cb_addebito_automatico.value
 
             # Calcolo importo residuo
             importo_residuo = None
@@ -229,12 +234,12 @@ class PrestitoDialogs:
                     importo_interessi=importo_interessi, importo_rata=importo_rata,
                     giorno_scadenza_rata=giorno_scadenza, id_conto_default=id_conto_default,
                     id_sottocategoria_default=id_sottocategoria_default,
-                    importo_residuo=importo_residuo
+                    importo_residuo=importo_residuo, addebito_automatico=addebito_automatico
                 )
             else:
-                # Se nuovo prestito e rate residue non specificate, residuo = finanziato
+                # Se nuovo prestito e rate residue non specificate, residuo = finanziato + interessi
                 if importo_residuo is None:
-                    importo_residuo = importo_finanziato
+                    importo_residuo = importo_finanziato + importo_interessi
 
                 success = aggiungi_prestito(
                     id_famiglia=id_famiglia, nome=nome, tipo=tipo, descrizione=descrizione,
@@ -242,7 +247,7 @@ class PrestitoDialogs:
                     importo_finanziato=importo_finanziato, importo_interessi=importo_interessi,
                     importo_rata=importo_rata, giorno_scadenza_rata=giorno_scadenza,
                     id_conto_default=id_conto_default, id_sottocategoria_default=id_sottocategoria_default,
-                    importo_residuo=importo_residuo
+                    importo_residuo=importo_residuo, addebito_automatico=addebito_automatico
                 )
 
             if success:

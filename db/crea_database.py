@@ -9,7 +9,7 @@ DB_FILE = os.path.join(APP_DATA_DIR, 'budget_familiare.db')
 
 # --- SCHEMA DATABASE ---
 # Versione 2: Aggiunta Sottocategorie e refactoring Budget/Transazioni
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 TABLES = {
     "Utenti": """
@@ -154,7 +154,9 @@ TABLES = {
             importo_rata REAL NOT NULL,
             giorno_scadenza_rata INTEGER NOT NULL,
             id_conto_pagamento_default INTEGER REFERENCES Conti(id_conto) ON DELETE SET NULL,
-            id_categoria_pagamento_default INTEGER REFERENCES Categorie(id_categoria) ON DELETE SET NULL
+            id_categoria_pagamento_default INTEGER REFERENCES Categorie(id_categoria) ON DELETE SET NULL,
+            id_sottocategoria_pagamento_default INTEGER REFERENCES Sottocategorie(id_sottocategoria) ON DELETE SET NULL,
+            addebito_automatico BOOLEAN DEFAULT 0
         );
     """,
     "StoricoPagamentiRate": """

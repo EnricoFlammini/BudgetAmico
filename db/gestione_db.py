@@ -1664,7 +1664,7 @@ def ottieni_storico_budget_per_export(id_famiglia, lista_periodi):
 # --- Funzioni Prestiti ---
 def aggiungi_prestito(id_famiglia, nome, tipo, descrizione, data_inizio, numero_mesi_totali, importo_finanziato,
                       importo_interessi, importo_residuo, importo_rata, giorno_scadenza_rata, id_conto_default=None,
-                      id_sottocategoria_default=None):
+                      id_sottocategoria_default=None, addebito_automatico=False):
     try:
         with sqlite3.connect(DB_FILE) as con:
             cur = con.cursor()
@@ -1673,11 +1673,11 @@ def aggiungi_prestito(id_famiglia, nome, tipo, descrizione, data_inizio, numero_
                         INSERT INTO Prestiti (id_famiglia, nome, tipo, descrizione, data_inizio, numero_mesi_totali,
                                               importo_finanziato, importo_interessi, importo_residuo, importo_rata,
                                               giorno_scadenza_rata, id_conto_pagamento_default,
-                                              id_categoria_pagamento_default)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                              id_sottocategoria_pagamento_default, addebito_automatico)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """, (id_famiglia, nome, tipo, descrizione, data_inizio, numero_mesi_totali, importo_finanziato,
                               importo_interessi, importo_residuo, importo_rata, giorno_scadenza_rata, id_conto_default,
-                              id_sottocategoria_default))
+                              id_sottocategoria_default, addebito_automatico))
             return cur.lastrowid
     except Exception as e:
         print(f"❌ Errore generico durante l'aggiunta del prestito: {e}")
@@ -1686,7 +1686,7 @@ def aggiungi_prestito(id_famiglia, nome, tipo, descrizione, data_inizio, numero_
 
 def modifica_prestito(id_prestito, nome, tipo, descrizione, data_inizio, numero_mesi_totali, importo_finanziato,
                       importo_interessi, importo_residuo, importo_rata, giorno_scadenza_rata, id_conto_default=None,
-                      id_sottocategoria_default=None):
+                      id_sottocategoria_default=None, addebito_automatico=False):
     try:
         with sqlite3.connect(DB_FILE) as con:
             cur = con.cursor()
@@ -1704,11 +1704,12 @@ def modifica_prestito(id_prestito, nome, tipo, descrizione, data_inizio, numero_
                             importo_rata                   = ?,
                             giorno_scadenza_rata           = ?,
                             id_conto_pagamento_default     = ?,
-                            id_categoria_pagamento_default = ?
+                            id_sottocategoria_pagamento_default = ?,
+                            addebito_automatico            = ?
                         WHERE id_prestito = ?
                         """, (nome, tipo, descrizione, data_inizio, numero_mesi_totali, importo_finanziato,
                               importo_interessi, importo_residuo, importo_rata, giorno_scadenza_rata, id_conto_default,
-                              id_sottocategoria_default, id_prestito))
+                              id_sottocategoria_default, addebito_automatico, id_prestito))
             return True
     except Exception as e:
         print(f"❌ Errore generico durante la modifica del prestito: {e}")
@@ -1737,7 +1738,7 @@ def ottieni_prestiti_famiglia(id_famiglia):
                         SELECT P.*, 
                                C.nome_categoria AS nome_categoria_default,
                                CASE 
-                                   WHEN P.importo_rata > 0 THEN CAST((P.importo_finanziato - P.importo_residuo) / P.importo_rata AS INTEGER)
+                                   WHEN P.importo_rata > 0 THEN CAST((P.importo_finanziato + IFNULL(P.importo_interessi, 0) - P.importo_residuo) / P.importo_rata AS INTEGER)
                                    ELSE 0 
                                END as rate_pagate
                         FROM Prestiti P

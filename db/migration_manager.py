@@ -68,6 +68,41 @@ def _migra_da_v1_a_v2(con: sqlite3.Connection):
         return False
 
 
+
+def _migra_da_v2_a_v3(con: sqlite3.Connection):
+    """
+    Logica specifica per migrare un DB dalla versione 2 alla 3.
+    - Aggiunge id_sottocategoria_pagamento_default alla tabella Prestiti.
+    - Aggiunge addebito_automatico alla tabella Prestiti.
+    """
+    print("Esecuzione migrazione da v2 a v3...")
+    try:
+        cur = con.cursor()
+
+        # 1. Aggiungi colonna id_sottocategoria_pagamento_default
+        print("  - Aggiunta colonna id_sottocategoria_pagamento_default a Prestiti...")
+        try:
+            cur.execute("ALTER TABLE Prestiti ADD COLUMN id_sottocategoria_pagamento_default INTEGER REFERENCES Sottocategorie(id_sottocategoria) ON DELETE SET NULL")
+        except sqlite3.OperationalError:
+            print("    Colonna id_sottocategoria_pagamento_default già esistente (ignorato).")
+
+        # 2. Aggiungi colonna addebito_automatico
+        print("  - Aggiunta colonna addebito_automatico a Prestiti...")
+        try:
+            cur.execute("ALTER TABLE Prestiti ADD COLUMN addebito_automatico BOOLEAN DEFAULT 0")
+        except sqlite3.OperationalError:
+            print("    Colonna addebito_automatico già esistente (ignorato).")
+
+        con.commit()
+        print("Migrazione a v3 completata con successo.")
+        return True
+
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v2 a v3: {e}")
+        con.rollback()
+        return False
+
+
 def migra_database(db_path, versione_vecchia, versione_nuova):
     """
     Funzione principale che gestisce il processo di migrazione.
@@ -93,6 +128,10 @@ def migra_database(db_path, versione_vecchia, versione_nuova):
                 versione_vecchia = 2
             
             # Aggiungi qui futuri blocchi di migrazione (es. da v2 a v3)
+            if versione_vecchia == 2 and versione_nuova >= 3:
+                if not _migra_da_v2_a_v3(con):
+                    raise Exception("Migrazione da v2 a v3 fallita.")
+                versione_vecchia = 3
 
             # Se tutto è andato bene, aggiorna la versione del DB
             cur.execute(f"PRAGMA user_version = {versione_nuova}")
