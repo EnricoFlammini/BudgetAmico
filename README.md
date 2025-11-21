@@ -2,6 +2,9 @@
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
+<img width="500" height="500" alt="Budget Amico" src="https://github.com/user-attachments/assets/ed2e29d2-c8a4-4e95-82b0-c6b40e125179" />
+
+
 **La tua app desktop per la gestione del budget personale e familiare, semplice e potente.**
 
 Budget Amico è un'applicazione cross-platform costruita con Python e Flet che ti aiuta a tenere traccia delle tue finanze, a monitorare le spese, a gestire i budget e a pianificare il tuo futuro finanziario, da solo o con la tua famiglia.
