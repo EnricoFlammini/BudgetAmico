@@ -1,10 +1,14 @@
 import flet as ft
+import datetime
 from db.gestione_db import (
     ottieni_portafoglio,
     compra_asset,
     vendi_asset,
     aggiorna_prezzo_manuale_asset,
-    modifica_asset_dettagli
+    modifica_asset_dettagli,
+    ottieni_tutti_i_conti_utente,
+    aggiungi_transazione,
+    aggiungi_transazione_condivisa
 )
 
 
@@ -44,6 +48,7 @@ class PortafoglioDialogs:
 
         # --- Dialogo per operazione (compra/vendi) ---
         self.dd_asset_esistenti = ft.Dropdown(on_change=self._on_asset_selezionato)
+        self.dd_conto_transazione = ft.Dropdown()
         self.txt_ticker = ft.TextField()
         self.txt_nome_asset = ft.TextField()
         self.txt_quantita = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
@@ -58,8 +63,9 @@ class PortafoglioDialogs:
                 self.txt_nome_asset,
                 self.txt_quantita,
                 self.txt_prezzo_unitario,
+                self.dd_conto_transazione,
                 self.radio_operazione
-            ], tight=True, spacing=10, height=450, width=400),
+            ], tight=True, spacing=10, height=550, width=400),
             actions=[
                 ft.TextButton(on_click=self._chiudi_dialog_operazione),
                 ft.TextButton(on_click=self._salva_operazione)
@@ -115,6 +121,7 @@ class PortafoglioDialogs:
         # Dialogo Operazione
         self.dialog_operazione_asset.title.value = loc.get("add_operation")
         self.dd_asset_esistenti.label = loc.get("select_existing_asset_optional")
+        self.dd_conto_transazione.label = "Conto per transazione"
         self.txt_ticker.label = loc.get("ticker")
         self.txt_nome_asset.label = loc.get("asset_name")
         self.txt_quantita.label = loc.get("quantity")
@@ -204,12 +211,27 @@ class PortafoglioDialogs:
         portafoglio_attuale = ottieni_portafoglio(self.conto_selezionato['id_conto'])
         self.dd_asset_esistenti.options = [
             ft.dropdown.Option(
-                key=asset['id_asset'],
+                key=str(asset['id_asset']),
                 text=f"{asset['ticker']} - {asset['nome_asset']}",
-                data=asset  # Memorizziamo l'intero dizionario dell'asset
+                data=asset
             ) for asset in portafoglio_attuale
         ]
         self.dd_asset_esistenti.value = None
+
+        # Popola il dropdown dei conti (personali e condivisi, esclusi investimenti)
+        id_utente = self.controller.get_user_id()
+        tutti_conti = ottieni_tutti_i_conti_utente(id_utente)
+        
+        # Filtra solo conti non di investimento
+        conti_disponibili = [c for c in tutti_conti if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
+        
+        self.dd_conto_transazione.options = [
+            ft.dropdown.Option(
+                key=f"{'C' if c.get('is_condiviso') else 'P'}_{c['id_conto']}",
+                text=f"{c['nome_conto']} ({c['tipo']})" + (" - Condiviso" if c.get('is_condiviso') else "")
+            ) for c in conti_disponibili
+        ]
+        self.dd_conto_transazione.value = None
 
         self.page.dialog = self.dialog_operazione_asset
         self.dialog_operazione_asset.open = True
@@ -222,7 +244,9 @@ class PortafoglioDialogs:
 
     def _on_asset_selezionato(self, e):
         """Chiamato quando un asset viene selezionato dal dropdown."""
-        selected_option = next((opt for opt in self.dd_asset_esistenti.options if opt.key == e.control.value), None)
+        selected_value = str(e.control.value) if e.control.value is not None else None
+        selected_option = next((opt for opt in self.dd_asset_esistenti.options if str(opt.key) == selected_value), None)
+        
         if selected_option and selected_option.data:
             asset_data = selected_option.data
             self.txt_ticker.value = asset_data['ticker']
@@ -230,7 +254,6 @@ class PortafoglioDialogs:
             self.txt_ticker.read_only = True
             self.txt_nome_asset.read_only = True
         else:
-            # Se l'utente deseleziona (sceglie l'opzione vuota), resetta
             self.txt_ticker.value = ""
             self.txt_nome_asset.value = ""
             self.txt_ticker.read_only = False
@@ -246,20 +269,70 @@ class PortafoglioDialogs:
             prezzo = float(self.txt_prezzo_unitario.value.replace(",", "."))
             ticker = self.txt_ticker.value.strip().upper()
             nome_asset = self.txt_nome_asset.value.strip()
+            conto_selezionato_key = self.dd_conto_transazione.value
 
-            if not all([ticker, nome_asset, quantita > 0, prezzo > 0]):
+            # Validate that operation type is selected
+            if not tipo_op:
                 self.controller.show_snack_bar(self.loc.get("fill_all_fields"), success=False)
                 return
 
+            if not all([ticker, nome_asset, quantita > 0, prezzo > 0, conto_selezionato_key]):
+                self.controller.show_snack_bar(self.loc.get("fill_all_fields"), success=False)
+                return
+
+            # Parse il conto selezionato (formato: "P_123" o "C_456")
+            tipo_conto, id_conto_str = conto_selezionato_key.split("_")
+            id_conto_transazione = int(id_conto_str)
+            is_conto_condiviso = (tipo_conto == "C")
+
+            # Calcola l'importo totale della transazione
+            importo_totale = quantita * prezzo
+            data_oggi = datetime.date.today().strftime('%Y-%m-%d')
+
             if tipo_op == "COMPRA":
+                # Acquisto: sottrai denaro dal conto
+                descrizione = f"Acquisto {quantita} {ticker} @ {prezzo}"
+                importo_transazione = -abs(importo_totale)
+                
+                # Compra l'asset
                 compra_asset(self.conto_selezionato['id_conto'], ticker, nome_asset, quantita, prezzo)
+                
             elif tipo_op == "VENDI":
+                # Vendita: aggiungi denaro al conto
+                descrizione = f"Vendita {quantita} {ticker} @ {prezzo}"
+                importo_transazione = abs(importo_totale)
+                
+                # Vendi l'asset
                 vendi_asset(self.conto_selezionato['id_conto'], ticker, quantita, prezzo)
+            else:
+                self.controller.show_snack_bar(self.loc.get("fill_all_fields"), success=False)
+                return
+
+            # Crea la transazione sul conto selezionato
+            if is_conto_condiviso:
+                id_utente = self.controller.get_user_id()
+                aggiungi_transazione_condivisa(
+                    id_utente, 
+                    id_conto_transazione, 
+                    data_oggi, 
+                    descrizione, 
+                    importo_transazione
+                )
+            else:
+                aggiungi_transazione(
+                    id_conto_transazione, 
+                    data_oggi, 
+                    descrizione, 
+                    importo_transazione
+                )
 
             self.controller.db_write_operation()
             self._aggiorna_tabella_portafoglio()
             self._chiudi_dialog_operazione(e)
-        except (ValueError, TypeError):
+            self.controller.show_snack_bar("Operazione completata con successo", success=True)
+            
+        except (ValueError, TypeError) as ex:
+            print(f"Errore durante il salvataggio: {ex}")
             self.controller.show_snack_bar(self.loc.get("invalid_amount_or_quantity"), success=False)
 
     def _apri_dialog_aggiorna_prezzo(self, e):
