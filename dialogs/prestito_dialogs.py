@@ -162,7 +162,7 @@ class PrestitoDialogs:
 
         conti = ottieni_tutti_i_conti_utente(id_utente)
         conti_filtrati = [c for c in conti if
-                          not c['is_condiviso'] and c['tipo'] not in ['Investimento', 'Fondo Pensione']]
+                          c['tipo'] not in ['Investimento', 'Fondo Pensione']]
         self.dd_conto_default.options = [ft.dropdown.Option(key=c['id_conto'], text=c['nome_conto']) for c in
                                          conti_filtrati]
 
@@ -270,7 +270,7 @@ class PrestitoDialogs:
         id_famiglia = self.controller.get_family_id()
         conti = ottieni_tutti_i_conti_utente(id_utente)
         conti_filtrati = [c for c in conti if
-                          not c['is_condiviso'] and c['tipo'] not in ['Investimento', 'Fondo Pensione']]
+                          c['tipo'] not in ['Investimento', 'Fondo Pensione']]
         self.dd_conto_pagamento.options = [ft.dropdown.Option(key=c['id_conto'], text=c['nome_conto']) for c in
                                            conti_filtrati]
 

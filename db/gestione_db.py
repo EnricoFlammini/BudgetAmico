@@ -176,9 +176,10 @@ def aggiungi_saldo_iniziale(id_conto, saldo_iniziale):
 
 def aggiungi_categorie_iniziali(id_famiglia):
     categorie_base = {
-        "ENTRATE": ["STIPENDIO", "BONUS", "REGALI"],
-        "SPESE": ["CIBO", "AFFITTO/MUTUO", "UTENZE", "TRASPORTI", "SVAGO", "VIAGGI", "SALUTE"],
-        "FINANZA": ["RISPARMI", "INVESTIMENTI", "TASSE"]
+        "SOPRAVVIVENZA": ["MUTUO", "FINANZIAMENTO", "ASSICURAZIONI", "UTENZE", "ALIMENTI","AUTO 1", "AUTO 2","SCUOLA", "CONDOMINIO", "SALUTE"],
+        "SPESE": ["TELEFONI", "INTERNET", "TELEVISIONE", "SERVIZI", "ATTIVITA' BAMBINI", "RISTORAZIONE", "VESTITI", "ACQUISTI VARI", "SPESE PER LA CASA", "REGALI", "VACANZE", "CORSI ESTIVI"],
+        "SVAGO": ["LIBRI", "SPETTACOLI"],
+        "IMPREVISTI": ["IMPREVISTI"]
     }
     for nome_cat, sottocategorie in categorie_base.items():
         id_cat = aggiungi_categoria(id_famiglia, nome_cat)
@@ -1663,7 +1664,7 @@ def ottieni_storico_budget_per_export(id_famiglia, lista_periodi):
 # --- Funzioni Prestiti ---
 def aggiungi_prestito(id_famiglia, nome, tipo, descrizione, data_inizio, numero_mesi_totali, importo_finanziato,
                       importo_interessi, importo_residuo, importo_rata, giorno_scadenza_rata, id_conto_default=None,
-                      id_categoria_default=None):
+                      id_sottocategoria_default=None):
     try:
         with sqlite3.connect(DB_FILE) as con:
             cur = con.cursor()
@@ -1676,7 +1677,7 @@ def aggiungi_prestito(id_famiglia, nome, tipo, descrizione, data_inizio, numero_
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """, (id_famiglia, nome, tipo, descrizione, data_inizio, numero_mesi_totali, importo_finanziato,
                               importo_interessi, importo_residuo, importo_rata, giorno_scadenza_rata, id_conto_default,
-                              id_categoria_default))
+                              id_sottocategoria_default))
             return cur.lastrowid
     except Exception as e:
         print(f"❌ Errore generico durante l'aggiunta del prestito: {e}")
@@ -1685,7 +1686,7 @@ def aggiungi_prestito(id_famiglia, nome, tipo, descrizione, data_inizio, numero_
 
 def modifica_prestito(id_prestito, nome, tipo, descrizione, data_inizio, numero_mesi_totali, importo_finanziato,
                       importo_interessi, importo_residuo, importo_rata, giorno_scadenza_rata, id_conto_default=None,
-                      id_categoria_default=None):
+                      id_sottocategoria_default=None):
     try:
         with sqlite3.connect(DB_FILE) as con:
             cur = con.cursor()
@@ -1707,7 +1708,7 @@ def modifica_prestito(id_prestito, nome, tipo, descrizione, data_inizio, numero_
                         WHERE id_prestito = ?
                         """, (nome, tipo, descrizione, data_inizio, numero_mesi_totali, importo_finanziato,
                               importo_interessi, importo_residuo, importo_rata, giorno_scadenza_rata, id_conto_default,
-                              id_categoria_default, id_prestito))
+                              id_sottocategoria_default, id_prestito))
             return True
     except Exception as e:
         print(f"❌ Errore generico durante la modifica del prestito: {e}")
