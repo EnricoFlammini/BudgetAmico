@@ -84,6 +84,26 @@ def registra_utente(username, email, password, nome, cognome):
         return None
 
 
+def ottieni_utenti_senza_famiglia():
+    """
+    Restituisce una lista di utenti che non appartengono a nessuna famiglia.
+    """
+    try:
+        with sqlite3.connect(DB_FILE) as con:
+            con.row_factory = sqlite3.Row
+            cur = con.cursor()
+            cur.execute("""
+                        SELECT username 
+                        FROM Utenti 
+                        WHERE id_utente NOT IN (SELECT id_utente FROM Appartenenza_Famiglia)
+                        ORDER BY username
+                        """)
+            return [row['username'] for row in cur.fetchall()]
+    except Exception as e:
+        print(f"❌ Errore recupero utenti senza famiglia: {e}")
+        return []
+
+
 def verifica_login(login_identifier, password):
     try:
         with sqlite3.connect(DB_FILE) as con:

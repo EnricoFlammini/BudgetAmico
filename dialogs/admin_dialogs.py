@@ -58,10 +58,14 @@ class AdminDialogs:
             ],
             value="livello1"
         )
+        self.dd_utenti_suggeriti = ft.Dropdown(
+            label="Suggerimenti (Utenti liberi)",
+            on_change=self._on_utente_suggerito_change
+        )
         self.dialog_invito_membri = ft.AlertDialog(
             modal=True,
             title=ft.Text(self.loc.get("invite_member")),
-            content=ft.Column([self.txt_username_o_email, self.dd_ruolo], tight=True),
+            content=ft.Column([self.dd_utenti_suggeriti, self.txt_username_o_email, self.dd_ruolo], tight=True),
             actions=[
                 ft.TextButton(self.loc.get("cancel"), on_click=self._chiudi_dialog_invito),
                 ft.TextButton(self.loc.get("invite"), on_click=self._invita_membro_cliccato),
@@ -206,9 +210,20 @@ class AdminDialogs:
     def apri_dialog_invito(self):
         self.txt_username_o_email.value = ""
         self.txt_username_o_email.error_text = None
+        
+        # Popola i suggerimenti
+        utenti_liberi = self.controller.get_users_without_family()
+        self.dd_utenti_suggeriti.options = [ft.dropdown.Option(u) for u in utenti_liberi]
+        self.dd_utenti_suggeriti.value = None
+        
         self.page.dialog = self.dialog_invito_membri
         self.dialog_invito_membri.open = True
         self.page.update()
+
+    def _on_utente_suggerito_change(self, e):
+        if self.dd_utenti_suggeriti.value:
+            self.txt_username_o_email.value = self.dd_utenti_suggeriti.value
+            self.dialog_invito_membri.update()
 
     def _chiudi_dialog_invito(self, e):
         self.dialog_invito_membri.open = False

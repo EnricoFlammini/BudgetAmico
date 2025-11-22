@@ -31,11 +31,12 @@ from db.gestione_db import (
     ottieni_prima_famiglia_utente, ottieni_ruolo_utente, check_e_paga_rate_scadute,
     check_e_processa_spese_fisse, get_user_count, crea_famiglia_e_admin,
     aggiungi_categorie_iniziali, cerca_utente_per_username, aggiungi_utente_a_famiglia,
-    ottieni_versione_db, crea_invito, ottieni_invito_per_token, DB_FILE
+    ottieni_versione_db, crea_invito, ottieni_invito_per_token, DB_FILE,
+    ottieni_utenti_senza_famiglia
 )
 
 URL_BASE = os.environ.get("FLET_APP_URL", "http://localhost:8550")
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 
 
 class AppController:
@@ -445,3 +446,40 @@ class AppController:
 
     def get_user_role(self):
         return self.page.session.get("ruolo_utente")
+
+    def gestisci_invito_o_sblocco(self, input_val, ruolo):
+        """
+        Gestisce l'invito di un nuovo membro o l'aggiunta di un utente esistente.
+        input_val: username o email
+        ruolo: ruolo da assegnare
+        """
+        id_famiglia = self.get_family_id()
+        if not id_famiglia:
+            return "Errore: Nessuna famiglia selezionata.", False
+
+        # 1. Cerca se esiste un utente con questo username
+        utente_esistente = cerca_utente_per_username(input_val)
+        
+        if utente_esistente:
+            # Utente trovato e non ha famiglia -> Aggiungi direttamente
+            success = aggiungi_utente_a_famiglia(id_famiglia, utente_esistente['id_utente'], ruolo)
+            if success:
+                return f"Utente {input_val} aggiunto alla famiglia!", True
+            else:
+                return "Errore durante l'aggiunta dell'utente.", False
+        
+        # 2. Se non è un utente esistente, prova a creare un invito via email
+        if "@" in input_val and "." in input_val:
+            token = crea_invito(id_famiglia, input_val, ruolo)
+            if token:
+                link_invito = f"{URL_BASE}/registrazione?token={token}"
+                self.page.set_clipboard(link_invito)
+                return f"Invito creato! Link copiato negli appunti.", True
+            else:
+                return "Errore durante la creazione dell'invito.", False
+        
+        return "Utente non trovato e indirizzo email non valido.", False
+
+    def get_users_without_family(self):
+        """Restituisce la lista di username degli utenti senza famiglia."""
+        return ottieni_utenti_senza_famiglia()
