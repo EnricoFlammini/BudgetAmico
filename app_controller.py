@@ -36,7 +36,7 @@ from db.gestione_db import (
 )
 
 URL_BASE = os.environ.get("FLET_APP_URL", "http://localhost:8550")
-VERSION = "0.8.0"
+VERSION = "0.9.0"
 
 
 class AppController:
