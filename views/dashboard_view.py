@@ -11,6 +11,7 @@ from tabs.tab_prestiti import PrestitiTab
 from tabs.tab_immobili import ImmobiliTab
 from tabs.tab_impostazioni import ImpostazioniTab
 from tabs.tab_spese_fisse import SpeseFisseTab
+from tabs.tab_investimenti import InvestimentiTab
 
 
 class DashboardView:
@@ -29,6 +30,7 @@ class DashboardView:
         self.tab_immobili = ImmobiliTab(controller)
         self.tab_impostazioni = ImpostazioniTab(controller)
         self.tab_spese_fisse = SpeseFisseTab(controller)
+        self.tab_investimenti = InvestimentiTab(controller)
 
         # 2. Sidebar personalizzata (sostituisce NavigationRail)
         self.selected_index = 0
@@ -241,7 +243,17 @@ class DashboardView:
         })
         index += 1
 
-        # 6. Prestiti
+        # 6. Investimenti
+        self.sidebar_items.append({
+            'icon': ft.Icons.TRENDING_UP_OUTLINED,
+            'selected_icon': ft.Icons.TRENDING_UP,
+            'label': loc.get("investments"),
+            'view': self.tab_investimenti,
+            'index': index
+        })
+        index += 1
+
+        # 7. Prestiti
         self.sidebar_items.append({
             'icon': ft.Icons.CREDIT_CARD_OUTLINED,
             'selected_icon': ft.Icons.CREDIT_CARD,
@@ -251,7 +263,7 @@ class DashboardView:
         })
         index += 1
 
-        # 7. Immobili
+        # 8. Immobili
         self.sidebar_items.append({
             'icon': ft.Icons.HOME_WORK_OUTLINED,
             'selected_icon': ft.Icons.HOME_WORK,
@@ -261,7 +273,7 @@ class DashboardView:
         })
         index += 1
 
-        # 8. Famiglia (Solo se autorizzato)
+        # 9. Famiglia (Solo se autorizzato)
         if ruolo in ['admin', 'livello1', 'livello2']:
             self.sidebar_items.append({
                 'icon': ft.Icons.DIVERSITY_3_OUTLINED,
@@ -272,7 +284,7 @@ class DashboardView:
             })
             index += 1
 
-        # 9. Admin (Solo Admin)
+        # 10. Admin (Solo Admin)
         if ruolo == 'admin':
             self.sidebar_items.append({
                 'icon': ft.Icons.ADMIN_PANEL_SETTINGS_OUTLINED,
@@ -283,7 +295,7 @@ class DashboardView:
             })
             index += 1
 
-        # 10. Impostazioni (Sempre visibile, in fondo)
+        # 11. Impostazioni (Sempre visibile, in fondo)
         self.sidebar_items.append({
             'icon': ft.Icons.SETTINGS_OUTLINED,
             'selected_icon': ft.Icons.SETTINGS,
@@ -333,6 +345,7 @@ class DashboardView:
         self.tab_conti_condivisi.update_view_data(is_initial_load)
         self.tab_spese_fisse.update_view_data(is_initial_load)
         self.tab_budget.update_view_data(is_initial_load)
+        self.tab_investimenti.update_view_data(is_initial_load)
         self.tab_prestiti.update_view_data(is_initial_load)
         self.tab_immobili.update_view_data(is_initial_load)
         self.tab_impostazioni.update_view_data(is_initial_load)

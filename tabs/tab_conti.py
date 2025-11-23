@@ -47,6 +47,8 @@ class ContiTab(ft.Container):
 
         self.lv_conti_personali.controls.clear()
         conti_personali = ottieni_dettagli_conti_utente(utente_id)
+        # Filtra i conti di investimento - questi vengono gestiti nel tab Investimenti
+        conti_personali = [c for c in conti_personali if c['tipo'] != 'Investimento']
         if not conti_personali:
             self.lv_conti_personali.controls.append(ft.Text(self.controller.loc.get("no_personal_accounts")))
         else:

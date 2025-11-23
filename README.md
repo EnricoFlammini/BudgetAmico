@@ -28,6 +28,11 @@ Budget Amico è un'applicazione cross-platform costruita con Python e Flet che t
 
 -   **Patrimonio a 360°**:
     -   **Dashboard Riepilogativa**: Tieni sotto controllo il tuo patrimonio netto personale e quello aggregato di tutta la famiglia.
+    -   **Tab Investimenti Dedicato** (v0.10): Gestione completa e autonoma dei conti di investimento con:
+        -   Creazione, modifica ed eliminazione conti investimento
+        -   Visualizzazione unificata di tutti i portafogli
+        -   Sincronizzazione automatica prezzi asset tramite yfinance
+        -   Statistiche aggregate (valore totale e gain/loss)
     -   **Portafogli di Investimento**: Traccia i tuoi investimenti, aggiungendo asset (azioni, ETF) e monitorando guadagni e perdite.
     -   **Prestiti e Mutui**: Gestisci i tuoi finanziamenti, tracciando l'importo residuo e le rate pagate.
     -   **Immobili**: Aggiungi i tuoi immobili per avere una visione completa del tuo patrimonio.
@@ -104,6 +109,7 @@ pip install flet flet-desktop google-api-python-client google-auth-httplib2 goog
 - `google-api-python-client` - API Google Drive e Gmail
 - `google-auth-httplib2` e `google-auth-oauthlib` - Autenticazione Google
 - `openpyxl` e `pandas` - Esportazione Excel
+- `yfinance` - Sincronizzazione prezzi asset finanziari (v0.10+)
 
 ---
 
@@ -197,7 +203,24 @@ BudgetAmico/
 -   **Librerie**:
     - `pandas` e `openpyxl` - Esportazione dati
     - `google-auth` - Autenticazione OAuth2
+    - `yfinance` - Integrazione prezzi asset finanziari
     - `pyinstaller` - Build eseguibili
+
+---
+
+## 📊 Novità Versione 0.10
+
+### Tab Investimenti Autonomo
+
+La versione 0.10 introduce un tab dedicato alla gestione degli investimenti:
+
+-   **Separazione Completa**: I conti di tipo "Investimento" sono ora gestiti esclusivamente nel tab "Investimenti", separati dai conti personali
+-   **Gestione Autonoma**: Creazione, modifica ed eliminazione conti investimento direttamente dal tab
+-   **Sincronizzazione Prezzi**: Integrazione con yfinance per aggiornare automaticamente i prezzi degli asset
+    -   Sincronizzazione singola per ogni asset
+    -   Sincronizzazione globale per tutti gli asset
+-   **Vista Unificata**: Tutti i portafogli visibili in un'unica schermata con statistiche aggregate
+-   **Gestione Errori**: Supporto per ticker internazionali con suffissi di mercato (es. `.MI`, `.L`, `.DE`)
 
 ---
 

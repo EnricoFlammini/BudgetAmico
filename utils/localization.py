@@ -209,6 +209,16 @@ STRINGS = {
         "manage_portfolio": "Gestisci Portafoglio",
         "manage_pension_fund": "Gestisci Fondo Pensione",
 
+        # Scheda Investimenti
+        "sync_prices": "Sincronizza Prezzi",
+        "update_all_prices": "Aggiorna Tutti i Prezzi",
+        "price_updated_successfully": "prezzi aggiornati con successo",
+        "error_fetching_price": "Errore nel recupero del prezzo",
+        "no_investment_accounts": "Non hai ancora aggiunto nessun conto di investimento.",
+        "no_assets_in_portfolio": "Nessun asset nel portafoglio.",
+        "select_investment_account": "Seleziona Conto di Investimento",
+        "add_investment_account": "Aggiungi Conto di Investimento",
+
         # Scheda Conti Condivisi
         "no_shared_accounts": "Non partecipi ancora a nessun conto condiviso.",
         "shared_type_family": "Tutta la Famiglia",
@@ -733,6 +743,16 @@ STRINGS = {
         "value": "Value",
         "manage_portfolio": "Manage Portfolio",
         "manage_pension_fund": "Manage Pension Fund",
+
+        # Scheda Investimenti
+        "sync_prices": "Sync Prices",
+        "update_all_prices": "Update All Prices",
+        "price_updated_successfully": "prices updated successfully",
+        "error_fetching_price": "Error fetching price",
+        "no_investment_accounts": "You haven't added any investment accounts yet.",
+        "no_assets_in_portfolio": "No assets in portfolio.",
+        "select_investment_account": "Select Investment Account",
+        "add_investment_account": "Add Investment Account",
 
         # Scheda Conti Condivisi
         "no_shared_accounts": "You are not part of any shared accounts yet.",
