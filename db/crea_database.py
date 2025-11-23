@@ -9,7 +9,7 @@ DB_FILE = os.path.join(APP_DATA_DIR, 'budget_amico.db')
 
 # --- SCHEMA DATABASE ---
 # Versione 2: Aggiunta Sottocategorie e refactoring Budget/Transazioni
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 TABLES = {
     "Utenti": """
@@ -60,7 +60,8 @@ TABLES = {
             tipo TEXT NOT NULL,
             iban TEXT,
             valore_manuale REAL DEFAULT 0.0,
-            rettifica_saldo REAL DEFAULT 0.0
+            rettifica_saldo REAL DEFAULT 0.0,
+            borsa_default TEXT
         );
     """,
     "ContiCondivisi": """

@@ -175,8 +175,12 @@ class ContoDialog(ft.AlertDialog):
         self.open = False
         self.page.update()
 
-    def apri_dialog_conto(self, e, conto_data=None):
+    def apri_dialog_conto(self, e, conto_data=None, escludi_investimento=False):
         self._update_texts()
+        
+        if escludi_investimento:
+            self.dd_conto_tipo.options = [opt for opt in self.dd_conto_tipo.options if opt.key != "Investimento"]
+
         # Reset errori
         self.txt_conto_nome.error_text = None
         self.txt_conto_iban.error_text = None

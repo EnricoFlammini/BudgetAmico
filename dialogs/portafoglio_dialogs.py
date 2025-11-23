@@ -42,7 +42,8 @@ class PortafoglioDialogs:
             ], width=800, height=500),
             actions=[
                 ft.TextButton(on_click=self._chiudi_dialog_portafoglio),
-                ft.ElevatedButton(icon=ft.Icons.ADD, on_click=self._apri_dialog_operazione)
+                ft.ElevatedButton(icon=ft.Icons.ADD_BOX, text=self.loc.get("add_existing_asset"), on_click=self._apri_dialog_asset_esistente),
+                ft.ElevatedButton(icon=ft.Icons.ADD, text=self.loc.get("add_operation"), on_click=self._apri_dialog_operazione)
             ]
         )
 
@@ -99,6 +100,28 @@ class PortafoglioDialogs:
             ]
         )
 
+        # --- Dialogo per aggiungere asset esistente ---
+        self.txt_ticker_esistente = ft.TextField()
+        self.txt_nome_asset_esistente = ft.TextField()
+        self.txt_quantita_esistente = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
+        self.txt_prezzo_medio_acquisto = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
+        self.txt_valore_attuale_unitario = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
+        self.dialog_asset_esistente = ft.AlertDialog(
+            modal=True,
+            title=ft.Text(),
+            content=ft.Column([
+                self.txt_ticker_esistente,
+                self.txt_nome_asset_esistente,
+                self.txt_quantita_esistente,
+                self.txt_prezzo_medio_acquisto,
+                self.txt_valore_attuale_unitario
+            ], tight=True, spacing=10, height=550, width=400),
+            actions=[
+                ft.TextButton(on_click=self._chiudi_dialog_asset_esistente),
+                ft.TextButton(on_click=self._salva_asset_esistente)
+            ]
+        )
+
     def _update_texts(self):
         """Aggiorna i testi di tutti i dialoghi."""
         loc = self.loc
@@ -107,7 +130,8 @@ class PortafoglioDialogs:
         self.dialog_portafoglio.content.controls[0].controls[0].value = loc.get("total_portfolio_value") + ":"
         self.dialog_portafoglio.content.controls[0].controls[2].value = loc.get("total_gain_loss") + ":"
         self.dialog_portafoglio.actions[0].text = loc.get("close")
-        self.dialog_portafoglio.actions[1].text = loc.get("add_operation")
+        self.dialog_portafoglio.actions[1].text = loc.get("add_existing_asset")
+        self.dialog_portafoglio.actions[2].text = loc.get("add_operation")
         self.dt_portafoglio.columns = [
             ft.DataColumn(ft.Text(loc.get("ticker"))),
             ft.DataColumn(ft.Text(loc.get("asset_name"))),
@@ -147,6 +171,18 @@ class PortafoglioDialogs:
         self.txt_modifica_nome.label = loc.get("asset_name")
         self.dialog_modifica_asset.actions[0].text = loc.get("cancel")
         self.dialog_modifica_asset.actions[1].text = loc.get("save")
+
+        # Dialogo Aggiungi Asset Esistente (potrebbe essere un BottomSheet senza title)
+        if hasattr(self.dialog_asset_esistente, 'title'):
+            self.dialog_asset_esistente.title.value = loc.get("add_existing_asset")
+        self.txt_ticker_esistente.label = loc.get("ticker")
+        self.txt_nome_asset_esistente.label = loc.get("asset_name")
+        self.txt_quantita_esistente.label = loc.get("quantity")
+        self.txt_prezzo_medio_acquisto.label = loc.get("avg_purchase_price")
+        self.txt_valore_attuale_unitario.label = loc.get("current_unit_price")
+        if hasattr(self.dialog_asset_esistente, 'actions'):
+            self.dialog_asset_esistente.actions[0].text = loc.get("cancel")
+            self.dialog_asset_esistente.actions[1].text = loc.get("save")
 
     def apri_dialog_portafoglio(self, e, conto_data):
         self._update_texts()
@@ -197,6 +233,22 @@ class PortafoglioDialogs:
             self.dialog_portafoglio.update()
 
     def _apri_dialog_operazione(self, e):
+        # RIPRISTINA IL CONTENUTO ORIGINALE (perché potrebbe essere stato alterato da _apri_dialog_asset_esistente)
+        self.dialog_operazione_asset.content = ft.Column([
+            self.dd_asset_esistenti,
+            self.txt_ticker,
+            self.txt_nome_asset,
+            self.txt_quantita,
+            self.txt_prezzo_unitario,
+            self.dd_conto_transazione,
+            self.radio_operazione
+        ], tight=True, spacing=10, height=550, width=400)
+        
+        self.dialog_operazione_asset.actions = [
+            ft.TextButton(on_click=self._chiudi_dialog_operazione),
+            ft.TextButton(on_click=self._salva_operazione)
+        ]
+
         self._update_texts()
         # Reset dei campi
         self.txt_ticker.value = ""
@@ -268,6 +320,13 @@ class PortafoglioDialogs:
             quantita = float(self.txt_quantita.value.replace(",", "."))
             prezzo = float(self.txt_prezzo_unitario.value.replace(",", "."))
             ticker = self.txt_ticker.value.strip().upper()
+            
+            # Aggiungi suffisso borsa default se presente e se il ticker non ha già un suffisso
+            if self.conto_selezionato and 'borsa_default' in self.conto_selezionato and self.conto_selezionato['borsa_default']:
+                suffix = self.conto_selezionato['borsa_default']
+                if "." not in ticker:
+                    ticker += suffix
+
             nome_asset = self.txt_nome_asset.value.strip()
             conto_selezionato_key = self.dd_conto_transazione.value
 
@@ -380,3 +439,83 @@ class PortafoglioDialogs:
             self.controller.db_write_operation()
             self._aggiorna_tabella_portafoglio()
             self._chiudi_dialog_modifica_asset(e)
+
+    def _apri_dialog_asset_esistente(self, e):
+        self._update_texts()
+        
+        # Reset dei campi
+        self.txt_ticker_esistente.value = ""
+        self.txt_nome_asset_esistente.value = ""
+        self.txt_quantita_esistente.value = ""
+        self.txt_prezzo_medio_acquisto.value = ""
+        self.txt_valore_attuale_unitario.value = ""
+        
+        # RIUSO IL DIALOGO OPERAZIONE (che sappiamo funzionare)
+        # Sostituisco il contenuto con i campi per l'asset esistente
+        self.dialog_operazione_asset.title.value = self.loc.get("add_existing_asset")
+        self.dialog_operazione_asset.content = ft.Column([
+            self.txt_ticker_esistente,
+            self.txt_nome_asset_esistente,
+            self.txt_quantita_esistente,
+            self.txt_prezzo_medio_acquisto,
+            self.txt_valore_attuale_unitario
+        ], tight=True, spacing=10, height=550, width=400)
+        
+        # Sostituisco le azioni
+        self.dialog_operazione_asset.actions = [
+            ft.TextButton(self.loc.get("cancel"), on_click=self._chiudi_dialog_asset_esistente),
+            ft.TextButton(self.loc.get("save"), on_click=self._salva_asset_esistente)
+        ]
+        
+        self.page.dialog = self.dialog_operazione_asset
+        self.dialog_operazione_asset.open = True
+        self.page.update()
+
+    def _chiudi_dialog_asset_esistente(self, e):
+        # Chiudiamo il dialogo operazione (che stiamo usando come proxy)
+        self.dialog_operazione_asset.open = False
+        self.page.dialog = self.dialog_portafoglio
+        self.page.update()
+        
+        # IMPORTANTE: Ripristinare il contenuto originale del dialogo operazione?
+        # Non strettamente necessario se _apri_dialog_operazione lo ricostruisce, 
+        # ma controlliamo _apri_dialog_operazione.
+        # _apri_dialog_operazione NON ricostruisce il contenuto, quindi dovremmo farlo qui o lì.
+        # Per ora lasciamo così, verificheremo se rompe l'altro dialogo.
+
+    def _salva_asset_esistente(self, e):
+        try:
+            ticker = self.txt_ticker_esistente.value.strip().upper()
+            nome_asset = self.txt_nome_asset_esistente.value.strip()
+            quantita = float(self.txt_quantita_esistente.value.replace(",", "."))
+            prezzo_medio = float(self.txt_prezzo_medio_acquisto.value.replace(",", "."))
+            valore_attuale = float(self.txt_valore_attuale_unitario.value.replace(",", "."))
+
+            if not all([ticker, nome_asset, quantita > 0, prezzo_medio >= 0, valore_attuale >= 0]):
+                self.controller.show_snack_bar(self.loc.get("fill_all_fields"), success=False)
+                return
+
+            # Aggiungi suffisso borsa default se necessario
+            if self.conto_selezionato and 'borsa_default' in self.conto_selezionato and self.conto_selezionato['borsa_default']:
+                suffix = self.conto_selezionato['borsa_default']
+                if "." not in ticker:
+                    ticker += suffix
+
+            # Usa compra_asset per aggiungere l'asset con il costo storico e il valore attuale
+            compra_asset(
+                self.conto_selezionato['id_conto'], 
+                ticker, 
+                nome_asset, 
+                quantita, 
+                prezzo_medio, # Questo diventa il costo_iniziale_unitario
+                tipo_mov="APERTURA", # O altro identificativo per saldo iniziale
+                prezzo_attuale_override=valore_attuale # Questo imposta il prezzo attuale manuale
+            )
+
+            self.controller.db_write_operation()
+            self._aggiorna_tabella_portafoglio()
+            self._chiudi_dialog_asset_esistente(e)
+            self.controller.show_snack_bar("Asset aggiunto con successo", success=True)
+
+        except (ValueError, TypeError):
+            self.controller.show_snack_bar(self.loc.get("invalid_amount"), success=False)

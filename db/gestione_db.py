@@ -362,17 +362,17 @@ def ottieni_invito_per_token(token):
 
 
 # --- Funzioni Conti Personali ---
-def aggiungi_conto(id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=0.0):
+def aggiungi_conto(id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=0.0, borsa_default=None):
     if not valida_iban_semplice(iban):
-        return None
+        return None, "IBAN non valido"
     iban_pulito = iban.strip().upper() if iban else None
     try:
         with sqlite3.connect(DB_FILE) as con:
             cur = con.cursor()
             cur.execute("PRAGMA foreign_keys = ON;")
-            cur.execute("INSERT INTO Conti (id_utente, nome_conto, tipo, iban, valore_manuale) VALUES (?, ?, ?, ?, ?)",
-                        (id_utente, nome_conto, tipo_conto, iban_pulito, valore_manuale))
-            return cur.lastrowid
+            cur.execute("INSERT INTO Conti (id_utente, nome_conto, tipo, iban, valore_manuale, borsa_default) VALUES (?, ?, ?, ?, ?, ?)",
+                        (id_utente, nome_conto, tipo_conto, iban_pulito, valore_manuale, borsa_default))
+            return cur.lastrowid, "Conto creato con successo"
     except sqlite3.IntegrityError as e:
         print(f"❌ Errore di integrità: {e}")
         return None
@@ -403,6 +403,7 @@ def ottieni_dettagli_conti_utente(id_utente):
                                C.nome_conto,
                                C.tipo,
                                C.iban,
+                               C.borsa_default,
                                CASE
                                    WHEN C.tipo = 'Fondo Pensione' THEN COALESCE(C.valore_manuale, 0.0)
                                    WHEN C.tipo = 'Investimento'
@@ -422,9 +423,9 @@ def ottieni_dettagli_conti_utente(id_utente):
         return []
 
 
-def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=None):
+def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=None, borsa_default=None):
     if not valida_iban_semplice(iban):
-        return False
+        return False, "IBAN non valido"
     iban_pulito = iban.strip().upper() if iban else None
     try:
         with sqlite3.connect(DB_FILE) as con:
@@ -432,13 +433,13 @@ def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valor
             cur.execute("PRAGMA foreign_keys = ON;") 
             # Se il valore manuale non viene passato, non lo aggiorniamo (manteniamo quello esistente)
             if valore_manuale is not None:
-                cur.execute("UPDATE Conti SET nome_conto = ?, tipo = ?, iban = ?, valore_manuale = ? WHERE id_conto = ? AND id_utente = ?",
-                            (nome_conto, tipo_conto, iban_pulito, valore_manuale, id_conto, id_utente))
+                cur.execute("UPDATE Conti SET nome_conto = ?, tipo = ?, iban = ?, valore_manuale = ?, borsa_default = ? WHERE id_conto = ? AND id_utente = ?",
+                            (nome_conto, tipo_conto, iban_pulito, valore_manuale, borsa_default, id_conto, id_utente))
             else:
                 # Query per quando il valore manuale non deve essere toccato
-                cur.execute("UPDATE Conti SET nome_conto = ?, tipo = ?, iban = ? WHERE id_conto = ? AND id_utente = ?",
-                            (nome_conto, tipo_conto, iban_pulito, id_conto, id_utente))
-            return cur.rowcount > 0
+                cur.execute("UPDATE Conti SET nome_conto = ?, tipo = ?, iban = ?, borsa_default = ? WHERE id_conto = ? AND id_utente = ?",
+                            (nome_conto, tipo_conto, iban_pulito, borsa_default, id_conto, id_utente))
+            return cur.rowcount > 0, "Conto modificato con successo"
     except Exception as e:
         print(f"❌ Errore generico: {e}")
         return False

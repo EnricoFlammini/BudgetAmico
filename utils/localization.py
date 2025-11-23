@@ -177,6 +177,9 @@ STRINGS = {
         "update_price": "Aggiorna Prezzo",
         "new_price": "Nuovo Prezzo",
         "edit_asset_details": "Modifica Dettagli Asset",
+        "add_existing_asset": "Aggiungi Asset Esistente",
+        "select_existing_asset_optional": "Seleziona Asset Esistente (Opzionale)",
+        "invalid_amount_or_quantity": "Importo o quantità non validi.",
 
         # Dialogo Prestiti
         "manage_loan_dialog": "Gestione Prestito",
@@ -218,6 +221,16 @@ STRINGS = {
         "no_assets_in_portfolio": "Nessun asset nel portafoglio.",
         "select_investment_account": "Seleziona Conto di Investimento",
         "add_investment_account": "Aggiungi Conto di Investimento",
+        "edit_investment_account": "Modifica Conto Investimento",
+        "new_investment_account": "Nuovo Conto Investimento",
+        "broker_name": "Broker",
+        "default_exchange": "Borsa Predefinita",
+        "exchange_milano": "Milano (.MI)",
+        "exchange_londra": "Londra (.L)",
+        "exchange_xetra": "Xetra (.DE)",
+        "exchange_parigi": "Parigi (.PA)",
+        "exchange_svizzera": "Svizzera (.SW)",
+        "exchange_amsterdam": "Amsterdam (.AS)",
 
         # Scheda Conti Condivisi
         "no_shared_accounts": "Non partecipi ancora a nessun conto condiviso.",
@@ -753,6 +766,16 @@ STRINGS = {
         "no_assets_in_portfolio": "No assets in portfolio.",
         "select_investment_account": "Select Investment Account",
         "add_investment_account": "Add Investment Account",
+        "edit_investment_account": "Edit Investment Account",
+        "new_investment_account": "New Investment Account",
+        "broker_name": "Broker",
+        "default_exchange": "Default Exchange",
+        "exchange_milano": "Milan (.MI)",
+        "exchange_londra": "London (.L)",
+        "exchange_xetra": "Xetra (.DE)",
+        "exchange_parigi": "Paris (.PA)",
+        "exchange_svizzera": "Switzerland (.SW)",
+        "exchange_amsterdam": "Amsterdam (.AS)",
 
         # Scheda Conti Condivisi
         "no_shared_accounts": "You are not part of any shared accounts yet.",
@@ -1759,3 +1782,6 @@ class LocalizationManager:
         formatted_amount = formatted_amount.replace(",", "X").replace(".", ",").replace("X", ".")
         
         return currency_info["format"].format(amount=formatted_amount, symbol=currency_info["symbol"])
+
+# Istanza globale
+loc = LocalizationManager()

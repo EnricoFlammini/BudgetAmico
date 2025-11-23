@@ -8,6 +8,7 @@ from db.gestione_db import (
 )
 from utils.styles import AppStyles, AppColors
 from utils.yfinance_manager import ottieni_prezzo_asset, ottieni_prezzi_multipli
+from dialogs.investimento_dialog import InvestimentoDialog
 import datetime
 
 
@@ -384,13 +385,49 @@ class InvestimentiTab(ft.Container):
 
     def _aggiungi_conto_investimento(self, e):
         """Apre il dialogo per creare un nuovo conto di investimento."""
-        # Apri il dialogo standard - l'utente selezionerà "Investimento" dal dropdown
-        self.controller.conto_dialog.apri_dialog_conto(e)
+        print("Tentativo di apertura dialogo investimento...")
+        try:
+            def on_save():
+                self.controller.db_write_operation()
+                
+            dialog = InvestimentoDialog(self.page, on_save)
+            
+            if hasattr(self.page, "open"):
+                self.page.open(dialog)
+            else:
+                self.page.dialog = dialog
+                dialog.open = True
+                self.page.update()
+            print("Dialogo aperto con successo.")
+        except Exception as ex:
+            print(f"Errore nell'apertura del dialogo: {ex}")
+            import traceback
+            traceback.print_exc()
+            self.controller.show_error_dialog(f"Errore apertura dialogo: {ex}")
 
     def _modifica_conto_investimento(self, e):
         """Apre il dialogo per modificare un conto di investimento."""
-        conto_data = e.control.data
-        self.controller.conto_dialog.apri_dialog_conto(e, conto_data)
+        print("Tentativo di apertura dialogo modifica investimento...")
+        try:
+            conto_data = e.control.data
+            
+            def on_save():
+                self.controller.db_write_operation()
+                
+            dialog = InvestimentoDialog(self.page, on_save, conto_da_modificare=conto_data)
+            
+            if hasattr(self.page, "open"):
+                self.page.open(dialog)
+            else:
+                self.page.dialog = dialog
+                dialog.open = True
+                self.page.update()
+            print("Dialogo modifica aperto con successo.")
+        except Exception as ex:
+            print(f"Errore nell'apertura del dialogo modifica: {ex}")
+            import traceback
+            traceback.print_exc()
+            self.controller.show_error_dialog(f"Errore apertura dialogo: {ex}")
 
     def _elimina_conto_investimento(self, e):
         """Elimina un conto di investimento."""

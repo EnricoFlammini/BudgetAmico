@@ -81,7 +81,7 @@ class ContiTab(ft.Container):
                 ft.IconButton(
                     icon=ft.Icons.ADD_CARD,
                     tooltip=self.controller.loc.get("add_personal_account"),
-                    on_click=lambda e: self.controller.conto_dialog.apri_dialog_conto(e),
+                    on_click=lambda e: self.controller.conto_dialog.apri_dialog_conto(e, escludi_investimento=True),
                     icon_color=theme.primary
                 )
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
@@ -126,7 +126,7 @@ class ContiTab(ft.Container):
                           on_click=lambda e: self.controller.conto_dialog.apri_dialog_rettifica_saldo(
                               e.control.data), visible=is_admin and is_corrente),
             ft.IconButton(icon=ft.Icons.EDIT, tooltip=self.controller.loc.get("edit_account"), data=conto,
-                          on_click=lambda e: self.controller.conto_dialog.apri_dialog_conto(e, e.control.data),
+                          on_click=lambda e: self.controller.conto_dialog.apri_dialog_conto(e, e.control.data, escludi_investimento=True),
                           icon_color=AppColors.INFO),
             ft.IconButton(icon=ft.Icons.DELETE, tooltip=self.controller.loc.get("delete_account"),
                           icon_color=AppColors.ERROR, data=conto['id_conto'],
