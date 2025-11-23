@@ -17,6 +17,7 @@ numpy>=2.3.0
 # Utilities
 python-dateutil>=2.9.0
 requests>=2.32.0
+python-dotenv>=1.0.0
 
 # Build Tools (optional, for creating executables)
 pyinstaller>=6.16.0

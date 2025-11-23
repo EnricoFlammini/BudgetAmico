@@ -28,7 +28,6 @@ else:
 SCOPES = [
     "https://www.googleapis.com/auth/drive.file",      # Gestire file creati dall'app
     "https://www.googleapis.com/auth/drive.appdata",   # Accedere alla cartella dati dell'applicazione
-    "https://www.googleapis.com/auth/gmail.send",      # Inviare email
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
     "openid"

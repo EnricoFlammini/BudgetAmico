@@ -3,7 +3,7 @@ from db.gestione_db import (
     registra_utente, verifica_login, aggiungi_utente_a_famiglia, trova_utente_per_email,
     imposta_password_temporanea, cambia_password, hash_password
 )
-from utils.gmail_sender import send_email_via_gmail_api
+from utils.email_sender import send_email
 import os
 import google_auth_manager
 
@@ -266,7 +266,7 @@ class AuthView:
                         <p>Al prossimo accesso ti verrà chiesto di impostare una nuova password personale.</p>
                     </body></html>
                     """
-                send_email_via_gmail_api(email, "Password Temporanea - Budget Amico", body)
+                send_email(email, "Password Temporanea - Budget Amico", body)
 
         # Mostra un messaggio generico per motivi di sicurezza
         self.recovery_status_text.value = self.loc.get("reset_link_sent_confirmation")

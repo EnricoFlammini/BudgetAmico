@@ -2,6 +2,7 @@ import flet as ft
 from db.gestione_db import (ottieni_tutti_i_conti_utente, imposta_conto_default_utente, ottieni_conto_default_utente,
                           ottieni_dettagli_utente, aggiorna_profilo_utente, cambia_password, hash_password)
 from utils.styles import AppStyles, AppColors
+from utils.config_manager import get_smtp_settings, save_smtp_settings
 
 
 class ImpostazioniTab(ft.Container):
@@ -88,6 +89,42 @@ class ImpostazioniTab(ft.Container):
         elif not successo_profilo:
             self.controller.show_error_dialog("Errore salvataggio profilo. Username o Email potrebbero essere già in uso.")
 
+    def _provider_email_cambiato(self, e):
+        """Precompila i campi SMTP in base al provider selezionato."""
+        provider = self.dd_email_provider.value
+        self.txt_gmail_hint.visible = (provider == "gmail")
+
+        if provider == "gmail":
+            self.txt_smtp_server.value = "smtp.gmail.com"
+            self.txt_smtp_port.value = "587"
+        elif provider == "outlook":
+            self.txt_smtp_server.value = "smtp.office365.com"
+            self.txt_smtp_port.value = "587"
+        elif provider == "yahoo":
+            self.txt_smtp_server.value = "smtp.mail.yahoo.com"
+            self.txt_smtp_port.value = "465"
+        elif provider == "icloud":
+            self.txt_smtp_server.value = "smtp.mail.me.com"
+            self.txt_smtp_port.value = "587"
+        
+        self.content.update()
+
+    def _salva_email_cliccato(self, e):
+        """Salva la configurazione email."""
+        server = self.txt_smtp_server.value
+        port = self.txt_smtp_port.value
+        user = self.txt_smtp_user.value
+        password = self.txt_smtp_password.value
+        provider = self.dd_email_provider.value
+
+        if not all([server, port, user, password]):
+            self.controller.show_snack_bar("Tutti i campi email sono obbligatori.", success=False)
+            return
+
+        if save_smtp_settings(server, port, user, password, provider):
+            self.controller.show_snack_bar("Configurazione email salvata con successo!", success=True)
+        else:
+            self.controller.show_snack_bar("Errore durante il salvataggio della configurazione.", success=False)
 
     def build_controls(self):
         """Costruisce e restituisce la lista di controlli per la scheda."""
@@ -144,6 +181,37 @@ class ImpostazioniTab(ft.Container):
         )
         # --- FINE NUOVI CONTROLLI ---
 
+        # --- CONTROLLI CONFIGURAZIONE EMAIL ---
+        self.dd_email_provider = ft.Dropdown(
+            label="Provider Email",
+            options=[
+                ft.dropdown.Option("gmail", "Gmail"),
+                ft.dropdown.Option("outlook", "Outlook / Hotmail"),
+                ft.dropdown.Option("yahoo", "Yahoo Mail"),
+                ft.dropdown.Option("icloud", "iCloud"),
+                ft.dropdown.Option("custom", "Altro / Personalizzato"),
+            ],
+            on_change=self._provider_email_cambiato,
+            border_color=ft.Colors.OUTLINE
+        )
+        self.txt_smtp_server = ft.TextField(label="Server SMTP", border_color=ft.Colors.OUTLINE)
+        self.txt_smtp_port = ft.TextField(label="Porta SMTP", border_color=ft.Colors.OUTLINE, width=100)
+        self.txt_smtp_user = ft.TextField(label="Email / Username", border_color=ft.Colors.OUTLINE)
+        self.txt_smtp_password = ft.TextField(label="Password / App Password", password=True, can_reveal_password=True, border_color=ft.Colors.OUTLINE)
+        self.btn_salva_email = ft.ElevatedButton(
+            "Salva Configurazione Email",
+            icon=ft.Icons.SAVE,
+            on_click=self._salva_email_cliccato,
+            bgcolor=AppColors.PRIMARY,
+            color=AppColors.ON_PRIMARY
+        )
+        self.txt_gmail_hint = ft.Text(
+            "Nota: Per Gmail con 2FA attivata, devi usare una 'Password per le app'.\n"
+            "Vai su: Account Google > Sicurezza > Verifica in due passaggi > Password per le app.",
+            size=12, color=ft.Colors.GREY_700, visible=False
+        )
+        # --- FINE CONTROLLI EMAIL ---
+
         return [
             AppStyles.header_text(loc.get("language_and_currency")),
             AppStyles.body_text(loc.get("language_and_currency_desc")),
@@ -178,6 +246,21 @@ class ImpostazioniTab(ft.Container):
             self.txt_conferma_password,
             ft.Row(
                 [self.btn_salva_profilo],
+                alignment=ft.MainAxisAlignment.END
+            ),
+
+            ft.Divider(height=30, color=ft.Colors.TRANSPARENT),
+
+            AppStyles.header_text("Configurazione Email"),
+            AppStyles.body_text("Configura il server SMTP per l'invio delle email (es. recupero password)."),
+            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+            self.dd_email_provider,
+            self.txt_gmail_hint,
+            ft.Row([self.txt_smtp_server, self.txt_smtp_port], spacing=10),
+            self.txt_smtp_user,
+            self.txt_smtp_password,
+            ft.Row(
+                [self.btn_salva_email],
                 alignment=ft.MainAxisAlignment.END
             ),
 
@@ -229,6 +312,17 @@ class ImpostazioniTab(ft.Container):
                 self.txt_data_nascita.value = dati_utente.get("data_nascita", "")
                 self.txt_codice_fiscale.value = dati_utente.get("codice_fiscale", "")
                 self.txt_indirizzo.value = dati_utente.get("indirizzo", "")
+
+        # Popola i campi email
+        smtp_settings = get_smtp_settings()
+        if smtp_settings:
+            provider = smtp_settings.get('provider', 'custom')
+            self.dd_email_provider.value = provider
+            self.txt_smtp_server.value = smtp_settings.get('server', '')
+            self.txt_smtp_port.value = smtp_settings.get('port', '')
+            self.txt_smtp_user.value = smtp_settings.get('user', '')
+            self.txt_smtp_password.value = smtp_settings.get('password', '')
+            self.txt_gmail_hint.visible = (provider == "gmail")
 
         if self.page:
             self.page.update()

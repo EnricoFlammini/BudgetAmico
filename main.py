@@ -4,6 +4,10 @@ from db.crea_database import setup_database, SCHEMA_VERSION
 from db.gestione_db import ottieni_versione_db, DB_FILE
 from db.migration_manager import migra_database
 import os
+from dotenv import load_dotenv
+
+# Carica le variabili d'ambiente dal file .env
+load_dotenv()
 
 def main(page: ft.Page):
     # Impostazioni iniziali della pagina
