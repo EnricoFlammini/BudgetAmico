@@ -3,6 +3,7 @@ from db.gestione_db import (ottieni_tutti_i_conti_utente, imposta_conto_default_
                           ottieni_dettagli_utente, aggiorna_profilo_utente, cambia_password, hash_password)
 from utils.styles import AppStyles, AppColors
 from utils.config_manager import get_smtp_settings, save_smtp_settings
+from utils.email_sender import send_email
 
 
 class ImpostazioniTab(ft.Container):
@@ -109,6 +110,42 @@ class ImpostazioniTab(ft.Container):
         
         self.content.update()
 
+    def _test_email_cliccato(self, e):
+        """Invia un'email di prova con le impostazioni correnti."""
+        server = self.txt_smtp_server.value
+        port = self.txt_smtp_port.value
+        user = self.txt_smtp_user.value
+        password = self.txt_smtp_password.value
+        
+        if not all([server, port, user, password]):
+            self.controller.show_snack_bar("Compila tutti i campi prima di provare.", success=False)
+            return
+
+        # Usa l'email dell'utente come destinatario, se disponibile, altrimenti usa l'email SMTP stessa
+        destinatario = self.txt_email.value if self.txt_email.value else user
+        
+        smtp_config = {
+            'server': server,
+            'port': port,
+            'user': user,
+            'password': password
+        }
+
+        try:
+            successo, errore = send_email(
+                to_email=destinatario,
+                subject="Test Configurazione Email - BudgetAmico",
+                body="Se leggi questa email, la configurazione SMTP è corretta!",
+                smtp_config=smtp_config
+            )
+            
+            if successo:
+                self.controller.show_snack_bar(f"Email di prova inviata a {destinatario}!", success=True)
+            else:
+                self.controller.show_error_dialog(f"Errore invio email: {errore}")
+        except Exception as ex:
+            self.controller.show_error_dialog(f"Eccezione durante il test: {str(ex)}")
+
     def _salva_email_cliccato(self, e):
         """Salva la configurazione email."""
         server = self.txt_smtp_server.value
@@ -198,6 +235,11 @@ class ImpostazioniTab(ft.Container):
         self.txt_smtp_port = ft.TextField(label="Porta SMTP", border_color=ft.Colors.OUTLINE, width=100)
         self.txt_smtp_user = ft.TextField(label="Email / Username", border_color=ft.Colors.OUTLINE)
         self.txt_smtp_password = ft.TextField(label="Password / App Password", password=True, can_reveal_password=True, border_color=ft.Colors.OUTLINE)
+        self.btn_test_email = ft.ElevatedButton(
+            "Invia Email di Prova",
+            icon=ft.Icons.SEND,
+            on_click=self._test_email_cliccato,
+        )
         self.btn_salva_email = ft.ElevatedButton(
             "Salva Configurazione Email",
             icon=ft.Icons.SAVE,
@@ -260,8 +302,9 @@ class ImpostazioniTab(ft.Container):
             self.txt_smtp_user,
             self.txt_smtp_password,
             ft.Row(
-                [self.btn_salva_email],
-                alignment=ft.MainAxisAlignment.END
+                [self.btn_test_email, self.btn_salva_email],
+                alignment=ft.MainAxisAlignment.END,
+                spacing=10
             ),
 
             ft.Divider(height=30, color=ft.Colors.TRANSPARENT),

@@ -3,34 +3,45 @@ import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import logging
+from utils.config_manager import get_smtp_settings
 
 # Configurazione logger
 logger = logging.getLogger(__name__)
 
-from utils.config_manager import get_smtp_settings
-
-def send_email(to_email, subject, body_html):
+def send_email(to_email, subject, body, smtp_config=None):
     """
-    Invia un'email utilizzando un server SMTP configurato.
-    Priorità: Configurazione salvata (config.json) > Variabili d'ambiente.
+    Invia un'email utilizzando le impostazioni SMTP.
+    
+    Args:
+        to_email (str): Indirizzo email del destinatario.
+        subject (str): Oggetto dell'email.
+        body (str): Corpo dell'email.
+        smtp_config (dict, optional): Dizionario con le impostazioni SMTP (server, port, user, password).
+                                      Se fornito, usa queste impostazioni invece di quelle salvate/env.
     """
-    # 1. Prova a caricare da config.json
-    smtp_settings = get_smtp_settings()
-    smtp_server = smtp_settings.get('server')
-    smtp_port = smtp_settings.get('port')
-    smtp_user = smtp_settings.get('user')
-    smtp_password = smtp_settings.get('password')
-
-    # 2. Fallback su variabili d'ambiente se mancano dati nel config
-    if not smtp_server: smtp_server = os.environ.get("SMTP_SERVER")
-    if not smtp_port: smtp_port = os.environ.get("SMTP_PORT")
-    if not smtp_user: smtp_user = os.environ.get("SMTP_USER")
-    if not smtp_password: smtp_password = os.environ.get("SMTP_PASSWORD")
+    if smtp_config:
+        smtp_server = smtp_config.get('server')
+        smtp_port = smtp_config.get('port')
+        smtp_user = smtp_config.get('user')
+        smtp_password = smtp_config.get('password')
+    else:
+        # 1. Prova a caricare da config.json
+        settings = get_smtp_settings()
+        if settings:
+            smtp_server = settings.get('server')
+            smtp_port = settings.get('port')
+            smtp_user = settings.get('user')
+            smtp_password = settings.get('password')
+        else:
+            # 2. Fallback su variabili d'ambiente
+            smtp_server = os.getenv("SMTP_SERVER")
+            smtp_port = os.getenv("SMTP_PORT")
+            smtp_user = os.getenv("SMTP_USER")
+            smtp_password = os.getenv("SMTP_PASSWORD")
 
     if not all([smtp_server, smtp_port, smtp_user, smtp_password]):
-        logger.error("Configurazione SMTP mancante. Controlla le variabili d'ambiente.")
-        print("❌ Configurazione SMTP mancante. Controlla le variabili d'ambiente.")
-        return False
+        logger.error("Configurazione SMTP mancante.")
+        return False, "Configurazione SMTP mancante."
 
     try:
         msg = MIMEMultipart('alternative')
@@ -38,7 +49,7 @@ def send_email(to_email, subject, body_html):
         msg['From'] = smtp_user
         msg['To'] = to_email
 
-        part = MIMEText(body_html, 'html')
+        part = MIMEText(body, 'html')
         msg.attach(part)
 
         # Connessione al server SMTP
@@ -49,10 +60,8 @@ def send_email(to_email, subject, body_html):
         server.quit()
 
         logger.info(f"Email inviata con successo a {to_email}")
-        print(f"✅ Email inviata con successo a {to_email}")
-        return True
+        return True, None
 
     except Exception as e:
         logger.error(f"Errore durante l'invio dell'email a {to_email}: {e}")
-        print(f"❌ Errore durante l'invio dell'email a {to_email}: {e}")
-        return False
+        return False, str(e)
