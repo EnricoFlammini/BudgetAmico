@@ -2,7 +2,7 @@
 STRINGS = {
     "it": {
         # Generali
-        "app_title": "Budget Familiare",
+        "app_title": "Budget Amico",
         "edit": "Modifica",
         "delete": "Elimina",
         "save": "Salva",
@@ -537,7 +537,7 @@ STRINGS = {
     },
     "en": {
         # Generali
-        "app_title": "Family Budget",
+        "app_title": "Budget Amico",
         "edit": "Edit",
         "delete": "Delete",
         "save": "Save",
@@ -855,7 +855,7 @@ STRINGS = {
     },
     "es": {
         # Generali
-        "app_title": "Presupuesto Familiar",
+        "app_title": "Budget Amico",
         "edit": "Editar",
         "delete": "Eliminar",
         "save": "Guardar",
@@ -1171,7 +1171,7 @@ STRINGS = {
     },
     "de": {
         # Generali
-        "app_title": "Familienbudget",
+        "app_title": "Budget Amico",
         "edit": "Bearbeiten",
         "delete": "Löschen",
         "save": "Speichern",

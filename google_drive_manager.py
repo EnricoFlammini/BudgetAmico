@@ -13,7 +13,7 @@ from utils.config_manager import CONFIG_FILE
 import google_auth_manager
 
 # Nome del file del database su Google Drive
-DB_FILENAME_DRIVE = "budget_familiare.db"
+DB_FILENAME_DRIVE = "budget_amico.db"
 CONFIG_FILENAME_DRIVE = "config.json"
 
 

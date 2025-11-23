@@ -19,10 +19,10 @@ if parent_dir not in sys.path:
 from db.crea_database import setup_database
 
 # --- GESTIONE PERCORSI PER ESEGUIBILE ---
-APP_DATA_DIR = os.path.join(os.getenv('APPDATA'), 'BudgetFamiliare')
+APP_DATA_DIR = os.path.join(os.getenv('APPDATA'), 'BudgetAmico')
 if not os.path.exists(APP_DATA_DIR):
     os.makedirs(APP_DATA_DIR)
-DB_FILE = os.path.join(APP_DATA_DIR, 'budget_familiare.db')
+DB_FILE = os.path.join(APP_DATA_DIR, 'budget_amico.db')
 # --- FINE GESTIONE PERCORSI ---
 
 

@@ -7,7 +7,7 @@ from googleapiclient.discovery import build
 import sys
 
 # --- GESTIONE PERCORSI PER ESEGUIBILE ---
-APP_DATA_DIR = os.path.join(os.getenv('APPDATA'), 'BudgetFamiliare')
+APP_DATA_DIR = os.path.join(os.getenv('APPDATA'), 'BudgetAmico')
 if not os.path.exists(APP_DATA_DIR):
     os.makedirs(APP_DATA_DIR)
 

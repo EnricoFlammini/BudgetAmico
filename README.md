@@ -211,7 +211,7 @@ Se ricevi errori di moduli mancanti, assicurati di:
 
 ### Database non trovato
 
-Al primo avvio, l'applicazione creerà automaticamente il database `budget_familiare.db`. Se riscontri problemi, elimina il file e riavvia l'applicazione.
+Al primo avvio, l'applicazione creerà automaticamente il database `budget_amico.db`. Se riscontri problemi, elimina il file e riavvia l'applicazione.
 
 ### Problemi con Google Drive
 

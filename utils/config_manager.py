@@ -6,7 +6,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Percorso del file di configurazione
-APP_DATA_DIR = os.path.join(os.getenv('APPDATA'), 'BudgetFamiliare')
+APP_DATA_DIR = os.path.join(os.getenv('APPDATA'), 'BudgetAmico')
 CONFIG_FILE = os.path.join(APP_DATA_DIR, 'config.json')
 
 def load_config():
