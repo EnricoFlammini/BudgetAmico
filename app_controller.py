@@ -188,7 +188,7 @@ class AppController:
     def _carica_dashboard(self):
         self.page.views.clear()
         self.page.views.append(self.dashboard_view.build_view())
-        self.dashboard_view.update_tabs_list()
+        self.dashboard_view.update_sidebar()
 
         saved_lang = self.page.client_storage.get("settings.language")
         if saved_lang: self.loc.set_language(saved_lang)

@@ -30,35 +30,26 @@ class DashboardView:
         self.tab_impostazioni = ImpostazioniTab(controller)
         self.tab_spese_fisse = SpeseFisseTab(controller)
 
-        # 2. Definisci il contenitore dei Tabs
-        self.tabs_control = ft.Tabs(
-            selected_index=0,
-            expand=True,
-            tabs=[],
-            on_change=self._tab_changed
+        # 2. Sidebar personalizzata (sostituisce NavigationRail)
+        self.selected_index = 0
+        self.sidebar_items = []  # Lista di voci della sidebar
+        
+        # Container per la sidebar scrollabile
+        self.sidebar_listview = ft.ListView(
+            spacing=0,
+            padding=ft.padding.symmetric(vertical=10),
         )
 
-        # 3. Aggiungi un contenitore per le viste speciali (Admin/Impostazioni)
-        self.special_view_container = ft.Container(
-            content=None,
+        # 3. Area Contenuti Principale
+        self.content_area = ft.Container(
+            content=self.tab_personale, # Default view
             expand=True,
-            visible=False
+            padding=10
         )
 
         # 4. Memorizza i componenti dell'AppBar
-        self.appbar_title = ft.Text()  # Il testo verrà impostato dinamicamente
-        self.appbar_leading = ft.IconButton(
-            icon=ft.Icons.ARROW_BACK,
-            on_click=self.hide_special_view,
-            visible=False
-        )
-        # Pulsante Admin nell'AppBar
-        self.appbar_admin_button = ft.IconButton(
-            icon=ft.Icons.ADMIN_PANEL_SETTINGS,
-            tooltip="Admin",
-            on_click=lambda e: self.show_special_view("admin"),
-            visible=False
-        )
+        self.appbar_title = ft.Text()
+        
         # Icona per lo stato della sincronizzazione
         self.sync_status_icon = ft.IconButton(
             icon=ft.Icons.CLOUD_DONE,
@@ -66,9 +57,47 @@ class DashboardView:
             visible=False
         )
 
+    def _create_sidebar_item(self, icon, selected_icon, label, view_instance, index):
+        """Crea un elemento della sidebar personalizzata."""
+        is_selected = (index == self.selected_index)
+        
+        return ft.Container(
+            content=ft.ListTile(
+                leading=ft.Icon(
+                    selected_icon if is_selected else icon,
+                    color=ft.Colors.PRIMARY if is_selected else None
+                ),
+                title=ft.Text(
+                    label,
+                    weight=ft.FontWeight.BOLD if is_selected else ft.FontWeight.NORMAL,
+                    color=ft.Colors.PRIMARY if is_selected else None
+                ),
+                selected=is_selected,
+                on_click=lambda e, idx=index, view=view_instance: self._sidebar_item_clicked(idx, view),
+            ),
+            bgcolor=ft.Colors.PRIMARY_CONTAINER if is_selected else None,
+            border_radius=10,
+            padding=ft.padding.symmetric(horizontal=5),
+        )
+
+    def _sidebar_item_clicked(self, index, view_instance):
+        """Gestisce il click su un elemento della sidebar."""
+        self.selected_index = index
+        self.content_area.content = view_instance
+        
+        # Aggiorna i dati della vista selezionata
+        if hasattr(view_instance, 'update_view_data'):
+            view_instance.update_view_data()
+        elif hasattr(view_instance, 'update_all_admin_tabs_data'):
+            view_instance.update_all_admin_tabs_data()
+        
+        # Ricostruisci la sidebar per aggiornare la selezione
+        self.update_sidebar()
+        self.page.update()
+
     def build_view(self) -> ft.View:
         """
-        Costruisce e restituisce la vista del Dashboard.
+        Costruisce e restituisce la vista del Dashboard con sidebar personalizzata.
         """
         loc = self.controller.loc
         self.appbar_title.value = loc.get("app_title")
@@ -76,17 +105,24 @@ class DashboardView:
         return ft.View(
             "/dashboard",
             [
-                ft.Stack(
+                ft.Row(
                     [
-                        self.tabs_control,
-                        self.special_view_container
+                        # Sidebar personalizzata scrollabile
+                        ft.Container(
+                            content=self.sidebar_listview,
+                            width=220,
+                            bgcolor=ft.Colors.SURFACE,
+                            padding=5,
+                        ),
+                        ft.VerticalDivider(width=1),
+                        self.content_area
                     ],
                     expand=True
                 )
             ],
             appbar=ft.AppBar(
                 title=self.appbar_title,
-                leading=self.appbar_leading,
+                center_title=False,
                 actions=[
                     ft.IconButton(
                         icon=ft.Icons.INFO_OUTLINE,
@@ -94,12 +130,6 @@ class DashboardView:
                         on_click=self.controller.open_info_dialog
                     ),
                     self.sync_status_icon,
-                    ft.IconButton(
-                        icon=ft.Icons.SETTINGS,
-                        tooltip=loc.get("settings"),
-                        on_click=lambda e: self.show_special_view("impostazioni")
-                    ),
-                    self.appbar_admin_button,
                     ft.IconButton(
                         icon=ft.Icons.DOWNLOAD,
                         tooltip=loc.get("export_data"),
@@ -118,29 +148,6 @@ class DashboardView:
                 on_click=self._open_add_menu
             )
         )
-
-    def show_special_view(self, view_name):
-        """Mostra una vista speciale (Admin o Impostazioni) e nasconde le tab."""
-        loc = self.controller.loc
-        if view_name == "admin":
-            self.special_view_container.content = self.tab_admin
-            self.appbar_title.value = loc.get("admin_panel_title")
-        elif view_name == "impostazioni":
-            self.special_view_container.content = self.tab_impostazioni
-            self.appbar_title.value = loc.get("settings")
-
-        self.tabs_control.visible = False
-        self.special_view_container.visible = True
-        self.appbar_leading.visible = True
-        self.page.update()
-
-    def hide_special_view(self, e=None):
-        """Nasconde la vista speciale e mostra di nuovo le tab."""
-        self.tabs_control.visible = True
-        self.special_view_container.visible = False
-        self.appbar_leading.visible = False
-        self.appbar_title.value = self.controller.loc.get("app_title")
-        self.page.update()
 
     def _open_add_menu(self, e):
         """Apre un BottomSheet con le opzioni di aggiunta."""
@@ -173,80 +180,153 @@ class DashboardView:
         self.page.overlay.append(bs)
         self.page.update()
 
-    def _tab_changed(self, e):
+    def update_sidebar(self):
         """
-        Callback per l'evento di cambio tab. Aggiorna i dati della tab selezionata.
-        """
-        selected_index = e.control.selected_index
-
-        # Mappa il testo della tab (che ora è tradotto) alla funzione di aggiornamento
-        # Usiamo le chiavi di localizzazione per un mapping robusto
-        tab_key_map = {
-            self.controller.loc.get("my_data"): self.tab_personale.update_view_data,
-            self.controller.loc.get("budget"): self.tab_budget.update_view_data,
-            self.controller.loc.get("personal_accounts"): self.tab_conti.update_view_data,
-            self.controller.loc.get("shared_accounts"): self.tab_conti_condivisi.update_view_data,
-            self.controller.loc.get("fixed_expenses"): self.tab_spese_fisse.update_view_data,
-            self.controller.loc.get("loans"): self.tab_prestiti.update_view_data,
-            self.controller.loc.get("properties"): self.tab_immobili.update_view_data,
-            self.controller.loc.get("family"): self.tab_famiglia.update_view_data,
-        }
-
-        if selected_index < len(self.tabs_control.tabs):
-            selected_tab_text = self.tabs_control.tabs[selected_index].text
-            update_function = tab_key_map.get(selected_tab_text)
-            if update_function:
-                print(f"Tab '{selected_tab_text}' selezionata. Aggiornamento dati...")
-                update_function()
-
-    def update_tabs_list(self):
-        """
-        Aggiorna la lista di ft.Tab visibili in base al ruolo dell'utente.
+        Aggiorna la sidebar personalizzata in base al ruolo.
         """
         loc = self.controller.loc
         ruolo = self.controller.get_user_role()
-        tabs_list = []
+        
+        # Costruisci la lista di voci
+        self.sidebar_items = []
+        index = 0
 
-        # Schede visibili a tutti
-        tabs_list.append(ft.Tab(text=loc.get("my_data"), icon=ft.Icons.PERSON, content=self.tab_personale))
-        tabs_list.append(ft.Tab(text=loc.get("budget"), icon=ft.Icons.PIE_CHART, content=self.tab_budget))
-        tabs_list.append(
-            ft.Tab(text=loc.get("personal_accounts"), icon=ft.Icons.ACCOUNT_BALANCE_WALLET, content=self.tab_conti))
-        tabs_list.append(ft.Tab(text=loc.get("shared_accounts"), icon=ft.Icons.GROUP, content=self.tab_conti_condivisi))
-        tabs_list.append(
-            ft.Tab(text=loc.get("fixed_expenses"), icon=ft.Icons.CALENDAR_MONTH, content=self.tab_spese_fisse))
-        tabs_list.append(ft.Tab(text=loc.get("loans"), icon=ft.Icons.CREDIT_CARD, content=self.tab_prestiti))
-        tabs_list.append(ft.Tab(text=loc.get("properties"), icon=ft.Icons.HOME_WORK, content=self.tab_immobili))
+        # 1. I Miei Dati
+        self.sidebar_items.append({
+            'icon': ft.Icons.PERSON_OUTLINE,
+            'selected_icon': ft.Icons.PERSON,
+            'label': loc.get("my_data"),
+            'view': self.tab_personale,
+            'index': index
+        })
+        index += 1
+        
+        # 2. Budget
+        self.sidebar_items.append({
+            'icon': ft.Icons.PIE_CHART_OUTLINE,
+            'selected_icon': ft.Icons.PIE_CHART,
+            'label': loc.get("budget"),
+            'view': self.tab_budget,
+            'index': index
+        })
+        index += 1
 
-        # Schede con visibilità basata sul ruolo
+        # 3. Conti Personali
+        self.sidebar_items.append({
+            'icon': ft.Icons.ACCOUNT_BALANCE_WALLET_OUTLINED,
+            'selected_icon': ft.Icons.ACCOUNT_BALANCE_WALLET,
+            'label': loc.get("personal_accounts"),
+            'view': self.tab_conti,
+            'index': index
+        })
+        index += 1
+
+        # 4. Conti Condivisi
+        self.sidebar_items.append({
+            'icon': ft.Icons.GROUP_OUTLINED,
+            'selected_icon': ft.Icons.GROUP,
+            'label': loc.get("shared_accounts"),
+            'view': self.tab_conti_condivisi,
+            'index': index
+        })
+        index += 1
+
+        # 5. Spese Fisse
+        self.sidebar_items.append({
+            'icon': ft.Icons.CALENDAR_MONTH_OUTLINED,
+            'selected_icon': ft.Icons.CALENDAR_MONTH,
+            'label': loc.get("fixed_expenses"),
+            'view': self.tab_spese_fisse,
+            'index': index
+        })
+        index += 1
+
+        # 6. Prestiti
+        self.sidebar_items.append({
+            'icon': ft.Icons.CREDIT_CARD_OUTLINED,
+            'selected_icon': ft.Icons.CREDIT_CARD,
+            'label': loc.get("loans"),
+            'view': self.tab_prestiti,
+            'index': index
+        })
+        index += 1
+
+        # 7. Immobili
+        self.sidebar_items.append({
+            'icon': ft.Icons.HOME_WORK_OUTLINED,
+            'selected_icon': ft.Icons.HOME_WORK,
+            'label': loc.get("properties"),
+            'view': self.tab_immobili,
+            'index': index
+        })
+        index += 1
+
+        # 8. Famiglia (Solo se autorizzato)
         if ruolo in ['admin', 'livello1', 'livello2']:
-            tabs_list.append(ft.Tab(text=loc.get("family"), icon=ft.Icons.DIVERSITY_3, content=self.tab_famiglia))
+            self.sidebar_items.append({
+                'icon': ft.Icons.DIVERSITY_3_OUTLINED,
+                'selected_icon': ft.Icons.DIVERSITY_3,
+                'label': loc.get("family"),
+                'view': self.tab_famiglia,
+                'index': index
+            })
+            index += 1
 
-        self.appbar_admin_button.visible = (ruolo == 'admin')
-        self.tabs_control.tabs = tabs_list
+        # 9. Admin (Solo Admin)
+        if ruolo == 'admin':
+            self.sidebar_items.append({
+                'icon': ft.Icons.ADMIN_PANEL_SETTINGS_OUTLINED,
+                'selected_icon': ft.Icons.ADMIN_PANEL_SETTINGS,
+                'label': loc.get("admin_panel_title"),
+                'view': self.tab_admin,
+                'index': index
+            })
+            index += 1
 
-        if self.tabs_control.selected_index >= len(self.tabs_control.tabs):
-            self.tabs_control.selected_index = 0
+        # 10. Impostazioni (Sempre visibile, in fondo)
+        self.sidebar_items.append({
+            'icon': ft.Icons.SETTINGS_OUTLINED,
+            'selected_icon': ft.Icons.SETTINGS,
+            'label': loc.get("settings"),
+            'view': self.tab_impostazioni,
+            'index': index
+        })
 
-        if self.tabs_control.page:
-            self.tabs_control.update()
-
-        if self.page.appbar:
-            self.page.appbar.update()
+        # Ricostruisci i controlli della ListView
+        self.sidebar_listview.controls.clear()
+        for item in self.sidebar_items:
+            self.sidebar_listview.controls.append(
+                self._create_sidebar_item(
+                    item['icon'],
+                    item['selected_icon'],
+                    item['label'],
+                    item['view'],
+                    item['index']
+                )
+            )
+        
+        # Reset selezione se fuori range
+        if self.selected_index >= len(self.sidebar_items):
+            self.selected_index = 0
+            
+        if self.sidebar_listview.page:
+            self.sidebar_listview.update()
 
     def update_all_tabs_data(self, is_initial_load=False):
         """
-        Questo è il "callback" principale.
-        Dice a OGNI scheda di ricaricare i propri dati dal DB.
+        Aggiorna i dati di tutte le viste e della sidebar.
         """
-        print("DashboardView: Aggiornamento dati di tutte le schede...")
+        print("DashboardView: Aggiornamento dati completo...")
 
-        # Prima ridisegna le etichette delle tab con la lingua corretta
-        self.update_tabs_list()
+        # Aggiorna la sidebar (lingue, ruoli)
+        self.update_sidebar()
 
-        # Aggiorna il titolo principale dell'app
+        # Aggiorna il titolo
         self.appbar_title.value = self.controller.loc.get("app_title")
 
+        # Aggiorna i dati di TUTTE le schede (così sono pronte quando ci clicchi)
+        # Nota: Potremmo ottimizzare aggiornando solo la visibile e le altre on-demand,
+        # ma per ora manteniamo la logica "eager" per semplicità.
         self.tab_personale.update_view_data(is_initial_load)
         self.tab_famiglia.update_view_data(is_initial_load)
         self.tab_conti.update_view_data(is_initial_load)
@@ -260,5 +340,5 @@ class DashboardView:
         if self.controller.get_user_role() == 'admin':
             self.tab_admin.update_all_admin_tabs_data(is_initial_load)
 
-        if self.special_view_container.visible:
-            self.hide_special_view()
+        if self.page:
+            self.page.update()
