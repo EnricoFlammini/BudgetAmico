@@ -1,36 +1,18 @@
 import flet as ft
-from functools import partial
-from db.gestione_db import (
-    ottieni_categorie_e_sottocategorie,
-    ottieni_membri_famiglia,
-    rimuovi_utente_da_famiglia,
-    modifica_ruolo_utente
-)
 import google_auth_manager
-from utils.styles import AppStyles, AppColors
-
+from functools import partial
+from utils.styles import AppColors, AppStyles
+from db.gestione_db import ottieni_categorie_e_sottocategorie, ottieni_membri_famiglia, rimuovi_utente_da_famiglia
+from utils.config_manager import get_smtp_settings, save_smtp_settings
+from utils.email_sender import send_email
 
 class AdminTab(ft.Container):
     def __init__(self, controller):
-        super().__init__(padding=10, expand=True)
+        super().__init__(expand=True)
         self.controller = controller
         self.page = controller.page
-
-        # Controlli per la gestione categorie
-        self.lv_categorie = ft.Column(scroll=ft.ScrollMode.ADAPTIVE, expand=True, spacing=10)
-
-        # Controlli per la gestione membri
-        self.lv_membri = ft.ListView(expand=True, spacing=10)
-
-        # Controlli per la gestione Google
-        self.google_status_text = ft.Text()
-        self.google_auth_button = ft.ElevatedButton()
-        self.sync_button = ft.ElevatedButton()
-
-        # Tabs interni
+        
         self.tabs_admin = ft.Tabs(
-            selected_index=0,
-            animation_duration=300,
             tabs=[],  # Verranno popolati dinamicamente
             expand=1,
             divider_color=ft.Colors.TRANSPARENT,
@@ -39,22 +21,43 @@ class AdminTab(ft.Container):
             unselected_label_color=AppColors.TEXT_SECONDARY
         )
 
+        # UI Controls for Email Settings (initialized here to be available)
+        self.dd_email_provider = ft.Dropdown(
+            label="Provider Email",
+            options=[
+                ft.dropdown.Option("gmail", "Gmail"),
+                ft.dropdown.Option("outlook", "Outlook / Hotmail"),
+                ft.dropdown.Option("yahoo", "Yahoo Mail"),
+                ft.dropdown.Option("icloud", "iCloud Mail"),
+                ft.dropdown.Option("custom", "Altro / Personalizzato"),
+            ],
+            on_change=self._provider_email_cambiato,
+            border_color=ft.Colors.OUTLINE
+        )
+        self.txt_smtp_server = ft.TextField(label="Server SMTP", border_color=ft.Colors.OUTLINE)
+        self.txt_smtp_port = ft.TextField(label="Porta SMTP", border_color=ft.Colors.OUTLINE)
+        self.txt_smtp_user = ft.TextField(label="Username / Email", border_color=ft.Colors.OUTLINE)
+        self.txt_smtp_password = ft.TextField(label="Password / App Password", password=True, can_reveal_password=True, border_color=ft.Colors.OUTLINE)
+        self.txt_gmail_hint = AppStyles.body_text("Per Gmail, devi usare una 'App Password' se hai la 2FA attiva.", color=AppColors.PRIMARY)
+        self.txt_gmail_hint.visible = False
+
+        self.btn_test_email = ft.ElevatedButton("Test Email", icon=ft.Icons.SEND, on_click=self._test_email_cliccato)
+        self.btn_salva_email = ft.ElevatedButton("Salva Configurazione", icon=ft.Icons.SAVE, on_click=self._salva_email_cliccato, bgcolor=AppColors.PRIMARY, color=AppColors.ON_PRIMARY)
+
+        # UI Controls for Google Settings
+        self.google_status_text = AppStyles.body_text("")
+        self.google_auth_button = ft.ElevatedButton(text="", on_click=None)
+        self.sync_button = ft.ElevatedButton(text="", on_click=None)
+
+        self.lv_categorie = ft.Column(scroll=ft.ScrollMode.AUTO)
+        self.lv_membri = ft.Column(scroll=ft.ScrollMode.AUTO)
+
         self.content = ft.Column(
             [self.tabs_admin],
             expand=True
         )
 
-    def update_all_admin_tabs_data(self, is_initial_load=False):
-        """Aggiorna i dati di tutte le sotto-schede."""
-        self.tabs_admin.tabs = self.build_tabs()
-        self.update_tab_categorie()
-        self.update_tab_membri()
-        self.update_tab_google()
-        if self.page:
-            self.page.update()
-
     def build_tabs(self):
-        """Costruisce e restituisce la lista di controlli per le sotto-schede."""
         loc = self.controller.loc
         return [
             ft.Tab(
@@ -100,8 +103,22 @@ class AdminTab(ft.Container):
                 ])
             ),
             ft.Tab(
+                text="Email / SMTP",
+                icon=ft.Icons.EMAIL,
+                content=ft.Column([
+                    AppStyles.header_text("Configurazione Email (SMTP)"),
+                    AppStyles.body_text("Configura i parametri SMTP per l'invio delle email (inviti, recupero password)."),
+                    ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+                    self.dd_email_provider,
+                    self.txt_gmail_hint,
+                    ft.Row([self.txt_smtp_server, self.txt_smtp_port], spacing=10),
+                    ft.Row([self.txt_smtp_user, self.txt_smtp_password], spacing=10),
+                    ft.Row([self.btn_test_email, self.btn_salva_email], spacing=10),
+                ], scroll=ft.ScrollMode.AUTO)
+            ),
+            ft.Tab(
                 text=loc.get("admin_google_settings"),
-                icon=ft.Icons.CLOUD_QUEUE, # icona corretta
+                icon=ft.Icons.CLOUD_QUEUE,
                 content=ft.Column([
                     AppStyles.header_text(loc.get("google_settings")),
                     AppStyles.body_text(loc.get("google_settings_desc")),
@@ -258,3 +275,101 @@ class AdminTab(ft.Container):
             self.google_auth_button.bgcolor = AppColors.PRIMARY
             self.google_auth_button.color = AppColors.ON_PRIMARY
             self.sync_button.visible = False
+
+    def _provider_email_cambiato(self, e):
+        """Precompila i campi SMTP in base al provider selezionato."""
+        provider = self.dd_email_provider.value
+        self.txt_gmail_hint.visible = (provider == "gmail")
+
+        if provider == "gmail":
+            self.txt_smtp_server.value = "smtp.gmail.com"
+            self.txt_smtp_port.value = "587"
+        elif provider == "outlook":
+            self.txt_smtp_server.value = "smtp.office365.com"
+            self.txt_smtp_port.value = "587"
+        elif provider == "yahoo":
+            self.txt_smtp_server.value = "smtp.mail.yahoo.com"
+            self.txt_smtp_port.value = "465"
+        elif provider == "icloud":
+            self.txt_smtp_server.value = "smtp.mail.me.com"
+            self.txt_smtp_port.value = "587"
+        
+        self.page.update()
+
+    def _test_email_cliccato(self, e):
+        """Invia un'email di prova con le impostazioni correnti."""
+        server = self.txt_smtp_server.value
+        port = self.txt_smtp_port.value
+        user = self.txt_smtp_user.value
+        password = self.txt_smtp_password.value
+        
+        if not all([server, port, user, password]):
+            self.controller.show_snack_bar("Compila tutti i campi prima di provare.", success=False)
+            return
+
+        # Usa l'email dell'utente come destinatario, se disponibile, altrimenti usa l'email SMTP stessa
+        destinatario = user # Default
+        dati_utente = self.controller.get_user_data()
+        if dati_utente and dati_utente.get('email'):
+             destinatario = dati_utente.get('email')
+        
+        smtp_config = {
+            'server': server,
+            'port': port,
+            'user': user,
+            'password': password
+        }
+
+        try:
+            successo, errore = send_email(
+                to_email=destinatario,
+                subject="Test Configurazione Email - BudgetAmico",
+                body="Se leggi questa email, la configurazione SMTP è corretta!",
+                smtp_config=smtp_config
+            )
+            
+            if successo:
+                self.controller.show_snack_bar(f"Email di prova inviata a {destinatario}!", success=True)
+            else:
+                self.controller.show_error_dialog(f"Errore invio email: {errore}")
+        except Exception as ex:
+            self.controller.show_error_dialog(f"Eccezione durante il test: {str(ex)}")
+
+    def _salva_email_cliccato(self, e):
+        """Salva la configurazione email."""
+        server = self.txt_smtp_server.value
+        port = self.txt_smtp_port.value
+        user = self.txt_smtp_user.value
+        password = self.txt_smtp_password.value
+        provider = self.dd_email_provider.value
+
+        if not all([server, port, user, password]):
+            self.controller.show_snack_bar("Tutti i campi email sono obbligatori.", success=False)
+            return
+
+        if save_smtp_settings(server, port, user, password, provider):
+            self.controller.show_snack_bar("Configurazione email salvata con successo!", success=True)
+        else:
+            self.controller.show_snack_bar("Errore durante il salvataggio della configurazione.", success=False)
+
+    def update_tab_email(self):
+        """Popola i campi email con i dati salvati."""
+        smtp_settings = get_smtp_settings()
+        if smtp_settings:
+            provider = smtp_settings.get('provider', 'custom')
+            self.dd_email_provider.value = provider
+            self.txt_smtp_server.value = smtp_settings.get('server', '')
+            self.txt_smtp_port.value = smtp_settings.get('port', '')
+            self.txt_smtp_user.value = smtp_settings.get('user', '')
+            self.txt_smtp_password.value = smtp_settings.get('password', '')
+            self.txt_gmail_hint.visible = (provider == "gmail")
+
+    def update_all_admin_tabs_data(self, is_initial_load=False):
+        """Aggiorna i dati di tutte le sotto-schede."""
+        self.tabs_admin.tabs = self.build_tabs()
+        self.update_tab_categorie()
+        self.update_tab_membri()
+        self.update_tab_google()
+        self.update_tab_email()
+        if self.page:
+            self.page.update()

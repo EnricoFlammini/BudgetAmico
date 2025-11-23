@@ -9,10 +9,12 @@ import time
 from datetime import datetime, timezone
 
 from db.gestione_db import DB_FILE
+from utils.config_manager import CONFIG_FILE
 import google_auth_manager
 
 # Nome del file del database su Google Drive
 DB_FILENAME_DRIVE = "budget_familiare.db"
+CONFIG_FILENAME_DRIVE = "config.json"
 
 
 def _get_drive_service(controller):
@@ -60,19 +62,22 @@ def check_for_remote_db(controller):
         return None, None
 
 
-def download_db(controller, file_id=None):
-    """Scarica il database da Google Drive e sovrascrive quello locale."""
-    drive_service = _get_drive_service(controller)
-    if not drive_service: return False
-
+def _download_file(drive_service, filename_drive, local_path):
+    """Helper per scaricare un singolo file da Drive."""
     try:
-        if not file_id:
-            file_id, _ = check_for_remote_db(controller)
-
-        if not file_id:
-            controller.show_snack_bar("File non trovato su Drive per il download.", success=False)
+        # Cerca il file
+        response = drive_service.files().list(
+            q=f"name='{filename_drive}' and 'appDataFolder' in parents",
+            spaces='appDataFolder',
+            fields='files(id)'
+        ).execute()
+        
+        files = response.get('files', [])
+        if not files:
+            print(f"File {filename_drive} non trovato su Drive.")
             return False
 
+        file_id = files[0]['id']
         request = drive_service.files().get_media(fileId=file_id)
         fh = io.BytesIO()
         downloader = MediaIoBaseDownload(fh, request)
@@ -80,51 +85,86 @@ def download_db(controller, file_id=None):
         done = False
         while not done:
             status, done = downloader.next_chunk()
-            print(f"Download {int(status.progress() * 100)}%.")
-
-        # Sovrascrivi il file locale
-        with open(DB_FILE, 'wb') as f:
+        
+        with open(local_path, 'wb') as f:
             f.write(fh.getvalue())
-
-        print("Download completato e file locale sovrascritto.")
+            
+        print(f"Download di {filename_drive} completato.")
         return True
-
     except Exception as e:
-        print(f"Errore durante il download del DB: {e}")
-        controller.show_snack_bar("Errore durante il download.", success=False)
+        print(f"Errore download {filename_drive}: {e}")
         return False
 
-
-def upload_db(controller, file_id=None):
-    """Carica il database locale su Google Drive."""
+def download_db(controller, file_id=None):
+    """Scarica il database e il file di configurazione da Google Drive."""
     drive_service = _get_drive_service(controller)
     if not drive_service: return False
 
-    file_metadata = {'name': DB_FILENAME_DRIVE}
-    media = MediaFileUpload(DB_FILE, mimetype='application/x-sqlite3')
+    success_db = _download_file(drive_service, DB_FILENAME_DRIVE, DB_FILE)
+    success_config = _download_file(drive_service, CONFIG_FILENAME_DRIVE, CONFIG_FILE)
+
+    if success_db:
+        print("Database scaricato e sovrascritto.")
+        if success_config:
+            print("Configurazione scaricata e sovrascritta.")
+        return True
+    else:
+        controller.show_snack_bar("Errore durante il download del Database.", success=False)
+        return False
+
+
+def _upload_file(drive_service, local_path, filename_drive, mimetype='application/octet-stream'):
+    """Helper per caricare un singolo file su Drive."""
+    if not os.path.exists(local_path):
+        print(f"File locale {local_path} non trovato, salto upload.")
+        return False
 
     try:
-        if file_id:
-            # Aggiorna file esistente
+        # Cerca se esiste già
+        response = drive_service.files().list(
+            q=f"name='{filename_drive}' and 'appDataFolder' in parents",
+            spaces='appDataFolder',
+            fields='files(id)'
+        ).execute()
+        
+        files = response.get('files', [])
+        
+        media = MediaFileUpload(local_path, mimetype=mimetype)
+        file_metadata = {'name': filename_drive, 'parents': ['appDataFolder']}
+
+        if files:
+            # Aggiorna
+            file_id = files[0]['id']
             drive_service.files().update(
                 fileId=file_id,
                 media_body=media
             ).execute()
-            print("File DB aggiornato su Google Drive.")
+            print(f"File {filename_drive} aggiornato su Drive.")
         else:
-            # Crea nuovo file nella appDataFolder
-            file_metadata['parents'] = ['appDataFolder']
+            # Crea
             drive_service.files().create(
                 body=file_metadata,
                 media_body=media,
                 fields='id'
             ).execute()
-            print("File DB creato su Google Drive.")
-
+            print(f"File {filename_drive} creato su Drive.")
         return True
     except Exception as e:
-        print(f"Errore durante l'upload del DB: {e}")
-        controller.show_snack_bar("Errore durante l'upload.", success=False)
+        print(f"Errore upload {filename_drive}: {e}")
+        return False
+
+def upload_db(controller, file_id=None):
+    """Carica il database locale e la configurazione su Google Drive."""
+    drive_service = _get_drive_service(controller)
+    if not drive_service: return False
+
+    success_db = _upload_file(drive_service, DB_FILE, DB_FILENAME_DRIVE, 'application/x-sqlite3')
+    success_config = _upload_file(drive_service, CONFIG_FILE, CONFIG_FILENAME_DRIVE, 'application/json')
+
+    if success_db:
+        return True
+    else:
+        controller.show_snack_bar("Errore durante l'upload del Database.", success=False)
         return False
 
 

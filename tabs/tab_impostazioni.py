@@ -1,19 +1,17 @@
 import flet as ft
-from db.gestione_db import (ottieni_tutti_i_conti_utente, imposta_conto_default_utente, ottieni_conto_default_utente,
-                          ottieni_dettagli_utente, aggiorna_profilo_utente, cambia_password, hash_password)
-from utils.styles import AppStyles, AppColors
-from utils.config_manager import get_smtp_settings, save_smtp_settings
-from utils.email_sender import send_email
-
+from utils.styles import AppColors, AppStyles
+from db.gestione_db import (
+    imposta_conto_default_utente, aggiorna_profilo_utente, cambia_password, hash_password,
+    ottieni_tutti_i_conti_utente, ottieni_conto_default_utente, ottieni_dettagli_utente
+)
 
 class ImpostazioniTab(ft.Container):
     def __init__(self, controller):
-        super().__init__(padding=ft.padding.only(left=10, top=10, right=10, bottom=80), expand=True)
+        super().__init__(expand=True)
         self.controller = controller
         self.page = controller.page
         self.loc = controller.loc
 
-        # I controlli verranno creati dinamicamente per supportare il multilingue
         self.content = ft.Column(
             scroll=ft.ScrollMode.ADAPTIVE,
             expand=True,
@@ -81,93 +79,13 @@ class ImpostazioniTab(ft.Container):
                     self.controller.show_error_dialog("Errore durante il cambio password.")
             else:
                 self.txt_conferma_password.error_text = loc.get("passwords_do_not_match")
-                self.content.update()
-                return
-
+        
         if successo_profilo and successo_password:
-            self.controller.show_snack_bar(loc.get("profile_saved_success"), success=True)
-            self.controller.update_all_views() # Ricarica tutto per riflettere i cambiamenti
-        elif not successo_profilo:
-            self.controller.show_error_dialog("Errore salvataggio profilo. Username o Email potrebbero essere già in uso.")
-
-    def _provider_email_cambiato(self, e):
-        """Precompila i campi SMTP in base al provider selezionato."""
-        provider = self.dd_email_provider.value
-        self.txt_gmail_hint.visible = (provider == "gmail")
-
-        if provider == "gmail":
-            self.txt_smtp_server.value = "smtp.gmail.com"
-            self.txt_smtp_port.value = "587"
-        elif provider == "outlook":
-            self.txt_smtp_server.value = "smtp.office365.com"
-            self.txt_smtp_port.value = "587"
-        elif provider == "yahoo":
-            self.txt_smtp_server.value = "smtp.mail.yahoo.com"
-            self.txt_smtp_port.value = "465"
-        elif provider == "icloud":
-            self.txt_smtp_server.value = "smtp.mail.me.com"
-            self.txt_smtp_port.value = "587"
-        
-        self.content.update()
-
-    def _test_email_cliccato(self, e):
-        """Invia un'email di prova con le impostazioni correnti."""
-        server = self.txt_smtp_server.value
-        port = self.txt_smtp_port.value
-        user = self.txt_smtp_user.value
-        password = self.txt_smtp_password.value
-        
-        if not all([server, port, user, password]):
-            self.controller.show_snack_bar("Compila tutti i campi prima di provare.", success=False)
-            return
-
-        # Usa l'email dell'utente come destinatario, se disponibile, altrimenti usa l'email SMTP stessa
-        destinatario = self.txt_email.value if self.txt_email.value else user
-        
-        smtp_config = {
-            'server': server,
-            'port': port,
-            'user': user,
-            'password': password
-        }
-
-        try:
-            successo, errore = send_email(
-                to_email=destinatario,
-                subject="Test Configurazione Email - BudgetAmico",
-                body="Se leggi questa email, la configurazione SMTP è corretta!",
-                smtp_config=smtp_config
-            )
-            
-            if successo:
-                self.controller.show_snack_bar(f"Email di prova inviata a {destinatario}!", success=True)
-            else:
-                self.controller.show_error_dialog(f"Errore invio email: {errore}")
-        except Exception as ex:
-            self.controller.show_error_dialog(f"Eccezione durante il test: {str(ex)}")
-
-    def _salva_email_cliccato(self, e):
-        """Salva la configurazione email."""
-        server = self.txt_smtp_server.value
-        port = self.txt_smtp_port.value
-        user = self.txt_smtp_user.value
-        password = self.txt_smtp_password.value
-        provider = self.dd_email_provider.value
-
-        if not all([server, port, user, password]):
-            self.controller.show_snack_bar("Tutti i campi email sono obbligatori.", success=False)
-            return
-
-        if save_smtp_settings(server, port, user, password, provider):
-            self.controller.show_snack_bar("Configurazione email salvata con successo!", success=True)
-        else:
-            self.controller.show_snack_bar("Errore durante il salvataggio della configurazione.", success=False)
+             self.controller.show_snack_bar(loc.get("profile_updated"), success=True)
 
     def build_controls(self):
-        """Costruisce e restituisce la lista di controlli per la scheda."""
-        loc = self.controller.loc
-
-        # Controlli Lingua e Valuta
+        loc = self.loc
+        
         self.dd_lingua = ft.Dropdown(
             label=loc.get("language"),
             options=[
@@ -180,6 +98,7 @@ class ImpostazioniTab(ft.Container):
             on_change=self._lingua_cambiata,
             border_color=ft.Colors.OUTLINE
         )
+        
         self.dd_valuta = ft.Dropdown(
             label=loc.get("currency"),
             options=[ft.dropdown.Option(key, f"{key} ({info['symbol']})") for key, info in
@@ -189,8 +108,8 @@ class ImpostazioniTab(ft.Container):
             border_color=ft.Colors.OUTLINE
         )
 
-        # Controlli Conto Predefinito
         self.dd_conto_default = ft.Dropdown(label=loc.get("account"), border_color=ft.Colors.OUTLINE)
+        
         self.btn_salva_conto_default = ft.ElevatedButton(
             loc.get("save_default_account"),
             icon=ft.Icons.SAVE,
@@ -199,7 +118,6 @@ class ImpostazioniTab(ft.Container):
             color=AppColors.ON_PRIMARY
         )
 
-        # --- NUOVI CONTROLLI PROFILO UTENTE ---
         self.txt_username = ft.TextField(label=loc.get("username"), border_color=ft.Colors.OUTLINE)
         self.txt_email = ft.TextField(label=loc.get("email"), border_color=ft.Colors.OUTLINE)
         self.txt_nome = ft.TextField(label=loc.get("name"), border_color=ft.Colors.OUTLINE)
@@ -209,6 +127,7 @@ class ImpostazioniTab(ft.Container):
         self.txt_indirizzo = ft.TextField(label=loc.get("address"), border_color=ft.Colors.OUTLINE)
         self.txt_nuova_password = ft.TextField(label=loc.get("new_password"), password=True, can_reveal_password=True, border_color=ft.Colors.OUTLINE)
         self.txt_conferma_password = ft.TextField(label=loc.get("confirm_new_password"), password=True, can_reveal_password=True, border_color=ft.Colors.OUTLINE)
+        
         self.btn_salva_profilo = ft.ElevatedButton(
             loc.get("save_profile"),
             icon=ft.Icons.SAVE,
@@ -216,47 +135,10 @@ class ImpostazioniTab(ft.Container):
             bgcolor=AppColors.PRIMARY,
             color=AppColors.ON_PRIMARY
         )
-        # --- FINE NUOVI CONTROLLI ---
-
-        # --- CONTROLLI CONFIGURAZIONE EMAIL ---
-        self.dd_email_provider = ft.Dropdown(
-            label="Provider Email",
-            options=[
-                ft.dropdown.Option("gmail", "Gmail"),
-                ft.dropdown.Option("outlook", "Outlook / Hotmail"),
-                ft.dropdown.Option("yahoo", "Yahoo Mail"),
-                ft.dropdown.Option("icloud", "iCloud"),
-                ft.dropdown.Option("custom", "Altro / Personalizzato"),
-            ],
-            on_change=self._provider_email_cambiato,
-            border_color=ft.Colors.OUTLINE
-        )
-        self.txt_smtp_server = ft.TextField(label="Server SMTP", border_color=ft.Colors.OUTLINE)
-        self.txt_smtp_port = ft.TextField(label="Porta SMTP", border_color=ft.Colors.OUTLINE, width=100)
-        self.txt_smtp_user = ft.TextField(label="Email / Username", border_color=ft.Colors.OUTLINE)
-        self.txt_smtp_password = ft.TextField(label="Password / App Password", password=True, can_reveal_password=True, border_color=ft.Colors.OUTLINE)
-        self.btn_test_email = ft.ElevatedButton(
-            "Invia Email di Prova",
-            icon=ft.Icons.SEND,
-            on_click=self._test_email_cliccato,
-        )
-        self.btn_salva_email = ft.ElevatedButton(
-            "Salva Configurazione Email",
-            icon=ft.Icons.SAVE,
-            on_click=self._salva_email_cliccato,
-            bgcolor=AppColors.PRIMARY,
-            color=AppColors.ON_PRIMARY
-        )
-        self.txt_gmail_hint = ft.Text(
-            "Nota: Per Gmail con 2FA attivata, devi usare una 'Password per le app'.\n"
-            "Vai su: Account Google > Sicurezza > Verifica in due passaggi > Password per le app.",
-            size=12, color=ft.Colors.GREY_700, visible=False
-        )
-        # --- FINE CONTROLLI EMAIL ---
 
         return [
-            AppStyles.header_text(loc.get("language_and_currency")),
-            AppStyles.body_text(loc.get("language_and_currency_desc")),
+            AppStyles.header_text(loc.get("general_settings")),
+            AppStyles.body_text(loc.get("general_settings_desc")),
             ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
             ft.Row([
                 self.dd_lingua,
@@ -286,31 +168,11 @@ class ImpostazioniTab(ft.Container):
             AppStyles.subheader_text(loc.get("change_password")),
             self.txt_nuova_password,
             self.txt_conferma_password,
-            ft.Row(
-                [self.btn_salva_profilo],
-                alignment=ft.MainAxisAlignment.END
-            ),
-
+            ft.Row([self.btn_salva_profilo], alignment=ft.MainAxisAlignment.END),
+            
             ft.Divider(height=30, color=ft.Colors.TRANSPARENT),
-
-            AppStyles.header_text("Configurazione Email"),
-            AppStyles.body_text("Configura il server SMTP per l'invio delle email (es. recupero password)."),
-            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
-            self.dd_email_provider,
-            self.txt_gmail_hint,
-            ft.Row([self.txt_smtp_server, self.txt_smtp_port], spacing=10),
-            self.txt_smtp_user,
-            self.txt_smtp_password,
-            ft.Row(
-                [self.btn_test_email, self.btn_salva_email],
-                alignment=ft.MainAxisAlignment.END,
-                spacing=10
-            ),
-
-            ft.Divider(height=30, color=ft.Colors.TRANSPARENT),
-
-            AppStyles.header_text(loc.get("backup_and_restore")),
-            AppStyles.body_text(loc.get("backup_and_restore_desc")),
+            
+            AppStyles.header_text(loc.get("backup_restore")),
             ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
             ft.Row(
                 [
@@ -355,17 +217,6 @@ class ImpostazioniTab(ft.Container):
                 self.txt_data_nascita.value = dati_utente.get("data_nascita", "")
                 self.txt_codice_fiscale.value = dati_utente.get("codice_fiscale", "")
                 self.txt_indirizzo.value = dati_utente.get("indirizzo", "")
-
-        # Popola i campi email
-        smtp_settings = get_smtp_settings()
-        if smtp_settings:
-            provider = smtp_settings.get('provider', 'custom')
-            self.dd_email_provider.value = provider
-            self.txt_smtp_server.value = smtp_settings.get('server', '')
-            self.txt_smtp_port.value = smtp_settings.get('port', '')
-            self.txt_smtp_user.value = smtp_settings.get('user', '')
-            self.txt_smtp_password.value = smtp_settings.get('password', '')
-            self.txt_gmail_hint.visible = (provider == "gmail")
-
+        
         if self.page:
             self.page.update()
