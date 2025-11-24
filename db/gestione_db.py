@@ -1537,11 +1537,17 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese):
                     C.nome_categoria,
                     S.id_sottocategoria,
                     S.nome_sottocategoria,
-                    COALESCE(B.importo_limite, 0.0) as importo_limite,
+                    COALESCE(BS.importo_limite, B.importo_limite, 0.0) as importo_limite,
                     COALESCE(T_SPESE.spesa_totale, 0.0) as spesa_totale
                 FROM Categorie C
                 JOIN Sottocategorie S ON C.id_categoria = S.id_categoria
-                LEFT JOIN Budget B ON S.id_sottocategoria = B.id_sottocategoria AND B.id_famiglia = C.id_famiglia AND B.periodo = 'Mensile'
+                LEFT JOIN Budget_Storico BS ON S.id_sottocategoria = BS.id_sottocategoria 
+                    AND BS.id_famiglia = C.id_famiglia 
+                    AND BS.anno = ? 
+                    AND BS.mese = ?
+                LEFT JOIN Budget B ON S.id_sottocategoria = B.id_sottocategoria 
+                    AND B.id_famiglia = C.id_famiglia 
+                    AND B.periodo = 'Mensile'
                 LEFT JOIN (
                     SELECT
                         T.id_sottocategoria,
@@ -1562,7 +1568,7 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese):
                 ) AS T_SPESE ON S.id_sottocategoria = T_SPESE.id_sottocategoria
                 WHERE C.id_famiglia = ?
                 ORDER BY C.nome_categoria, S.nome_sottocategoria;
-            """, (id_famiglia, data_inizio, data_fine, id_famiglia, data_inizio, data_fine, id_famiglia))
+            """, (anno, mese, id_famiglia, data_inizio, data_fine, id_famiglia, data_inizio, data_fine, id_famiglia))
             
             riepilogo = {}
             for row in cur.fetchall():
@@ -1608,6 +1614,7 @@ def salva_budget_mese_corrente(id_famiglia, anno, mese):
             cur = con.cursor()
             cur.execute("PRAGMA foreign_keys = ON;")
             dati_da_salvare = []
+            # Salva per ogni sottocategoria
             for cat_id, cat_data in riepilogo_corrente.items():
                 for sub_data in cat_data['sottocategorie']:
                     dati_da_salvare.append((
@@ -1625,6 +1632,67 @@ def salva_budget_mese_corrente(id_famiglia, anno, mese):
     except Exception as e:
         print(f"❌ Errore generico durante la storicizzazione del budget: {e}")
         return False
+
+
+def storicizza_budget_retroattivo(id_famiglia):
+    """
+    Storicizza automaticamente i budget per tutti i mesi passati con transazioni.
+    Usa i limiti correnti dalla tabella Budget come baseline per i mesi storici.
+    Questa funzione dovrebbe essere chiamata una sola volta per popolare Budget_Storico.
+    """
+    try:
+        oggi = datetime.date.today()
+        
+        # Ottieni tutti i mesi con transazioni
+        periodi = ottieni_anni_mesi_storicizzati(id_famiglia)
+        if not periodi:
+            print("Nessun periodo storico trovato.")
+            return True
+        
+        mesi_storicizzati = 0
+        mesi_saltati = 0
+        
+        with sqlite3.connect(DB_FILE) as con:
+            cur = con.cursor()
+            
+            for periodo in periodi:
+                anno = periodo['anno']
+                mese = periodo['mese']
+                
+                # Salta il mese corrente (verrà storicizzato normalmente)
+                if anno == oggi.year and mese == oggi.month:
+                    continue
+                
+                # Salta i mesi futuri
+                if anno > oggi.year or (anno == oggi.year and mese > oggi.month):
+                    continue
+                
+                # Controlla se il mese è già storicizzato
+                cur.execute("""
+                    SELECT COUNT(*) FROM Budget_Storico 
+                    WHERE id_famiglia = ? AND anno = ? AND mese = ?
+                """, (id_famiglia, anno, mese))
+                
+                if cur.fetchone()[0] > 0:
+                    mesi_saltati += 1
+                    continue
+                
+                # Storicizza il mese usando i limiti correnti
+                if salva_budget_mese_corrente(id_famiglia, anno, mese):
+                    mesi_storicizzati += 1
+                    print(f"  Storicizzato {anno}-{mese:02d}")
+                else:
+                    print(f"  Errore storicizzando {anno}-{mese:02d}")
+        
+        print(f"\nStoricizzazione retroattiva completata:")
+        print(f"  - Mesi storicizzati: {mesi_storicizzati}")
+        print(f"  - Mesi già presenti: {mesi_saltati}")
+        return True
+        
+    except Exception as e:
+        print(f"Errore durante la storicizzazione retroattiva: {e}")
+        return False
+
 
 
 def ottieni_anni_mesi_storicizzati(id_famiglia):

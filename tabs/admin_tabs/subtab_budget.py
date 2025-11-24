@@ -2,11 +2,12 @@ import flet as ft
 import datetime
 # Importa solo le funzioni DB necessarie per QUESTA scheda
 from db.gestione_db import (
-    ottieni_categorie,
+    ottieni_categorie_e_sottocategorie,
     ottieni_budget_famiglia,
     imposta_budget,
     salva_budget_mese_corrente
 )
+from utils.styles import AppStyles, AppColors
 
 
 class AdminSubTabBudget(ft.Column):
@@ -18,7 +19,7 @@ class AdminSubTabBudget(ft.Column):
         # --- Controlli della Scheda ---
 
         # 1. Elenco Budget
-        self.lv_admin_budget = ft.Column(spacing=10)
+        self.lv_admin_budget = ft.Column(spacing=20) # Aumentato spacing per separare meglio le categorie
         self.txt_admin_totale_budget = ft.Text(size=16, weight=ft.FontWeight.BOLD)
 
         # 2. Controlli Storicizzazione
@@ -43,8 +44,9 @@ class AdminSubTabBudget(ft.Column):
         # --- Layout della Scheda ---
         self.controls = [
             ft.Text("Gestione Budget Mensile", size=24, weight=ft.FontWeight.BOLD),
-            ft.Text("Imposta un limite di spesa mensile per categoria (0 per nessun limite).", size=12,
+            ft.Text("Imposta un limite di spesa mensile per SOTTOCATEGORIA (0 per nessun limite).", size=12,
                     color=ft.Colors.GREY_500),
+            ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
             self.lv_admin_budget,  # Contenitore per i campi di testo
             ft.Divider(height=10),
             self.txt_admin_totale_budget,
@@ -80,51 +82,83 @@ class AdminSubTabBudget(ft.Column):
         self.lv_admin_budget.controls.clear()
 
         try:
-            categorie = ottieni_categorie(famiglia_id)
+            # Recupera struttura completa categorie/sottocategorie
+            dati_categorie = ottieni_categorie_e_sottocategorie(famiglia_id)
             budget_impostati = ottieni_budget_famiglia(famiglia_id)
 
-            # Mappa i budget per un accesso rapido
-            mappa_budget = {b['id_categoria']: b['importo_limite'] for b in budget_impostati}
+            # Mappa i budget per un accesso rapido usando id_sottocategoria
+            mappa_budget = {b['id_sottocategoria']: b['importo_limite'] for b in budget_impostati}
 
-            if not categorie:
+            if not dati_categorie:
                 self.lv_admin_budget.controls.append(ft.Text("Nessuna categoria trovata. Creane una prima."))
 
             totale_budget_impostato = 0.0
 
-            for cat in categorie:
-                id_cat = cat['id_categoria']
-                nome_cat = cat['nome_categoria']
-                limite_attuale = mappa_budget.get(id_cat, 0.0)
-                totale_budget_impostato += limite_attuale
+            # Itera sulle categorie
+            for id_cat, cat_data in dati_categorie.items():
+                nome_cat = cat_data['nome_categoria']
+                sottocategorie = cat_data['sottocategorie']
+                
+                if not sottocategorie:
+                    continue
 
-                txt_limite = ft.TextField(
-                    label=nome_cat,
-                    prefix="€",
-                    value=f"{limite_attuale:.2f}",
-                    keyboard_type=ft.KeyboardType.NUMBER,
-                    width=200
-                )
+                # Crea header categoria
+                header_cat = ft.Text(nome_cat, size=18, weight=ft.FontWeight.BOLD, color=AppColors.PRIMARY)
+                
+                # Container per le sottocategorie di questa categoria
+                container_sottocategorie = ft.Column(spacing=10)
 
-                btn_salva = ft.IconButton(
-                    icon=ft.Icons.SAVE,
-                    tooltip="Salva Limite",
-                    data={'id_categoria': id_cat, 'textfield': txt_limite},
-                    on_click=self._salva_budget_categoria
-                )
+                for sub in sottocategorie:
+                    id_sub = sub['id_sottocategoria']
+                    nome_sub = sub['nome_sottocategoria']
+                    
+                    limite_attuale = mappa_budget.get(id_sub, 0.0)
+                    totale_budget_impostato += limite_attuale
 
+                    txt_limite = ft.TextField(
+                        label=nome_sub,
+                        prefix="€",
+                        value=f"{limite_attuale:.2f}",
+                        keyboard_type=ft.KeyboardType.NUMBER,
+                        width=200,
+                        text_size=14,
+                        content_padding=10,
+                        height=40
+                    )
+
+                    btn_salva = ft.IconButton(
+                        icon=ft.Icons.SAVE,
+                        tooltip="Salva Limite",
+                        data={'id_sottocategoria': id_sub, 'textfield': txt_limite, 'nome_sottocategoria': nome_sub},
+                        on_click=self._salva_budget_sottocategoria,
+                        icon_size=20
+                    )
+
+                    container_sottocategorie.controls.append(
+                        ft.Row([txt_limite, btn_salva], vertical_alignment=ft.CrossAxisAlignment.CENTER)
+                    )
+                
+                # Aggiungi il blocco categoria alla lista principale
                 self.lv_admin_budget.controls.append(
-                    ft.Row([txt_limite, btn_salva], vertical_alignment=ft.CrossAxisAlignment.START)
+                    ft.Container(
+                        content=ft.Column([header_cat, container_sottocategorie]),
+                        padding=10,
+                        border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                        border_radius=10
+                    )
                 )
 
             self.txt_admin_totale_budget.value = f"Budget Mensile Totale: {totale_budget_impostato:.2f} €"
 
         except Exception as e:
             self.lv_admin_budget.controls.append(ft.Text(f"Errore caricamento budget: {e}"))
+            print(f"Errore caricamento budget: {e}")
 
         # L'aggiornamento UI è gestito dal controller globale
 
-    def _salva_budget_categoria(self, e):
-        id_categoria = e.control.data['id_categoria']
+    def _salva_budget_sottocategoria(self, e):
+        id_sottocategoria = e.control.data['id_sottocategoria']
+        nome_sottocategoria = e.control.data['nome_sottocategoria']
         txt_field = e.control.data['textfield']
 
         try:
@@ -134,11 +168,13 @@ class AdminSubTabBudget(ft.Column):
                 raise ValueError("Limite negativo")
 
             famiglia_id = self.controller.get_family_id()
-            success = imposta_budget(famiglia_id, id_categoria, importo_limite)
+            # Ora passiamo id_sottocategoria
+            success = imposta_budget(famiglia_id, id_sottocategoria, importo_limite)
 
             if success:
-                self.controller.show_snack_bar(f"Budget per {txt_field.label} salvato!", success=True)
+                self.controller.show_snack_bar(f"Budget per {nome_sottocategoria} salvato!", success=True)
                 txt_field.error_text = None
+                # Aggiorna il totale (potremmo farlo in modo più efficiente, ma update_all_views è sicuro)
                 self.controller.update_all_views()
             else:
                 raise Exception("Errore salvataggio DB")

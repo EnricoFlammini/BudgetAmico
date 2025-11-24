@@ -8,8 +8,8 @@ if not os.path.exists(APP_DATA_DIR):
 DB_FILE = os.path.join(APP_DATA_DIR, 'budget_amico.db')
 
 # --- SCHEMA DATABASE ---
-# Versione 2: Aggiunta Sottocategorie e refactoring Budget/Transazioni
-SCHEMA_VERSION = 7
+# Versione 8: Budget_Storico usa id_sottocategoria invece di id_categoria
+SCHEMA_VERSION = 8
 
 TABLES = {
     "Utenti": """
@@ -131,13 +131,13 @@ TABLES = {
         CREATE TABLE Budget_Storico (
             id_storico INTEGER PRIMARY KEY AUTOINCREMENT,
             id_famiglia INTEGER NOT NULL,
-            id_categoria INTEGER NOT NULL,
-            nome_categoria TEXT NOT NULL,
+            id_sottocategoria INTEGER NOT NULL,
+            nome_sottocategoria TEXT NOT NULL,
             anno INTEGER NOT NULL,
             mese INTEGER NOT NULL,
             importo_limite REAL NOT NULL,
             importo_speso REAL NOT NULL,
-            UNIQUE(id_famiglia, id_categoria, anno, mese)
+            UNIQUE(id_famiglia, id_sottocategoria, anno, mese)
         );
     """,
     "Prestiti": """

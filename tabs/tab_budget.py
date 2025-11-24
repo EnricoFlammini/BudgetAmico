@@ -1,5 +1,5 @@
 import flet as ft
-from db.gestione_db import ottieni_riepilogo_budget_mensile
+from db.gestione_db import ottieni_riepilogo_budget_mensile, ottieni_anni_mesi_storicizzati
 import datetime
 from utils.styles import AppStyles, AppColors
 
@@ -10,10 +10,18 @@ class BudgetTab(ft.Container):
         self.controller = controller
         self.page = controller.page
 
-        self.lv_budget = ft.Column(
-            scroll=ft.ScrollMode.ADAPTIVE,
+        # Filtro per mese
+        self.dd_mese_filtro = ft.Dropdown(
+            on_change=self._filtro_mese_cambiato,
+            border_color=ft.Colors.OUTLINE,
+            text_size=14,
+            content_padding=10
+        )
+
+        self.lv_budget = ft.ListView(
             expand=True,
-            spacing=10
+            spacing=10,
+            padding=10
         )
         self.content = ft.Column(expand=True, spacing=10)
 
@@ -22,12 +30,16 @@ class BudgetTab(ft.Container):
         theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
         self.content.controls = self.build_controls()
 
+        # Popola il filtro sempre per aggiornare i mesi disponibili
+        self._popola_filtro_mese()
+
         id_famiglia = self.controller.get_family_id()
         if not id_famiglia:
             return
 
-        oggi = datetime.date.today()
-        riepilogo = ottieni_riepilogo_budget_mensile(id_famiglia, oggi.year, oggi.month)
+        # Usa il mese selezionato dal dropdown
+        anno, mese = self._get_anno_mese_selezionato()
+        riepilogo = ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese)
         self.lv_budget.controls.clear()
 
         if not riepilogo:
@@ -43,12 +55,56 @@ class BudgetTab(ft.Container):
     def build_controls(self):
         """Costruisce e restituisce la lista di controlli per la scheda."""
         loc = self.controller.loc
+        self.dd_mese_filtro.label = loc.get("filter_by_month")
+        
         return [
             AppStyles.header_text(loc.get("budget_management")),
             AppStyles.body_text(loc.get("budget_description")),
+            ft.Container(
+                content=self.dd_mese_filtro,
+                padding=ft.padding.only(top=10, bottom=10)
+            ),
             ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
             self.lv_budget
         ]
+
+    def _popola_filtro_mese(self):
+        """Popola il dropdown con i mesi disponibili."""
+        id_famiglia = self.controller.get_family_id()
+        if not id_famiglia:
+            return
+
+        # Salva la selezione corrente prima di aggiornare le opzioni
+        selezione_corrente = self.dd_mese_filtro.value
+
+        periodi = ottieni_anni_mesi_storicizzati(id_famiglia)
+        oggi = datetime.date.today()
+        periodo_corrente = {'anno': oggi.year, 'mese': oggi.month}
+        if periodo_corrente not in periodi:
+            periodi.insert(0, periodo_corrente)
+
+        self.dd_mese_filtro.options = [
+            ft.dropdown.Option(
+                key=f"{p['anno']}-{p['mese']}",
+                text=datetime.date(p['anno'], p['mese'], 1).strftime("%B %Y")
+            ) for p in periodi
+        ]
+        
+        # Ripristina la selezione precedente se ancora valida, altrimenti usa il mese corrente
+        if selezione_corrente and any(opt.key == selezione_corrente for opt in self.dd_mese_filtro.options):
+            self.dd_mese_filtro.value = selezione_corrente
+        else:
+            self.dd_mese_filtro.value = f"{oggi.year}-{oggi.month}"
+
+    def _get_anno_mese_selezionato(self):
+        if self.dd_mese_filtro.value:
+            return map(int, self.dd_mese_filtro.value.split('-'))
+        oggi = datetime.date.today()
+        return oggi.year, oggi.month
+
+    def _filtro_mese_cambiato(self, e):
+        self.update_view_data()
+        self.page.update()
 
     def _crea_widget_categoria(self, cat_data, theme):
         loc = self.controller.loc
