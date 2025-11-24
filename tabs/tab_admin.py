@@ -2,7 +2,8 @@ import flet as ft
 import google_auth_manager
 from functools import partial
 from utils.styles import AppColors, AppStyles
-from db.gestione_db import ottieni_categorie_e_sottocategorie, ottieni_membri_famiglia, rimuovi_utente_da_famiglia
+from db.gestione_db import ottieni_categorie_e_sottocategorie, ottieni_membri_famiglia, rimuovi_utente_da_famiglia, ottieni_budget_famiglia
+
 from utils.config_manager import get_smtp_settings, save_smtp_settings
 from utils.email_sender import send_email
 
@@ -49,7 +50,7 @@ class AdminTab(ft.Container):
         self.google_auth_button = ft.ElevatedButton(text="", on_click=None)
         self.sync_button = ft.ElevatedButton(text="", on_click=None)
 
-        self.lv_categorie = ft.Column(scroll=ft.ScrollMode.AUTO)
+        self.lv_categorie = ft.Column(scroll=ft.ScrollMode.AUTO, expand=True)
         self.lv_membri = ft.Column(scroll=ft.ScrollMode.AUTO)
 
         self.content = ft.Column(
@@ -63,7 +64,7 @@ class AdminTab(ft.Container):
             ft.Tab(
                 text=loc.get("categories_management"),
                 icon=ft.Icons.CATEGORY,
-                content=ft.Column([
+                content=ft.Column(expand=True, controls=[
                     ft.Row([
                         AppStyles.header_text(loc.get("categories_management")),
                         ft.Row([
@@ -142,6 +143,14 @@ class AdminTab(ft.Container):
 
         self.lv_categorie.controls.clear()
         categorie_data = ottieni_categorie_e_sottocategorie(id_famiglia)
+        
+
+        # Recupera i budget impostati
+
+        budget_impostati = ottieni_budget_famiglia(id_famiglia)
+
+        mappa_budget = {b['id_sottocategoria']: b['importo_limite'] for b in budget_impostati}
+
 
         if not categorie_data:
             self.lv_categorie.controls.append(AppStyles.body_text(loc.get("no_categories_found")))
@@ -152,7 +161,8 @@ class AdminTab(ft.Container):
                     sottocategorie_list.controls.append(
                         ft.Row([
                             ft.Icon(ft.Icons.SUBDIRECTORY_ARROW_RIGHT, size=16, color=AppColors.TEXT_SECONDARY),
-                            ft.Text(sub['nome_sottocategoria'], expand=True),
+                            ft.Text(f"{sub['nome_sottocategoria']}: €{mappa_budget.get(sub['id_sottocategoria'], 0.0):.2f}", expand=True),
+
                             ft.IconButton(icon=ft.Icons.EDIT, icon_size=16, tooltip=loc.get("edit"), data=sub, icon_color=AppColors.PRIMARY, on_click=lambda e: self.controller.admin_dialogs.apri_dialog_sottocategoria(sub_cat_data=e.control.data)),
                             ft.IconButton(icon=ft.Icons.DELETE, icon_size=16, tooltip=loc.get("delete"), icon_color=AppColors.ERROR, data=sub['id_sottocategoria'], on_click=lambda e: self.controller.open_confirm_delete_dialog(partial(self.controller.admin_dialogs.elimina_sottocategoria_cliccato, e))),
                         ])
@@ -182,6 +192,12 @@ class AdminTab(ft.Container):
                         ]
                     )
                 )
+
+
+            # Aggiungi spazio in basso per evitare interferenze con il pulsante +
+
+            self.lv_categorie.controls.append(ft.Container(height=80))
+
 
     def update_tab_membri(self):
         loc = self.controller.loc

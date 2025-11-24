@@ -66,7 +66,9 @@ class AdminSubTabBudget(ft.Column):
                     )
                 ],
                 alignment=ft.MainAxisAlignment.START
-            )
+            ),
+            # Spazio in basso per evitare interferenze con il pulsante +
+            ft.Container(height=80)
         ]
 
         self.expand = True
@@ -115,27 +117,28 @@ class AdminSubTabBudget(ft.Column):
                     limite_attuale = mappa_budget.get(id_sub, 0.0)
                     totale_budget_impostato += limite_attuale
 
-                    txt_limite = ft.TextField(
-                        label=nome_sub,
-                        prefix="€",
-                        value=f"{limite_attuale:.2f}",
-                        keyboard_type=ft.KeyboardType.NUMBER,
-                        width=200,
-                        text_size=14,
-                        content_padding=10,
-                        height=40
+                    # Testo con nome sottocategoria e valore budget
+                    txt_nome_budget = ft.Text(
+                        f"{nome_sub}: €{limite_attuale:.2f}",
+                        size=14,
+                        weight=ft.FontWeight.W_500,
+                        width=250
                     )
 
-                    btn_salva = ft.IconButton(
-                        icon=ft.Icons.SAVE,
-                        tooltip="Salva Limite",
-                        data={'id_sottocategoria': id_sub, 'textfield': txt_limite, 'nome_sottocategoria': nome_sub},
-                        on_click=self._salva_budget_sottocategoria,
+                    btn_modifica = ft.IconButton(
+                        icon=ft.Icons.EDIT,
+                        tooltip="Modifica Limite",
+                        data={'id_sottocategoria': id_sub, 'nome_sottocategoria': nome_sub, 'limite_attuale': limite_attuale},
+                        on_click=self._modifica_budget_sottocategoria,
                         icon_size=20
                     )
 
                     container_sottocategorie.controls.append(
-                        ft.Row([txt_limite, btn_salva], vertical_alignment=ft.CrossAxisAlignment.CENTER)
+                        ft.Row(
+                            [txt_nome_budget, btn_modifica], 
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=10
+                        )
                     )
                 
                 # Aggiungi il blocco categoria alla lista principale
@@ -156,35 +159,63 @@ class AdminSubTabBudget(ft.Column):
 
         # L'aggiornamento UI è gestito dal controller globale
 
-    def _salva_budget_sottocategoria(self, e):
+    def _modifica_budget_sottocategoria(self, e):
+        """Apre un dialog per modificare il budget di una sottocategoria"""
         id_sottocategoria = e.control.data['id_sottocategoria']
         nome_sottocategoria = e.control.data['nome_sottocategoria']
-        txt_field = e.control.data['textfield']
+        limite_attuale = e.control.data['limite_attuale']
 
-        try:
-            importo_str = txt_field.value.replace(",", ".")
-            importo_limite = float(importo_str)
-            if importo_limite < 0:
-                raise ValueError("Limite negativo")
+        # Campo di testo per il nuovo valore
+        txt_nuovo_limite = ft.TextField(
+            label="Nuovo Limite",
+            prefix="€",
+            value=f"{limite_attuale:.2f}",
+            keyboard_type=ft.KeyboardType.NUMBER,
+            width=200,
+            autofocus=True
+        )
 
-            famiglia_id = self.controller.get_family_id()
-            # Ora passiamo id_sottocategoria
-            success = imposta_budget(famiglia_id, id_sottocategoria, importo_limite)
+        def salva_modifica(e_dialog):
+            try:
+                importo_str = txt_nuovo_limite.value.replace(",", ".")
+                importo_limite = float(importo_str)
+                if importo_limite < 0:
+                    raise ValueError("Limite negativo")
 
-            if success:
-                self.controller.show_snack_bar(f"Budget per {nome_sottocategoria} salvato!", success=True)
-                txt_field.error_text = None
-                # Aggiorna il totale (potremmo farlo in modo più efficiente, ma update_all_views è sicuro)
-                self.controller.update_all_views()
-            else:
-                raise Exception("Errore salvataggio DB")
+                famiglia_id = self.controller.get_family_id()
+                success = imposta_budget(famiglia_id, id_sottocategoria, importo_limite)
 
-        except Exception as ex:
-            print(f"Errore salvataggio budget: {ex}")
-            self.controller.show_snack_bar(f"Errore: Inserire un importo valido (es. 250.50)", success=False)
-            txt_field.error_text = "Non valido"
-            if self.page:
-                txt_field.update()
+                if success:
+                    self.controller.show_snack_bar(f"Budget per {nome_sottocategoria} salvato!", success=True)
+                    dialog.open = False
+                    self.page.update()
+                    self.controller.update_all_views()
+                else:
+                    raise Exception("Errore salvataggio DB")
+
+            except Exception as ex:
+                print(f"Errore salvataggio budget: {ex}")
+                self.controller.show_snack_bar(f"Errore: Inserire un importo valido (es. 250.50)", success=False)
+                txt_nuovo_limite.error_text = "Non valido"
+                txt_nuovo_limite.update()
+
+        def chiudi_dialog(e_dialog):
+            dialog.open = False
+            self.page.update()
+
+        dialog = ft.AlertDialog(
+            title=ft.Text(f"Modifica Budget: {nome_sottocategoria}"),
+            content=txt_nuovo_limite,
+            actions=[
+                ft.TextButton("Annulla", on_click=chiudi_dialog),
+                ft.ElevatedButton("Salva", on_click=salva_modifica)
+            ],
+            actions_alignment=ft.MainAxisAlignment.END
+        )
+
+        self.page.overlay.append(dialog)
+        dialog.open = True
+        self.page.update()
 
     def _clicca_salva_storico_selezionato(self, e):
         famiglia_id = self.controller.get_family_id()
