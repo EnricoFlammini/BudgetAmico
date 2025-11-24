@@ -109,7 +109,8 @@ pip install flet flet-desktop google-api-python-client google-auth-httplib2 goog
 - `google-api-python-client` - API Google Drive e Gmail
 - `google-auth-httplib2` e `google-auth-oauthlib` - Autenticazione Google
 - `openpyxl` e `pandas` - Esportazione Excel
-- `yfinance` - Sincronizzazione prezzi asset finanziari (v0.10+)
+- `requests` - Chiamate HTTP per recupero prezzi asset (v0.10+)
+- `python-dotenv` - Gestione variabili d'ambiente (opzionale)
 
 ---
 
@@ -147,11 +148,22 @@ L'applicazione si avvierà in una finestra desktop.
 
 Per creare un eseguibile standalone usando PyInstaller:
 
-```bash
-pyinstaller "Budget Amico.spec"
+**Windows:**
+```powershell
+.\build.ps1
 ```
 
-L'eseguibile sarà disponibile nella cartella `dist/`.
+**Manuale:**
+```bash
+pyinstaller --name "Budget Amico" --windowed --onedir --clean --noconfirm --add-data "assets;assets" --add-data "credentials.json;." --icon "assets/icon.ico" --hidden-import=yfinance --hidden-import=python_dotenv main.py
+```
+
+L'eseguibile sarà disponibile in `dist\Budget Amico\Budget Amico.exe`.
+
+**Note sulla Build:**
+- Il modulo `python-dotenv` è opzionale nell'eseguibile (gestito con try/except)
+- I prezzi degli asset vengono recuperati tramite chiamate HTTP dirette alle API Yahoo Finance
+- Non sono richieste dipendenze complesse come `curl_cffi`
 
 ---
 
@@ -199,11 +211,11 @@ BudgetAmico/
 -   **Framework GUI**: [Flet](https://flet.dev/) - Framework Python per creare app multi-piattaforma
 -   **Linguaggio**: Python 3.10+
 -   **Database**: SQLite con gestione migrazioni automatiche
--   **API**: Google Drive API, Gmail API
+-   **API**: Google Drive API, Gmail API, Yahoo Finance API
 -   **Librerie**:
     - `pandas` e `openpyxl` - Esportazione dati
     - `google-auth` - Autenticazione OAuth2
-    - `yfinance` - Integrazione prezzi asset finanziari
+    - `requests` - Chiamate HTTP per recupero prezzi asset
     - `pyinstaller` - Build eseguibili
 
 ---
@@ -216,9 +228,11 @@ La versione 0.10 introduce un tab dedicato alla gestione degli investimenti:
 
 -   **Separazione Completa**: I conti di tipo "Investimento" sono ora gestiti esclusivamente nel tab "Investimenti", separati dai conti personali
 -   **Gestione Autonoma**: Creazione, modifica ed eliminazione conti investimento direttamente dal tab
--   **Sincronizzazione Prezzi**: Integrazione con yfinance per aggiornare automaticamente i prezzi degli asset
+-   **Sincronizzazione Prezzi**: Recupero automatico prezzi asset tramite API Yahoo Finance
+    -   Implementazione con chiamate HTTP dirette (senza dipendenze esterne complesse)
     -   Sincronizzazione singola per ogni asset
     -   Sincronizzazione globale per tutti gli asset
+    -   Compatibile con PyInstaller per eseguibili standalone
 -   **Vista Unificata**: Tutti i portafogli visibili in un'unica schermata con statistiche aggregate
 -   **Gestione Errori**: Supporto per ticker internazionali con suffissi di mercato (es. `.MI`, `.L`, `.DE`)
 

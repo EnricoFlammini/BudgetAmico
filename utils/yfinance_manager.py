@@ -1,14 +1,15 @@
 """
-Modulo per l'integrazione con yfinance per ottenere i prezzi degli asset finanziari.
+Modulo per recuperare i prezzi degli asset finanziari usando chiamate HTTP dirette.
+Usa solo 'requests' per massima compatibilità con PyInstaller.
 """
-import yfinance as yf
 from typing import Optional, Dict, List
-import datetime
+import requests
+import json
 
 
 def ottieni_prezzo_asset(ticker: str) -> Optional[float]:
     """
-    Recupera il prezzo corrente di un asset tramite yfinance.
+    Recupera il prezzo corrente di un asset tramite Yahoo Finance API.
     
     Args:
         ticker: Il simbolo ticker dell'asset (es. "AAPL", "MSFT", "GOOGL")
@@ -17,24 +18,40 @@ def ottieni_prezzo_asset(ticker: str) -> Optional[float]:
         Il prezzo corrente dell'asset, o None se non trovato o in caso di errore
     """
     try:
-        asset = yf.Ticker(ticker)
-        info = asset.info
+        # URL dell'API Yahoo Finance (v8)
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
         
-        # Prova diversi campi per ottenere il prezzo
-        prezzo = (
-            info.get('currentPrice') or 
-            info.get('regularMarketPrice') or 
-            info.get('previousClose')
-        )
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
         
-        if prezzo and prezzo > 0:
-            return float(prezzo)
+        params = {
+            'interval': '1d',
+            'range': '1d'
+        }
         
-        # Se info non funziona, prova con history
-        hist = asset.history(period="1d")
-        if not hist.empty:
-            return float(hist['Close'].iloc[-1])
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        # Estrai il prezzo corrente
+        if 'chart' in data and 'result' in data['chart'] and data['chart']['result']:
+            result = data['chart']['result'][0]
             
+            # Prova a ottenere il prezzo corrente
+            if 'meta' in result and 'regularMarketPrice' in result['meta']:
+                return float(result['meta']['regularMarketPrice'])
+            
+            # Fallback: usa l'ultimo prezzo di chiusura
+            if 'indicators' in result and 'quote' in result['indicators']:
+                quotes = result['indicators']['quote'][0]
+                if 'close' in quotes and quotes['close']:
+                    # Prendi l'ultimo valore non-None
+                    closes = [c for c in quotes['close'] if c is not None]
+                    if closes:
+                        return float(closes[-1])
+        
         return None
         
     except Exception as e:
@@ -71,20 +88,36 @@ def ottieni_info_asset(ticker: str) -> Optional[Dict]:
         Dizionario con informazioni sull'asset, o None se non trovato
     """
     try:
-        asset = yf.Ticker(ticker)
-        info = asset.info
+        # URL per quote summary
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
         
-        return {
-            'nome': info.get('longName') or info.get('shortName'),
-            'prezzo_corrente': (
-                info.get('currentPrice') or 
-                info.get('regularMarketPrice') or 
-                info.get('previousClose')
-            ),
-            'valuta': info.get('currency'),
-            'tipo': info.get('quoteType'),
-            'cambio_percentuale': info.get('regularMarketChangePercent'),
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
+        
+        params = {
+            'interval': '1d',
+            'range': '1d'
+        }
+        
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if 'chart' in data and 'result' in data['chart'] and data['chart']['result']:
+            result = data['chart']['result'][0]
+            meta = result.get('meta', {})
+            
+            return {
+                'nome': meta.get('longName') or meta.get('shortName') or ticker,
+                'prezzo_corrente': meta.get('regularMarketPrice'),
+                'valuta': meta.get('currency'),
+                'tipo': meta.get('instrumentType'),
+                'cambio_percentuale': None,  # Non disponibile in questa API
+            }
+        
+        return None
         
     except Exception as e:
         print(f"Errore nel recupero delle info per {ticker}: {e}")
@@ -102,11 +135,7 @@ def verifica_ticker_valido(ticker: str) -> bool:
         True se il ticker è valido, False altrimenti
     """
     try:
-        asset = yf.Ticker(ticker)
-        info = asset.info
-        
-        # Verifica che ci siano dati significativi
-        return bool(info.get('regularMarketPrice') or info.get('currentPrice'))
-        
+        prezzo = ottieni_prezzo_asset(ticker)
+        return prezzo is not None and prezzo > 0
     except Exception:
         return False

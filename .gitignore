@@ -16,7 +16,7 @@ dist/
 # Credentials and sensitive data (CRITICAL!)
 credentials.json
 token.json
-budget_familiare.db
+budget_amico.db
 
 # IDE and editor files
 .vscode/

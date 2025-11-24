@@ -16,8 +16,13 @@ TOKEN_FILE = os.path.join(APP_DATA_DIR, 'token.json')
 
 # Il file delle credenziali viene cercato prima nella cartella dell'eseguibile, poi in AppData
 if getattr(sys, 'frozen', False):
-    # Se l'app è un eseguibile, il file è nella cartella temporanea _MEIPASS
-    CREDENTIALS_FILE = os.path.join(sys._MEIPASS, 'credentials.json')
+    # Se l'app è un eseguibile
+    if hasattr(sys, '_MEIPASS'):
+        # PyInstaller
+        CREDENTIALS_FILE = os.path.join(sys._MEIPASS, 'credentials.json')
+    else:
+        # cx_Freeze
+        CREDENTIALS_FILE = os.path.join(os.path.dirname(sys.executable), 'credentials.json')
 else:
     # Se è uno script, è nella root del progetto
     CREDENTIALS_FILE = 'credentials.json'
