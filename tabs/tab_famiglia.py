@@ -64,8 +64,8 @@ class FamigliaTab(ft.Container):
         self.dt_transazioni_famiglia.data_row_color = {"hovered": ft.Colors.with_opacity(0.1, theme.primary)}
         self.dt_transazioni_famiglia.border = ft.border.all(1, ft.Colors.OUTLINE_VARIANT)
 
-        if is_initial_load:
-            self._popola_filtro_mese()
+        # Popola il filtro sempre per aggiornare i mesi disponibili
+        self._popola_filtro_mese()
 
         famiglia_id = self.controller.get_family_id()
         ruolo = self.controller.get_user_role()
@@ -192,6 +192,9 @@ class FamigliaTab(ft.Container):
         id_famiglia = self.controller.get_family_id()
         if not id_famiglia: return
 
+        # Salva la selezione corrente prima di aggiornare le opzioni
+        selezione_corrente = self.dd_mese_filtro.value
+
         periodi = ottieni_anni_mesi_storicizzati(id_famiglia)
         oggi = datetime.date.today()
         periodo_corrente = {'anno': oggi.year, 'mese': oggi.month}
@@ -202,7 +205,12 @@ class FamigliaTab(ft.Container):
             ft.dropdown.Option(key=f"{p['anno']}-{p['mese']}", text=datetime.date(p['anno'], p['mese'], 1).strftime("%B %Y"))
             for p in periodi
         ]
-        self.dd_mese_filtro.value = f"{oggi.year}-{oggi.month}"
+        
+        # Ripristina la selezione precedente se ancora valida, altrimenti usa il mese corrente
+        if selezione_corrente and any(opt.key == selezione_corrente for opt in self.dd_mese_filtro.options):
+            self.dd_mese_filtro.value = selezione_corrente
+        else:
+            self.dd_mese_filtro.value = f"{oggi.year}-{oggi.month}"
 
     def _get_anno_mese_selezionato(self):
         if self.dd_mese_filtro.value:

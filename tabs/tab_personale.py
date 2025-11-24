@@ -42,9 +42,8 @@ class PersonaleTab(ft.Container):
         # Ricostruisce l'interfaccia con le traduzioni corrette ogni volta
         self.content.controls = self.build_controls()
 
-        # Popola il filtro solo al primo caricamento per evitare refresh continui
-        if is_initial_load:
-            self._popola_filtro_mese()
+        # Popola il filtro sempre per aggiornare i mesi disponibili
+        self._popola_filtro_mese()
 
         utente_id = self.controller.get_user_id()
         if not utente_id:
@@ -148,6 +147,9 @@ class PersonaleTab(ft.Container):
         if not id_famiglia:
             return
 
+        # Salva la selezione corrente prima di aggiornare le opzioni
+        selezione_corrente = self.dd_mese_filtro.value
+
         periodi = ottieni_anni_mesi_storicizzati(id_famiglia)
         oggi = datetime.date.today()
         periodo_corrente = {'anno': oggi.year, 'mese': oggi.month}
@@ -160,7 +162,12 @@ class PersonaleTab(ft.Container):
                 text=datetime.date(p['anno'], p['mese'], 1).strftime("%B %Y")
             ) for p in periodi
         ]
-        self.dd_mese_filtro.value = f"{oggi.year}-{oggi.month}"
+        
+        # Ripristina la selezione precedente se ancora valida, altrimenti usa il mese corrente
+        if selezione_corrente and any(opt.key == selezione_corrente for opt in self.dd_mese_filtro.options):
+            self.dd_mese_filtro.value = selezione_corrente
+        else:
+            self.dd_mese_filtro.value = f"{oggi.year}-{oggi.month}"
 
     def _get_anno_mese_selezionato(self):
         if self.dd_mese_filtro.value:
