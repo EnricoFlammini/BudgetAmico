@@ -378,7 +378,7 @@ class PrestitoDialogs:
                 id_conto_pagamento=id_conto,
                 importo_pagato=importo,
                 data_pagamento=data,
-                sottocategoria_pagamento_id=id_sottocategoria,
+                id_sottocategoria=id_sottocategoria,
                 nome_prestito=self.prestito_per_pagamento['nome']
             )
 

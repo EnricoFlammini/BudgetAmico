@@ -1927,7 +1927,7 @@ def check_e_paga_rate_scadute(id_famiglia):
         return 0
 
 
-def effettua_pagamento_rata(id_prestito, id_conto_pagamento, importo_pagato, data_pagamento, categoria_pagamento_id,
+def effettua_pagamento_rata(id_prestito, id_conto_pagamento, importo_pagato, data_pagamento, id_sottocategoria,
                             nome_prestito=""):
     try:
         with sqlite3.connect(DB_FILE) as con:
@@ -1938,7 +1938,7 @@ def effettua_pagamento_rata(id_prestito, id_conto_pagamento, importo_pagato, dat
             descrizione = f"Pagamento rata {nome_prestito} (Prestito ID: {id_prestito})"
             cur.execute(
                 "INSERT INTO Transazioni (id_conto, id_sottocategoria, data, descrizione, importo) VALUES (?, ?, ?, ?, ?)",
-                (id_conto_pagamento, categoria_pagamento_id, data_pagamento, descrizione, -abs(importo_pagato)))
+                (id_conto_pagamento, id_sottocategoria, data_pagamento, descrizione, -abs(importo_pagato)))
             data_dt = parse_date(data_pagamento)
             cur.execute(
                 "INSERT INTO StoricoPagamentiRate (id_prestito, anno, mese, data_pagamento, importo_pagato) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id_prestito, anno, mese) DO NOTHING",
