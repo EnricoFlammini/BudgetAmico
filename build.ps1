@@ -1,4 +1,5 @@
 # Build script for Budget Amico
+Set-Location $PSScriptRoot
 Write-Host "Building Budget Amico..."
 
 # Clean previous builds
