@@ -9,7 +9,10 @@ from db.gestione_db import (
     admin_imposta_saldo_conto_corrente,
     imposta_conto_default_utente,
     ottieni_conto_default_utente,
-    ottieni_conti_utente  # Importa per popolare il dropdown
+    ottieni_conti_utente,  # Importa per popolare il dropdown
+    ottieni_saldo_iniziale_conto,
+    aggiorna_saldo_iniziale_conto,
+    admin_imposta_saldo_conto_condiviso
 )
 
 
@@ -20,6 +23,7 @@ class ContoDialog(ft.AlertDialog):
         self.page = controller.page
         self.loc = controller.loc
         self.conto_id_in_modifica = None
+        self.is_condiviso_in_modifica = False
 
         # Dialogo Rettifica Saldo (Admin)
         self.txt_nuovo_saldo = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
@@ -197,13 +201,14 @@ class ContoDialog(ft.AlertDialog):
             self.conto_id_in_modifica = conto_data['id_conto']
             self.txt_conto_nome.value = conto_data['nome_conto']
             self.dd_conto_tipo.value = conto_data['tipo']
-            self.dd_conto_tipo.disabled = True  # Non si può cambiare il tipo di un conto esistente
+            self.dd_conto_tipo.disabled = False  # Ora si può cambiare il tipo
             self.txt_conto_iban.value = conto_data['iban']
 
-            # Nascondi sezioni non pertinenti in modifica
+            # Gestione visibilità in base al tipo
+            # Saldo iniziale NON modificabile in edit mode (solo tramite rettifica admin)
             self.container_saldo_iniziale.visible = False
-            self.container_asset_iniziali.visible = False
-
+            self.container_asset_iniziali.visible = (conto_data['tipo'] == 'Investimento')
+            
             self.chk_conto_default.visible = (conto_data['tipo'] not in ['Investimento', 'Fondo Pensione'])
             self.txt_conto_iban.visible = (conto_data['tipo'] != 'Contanti')
             self.chk_conto_default.value = (conto_data['id_conto'] == conto_default_id)
@@ -245,8 +250,9 @@ class ContoDialog(ft.AlertDialog):
             saldo_iniziale = 0.0
             lista_asset_iniziali = []
 
-            # La validazione del saldo iniziale e degli asset avviene solo in modalità creazione
-            if not self.conto_id_in_modifica:
+            # La validazione del saldo iniziale e degli asset avviene sempre (creazione e modifica)
+            # Ma per modifica, solo se il tipo lo richiede
+            if True: # Rimosso check if not self.conto_id_in_modifica
                 if tipo == 'Investimento':
                     for riga_asset_widget in self.lv_asset_iniziali.controls:
                         # Estrai i campi di testo dalla riga
@@ -310,13 +316,26 @@ class ContoDialog(ft.AlertDialog):
             new_conto_id = None
 
             if self.conto_id_in_modifica:
-                success = modifica_conto(self.conto_id_in_modifica, utente_id, nome, tipo, iban)
+                # Passa il saldo_iniziale come valore_manuale solo se il tipo è 'Fondo Pensione'
+                valore_manuale_modifica = saldo_iniziale if tipo == 'Fondo Pensione' else None
+                
+                success, msg = modifica_conto(self.conto_id_in_modifica, utente_id, nome, tipo, iban, valore_manuale=valore_manuale_modifica)
                 messaggio = "modificato" if success else "errore modifica"
                 new_conto_id = self.conto_id_in_modifica
+                
+                if success and tipo != 'Fondo Pensione' and tipo != 'Investimento':
+                    # In modifica NON aggiorniamo più il saldo iniziale da qui.
+                    pass
+
             else:
                 # Passa il saldo_iniziale come valore_manuale solo se il tipo è 'Fondo Pensione'
                 valore_manuale_iniziale = saldo_iniziale if tipo == 'Fondo Pensione' else 0.0
-                new_conto_id = aggiungi_conto(utente_id, nome, tipo, iban, valore_manuale=valore_manuale_iniziale)
+                res = aggiungi_conto(utente_id, nome, tipo, iban, valore_manuale=valore_manuale_iniziale)
+                if isinstance(res, tuple):
+                    new_conto_id, msg = res
+                else:
+                    new_conto_id = res
+                
                 if new_conto_id:
                     success = True
                     messaggio = "aggiunto"
@@ -366,8 +385,9 @@ class ContoDialog(ft.AlertDialog):
 
     # --- Logica per Rettifica Saldo (Admin) ---
 
-    def apri_dialog_rettifica_saldo(self, conto_data):
+    def apri_dialog_rettifica_saldo(self, conto_data, is_condiviso=False):
         self.conto_id_in_modifica = conto_data['id_conto']
+        self.is_condiviso_in_modifica = is_condiviso
         self.dialog_rettifica_saldo.title.value = f"Rettifica: {conto_data['nome_conto']}"
         self.txt_nuovo_saldo.label = "Nuovo Saldo Reale"
         self.txt_nuovo_saldo.value = f"{conto_data['saldo_calcolato']:.2f}"
@@ -386,7 +406,12 @@ class ContoDialog(ft.AlertDialog):
             nuovo_saldo = float(self.txt_nuovo_saldo.value.replace(",", "."))
             id_conto = self.conto_id_in_modifica
 
-            if admin_imposta_saldo_conto_corrente(id_conto, nuovo_saldo):
+            if self.is_condiviso_in_modifica:
+                success = admin_imposta_saldo_conto_condiviso(id_conto, nuovo_saldo)
+            else:
+                success = admin_imposta_saldo_conto_corrente(id_conto, nuovo_saldo)
+
+            if success:
                 self.controller.show_snack_bar("Saldo rettificato con successo!", success=True)
                 self.controller.db_write_operation()
                 self._chiudi_dialog_rettifica(e)

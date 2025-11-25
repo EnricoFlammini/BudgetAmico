@@ -94,7 +94,7 @@ class ContiTab(ft.Container):
         is_fondo_pensione = conto['tipo'] == 'Fondo Pensione'
 
         is_admin = self.controller.get_user_role() == 'admin'
-        is_corrente = conto['tipo'] in ['Corrente', 'Risparmio']
+        is_corrente = conto['tipo'] in ['Corrente', 'Risparmio', 'Contanti']
 
         label_saldo = self.controller.loc.get(
             "value") if is_investimento or is_fondo_pensione else self.controller.loc.get("current_balance")

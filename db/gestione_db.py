@@ -442,6 +442,48 @@ def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valor
             return cur.rowcount > 0, "Conto modificato con successo"
     except Exception as e:
         print(f"❌ Errore generico: {e}")
+        return False, f"Errore generico: {e}"
+
+
+def ottieni_saldo_iniziale_conto(id_conto):
+    """Recupera l'importo della transazione 'Saldo Iniziale' per un conto."""
+    try:
+        with sqlite3.connect(DB_FILE) as con:
+            cur = con.cursor()
+            cur.execute("SELECT importo FROM Transazioni WHERE id_conto = ? AND descrizione = 'Saldo Iniziale'", (id_conto,))
+            res = cur.fetchone()
+            return res[0] if res else 0.0
+    except Exception as e:
+        print(f"❌ Errore recupero saldo iniziale: {e}")
+        return 0.0
+
+
+def aggiorna_saldo_iniziale_conto(id_conto, nuovo_saldo):
+    """
+    Aggiorna la transazione 'Saldo Iniziale' o la crea se non esiste.
+    Se nuovo_saldo è 0 e la transazione esiste, la elimina? O la mette a 0?
+    Meglio metterla a 0 o aggiornarla.
+    """
+    try:
+        with sqlite3.connect(DB_FILE) as con:
+            cur = con.cursor()
+            cur.execute("SELECT id_transazione FROM Transazioni WHERE id_conto = ? AND descrizione = 'Saldo Iniziale'", (id_conto,))
+            res = cur.fetchone()
+            
+            if res:
+                id_transazione = res[0]
+                if nuovo_saldo == 0:
+                    # Opzionale: eliminare la transazione se saldo è 0?
+                    # Per ora aggiorniamo a 0 per mantenere la storia che è stato inizializzato
+                    modifica_transazione(id_transazione, datetime.date.today().strftime('%Y-%m-%d'), "Saldo Iniziale", nuovo_saldo)
+                else:
+                    modifica_transazione(id_transazione, datetime.date.today().strftime('%Y-%m-%d'), "Saldo Iniziale", nuovo_saldo)
+            elif nuovo_saldo != 0:
+                aggiungi_transazione(id_conto, datetime.date.today().strftime('%Y-%m-%d'), "Saldo Iniziale", nuovo_saldo)
+            
+            return True
+    except Exception as e:
+        print(f"❌ Errore aggiornamento saldo iniziale: {e}")
         return False
 
 
@@ -499,6 +541,24 @@ def admin_imposta_saldo_conto_corrente(id_conto, nuovo_saldo):
             return cur.rowcount > 0
     except Exception as e:
         print(f"❌ Errore in admin_imposta_saldo_conto_corrente: {e}")
+        return False
+
+def admin_imposta_saldo_conto_condiviso(id_conto_condiviso, nuovo_saldo):
+    """
+    [SOLO ADMIN] Calcola e imposta la rettifica per forzare un nuovo saldo su un conto CONDIVISO.
+    """
+    try:
+        with sqlite3.connect(DB_FILE) as con:
+            cur = con.cursor()
+            # Calcola il saldo corrente basato solo sulle transazioni
+            cur.execute("SELECT COALESCE(SUM(importo), 0.0) FROM TransazioniCondivise WHERE id_conto_condiviso = ?", (id_conto_condiviso,))
+            saldo_transazioni = cur.fetchone()[0]
+            # La rettifica è la differenza tra il nuovo saldo desiderato e il saldo delle transazioni
+            rettifica = nuovo_saldo - saldo_transazioni
+            cur.execute("UPDATE ContiCondivisi SET rettifica_saldo = ? WHERE id_conto_condiviso = ?", (rettifica, id_conto_condiviso))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"❌ Errore in admin_imposta_saldo_conto_condiviso: {e}")
         return False
 
 # --- Funzioni Conti Condivisi ---
@@ -580,7 +640,7 @@ def ottieni_conti_condivisi_utente(id_utente):
                                CC.tipo,
                                CC.tipo_condivisione,
                                1                             AS is_condiviso,
-                               COALESCE(SUM(T.importo), 0.0) AS saldo_calcolato
+                               COALESCE(SUM(T.importo), 0.0) + COALESCE(CC.rettifica_saldo, 0.0) AS saldo_calcolato
                         FROM ContiCondivisi CC
                                  LEFT JOIN PartecipazioneContoCondiviso PCC
                                            ON CC.id_conto_condiviso = PCC.id_conto_condiviso
@@ -589,7 +649,7 @@ def ottieni_conti_condivisi_utente(id_utente):
                            OR (CC.id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = ?) AND
                                CC.tipo_condivisione = 'famiglia')
                         GROUP BY CC.id_conto_condiviso, CC.nome_conto, CC.tipo,
-                                 CC.tipo_condivisione -- GROUP BY per tutte le colonne non aggregate
+                                 CC.tipo_condivisione, CC.rettifica_saldo -- GROUP BY per tutte le colonne non aggregate
                         ORDER BY CC.nome_conto
                         """, (id_utente, id_utente))
             return [dict(row) for row in cur.fetchall()]
@@ -609,11 +669,11 @@ def ottieni_dettagli_conto_condiviso(id_conto_condiviso):
                                CC.nome_conto,
                                CC.tipo,
                                CC.tipo_condivisione,
-                               COALESCE(SUM(T.importo), 0.0) AS saldo_calcolato
+                               COALESCE(SUM(T.importo), 0.0) + COALESCE(CC.rettifica_saldo, 0.0) AS saldo_calcolato
                         FROM ContiCondivisi CC
                                  LEFT JOIN TransazioniCondivise T ON CC.id_conto_condiviso = T.id_conto_condiviso
                         WHERE CC.id_conto_condiviso = ?
-                        GROUP BY CC.id_conto_condiviso, CC.id_famiglia, CC.nome_conto, CC.tipo, CC.tipo_condivisione
+                        GROUP BY CC.id_conto_condiviso, CC.id_famiglia, CC.nome_conto, CC.tipo, CC.tipo_condivisione, CC.rettifica_saldo
                         """, (id_conto_condiviso,))
             conto = cur.fetchone()
             if conto:

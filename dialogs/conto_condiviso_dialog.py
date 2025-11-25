@@ -132,9 +132,13 @@ class ContoCondivisoDialog(ft.AlertDialog):
                     self.container_partecipanti.visible = True
                     utenti_selezionati_ids = [p['id_utente'] for p in dettagli_conto.get('partecipanti', [])]
                     self._popola_lista_utenti(utenti_selezionati_ids)
+            
+            # Nascondi saldo iniziale in modifica
+            self.txt_saldo_iniziale.visible = False
         else:
             self.title.value = self.loc.get("create_shared_account")
             self.dd_tipo_condivisione.value = "famiglia"
+            self.txt_saldo_iniziale.visible = True
 
         self.open = True
         self.controller.page.update()
@@ -203,7 +207,8 @@ class ContoCondivisoDialog(ft.AlertDialog):
                 success = id_conto_condiviso_salvato is not None
                 messaggio = "aggiunto" if success else "errore aggiunta"
 
-            if success and saldo_iniziale != 0 and id_conto_condiviso_salvato:
+            # Aggiungi saldo iniziale SOLO se è un NUOVO conto (non in modifica)
+            if success and saldo_iniziale != 0 and id_conto_condiviso_salvato and not self.id_conto_condiviso_in_modifica:
                 oggi = datetime.date.today().strftime('%Y-%m-%d')
                 id_utente_autore = self.controller.get_user_id()
                 if id_utente_autore:

@@ -53,6 +53,11 @@ class ContiCondivisiTab(ft.Container):
                                     weight=ft.FontWeight.BOLD,
                                     color=AppColors.SUCCESS if conto['saldo_calcolato'] >= 0 else AppColors.ERROR)
                         ], horizontal_alignment=ft.CrossAxisAlignment.END),
+                        ft.IconButton(icon=ft.Icons.EDIT_NOTE, tooltip="Rettifica Saldo (Admin)", data=conto,
+                                      on_click=lambda e: self.controller.conto_dialog.apri_dialog_rettifica_saldo(
+                                          e.control.data, is_condiviso=True),
+                                      visible=(self.controller.get_user_role() == 'admin' and 
+                                               conto['tipo'] in ['Corrente', 'Risparmio', 'Contanti'])),
                         ft.IconButton(icon=ft.Icons.EDIT, tooltip="Gestisci Conto Condiviso", data=conto,
                                       icon_color=AppColors.PRIMARY,
                                       on_click=lambda e: self.controller.conto_condiviso_dialog.apri_dialog(

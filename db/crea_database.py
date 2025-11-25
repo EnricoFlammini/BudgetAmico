@@ -70,7 +70,8 @@ TABLES = {
             id_famiglia INTEGER NOT NULL REFERENCES Famiglie(id_famiglia) ON DELETE CASCADE,
             nome_conto TEXT NOT NULL,
             tipo TEXT NOT NULL,
-            tipo_condivisione TEXT NOT NULL CHECK(tipo_condivisione IN ('famiglia', 'utenti'))
+            tipo_condivisione TEXT NOT NULL CHECK(tipo_condivisione IN ('famiglia', 'utenti')),
+            rettifica_saldo REAL DEFAULT 0.0
         );
     """,
     "PartecipazioneContoCondiviso": """

@@ -74,7 +74,11 @@ class InvestimentoDialog(ft.AlertDialog):
             )
         else:
             # ID utente hardcoded a 1 per ora, come nel resto dell'app
-            successo, msg = aggiungi_conto(1, nome, "Investimento", valore_manuale=0.0, borsa_default=borsa)
+            res = aggiungi_conto(1, nome, "Investimento", valore_manuale=0.0, borsa_default=borsa)
+            if isinstance(res, tuple):
+                successo, msg = True, res[1]
+            else:
+                successo, msg = False, "Errore generico"
 
         if successo:
             self.chiudi()
