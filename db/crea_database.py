@@ -8,8 +8,8 @@ if not os.path.exists(APP_DATA_DIR):
 DB_FILE = os.path.join(APP_DATA_DIR, 'budget_amico.db')
 
 # --- SCHEMA DATABASE ---
-# Versione 8: Budget_Storico usa id_sottocategoria invece di id_categoria
-SCHEMA_VERSION = 8
+# Versione 9: Aggiunta rettifica_saldo a ContiCondivisi e data_aggiornamento a Asset
+SCHEMA_VERSION = 9
 
 TABLES = {
     "Utenti": """
@@ -195,6 +195,7 @@ TABLES = {
             quantita REAL NOT NULL,
             costo_iniziale_unitario REAL NOT NULL,
             prezzo_attuale_manuale REAL NOT NULL,
+            data_aggiornamento TEXT,
             UNIQUE(id_conto, ticker)
         );
     """,

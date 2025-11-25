@@ -216,7 +216,9 @@ class InvestimentiTab(ft.Container):
                     ft.Text(f"{loc.format_currency(asset['prezzo_attuale_manuale'])}", 
                            size=13),
                     ft.Text(f"{loc.get('value')}: {loc.format_currency(valore_totale)}", 
-                           size=12, color=AppColors.TEXT_SECONDARY)
+                           size=12, color=AppColors.TEXT_SECONDARY),
+                    ft.Text(f"Agg: {asset['data_aggiornamento']}" if asset['data_aggiornamento'] else "",
+                            size=10, color=ft.Colors.GREY_500)
                 ], horizontal_alignment=ft.CrossAxisAlignment.END),
                 
                 # Gain/Loss

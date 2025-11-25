@@ -2118,6 +2118,7 @@ def ottieni_portafoglio(id_conto_investimento):
                                quantita,
                                prezzo_attuale_manuale,
                                costo_iniziale_unitario,
+                               data_aggiornamento,
                                (prezzo_attuale_manuale - costo_iniziale_unitario)              AS gain_loss_unitario,
                                (quantita * (prezzo_attuale_manuale - costo_iniziale_unitario)) AS gain_loss_totale
                         FROM Asset
@@ -2135,7 +2136,8 @@ def aggiorna_prezzo_manuale_asset(id_asset, nuovo_prezzo):
         with sqlite3.connect(DB_FILE) as con:
             cur = con.cursor()
             cur.execute("PRAGMA foreign_keys = ON;")
-            cur.execute("UPDATE Asset SET prezzo_attuale_manuale = ? WHERE id_asset = ?", (nuovo_prezzo, id_asset))
+            adesso = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cur.execute("UPDATE Asset SET prezzo_attuale_manuale = ?, data_aggiornamento = ? WHERE id_asset = ?", (nuovo_prezzo, adesso, id_asset))
             return cur.rowcount > 0
     except Exception as e:
         print(f"❌ Errore generico durante l'aggiornamento prezzo: {e}")

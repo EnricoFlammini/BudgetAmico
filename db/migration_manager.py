@@ -255,6 +255,41 @@ def _migra_da_v7_a_v8(con: sqlite3.Connection):
         return False
 
 
+
+def _migra_da_v8_a_v9(con: sqlite3.Connection):
+    """
+    Logica specifica per migrare un DB dalla versione 8 alla 9.
+    - Aggiunge rettifica_saldo alla tabella ContiCondivisi.
+    - Aggiunge data_aggiornamento alla tabella Asset.
+    """
+    print("Esecuzione migrazione da v8 a v9...")
+    try:
+        cur = con.cursor()
+
+        # 1. Aggiungi colonna rettifica_saldo a ContiCondivisi
+        print("  - Aggiunta colonna rettifica_saldo a ContiCondivisi...")
+        try:
+            cur.execute("ALTER TABLE ContiCondivisi ADD COLUMN rettifica_saldo REAL DEFAULT 0.0")
+        except sqlite3.OperationalError:
+            print("    Colonna rettifica_saldo già esistente (ignorato).")
+
+        # 2. Aggiungi colonna data_aggiornamento a Asset
+        print("  - Aggiunta colonna data_aggiornamento a Asset...")
+        try:
+            cur.execute("ALTER TABLE Asset ADD COLUMN data_aggiornamento TEXT")
+        except sqlite3.OperationalError:
+            print("    Colonna data_aggiornamento già esistente (ignorato).")
+
+        con.commit()
+        print("Migrazione a v9 completata con successo.")
+        return True
+
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v8 a v9: {e}")
+        con.rollback()
+        return False
+
+
 def migra_database(db_path, versione_vecchia, versione_nuova):
     """
     Funzione principale che gestisce il processo di migrazione.
@@ -308,6 +343,11 @@ def migra_database(db_path, versione_vecchia, versione_nuova):
                 if not _migra_da_v7_a_v8(con):
                     raise Exception("Migrazione da v7 a v8 fallita.")
                 versione_vecchia = 8
+
+            if versione_vecchia == 8 and versione_nuova >= 9:
+                if not _migra_da_v8_a_v9(con):
+                    raise Exception("Migrazione da v8 a v9 fallita.")
+                versione_vecchia = 9
 
             # Se tutto è andato bene, aggiorna la versione del DB
             cur.execute(f"PRAGMA user_version = {versione_nuova}")
