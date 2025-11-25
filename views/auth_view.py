@@ -5,7 +5,6 @@ from db.gestione_db import (
 )
 from utils.email_sender import send_email
 import os
-import google_auth_manager
 
 
 class AuthView:
@@ -39,10 +38,6 @@ class AuthView:
         self.reset_status_text = ft.Text(visible=False)
         # self.reset_token = None # Non più necessario
 
-    def login_google(self, e):
-        """Avvia il flusso di autenticazione Google."""
-        # Chiama la funzione authenticate dal modulo google_auth_manager
-        google_auth_manager.authenticate(self.controller)
 
     def get_login_view(self) -> ft.View:
         """Costruisce e restituisce la vista di Login."""

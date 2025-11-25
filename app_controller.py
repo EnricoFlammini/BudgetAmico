@@ -24,8 +24,7 @@ from dialogs.spesa_fissa_dialog import SpesaFissaDialog
 from utils.localization import LocalizationManager
 from db.migration_manager import migra_database
 from db.crea_database import setup_database
-import google_auth_manager
-import google_drive_manager
+# Google Drive rimosso - ora usiamo Supabase PostgreSQL
 
 from db.gestione_db import (
     ottieni_prima_famiglia_utente, ottieni_ruolo_utente, check_e_paga_rate_scadute,
@@ -400,16 +399,6 @@ class AppController:
         self.page.session.clear()
         self.page.go("/")
 
-    def logout_google(self, e):
-        """Esegue il logout da Google, revocando il token."""
-        success = google_auth_manager.logout()
-        if success:
-            self.show_snack_bar("Account Google disconnesso con successo.", success=True)
-        else:
-            self.show_error_dialog("Errore durante la disconnessione dell'account Google.")
-        # Aggiorna l'interfaccia per riflettere il nuovo stato
-        self.update_all_views()
-
     def update_all_views(self, is_initial_load=False):
         if self.dashboard_view:
             self.dashboard_view.update_all_tabs_data(is_initial_load)
@@ -417,16 +406,9 @@ class AppController:
             self.page.update()
 
     def db_write_operation(self):
+        """Chiamato dopo operazioni di scrittura sul database."""
         self.update_all_views()
-        self.trigger_auto_sync()
-
-    def trigger_auto_sync(self):
-        if self.page.session.get("google_auth_token_present"):
-            if self.dashboard_view.sync_status_icon:
-                self.dashboard_view.sync_status_icon.icon = ft.Icons.SYNC
-                self.dashboard_view.sync_status_icon.rotate = ft.Rotate(angle=0, alignment=ft.alignment.center)
-                self.page.update()
-            threading.Thread(target=google_drive_manager.upload_db, args=(self,)).start()
+        # Auto-sync rimosso - Supabase gestisce la sincronizzazione automaticamente
 
     def show_snack_bar(self, messaggio, success=True):
         theme = self._get_current_theme_scheme() or ft.ColorScheme()

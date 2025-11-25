@@ -31,7 +31,10 @@ def main(page: ft.Page):
         setup_database()
     else:
         print(f"Database esistente trovato in: {DB_FILE}")
-        versione_corrente_db = ottieni_versione_db()
+        try:
+            versione_corrente_db = int(ottieni_versione_db())
+        except (ValueError, TypeError):
+            versione_corrente_db = 0
         print(f"Versione DB: {versione_corrente_db}, Versione Schema Atteso: {SCHEMA_VERSION}")
         if versione_corrente_db < SCHEMA_VERSION:
             print("Avvio migrazione database...")

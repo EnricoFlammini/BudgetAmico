@@ -1,5 +1,5 @@
 import flet as ft
-import google_auth_manager
+# Google Auth rimosso - ora usiamo Supabase PostgreSQL
 from functools import partial
 from utils.styles import AppColors, AppStyles
 from db.gestione_db import ottieni_categorie_e_sottocategorie, ottieni_membri_famiglia, rimuovi_utente_da_famiglia, ottieni_budget_famiglia
@@ -45,10 +45,7 @@ class AdminTab(ft.Container):
         self.btn_test_email = ft.ElevatedButton("Test Email", icon=ft.Icons.SEND, on_click=self._test_email_cliccato)
         self.btn_salva_email = ft.ElevatedButton("Salva Configurazione", icon=ft.Icons.SAVE, on_click=self._salva_email_cliccato, bgcolor=AppColors.PRIMARY, color=AppColors.ON_PRIMARY)
 
-        # UI Controls for Google Settings
-        self.google_status_text = AppStyles.body_text("")
-        self.google_auth_button = ft.ElevatedButton(text="", on_click=None)
-        self.sync_button = ft.ElevatedButton(text="", on_click=None)
+        # UI Controls for Google Settings - RIMOSSI (Google Drive deprecato)
 
         self.lv_categorie = ft.Column(scroll=ft.ScrollMode.AUTO, expand=True)
         self.lv_membri = ft.Column(scroll=ft.ScrollMode.AUTO)
@@ -116,22 +113,6 @@ class AdminTab(ft.Container):
                     ft.Row([self.txt_smtp_user, self.txt_smtp_password], spacing=10),
                     ft.Row([self.btn_test_email, self.btn_salva_email], spacing=10),
                 ], scroll=ft.ScrollMode.AUTO)
-            ),
-            ft.Tab(
-                text=loc.get("admin_google_settings"),
-                icon=ft.Icons.CLOUD_QUEUE,
-                content=ft.Column([
-                    AppStyles.header_text(loc.get("google_settings")),
-                    AppStyles.body_text(loc.get("google_settings_desc")),
-                    ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
-                    ft.Row([
-                        self.google_status_text,
-                        self.google_auth_button,
-                    ], spacing=10),
-                    ft.Row([
-                        self.sync_button,
-                    ], spacing=10),
-                ])
             )
         ]
 
@@ -261,36 +242,7 @@ class AdminTab(ft.Container):
         else:
             self.controller.show_snack_bar("Errore durante la rimozione del membro.", success=False)
 
-    def update_tab_google(self):
-        """Aggiorna la scheda delle impostazioni Google."""
-        loc = self.controller.loc
-        theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
-        is_auth = google_auth_manager.is_authenticated()
-        self.controller.page.session.set("google_auth_token_present", is_auth)
-
-        self.sync_button.text = loc.get("sync_db_drive")
-        self.sync_button.icon = ft.Icons.SYNC
-        self.sync_button.on_click = lambda e: self.controller.trigger_auto_sync()
-        self.sync_button.tooltip = loc.get("sync_db_drive_tooltip")
-        self.sync_button.bgcolor = AppColors.PRIMARY
-        self.sync_button.color = AppColors.ON_PRIMARY
-
-        if is_auth:
-            self.google_status_text.value = loc.get("status_connected")
-            self.google_status_text.color = AppColors.SUCCESS
-            self.google_auth_button.text = loc.get("disconnect_google_account")
-            self.google_auth_button.on_click = self.controller.logout_google
-            self.google_auth_button.bgcolor = AppColors.ERROR
-            self.google_auth_button.color = AppColors.ON_PRIMARY
-            self.sync_button.visible = True
-        else:
-            self.google_status_text.value = loc.get("status_disconnected")
-            self.google_status_text.color = AppColors.ERROR
-            self.google_auth_button.text = loc.get("connect_google_account")
-            self.google_auth_button.on_click = self.controller.auth_view.login_google
-            self.google_auth_button.bgcolor = AppColors.PRIMARY
-            self.google_auth_button.color = AppColors.ON_PRIMARY
-            self.sync_button.visible = False
+    # Metodo update_tab_google rimosso - Google Drive deprecato
 
     def _provider_email_cambiato(self, e):
         """Precompila i campi SMTP in base al provider selezionato."""
@@ -385,7 +337,7 @@ class AdminTab(ft.Container):
         self.tabs_admin.tabs = self.build_tabs()
         self.update_tab_categorie()
         self.update_tab_membri()
-        self.update_tab_google()
+        # update_tab_google rimosso - Google Drive deprecato
         self.update_tab_email()
         if self.page:
             self.page.update()
