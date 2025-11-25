@@ -220,6 +220,17 @@ BudgetAmico/
 
 ---
 
+## 📊 Novità Versione 0.11
+
+### Gestione Saldi e Admin
+-   **Rettifica Saldo (Admin)**: Nuova funzionalità riservata agli amministratori per allineare il saldo dei conti (personali e condivisi) al valore reale, utile per correggere discrepanze senza dover inserire transazioni fittizie.
+-   **Protezione Saldo Iniziale**: Il saldo iniziale dei conti non è più modificabile liberamente dopo la creazione. Eventuali correzioni devono passare tramite la funzione di rettifica.
+
+### Miglioramenti Investimenti
+-   **Data Aggiornamento Prezzi**: Visualizzazione chiara della data e ora dell'ultimo aggiornamento prezzi per ogni asset nel portafoglio.
+
+---
+
 ## 📊 Novità Versione 0.10
 
 ### Tab Investimenti Autonomo
