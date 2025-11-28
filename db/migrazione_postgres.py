@@ -285,6 +285,17 @@ def create_tables(cur):
         );
     """)
 
+    # 20. InfoDB
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS InfoDB (
+            chiave TEXT PRIMARY KEY,
+            valore TEXT NOT NULL
+        );
+    """)
+    
+    # Inserisci versione se non esiste
+    cur.execute("INSERT INTO InfoDB (chiave, valore) VALUES ('versione', '9') ON CONFLICT (chiave) DO NOTHING;")
+
     # Aggiunta FK circolari per Utenti
     print("Aggiunta vincoli FK circolari...")
     cur.execute("""

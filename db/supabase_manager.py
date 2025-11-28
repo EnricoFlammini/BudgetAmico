@@ -40,9 +40,9 @@ class SupabaseManager:
                         dsn=db_url,
                         cursor_factory=extras.RealDictCursor  # Restituisce dizionari invece di tuple
                     )
-                    print("✅ Connection pool Supabase inizializzato con successo")
+                    print("[OK] Connection pool Supabase inizializzato con successo")
         except Exception as e:
-            print(f"❌ Errore durante l'inizializzazione del connection pool: {e}")
+            print(f"[ERRORE] Errore durante l'inizializzazione del connection pool: {e}")
             raise
     
     @classmethod
@@ -68,7 +68,7 @@ class SupabaseManager:
             
             return conn
         except Exception as e:
-            print(f"❌ Errore durante l'ottenimento della connessione: {e}")
+            print(f"[ERRORE] Errore durante l'ottenimento della connessione: {e}")
             raise
     
     @classmethod
@@ -87,7 +87,7 @@ class SupabaseManager:
                 cur.execute("SET app.current_user_id = %s", (id_utente,))
                 conn.commit()
         except Exception as e:
-            print(f"❌ Errore durante l'impostazione del contesto utente: {e}")
+            print(f"[ERRORE] Errore durante l'impostazione del contesto utente: {e}")
             conn.rollback()
             raise
     
@@ -121,7 +121,7 @@ class SupabaseManager:
                 cls._connection_pool.closeall()
                 cls._connection_pool = None
                 cls._current_user_id = None
-                print("✅ Connection pool chiuso")
+                print("[OK] Connection pool chiuso")
     
     @classmethod
     def get_current_user_id(cls):
@@ -147,10 +147,10 @@ class SupabaseManager:
                 cur.execute("SELECT 1")
                 result = cur.fetchone()
             cls.release_connection(conn)
-            print("✅ Test connessione Supabase riuscito")
+            print("[OK] Test connessione Supabase riuscito")
             return True
         except Exception as e:
-            print(f"❌ Test connessione Supabase fallito: {e}")
+            print(f"[ERRORE] Test connessione Supabase fallito: {e}")
             return False
 
 

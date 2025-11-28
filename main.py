@@ -1,8 +1,7 @@
 import flet as ft
 from app_controller import AppController
-from db.crea_database import setup_database, SCHEMA_VERSION
-from db.gestione_db import ottieni_versione_db, DB_FILE
-from db.migration_manager import migra_database
+from db.gestione_db import ottieni_versione_db
+from db.supabase_manager import SupabaseManager
 import os
 
 # Carica le variabili d'ambiente dal file .env (opzionale)
@@ -25,23 +24,19 @@ def main(page: ft.Page):
     page.theme = ft.Theme(color_scheme_seed="blue")
     page.dark_theme = ft.Theme(color_scheme_seed="blue")
 
-    # --- Logica di Creazione e Migrazione Database ---
-    if not os.path.exists(DB_FILE):
-        print(f"Database non trovato, lo creo in: {DB_FILE}")
-        setup_database()
-    else:
-        print(f"Database esistente trovato in: {DB_FILE}")
-        try:
-            versione_corrente_db = int(ottieni_versione_db())
-        except (ValueError, TypeError):
-            versione_corrente_db = 0
-        print(f"Versione DB: {versione_corrente_db}, Versione Schema Atteso: {SCHEMA_VERSION}")
-        if versione_corrente_db < SCHEMA_VERSION:
-            print("Avvio migrazione database...")
-            if not migra_database(DB_FILE, versione_corrente_db, SCHEMA_VERSION):
-                # Se la migrazione fallisce, mostra un errore critico e ferma l'app
-                page.add(ft.Text("Errore critico durante la migrazione del database. Controllare i log.", color=ft.colors.RED))
-                return
+    # --- Logica di Connessione Database (PostgreSQL/Supabase) ---
+    print("Verifica connessione al database...")
+    if not SupabaseManager.test_connection():
+        page.add(ft.Text("Errore critico: Impossibile connettersi al database.", color=ft.colors.RED))
+        return
+
+    try:
+        versione_corrente_db = int(ottieni_versione_db())
+        print(f"Versione DB: {versione_corrente_db}")
+    except Exception as e:
+        print(f"Errore verifica versione DB: {e}")
+        page.add(ft.Text(f"Errore verifica versione DB: {e}", color=ft.colors.RED))
+        return
     # --- Fine Logica ---
 
     # Crea l'istanza del controller principale

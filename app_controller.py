@@ -22,15 +22,11 @@ from dialogs.giroconto_dialog import GirocontoDialog
 from dialogs.conto_condiviso_dialog import ContoCondivisoDialog
 from dialogs.spesa_fissa_dialog import SpesaFissaDialog
 from utils.localization import LocalizationManager
-from db.migration_manager import migra_database
-from db.crea_database import setup_database
-# Google Drive rimosso - ora usiamo Supabase PostgreSQL
-
 from db.gestione_db import (
     ottieni_prima_famiglia_utente, ottieni_ruolo_utente, check_e_paga_rate_scadute,
     check_e_processa_spese_fisse, get_user_count, crea_famiglia_e_admin,
     aggiungi_categorie_iniziali, cerca_utente_per_username, aggiungi_utente_a_famiglia,
-    ottieni_versione_db, crea_invito, ottieni_invito_per_token, DB_FILE,
+    ottieni_versione_db, crea_invito, ottieni_invito_per_token,
     ottieni_utenti_senza_famiglia
 )
 
@@ -208,12 +204,13 @@ class AppController:
     def _download_rifiutato(self, e): pass
 
     def backup_dati_clicked(self):
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.file_picker_salva_backup.save_file(
-            dialog_title="Salva Backup Database",
-            file_name=f"budget_backup_{timestamp}.db",
-            allowed_extensions=["db"]
-        )
+        self.show_snack_bar("Funzionalità di backup non disponibile con PostgreSQL.", success=False)
+        # timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        # self.file_picker_salva_backup.save_file(
+        #     dialog_title="Salva Backup Database",
+        #     file_name=f"budget_backup_{timestamp}.db",
+        #     allowed_extensions=["db"]
+        # )
 
     def _on_backup_dati_result(self, e: ft.FilePickerResultEvent):
         if not e.path:
@@ -226,11 +223,12 @@ class AppController:
             self.show_error_dialog(f"Errore durante la creazione del backup: {ex}")
 
     def ripristina_dati_clicked(self):
-        self.file_picker_apri_backup.pick_files(
-            dialog_title="Seleziona un file di Backup (.db)",
-            allow_multiple=False,
-            allowed_extensions=["db"]
-        )
+        self.show_snack_bar("Funzionalità di ripristino non disponibile con PostgreSQL.", success=False)
+        # self.file_picker_apri_backup.pick_files(
+        #     dialog_title="Seleziona un file di Backup (.db)",
+        #     allow_multiple=False,
+        #     allowed_extensions=["db"]
+        # )
 
     def _on_ripristina_dati_result(self, e: ft.FilePickerResultEvent):
         if not e.files:
