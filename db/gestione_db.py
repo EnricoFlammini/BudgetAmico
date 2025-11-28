@@ -384,15 +384,29 @@ def registra_utente(nome, cognome, username, password, email, data_nascita, codi
         return None
 
 
-def crea_famiglia_e_admin(nome_famiglia, id_admin):
+def crea_famiglia_e_admin(nome_famiglia, id_admin, master_key_b64=None):
     try:
+        # Generate a random family key (32 bytes) and encode it to base64
+        family_key_bytes = secrets.token_bytes(32)
+        family_key_b64 = base64.b64encode(family_key_bytes).decode('utf-8')
+        
+        # Encrypt family key with admin's master key
+        chiave_famiglia_criptata = None
+        if master_key_b64:
+            try:
+                crypto, master_key = _get_crypto_and_key(master_key_b64)
+                if master_key:
+                    chiave_famiglia_criptata = crypto.encrypt_data(family_key_b64, master_key)
+            except Exception as e:
+                print(f"[WARNING] Could not encrypt family key: {e}")
+        
         with get_db_connection() as con:
             cur = con.cursor()
             # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
             cur.execute("INSERT INTO Famiglie (nome_famiglia) VALUES (%s) RETURNING id_famiglia", (nome_famiglia,))
             id_famiglia = cur.fetchone()['id_famiglia']
-            cur.execute("INSERT INTO Appartenenza_Famiglia (id_utente, id_famiglia, ruolo) VALUES (%s, %s, %s)",
-                        (id_admin, id_famiglia, 'admin'))
+            cur.execute("INSERT INTO Appartenenza_Famiglia (id_utente, id_famiglia, ruolo, chiave_famiglia_criptata) VALUES (%s, %s, %s, %s)",
+                        (id_admin, id_famiglia, 'admin', chiave_famiglia_criptata))
             return id_famiglia
     except Exception as e:
         print(f"[ERRORE] Errore durante la creazione famiglia: {e}")
@@ -891,10 +905,24 @@ def admin_imposta_saldo_conto_condiviso(id_conto_condiviso, nuovo_saldo):
 
 
 # --- Funzioni Conti Condivisi ---
-def crea_conto_condiviso(id_famiglia, nome_conto, tipo_conto, tipo_condivisione, lista_utenti_ids=None, master_key_b64=None):
-    # Encrypt if key available
-    crypto, master_key = _get_crypto_and_key(master_key_b64)
-    encrypted_nome = _encrypt_if_key(nome_conto, master_key, crypto)
+def crea_conto_condiviso(id_famiglia, nome_conto, tipo_conto, tipo_condivisione, lista_utenti=None, id_utente=None, master_key_b64=None):
+    # Encrypt with family key if available
+    encrypted_nome = nome_conto
+    if id_utente and master_key_b64:
+        try:
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            # Get family key for this family
+            with get_db_connection() as con:
+                cur = con.cursor()
+                cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_famiglia = %s AND id_utente = %s", (id_famiglia, id_utente))
+                row = cur.fetchone()
+                if row and row['chiave_famiglia_criptata']:
+                    # Decrypt to get family_key_b64, then decode to bytes
+                    family_key_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+                    family_key_bytes = base64.b64decode(family_key_b64)
+                    encrypted_nome = crypto.encrypt_data(nome_conto, family_key_bytes)
+        except Exception as e:
+            print(f"[ERRORE] Encryption failed in crea_conto_condiviso: {e}")
     
     try:
         with get_db_connection() as con:
@@ -906,11 +934,11 @@ def crea_conto_condiviso(id_famiglia, nome_conto, tipo_conto, tipo_condivisione,
                 (id_famiglia, encrypted_nome, tipo_conto, tipo_condivisione))
             id_nuovo_conto_condiviso = cur.fetchone()['id_conto_condiviso']
 
-            if tipo_condivisione == 'utenti' and lista_utenti_ids:
-                for id_utente in lista_utenti_ids:
+            if tipo_condivisione == 'utenti' and lista_utenti:
+                for uid in lista_utenti:
                     cur.execute(
                         "INSERT INTO PartecipazioneContoCondiviso (id_conto_condiviso, id_utente) VALUES (%s, %s)",
-                        (id_nuovo_conto_condiviso, id_utente))
+                        (id_nuovo_conto_condiviso, uid))
 
             return id_nuovo_conto_condiviso
     except Exception as e:
@@ -918,31 +946,52 @@ def crea_conto_condiviso(id_famiglia, nome_conto, tipo_conto, tipo_condivisione,
         return None
 
 
-def modifica_conto_condiviso(id_conto_condiviso, nome_conto, tipo_conto, lista_utenti_ids=None, master_key_b64=None):
-    # Encrypt if key available
-    crypto, master_key = _get_crypto_and_key(master_key_b64)
-    encrypted_nome = _encrypt_if_key(nome_conto, master_key, crypto)
+def modifica_conto_condiviso(id_conto_condiviso, nome_conto, tipo=None, lista_utenti=None, id_utente=None, master_key_b64=None):
+    # Encrypt with family key if available
+    encrypted_nome = nome_conto
+    if id_utente and master_key_b64:
+        try:
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            # Get family key for this account's family
+            with get_db_connection() as con:
+                cur = con.cursor()
+                cur.execute("SELECT id_famiglia FROM ContiCondivisi WHERE id_conto_condiviso = %s", (id_conto_condiviso,))
+                res = cur.fetchone()
+                if res:
+                    id_famiglia = res['id_famiglia']
+                    cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_famiglia = %s AND id_utente = %s", (id_famiglia, id_utente))
+                    row = cur.fetchone()
+                    if row and row['chiave_famiglia_criptata']:
+                        # Decrypt to get family_key_b64, then decode to bytes
+                        family_key_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+                        family_key_bytes = base64.b64decode(family_key_b64)
+                        encrypted_nome = crypto.encrypt_data(nome_conto, family_key_bytes)
+        except Exception as e:
+            print(f"[ERRORE] Encryption failed in modifica_conto_condiviso: {e}")
 
     try:
         with get_db_connection() as con:
             cur = con.cursor()
             # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
 
-            cur.execute("UPDATE ContiCondivisi SET nome_conto = %s, tipo = %s WHERE id_conto_condiviso = %s",
-                        (encrypted_nome, tipo_conto, id_conto_condiviso))
+            if tipo:
+                cur.execute("UPDATE ContiCondivisi SET nome_conto = %s, tipo = %s WHERE id_conto_condiviso = %s",
+                            (encrypted_nome, tipo, id_conto_condiviso))
+            else:
+                cur.execute("UPDATE ContiCondivisi SET nome_conto = %s WHERE id_conto_condiviso = %s",
+                            (encrypted_nome, id_conto_condiviso))
 
             cur.execute("SELECT tipo_condivisione FROM ContiCondivisi WHERE id_conto_condiviso = %s",
                         (id_conto_condiviso,))
             tipo_condivisione = cur.fetchone()['tipo_condivisione']
 
-            if tipo_condivisione == 'utenti':
+            if tipo_condivisione == 'utenti' and lista_utenti is not None:
                 cur.execute("DELETE FROM PartecipazioneContoCondiviso WHERE id_conto_condiviso = %s",
                             (id_conto_condiviso,))
-                if lista_utenti_ids:
-                    for id_utente in lista_utenti_ids:
-                        cur.execute(
-                            "INSERT INTO PartecipazioneContoCondiviso (id_conto_condiviso, id_utente) VALUES (%s, %s)",
-                            (id_conto_condiviso, id_utente))
+                for uid in lista_utenti:
+                    cur.execute(
+                        "INSERT INTO PartecipazioneContoCondiviso (id_conto_condiviso, id_utente) VALUES (%s, %s)",
+                        (id_conto_condiviso, uid))
 
             return True
     except Exception as e:
@@ -970,6 +1019,7 @@ def ottieni_conti_condivisi_utente(id_utente, master_key_b64=None):
             cur.execute("""
                         -- Recupera l'elenco dei conti condivisi a cui l'utente partecipa, includendo il saldo calcolato.
                         SELECT CC.id_conto_condiviso         AS id_conto,
+                               CC.id_famiglia,
                                CC.nome_conto,
                                CC.tipo,
                                CC.tipo_condivisione,
@@ -982,17 +1032,42 @@ def ottieni_conti_condivisi_utente(id_utente, master_key_b64=None):
                         WHERE (PCC.id_utente = %s AND CC.tipo_condivisione = 'utenti')
                            OR (CC.id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s) AND
                                CC.tipo_condivisione = 'famiglia')
-                        GROUP BY CC.id_conto_condiviso, CC.nome_conto, CC.tipo,
+                        GROUP BY CC.id_conto_condiviso, CC.id_famiglia, CC.nome_conto, CC.tipo,
                                  CC.tipo_condivisione, CC.rettifica_saldo -- GROUP BY per tutte le colonne non aggregate
                         ORDER BY CC.nome_conto
                         """, (id_utente, id_utente))
             results = [dict(row) for row in cur.fetchall()]
             
             # Decrypt if key available
-            crypto, master_key = _get_crypto_and_key(master_key_b64)
-            if master_key:
-                for row in results:
-                    row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
+            if master_key_b64 and results:
+                try:
+                    crypto, master_key = _get_crypto_and_key(master_key_b64)
+                    
+                    # Fetch all family keys for the user
+                    family_ids = list(set(r['id_famiglia'] for r in results if r['id_famiglia']))
+                    family_keys = {}
+                    if family_ids:
+                        # Use a loop or IN clause. IN clause is better.
+                        placeholders = ','.join(['%s'] * len(family_ids))
+                        cur.execute(f"SELECT id_famiglia, chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia IN ({placeholders})",
+                                    (id_utente, *family_ids))
+                        for row in cur.fetchall():
+                            if row['chiave_famiglia_criptata']:
+                                try:
+                                    # Decrypt to get family_key_b64 (string), then decode to bytes
+                                    family_key_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+                                    family_key_bytes = base64.b64decode(family_key_b64)
+                                    family_keys[row['id_famiglia']] = family_key_bytes
+                                except Exception as e:
+                                    print(f"[DEBUG] Could not decrypt family key: {e}")
+                                    pass
+
+                    for row in results:
+                        fam_id = row.get('id_famiglia')
+                        if fam_id and fam_id in family_keys:
+                            row['nome_conto'] = _decrypt_if_key(row['nome_conto'], family_keys[fam_id], crypto)
+                except Exception as e:
+                    print(f"[ERRORE] Decryption error in ottieni_conti_condivisi_utente: {e}")
             
             return results
     except Exception as e:

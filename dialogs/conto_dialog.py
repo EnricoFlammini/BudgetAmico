@@ -416,9 +416,6 @@ class ContoDialog(ft.AlertDialog):
     def _chiudi_dialog_rettifica(self, e):
         self.dialog_rettifica_saldo.open = False
         self.controller.page.update()
-        if self.dialog_rettifica_saldo in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_rettifica_saldo)
-        self.controller.page.update()
 
     def _salva_rettifica_saldo(self, e):
         try:

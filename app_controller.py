@@ -135,7 +135,7 @@ class AppController:
     def route_change(self, route):
         try:
             self.page.views.clear()
-            self.page.overlay.clear()  # Ensure no stuck dialogs/overlays
+            # self.page.overlay.clear()  # Removed because it deletes global dialogs!
             
             parsed_url = urlparse(route.route)
             route_path = parsed_url.path
@@ -401,7 +401,8 @@ class AppController:
             return
 
         try:
-            new_family_id = crea_famiglia_e_admin(nome_famiglia, utente['id'])
+            master_key_b64 = self.page.session.get("master_key")
+            new_family_id = crea_famiglia_e_admin(nome_famiglia, utente['id'], master_key_b64=master_key_b64)
             if not new_family_id: raise Exception("Creazione famiglia fallita. Nome duplicato?")
             
             aggiungi_categorie_iniziali(new_family_id)
@@ -487,7 +488,9 @@ class AppController:
         
         # 2. Se non è un utente esistente, prova a creare un invito via email
         if "@" in input_val and "." in input_val:
-            token = crea_invito(id_famiglia, input_val, ruolo)
+            utente = self.page.session.get("utente_loggato")
+            master_key_b64 = self.page.session.get("master_key")
+            token = crea_invito(id_famiglia, input_val, ruolo, id_admin=utente['id'] if utente else None, master_key_b64=master_key_b64)
             if token:
                 link_invito = f"{URL_BASE}/registrazione?token={token}"
                 self.page.set_clipboard(link_invito)

@@ -79,6 +79,10 @@ class PersonaleTab(ft.Container):
 
         self.lista_transazioni.controls.clear()
         for t in transazioni:
+            # Filtra transazioni condivise (vengono mostrate nel tab Conti Condivisi)
+            if t.get('tipo_transazione') == 'condivisa':
+                continue
+
             descrizione_transazione = t.get('descrizione', '').upper()
             if descrizione_transazione.startswith("SALDO INIZIALE"):
                 continue

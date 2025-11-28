@@ -91,8 +91,10 @@ class GirocontoDialog(ft.AlertDialog):
         if not id_famiglia or not id_utente:
             return
 
+        master_key_b64 = self.controller.page.session.get("master_key")
+
         # Popola conti SORGENTE (solo i miei conti personali e condivisi)
-        conti_utente = ottieni_tutti_i_conti_utente(id_utente)
+        conti_utente = ottieni_tutti_i_conti_utente(id_utente, master_key_b64=master_key_b64)
         conti_sorgente_filtrati = [c for c in conti_utente if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
         opzioni_sorgente = []
         for c in conti_sorgente_filtrati:
@@ -101,7 +103,7 @@ class GirocontoDialog(ft.AlertDialog):
         self.dd_conto_sorgente.options = opzioni_sorgente
 
         # Popola conti DESTINAZIONE (tutti i conti della famiglia)
-        conti_famiglia = ottieni_tutti_i_conti_famiglia(id_famiglia)
+        conti_famiglia = ottieni_tutti_i_conti_famiglia(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
         conti_destinazione_filtrati = [c for c in conti_famiglia if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
         opzioni_destinazione = []
         for c in conti_destinazione_filtrati:
@@ -139,13 +141,36 @@ class GirocontoDialog(ft.AlertDialog):
                     is_valid = False
             except (ValueError, TypeError):
                 self.txt_importo.error_text = self.loc.get("invalid_amount")
-            else:
-                self.controller.show_snack_bar("❌ Errore durante l'esecuzione del giroconto.", success=False)
+                is_valid = False
 
-            self.controller.page.update()
+            if not is_valid:
+                self.controller.page.update()
+                return
+
+            # Esegui giroconto
+            id_conto_sorgente = int(sorgente_key[1:])
+            tipo_sorgente = "personale" if sorgente_key.startswith("P") else "condiviso"
+            id_conto_destinazione = int(destinazione_key[1:])
+            tipo_destinazione = "personale" if destinazione_key.startswith("P") else "condiviso"
+            
+            master_key_b64 = self.controller.page.session.get("master_key")
+
+            success, msg = esegui_giroconto(
+                id_conto_sorgente, tipo_sorgente,
+                id_conto_destinazione, tipo_destinazione,
+                importo, self.txt_descrizione.value,
+                self.txt_data.value,
+                master_key_b64=master_key_b64
+            )
+
+            if success:
+                self.controller.show_snack_bar(msg, success=True)
+                self.chiudi_dialog(None)
+                self.controller.db_write_operation()
+            else:
+                self.controller.show_snack_bar(f"Errore: {msg}", success=False)
 
         except Exception as ex:
             print(f"Errore salvataggio giroconto: {ex}")
             traceback.print_exc()
             self.controller.show_snack_bar(f"Errore inaspettato: {ex}", success=False)
-            self.controller.page.update()

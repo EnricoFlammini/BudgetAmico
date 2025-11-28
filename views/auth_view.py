@@ -210,15 +210,17 @@ class AuthView:
             
             invito_attivo = self.page.session.get("invito_attivo")
             if invito_attivo:
-                aggiungi_utente_a_famiglia(invito_attivo['id_famiglia'], id_nuovo_utente,
-                                           invito_attivo['ruolo_assegnato'])
+                from db.gestione_db import accetta_invito
+                master_key = result.get("master_key")
+                accetta_invito(id_nuovo_utente, invito_attivo['token'], master_key)
                 self.page.session.remove("invito_attivo")
 
             # Show recovery key dialog
             def close_dialog(e):
                 print("[DEBUG] Dialog chiuso. Redirect a login.")
                 dialog.open = False
-                self.page.overlay.remove(dialog)
+                if dialog in self.page.overlay:
+                    self.page.overlay.remove(dialog)
                 self.page.update()
                 self.controller.show_snack_bar("Registrazione completata! Effettua il login.", success=True)
                 self.page.go("/")
