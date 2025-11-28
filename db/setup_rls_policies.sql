@@ -29,6 +29,16 @@ ALTER TABLE Immobili ENABLE ROW LEVEL SECURITY;
 ALTER TABLE Asset ENABLE ROW LEVEL SECURITY;
 ALTER TABLE Storico_Asset ENABLE ROW LEVEL SECURITY;
 ALTER TABLE SpeseFisse ENABLE ROW LEVEL SECURITY;
+ALTER TABLE InfoDB ENABLE ROW LEVEL SECURITY;
+
+-- ============================================================================
+-- Policy per InfoDB (Pubblica Lettura)
+-- ============================================================================
+
+DROP POLICY IF EXISTS "Everyone can read InfoDB" ON InfoDB;
+CREATE POLICY "Everyone can read InfoDB" ON InfoDB
+    FOR SELECT
+    USING (true);
 
 -- ============================================================================
 -- Helper Function: Ottieni ID Famiglia dell'utente corrente
@@ -51,11 +61,13 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- ============================================================================
 
 -- Gli utenti possono vedere solo il proprio profilo
+DROP POLICY IF EXISTS "Users can view own profile" ON Utenti;
 CREATE POLICY "Users can view own profile" ON Utenti
     FOR SELECT
     USING (id_utente = current_setting('app.current_user_id', true)::INTEGER);
 
 -- Gli utenti possono aggiornare solo il proprio profilo
+DROP POLICY IF EXISTS "Users can update own profile" ON Utenti;
 CREATE POLICY "Users can update own profile" ON Utenti
     FOR UPDATE
     USING (id_utente = current_setting('app.current_user_id', true)::INTEGER);
@@ -65,6 +77,7 @@ CREATE POLICY "Users can update own profile" ON Utenti
 -- ============================================================================
 
 -- Gli utenti possono vedere solo la propria famiglia
+DROP POLICY IF EXISTS "Users can view own family" ON Famiglie;
 CREATE POLICY "Users can view own family" ON Famiglie
     FOR SELECT
     USING (
@@ -79,21 +92,25 @@ CREATE POLICY "Users can view own family" ON Famiglie
 -- ============================================================================
 
 -- Gli utenti possono vedere solo i propri conti
+DROP POLICY IF EXISTS "Users can view own accounts" ON Conti;
 CREATE POLICY "Users can view own accounts" ON Conti
     FOR SELECT
     USING (id_utente = current_setting('app.current_user_id', true)::INTEGER);
 
 -- Gli utenti possono creare conti per se stessi
+DROP POLICY IF EXISTS "Users can create own accounts" ON Conti;
 CREATE POLICY "Users can create own accounts" ON Conti
     FOR INSERT
     WITH CHECK (id_utente = current_setting('app.current_user_id', true)::INTEGER);
 
 -- Gli utenti possono modificare solo i propri conti
+DROP POLICY IF EXISTS "Users can update own accounts" ON Conti;
 CREATE POLICY "Users can update own accounts" ON Conti
     FOR UPDATE
     USING (id_utente = current_setting('app.current_user_id', true)::INTEGER);
 
 -- Gli utenti possono eliminare solo i propri conti
+DROP POLICY IF EXISTS "Users can delete own accounts" ON Conti;
 CREATE POLICY "Users can delete own accounts" ON Conti
     FOR DELETE
     USING (id_utente = current_setting('app.current_user_id', true)::INTEGER);
@@ -103,11 +120,13 @@ CREATE POLICY "Users can delete own accounts" ON Conti
 -- ============================================================================
 
 -- Gli utenti possono vedere i conti condivisi della propria famiglia
+DROP POLICY IF EXISTS "Users can view family shared accounts" ON ContiCondivisi;
 CREATE POLICY "Users can view family shared accounts" ON ContiCondivisi
     FOR SELECT
     USING (id_famiglia = get_current_user_family_id());
 
 -- Solo admin possono creare conti condivisi
+DROP POLICY IF EXISTS "Admins can create shared accounts" ON ContiCondivisi;
 CREATE POLICY "Admins can create shared accounts" ON ContiCondivisi
     FOR INSERT
     WITH CHECK (
@@ -121,6 +140,7 @@ CREATE POLICY "Admins can create shared accounts" ON ContiCondivisi
     );
 
 -- Solo admin possono modificare conti condivisi
+DROP POLICY IF EXISTS "Admins can update shared accounts" ON ContiCondivisi;
 CREATE POLICY "Admins can update shared accounts" ON ContiCondivisi
     FOR UPDATE
     USING (
@@ -137,6 +157,7 @@ CREATE POLICY "Admins can update shared accounts" ON ContiCondivisi
 -- ============================================================================
 
 -- Gli utenti possono vedere solo le transazioni dei propri conti
+DROP POLICY IF EXISTS "Users can view own transactions" ON Transazioni;
 CREATE POLICY "Users can view own transactions" ON Transazioni
     FOR SELECT
     USING (
@@ -147,6 +168,7 @@ CREATE POLICY "Users can view own transactions" ON Transazioni
     );
 
 -- Gli utenti possono creare transazioni solo sui propri conti
+DROP POLICY IF EXISTS "Users can create own transactions" ON Transazioni;
 CREATE POLICY "Users can create own transactions" ON Transazioni
     FOR INSERT
     WITH CHECK (
@@ -157,6 +179,7 @@ CREATE POLICY "Users can create own transactions" ON Transazioni
     );
 
 -- Gli utenti possono modificare solo le proprie transazioni
+DROP POLICY IF EXISTS "Users can update own transactions" ON Transazioni;
 CREATE POLICY "Users can update own transactions" ON Transazioni
     FOR UPDATE
     USING (
@@ -167,6 +190,7 @@ CREATE POLICY "Users can update own transactions" ON Transazioni
     );
 
 -- Gli utenti possono eliminare solo le proprie transazioni
+DROP POLICY IF EXISTS "Users can delete own transactions" ON Transazioni;
 CREATE POLICY "Users can delete own transactions" ON Transazioni
     FOR DELETE
     USING (
@@ -181,6 +205,7 @@ CREATE POLICY "Users can delete own transactions" ON Transazioni
 -- ============================================================================
 
 -- Gli utenti possono vedere le transazioni condivise della propria famiglia
+DROP POLICY IF EXISTS "Users can view family shared transactions" ON TransazioniCondivise;
 CREATE POLICY "Users can view family shared transactions" ON TransazioniCondivise
     FOR SELECT
     USING (
@@ -191,6 +216,7 @@ CREATE POLICY "Users can view family shared transactions" ON TransazioniCondivis
     );
 
 -- Gli utenti possono creare transazioni sui conti condivisi della famiglia
+DROP POLICY IF EXISTS "Users can create family shared transactions" ON TransazioniCondivise;
 CREATE POLICY "Users can create family shared transactions" ON TransazioniCondivise
     FOR INSERT
     WITH CHECK (
@@ -202,11 +228,13 @@ CREATE POLICY "Users can create family shared transactions" ON TransazioniCondiv
     );
 
 -- Gli utenti possono modificare solo le transazioni che hanno creato
+DROP POLICY IF EXISTS "Users can update own shared transactions" ON TransazioniCondivise;
 CREATE POLICY "Users can update own shared transactions" ON TransazioniCondivise
     FOR UPDATE
     USING (id_utente_autore = current_setting('app.current_user_id', true)::INTEGER);
 
 -- Gli utenti possono eliminare solo le transazioni che hanno creato
+DROP POLICY IF EXISTS "Users can delete own shared transactions" ON TransazioniCondivise;
 CREATE POLICY "Users can delete own shared transactions" ON TransazioniCondivise
     FOR DELETE
     USING (id_utente_autore = current_setting('app.current_user_id', true)::INTEGER);
@@ -216,11 +244,13 @@ CREATE POLICY "Users can delete own shared transactions" ON TransazioniCondivise
 -- ============================================================================
 
 -- Gli utenti possono vedere le categorie della propria famiglia
+DROP POLICY IF EXISTS "Users can view family categories" ON Categorie;
 CREATE POLICY "Users can view family categories" ON Categorie
     FOR SELECT
     USING (id_famiglia = get_current_user_family_id());
 
 -- Solo admin possono gestire categorie
+DROP POLICY IF EXISTS "Admins can manage categories" ON Categorie;
 CREATE POLICY "Admins can manage categories" ON Categorie
     FOR ALL
     USING (
@@ -233,6 +263,7 @@ CREATE POLICY "Admins can manage categories" ON Categorie
     );
 
 -- Gli utenti possono vedere le sottocategorie della propria famiglia
+DROP POLICY IF EXISTS "Users can view family subcategories" ON Sottocategorie;
 CREATE POLICY "Users can view family subcategories" ON Sottocategorie
     FOR SELECT
     USING (
@@ -243,6 +274,7 @@ CREATE POLICY "Users can view family subcategories" ON Sottocategorie
     );
 
 -- Solo admin possono gestire sottocategorie
+DROP POLICY IF EXISTS "Admins can manage subcategories" ON Sottocategorie;
 CREATE POLICY "Admins can manage subcategories" ON Sottocategorie
     FOR ALL
     USING (
@@ -262,11 +294,13 @@ CREATE POLICY "Admins can manage subcategories" ON Sottocategorie
 -- ============================================================================
 
 -- Gli utenti possono vedere i budget della propria famiglia
+DROP POLICY IF EXISTS "Users can view family budgets" ON Budget;
 CREATE POLICY "Users can view family budgets" ON Budget
     FOR SELECT
     USING (id_famiglia = get_current_user_family_id());
 
 -- Solo admin possono gestire budget
+DROP POLICY IF EXISTS "Admins can manage budgets" ON Budget;
 CREATE POLICY "Admins can manage budgets" ON Budget
     FOR ALL
     USING (
@@ -279,6 +313,7 @@ CREATE POLICY "Admins can manage budgets" ON Budget
     );
 
 -- Policy simili per Budget_Storico
+DROP POLICY IF EXISTS "Users can view family budget history" ON Budget_Storico;
 CREATE POLICY "Users can view family budget history" ON Budget_Storico
     FOR SELECT
     USING (id_famiglia = get_current_user_family_id());
@@ -288,6 +323,7 @@ CREATE POLICY "Users can view family budget history" ON Budget_Storico
 -- ============================================================================
 
 -- Gli utenti possono vedere gli asset dei propri conti
+DROP POLICY IF EXISTS "Users can view own assets" ON Asset;
 CREATE POLICY "Users can view own assets" ON Asset
     FOR SELECT
     USING (
@@ -298,6 +334,7 @@ CREATE POLICY "Users can view own assets" ON Asset
     );
 
 -- Gli utenti possono gestire gli asset dei propri conti
+DROP POLICY IF EXISTS "Users can manage own assets" ON Asset;
 CREATE POLICY "Users can manage own assets" ON Asset
     FOR ALL
     USING (
@@ -308,6 +345,7 @@ CREATE POLICY "Users can manage own assets" ON Asset
     );
 
 -- Policy simili per Storico_Asset
+DROP POLICY IF EXISTS "Users can view own asset history" ON Storico_Asset;
 CREATE POLICY "Users can view own asset history" ON Storico_Asset
     FOR SELECT
     USING (
@@ -317,6 +355,7 @@ CREATE POLICY "Users can view own asset history" ON Storico_Asset
         )
     );
 
+DROP POLICY IF EXISTS "Users can manage own asset history" ON Storico_Asset;
 CREATE POLICY "Users can manage own asset history" ON Storico_Asset
     FOR ALL
     USING (
@@ -331,19 +370,23 @@ CREATE POLICY "Users can manage own asset history" ON Storico_Asset
 -- ============================================================================
 
 -- Gli utenti possono vedere prestiti/immobili/spese della propria famiglia
+DROP POLICY IF EXISTS "Users can view family loans" ON Prestiti;
 CREATE POLICY "Users can view family loans" ON Prestiti
     FOR SELECT
     USING (id_famiglia = get_current_user_family_id());
 
+DROP POLICY IF EXISTS "Users can view family properties" ON Immobili;
 CREATE POLICY "Users can view family properties" ON Immobili
     FOR SELECT
     USING (id_famiglia = get_current_user_family_id());
 
+DROP POLICY IF EXISTS "Users can view family fixed expenses" ON SpeseFisse;
 CREATE POLICY "Users can view family fixed expenses" ON SpeseFisse
     FOR SELECT
     USING (id_famiglia = get_current_user_family_id());
 
 -- Solo admin possono gestire prestiti/immobili/spese
+DROP POLICY IF EXISTS "Admins can manage loans" ON Prestiti;
 CREATE POLICY "Admins can manage loans" ON Prestiti
     FOR ALL
     USING (
@@ -355,6 +398,7 @@ CREATE POLICY "Admins can manage loans" ON Prestiti
         )
     );
 
+DROP POLICY IF EXISTS "Admins can manage properties" ON Immobili;
 CREATE POLICY "Admins can manage properties" ON Immobili
     FOR ALL
     USING (
@@ -366,6 +410,7 @@ CREATE POLICY "Admins can manage properties" ON Immobili
         )
     );
 
+DROP POLICY IF EXISTS "Admins can manage fixed expenses" ON SpeseFisse;
 CREATE POLICY "Admins can manage fixed expenses" ON SpeseFisse
     FOR ALL
     USING (
@@ -378,6 +423,7 @@ CREATE POLICY "Admins can manage fixed expenses" ON SpeseFisse
     );
 
 -- Policy per StoricoPagamentiRate
+DROP POLICY IF EXISTS "Users can view family loan payments" ON StoricoPagamentiRate;
 CREATE POLICY "Users can view family loan payments" ON StoricoPagamentiRate
     FOR SELECT
     USING (
