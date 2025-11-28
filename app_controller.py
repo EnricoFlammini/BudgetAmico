@@ -327,10 +327,9 @@ class AppController:
             self.page.session.set("id_famiglia", id_famiglia)
             self.page.session.set("ruolo_utente", ottieni_ruolo_utente(id_utente, id_famiglia))
             self.page.go("/dashboard")
-        elif get_user_count() == 1:
-            self.page.go("/setup-admin")
         else:
-            self.page.go("/in-attesa")
+            # Se l'utente non ha una famiglia, lo reindirizziamo alla creazione
+            self.page.go("/setup-admin")
 
     def build_setup_view(self) -> ft.View:
         self.txt_nome_famiglia.value = ""
@@ -341,7 +340,7 @@ class AppController:
         return ft.View("/setup-admin", [
             ft.Column([
                 ft.Text("Benvenuto!", size=30, weight=ft.FontWeight.BOLD),
-                ft.Text("Sei il primo utente. Configura la tua famiglia per iniziare."),
+                ft.Text("Crea la tua Famiglia per iniziare."),
                 ft.Container(height=20),
                 self.txt_nome_famiglia,
                 self.txt_errore_setup,

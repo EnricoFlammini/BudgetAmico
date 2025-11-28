@@ -1,7 +1,7 @@
 import flet as ft
 from db.gestione_db import (
     registra_utente, verifica_login, aggiungi_utente_a_famiglia, trova_utente_per_email,
-    imposta_password_temporanea, cambia_password, hash_password
+    imposta_password_temporanea, cambia_password, hash_password, cambia_password_e_username
 )
 from utils.email_sender import send_email
 import os
@@ -33,10 +33,10 @@ class AuthView:
         self.recovery_status_text = ft.Text(visible=False)
 
         # Controlli per il Reset Password
+        self.txt_reset_username = ft.TextField(label="Nuovo Username")
         self.txt_reset_new_password = ft.TextField(password=True, can_reveal_password=True)
         self.txt_reset_confirm_password = ft.TextField(password=True, can_reveal_password=True)
         self.reset_status_text = ft.Text(visible=False)
-        # self.reset_token = None # Non più necessario
 
 
     def get_login_view(self) -> ft.View:
@@ -274,6 +274,7 @@ class AuthView:
     def get_force_change_password_view(self) -> ft.View:
         """Costruisce la vista per impostare la nuova password."""
         loc = self.loc
+        self.txt_reset_username.value = ""
         self.txt_reset_new_password.label = loc.get("new_password")
         self.txt_reset_confirm_password.label = loc.get("confirm_new_password")
         self.txt_reset_new_password.value = ""
@@ -286,6 +287,8 @@ class AuthView:
                 ft.Column(
                     [
                         ft.Text(loc.get("set_new_password_title"), size=30, weight=ft.FontWeight.BOLD),
+                        ft.Text("Completa il tuo profilo", size=16),
+                        self.txt_reset_username,
                         self.txt_reset_new_password,
                         self.txt_reset_confirm_password,
                         self.reset_status_text,
@@ -301,11 +304,12 @@ class AuthView:
         )
 
     def _salva_nuova_password(self, e):
+        nuovo_username = self.txt_reset_username.value.strip()
         nuova_pass = self.txt_reset_new_password.value
         conferma_pass = self.txt_reset_confirm_password.value
 
-        if not nuova_pass or nuova_pass != conferma_pass:
-            self.reset_status_text.value = self.loc.get("passwords_do_not_match")
+        if not nuovo_username or not nuova_pass or nuova_pass != conferma_pass:
+            self.reset_status_text.value = "Compila tutti i campi e verifica che le password coincidano."
             self.reset_status_text.color = ft.Colors.RED
             self.reset_status_text.visible = True
             self.page.update()
@@ -316,14 +320,20 @@ class AuthView:
             self.page.go("/")
             return
 
-        success = cambia_password(id_utente, hash_password(nuova_pass))
+        success = cambia_password_e_username(id_utente, hash_password(nuova_pass), nuovo_username)
 
         if success:
-            self.controller.show_snack_bar(self.loc.get("password_updated_success"), success=True)
+            # Update session username
+            utente = self.page.session.get("utente_loggato")
+            if utente:
+                utente['username'] = nuovo_username
+                self.page.session.set("utente_loggato", utente)
+                
+            self.controller.show_snack_bar("Profilo aggiornato con successo!", success=True)
             # Ricarica la dashboard con la sessione valida
             self.page.go("/dashboard")
         else:
-            self.reset_status_text.value = "Errore durante l'aggiornamento della password."
+            self.reset_status_text.value = "Errore durante l'aggiornamento. Username forse già in uso."
             self.reset_status_text.color = ft.Colors.RED
             self.reset_status_text.visible = True
             self.page.update()

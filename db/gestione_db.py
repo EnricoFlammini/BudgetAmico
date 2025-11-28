@@ -101,6 +101,59 @@ def verifica_login(login_identifier, password):
         return None
 
 
+def crea_utente_invitato(email, ruolo, id_famiglia):
+    """
+    Crea un nuovo utente invitato con credenziali temporanee.
+    Restituisce un dizionario con le credenziali o None in caso di errore.
+    """
+    try:
+        # Genera credenziali temporanee
+        temp_password = secrets.token_urlsafe(10)
+        temp_username = f"user_{secrets.token_hex(4)}"
+        password_hash = hash_password(temp_password)
+        
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # 1. Crea l'utente
+            cur.execute("""
+                INSERT INTO Utenti (username, email, password_hash, nome, cognome, forza_cambio_password)
+                VALUES (%s, %s, %s, %s, %s, TRUE)
+                RETURNING id_utente
+            """, (temp_username, email, password_hash, "Nuovo", "Utente"))
+            
+            id_utente = cur.fetchone()['id_utente']
+            
+            # 2. Aggiungi alla famiglia
+            cur.execute("""
+                INSERT INTO Appartenenza_Famiglia (id_utente, id_famiglia, ruolo)
+                VALUES (%s, %s, %s)
+            """, (id_utente, id_famiglia, ruolo))
+            
+            con.commit()
+            
+            return {
+                "email": email,
+                "username": temp_username,
+                "password": temp_password
+            }
+            
+    except Exception as e:
+        print(f"[ERRORE] Errore creazione utente invitato: {e}")
+        return None
+
+
+def ottieni_utente_da_email(email):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT * FROM Utenti WHERE email = %s", (email,))
+            return cur.fetchone()
+    except Exception as e:
+        print(f"[ERRORE] ottieni_utente_da_email: {e}")
+        return None
+
+
 def imposta_conto_default_utente(id_utente, id_conto_personale=None, id_conto_condiviso=None):
     try:
         with get_db_connection() as con:
@@ -268,6 +321,23 @@ def cambia_password(id_utente, nuovo_password_hash):
             return True
     except Exception as e:
         print(f"[ERRORE] Errore durante il cambio password: {e}")
+        return False
+
+
+def cambia_password_e_username(id_utente, nuovo_password_hash, nuovo_username):
+    """Cambia password e username, rimuovendo il flag di cambio forzato."""
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("""
+                UPDATE Utenti 
+                SET password_hash = %s, username = %s, forza_cambio_password = FALSE 
+                WHERE id_utente = %s
+            """, (nuovo_password_hash, nuovo_username, id_utente))
+            con.commit()
+            return True
+    except Exception as e:
+        print(f"[ERRORE] Errore cambio password e username: {e}")
         return False
 
 def ottieni_dettagli_utente(id_utente):
@@ -1367,9 +1437,9 @@ def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese):
                 f"DEBUG (ottieni_riepilogo_patrimonio_utente): Conti condivisi da calcolare: {conti_condivisi_da_calcolare}")
 
             for row in conti_condivisi_da_calcolare:
-                id_conto_cond, saldo_conto, num_partecipanti = row
-                saldo_conto = float(saldo_conto) if saldo_conto is not None else 0.0
-                num_partecipanti = int(num_partecipanti) if num_partecipanti is not None else 0
+                id_conto_cond = row['id_conto_condiviso']
+                saldo_conto = float(row['saldo_conto']) if row['saldo_conto'] is not None else 0.0
+                num_partecipanti = int(row['num_partecipanti']) if row['num_partecipanti'] is not None else 0
                 
                 if num_partecipanti > 0:
                     quota_condivisa += (saldo_conto / num_partecipanti)
@@ -1415,7 +1485,7 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese):
                                  LEFT JOIN Sottocategorie SCat ON T.id_sottocategoria = SCat.id_sottocategoria
                                  LEFT JOIN Categorie Cat ON SCat.id_categoria = Cat.id_categoria
                         WHERE AF.id_famiglia = %s
-                          AND C.tipo != 'Fondo Pensione' AND T.data BETWEEN %s AND %s AND UPPER(T.descrizione) NOT LIKE '%SALDO INIZIALE%'
+                          AND C.tipo != 'Fondo Pensione' AND T.data BETWEEN %s AND %s AND UPPER(T.descrizione) NOT LIKE '%%SALDO INIZIALE%%'
                         UNION ALL
                         -- Transazioni Condivise
                         SELECT COALESCE(U.nome || ' ' || U.cognome, U.username) AS utente_nome,
@@ -1432,7 +1502,7 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese):
                                  LEFT JOIN Categorie Cat ON SCat.id_categoria = Cat.id_categoria
                         WHERE CC.id_famiglia = %s
                           AND TC.data BETWEEN %s AND %s
-                          AND UPPER(TC.descrizione) NOT LIKE '%SALDO INIZIALE%' -- Include tutti i conti condivisi della famiglia
+                          AND UPPER(TC.descrizione) NOT LIKE '%%SALDO INIZIALE%%' -- Include tutti i conti condivisi della famiglia
                         ORDER BY data DESC, utente_nome, conto_nome
                         """, (id_famiglia, data_inizio, data_fine, id_famiglia, data_inizio, data_fine))
             return [dict(row) for row in cur.fetchall()]
@@ -2361,14 +2431,14 @@ def check_e_processa_spese_fisse(id_famiglia):
                 cur.execute("""
                     SELECT 1 FROM Transazioni
                     WHERE (id_conto = %s AND descrizione = %s)
-                    AND TO_CHAR(data, 'YYYY-MM') = %s
+                    AND TO_CHAR(data::date, 'YYYY-MM') = %s
                 """, (spesa['id_conto_personale_addebito'], f"Spesa Fissa: {spesa['nome']}", oggi.strftime('%Y-%m')))
                 if cur.fetchone(): continue
 
                 cur.execute("""
                     SELECT 1 FROM TransazioniCondivise
                     WHERE (id_conto_condiviso = %s AND descrizione = %s)
-                    AND TO_CHAR(data, 'YYYY-MM') = %s
+                    AND TO_CHAR(data::date, 'YYYY-MM') = %s
                 """, (spesa['id_conto_condiviso_addebito'], f"Spesa Fissa: {spesa['nome']}", oggi.strftime('%Y-%m')))
                 if cur.fetchone(): continue
 
