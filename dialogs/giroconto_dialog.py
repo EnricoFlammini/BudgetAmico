@@ -39,7 +39,7 @@ class GirocontoDialog(ft.AlertDialog):
         )
 
         self.actions = [
-            ft.TextButton(on_click=self._chiudi_dialog),
+            ft.TextButton(on_click=self.chiudi_dialog),
             ft.TextButton(on_click=self._salva_giroconto),
         ]
         self.actions_alignment = ft.MainAxisAlignment.END
@@ -56,11 +56,15 @@ class GirocontoDialog(ft.AlertDialog):
         self.actions[0].text = self.loc.get("cancel")
         self.actions[1].text = self.loc.get("execute_transfer")
 
-    def _chiudi_dialog(self, e):
-        self.open = False
-        if self in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self)
-        self.controller.page.update()
+    def chiudi_dialog(self, e):
+        print(f"DEBUG: chiudi_dialog chiamato per {self}")
+        try:
+            self.open = False
+            self.controller.page.update()
+            print("DEBUG: chiudi_dialog completato (solo open=False)")
+        except Exception as ex:
+            print(f"Errore chiusura dialog: {ex}")
+            traceback.print_exc()
 
     def apri_dialog(self):
         self._update_texts()
