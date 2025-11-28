@@ -277,7 +277,7 @@ class AdminTab(ft.Container):
 
         # Usa l'email dell'utente come destinatario, se disponibile, altrimenti usa l'email SMTP stessa
         destinatario = user # Default
-        dati_utente = self.controller.get_user_data()
+        dati_utente = self.page.session.get("utente_loggato")
         if dati_utente and dati_utente.get('email'):
              destinatario = dati_utente.get('email')
         

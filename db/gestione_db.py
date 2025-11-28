@@ -1233,13 +1233,13 @@ def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese):
                                          JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
                                 WHERE AF.id_famiglia = %s
                                   AND C.tipo NOT IN ('Investimento', 'Fondo Pensione')
-                                  AND T.data <= ?)
+                                  AND T.data <= %s)
                                    +
                                (SELECT COALESCE(SUM(TC.importo), 0.0)
                                 FROM TransazioniCondivise TC
                                          JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
                                 WHERE CC.id_famiglia = %s
-                                  AND TC.data <= ?)
+                                  AND TC.data <= %s)
                                    +
                                (SELECT COALESCE(SUM(C.rettifica_saldo), 0.0)
                                 FROM Conti C
@@ -1298,7 +1298,7 @@ def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese):
                                  JOIN Conti C ON T.id_conto = C.id_conto
                         WHERE C.id_utente = %s
                           AND C.tipo NOT IN ('Investimento', 'Fondo Pensione')
-                          AND T.data <= ?
+                          AND T.data <= %s
                         """, (id_utente, data_fine))
             liquidita_transazioni = cur.fetchone()['liquidita_transazioni'] or 0.0
 
@@ -1339,7 +1339,7 @@ def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese):
                                (SELECT COALESCE(SUM(importo), 0.0)
                                 FROM TransazioniCondivise
                                 WHERE id_conto_condiviso = CC.id_conto_condiviso
-                                  AND data <= ?) as saldo_conto,
+                                  AND data <= %s) as saldo_conto,
                                CASE
                                    WHEN CC.tipo_condivisione = 'famiglia' THEN (SELECT COUNT(*)
                                                                                 FROM Appartenenza_Famiglia
@@ -1368,7 +1368,10 @@ def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese):
 
             for row in conti_condivisi_da_calcolare:
                 id_conto_cond, saldo_conto, num_partecipanti = row
-                if num_partecipanti and num_partecipanti > 0:
+                saldo_conto = float(saldo_conto) if saldo_conto is not None else 0.0
+                num_partecipanti = int(num_partecipanti) if num_partecipanti is not None else 0
+                
+                if num_partecipanti > 0:
                     quota_condivisa += (saldo_conto / num_partecipanti)
                     print(
                         f"DEBUG (ottieni_riepilogo_patrimonio_utente):   Conto ID {id_conto_cond}, Saldo: {saldo_conto}, Partecipanti: {num_partecipanti}, Quota: {saldo_conto / num_partecipanti}")
@@ -1428,7 +1431,7 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese):
                                  LEFT JOIN Sottocategorie SCat ON TC.id_sottocategoria = SCat.id_sottocategoria
                                  LEFT JOIN Categorie Cat ON SCat.id_categoria = Cat.id_categoria
                         WHERE CC.id_famiglia = %s
-                          AND TC.data BETWEEN %s AND ?
+                          AND TC.data BETWEEN %s AND %s
                           AND UPPER(TC.descrizione) NOT LIKE '%SALDO INIZIALE%' -- Include tutti i conti condivisi della famiglia
                         ORDER BY data DESC, utente_nome, conto_nome
                         """, (id_famiglia, data_inizio, data_fine, id_famiglia, data_inizio, data_fine))
@@ -1598,7 +1601,7 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese):
                     FROM Transazioni T
                     JOIN Conti CO ON T.id_conto = CO.id_conto
                     JOIN Appartenenza_Famiglia AF ON CO.id_utente = AF.id_utente
-                    WHERE AF.id_famiglia = %s AND T.importo < 0 AND T.data BETWEEN %s AND ?
+                    WHERE AF.id_famiglia = %s AND T.importo < 0 AND T.data BETWEEN %s AND %s
                     GROUP BY T.id_sottocategoria
                     UNION ALL
                     SELECT
@@ -1606,7 +1609,7 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese):
                         SUM(TC.importo) as spesa_totale
                     FROM TransazioniCondivise TC
                     JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
-                    WHERE CC.id_famiglia = %s AND TC.importo < 0 AND TC.data BETWEEN %s AND ?
+                    WHERE CC.id_famiglia = %s AND TC.importo < 0 AND TC.data BETWEEN %s AND %s
                     GROUP BY TC.id_sottocategoria
                 ) AS T_SPESE ON S.id_sottocategoria = T_SPESE.id_sottocategoria
                 WHERE C.id_famiglia = %s
@@ -1748,8 +1751,8 @@ def ottieni_anni_mesi_storicizzati(id_famiglia):
                 SELECT DISTINCT anno, mese FROM (
                     -- Mesi da transazioni personali
                     SELECT
-                        CAST(strftime('%Y', T.data) AS INTEGER) as anno,
-                        CAST(strftime('%m', T.data) AS INTEGER) as mese
+                        CAST(EXTRACT(YEAR FROM CAST(T.data AS DATE)) AS INTEGER) as anno,
+                        CAST(EXTRACT(MONTH FROM CAST(T.data AS DATE)) AS INTEGER) as mese
                     FROM Transazioni T
                     JOIN Conti C ON T.id_conto = C.id_conto
                     JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
@@ -1759,8 +1762,8 @@ def ottieni_anni_mesi_storicizzati(id_famiglia):
 
                     -- Mesi da transazioni condivise
                     SELECT
-                        CAST(strftime('%Y', TC.data) AS INTEGER) as anno,
-                        CAST(strftime('%m', TC.data) AS INTEGER) as mese
+                        CAST(EXTRACT(YEAR FROM CAST(TC.data AS DATE)) AS INTEGER) as anno,
+                        CAST(EXTRACT(MONTH FROM CAST(TC.data AS DATE)) AS INTEGER) as mese
                     FROM TransazioniCondivise TC
                     JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
                     WHERE CC.id_famiglia = %s
@@ -1872,7 +1875,7 @@ def ottieni_prestiti_famiglia(id_famiglia):
                         SELECT P.*, 
                                C.nome_categoria AS nome_categoria_default,
                                CASE 
-                                   WHEN P.importo_rata > 0 THEN CAST((P.importo_finanziato + IFNULL(P.importo_interessi, 0) - P.importo_residuo) / P.importo_rata AS INTEGER)
+                                   WHEN P.importo_rata > 0 THEN CAST((P.importo_finanziato + COALESCE(P.importo_interessi, 0) - P.importo_residuo) / P.importo_rata AS INTEGER)
                                    ELSE 0 
                                END as rate_pagate
                         FROM Prestiti P
@@ -2225,7 +2228,7 @@ def ottieni_transazioni_famiglia_per_export(id_famiglia, data_inizio, data_fine)
                                  JOIN Appartenenza_Famiglia AF ON U.id_utente = AF.id_utente
                                  LEFT JOIN Categorie Cat ON T.id_categoria = Cat.id_categoria
                         WHERE AF.id_famiglia = %s
-                          AND T.data BETWEEN %s AND ?
+                          AND T.data BETWEEN %s AND %s
                           AND C.tipo != 'Fondo Pensione'
                         ORDER BY T.data DESC, T.id_transazione DESC
                         """, (id_famiglia, data_inizio, data_fine))
@@ -2358,14 +2361,14 @@ def check_e_processa_spese_fisse(id_famiglia):
                 cur.execute("""
                     SELECT 1 FROM Transazioni
                     WHERE (id_conto = %s AND descrizione = %s)
-                    AND strftime('%Y-%m', data) = %s
+                    AND TO_CHAR(data, 'YYYY-MM') = %s
                 """, (spesa['id_conto_personale_addebito'], f"Spesa Fissa: {spesa['nome']}", oggi.strftime('%Y-%m')))
                 if cur.fetchone(): continue
 
                 cur.execute("""
                     SELECT 1 FROM TransazioniCondivise
                     WHERE (id_conto_condiviso = %s AND descrizione = %s)
-                    AND strftime('%Y-%m', data) = %s
+                    AND TO_CHAR(data, 'YYYY-MM') = %s
                 """, (spesa['id_conto_condiviso_addebito'], f"Spesa Fissa: {spesa['nome']}", oggi.strftime('%Y-%m')))
                 if cur.fetchone(): continue
 

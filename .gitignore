@@ -6,6 +6,7 @@ __pycache__/
 .Python
 .venv/
 venv/
+reset_password.py
 
 # Environment variables
 .env
