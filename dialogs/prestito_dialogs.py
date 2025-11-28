@@ -155,9 +155,10 @@ class PrestitoDialogs:
             if tipo_default:
                 self.dd_tipo.value = tipo_default
 
-        self.page.dialog = self.dialog_prestito
+        if self.dialog_prestito not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_prestito)
         self.dialog_prestito.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _reset_fields_prestito(self):
         self.txt_nome.value = ""
@@ -210,7 +211,10 @@ class PrestitoDialogs:
 
     def _chiudi_dialog_prestito(self, e):
         self.dialog_prestito.open = False
-        self.page.update()
+        self.controller.page.update()
+        if self.dialog_prestito in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_prestito)
+        self.controller.page.update()
 
     def _salva_prestito_cliccato(self, e):
         try:
@@ -290,7 +294,7 @@ class PrestitoDialogs:
             traceback.print_exc()
             self.controller.show_error_dialog(f"Errore inaspettato: {ex}")
 
-        self.page.update()
+        self.controller.page.update()
 
     def _valida_campi_prestito(self):
         is_valid = True
@@ -321,7 +325,7 @@ class PrestitoDialogs:
                 self.txt_rate_residue.error_text = self.loc.get("invalid_amount")
                 is_valid = False
 
-        self.page.update()
+        self.controller.page.update()
         return is_valid
 
     def apri_dialog_paga_rata(self, prestito_data):
@@ -354,13 +358,17 @@ class PrestitoDialogs:
         self.dd_conto_pagamento.value = prestito_data.get('id_conto_pagamento_default')
         self.dd_sottocategoria_pagamento.value = prestito_data.get('id_sottocategoria_pagamento_default')
 
-        self.page.dialog = self.dialog_paga_rata
+        if self.dialog_paga_rata not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_paga_rata)
         self.dialog_paga_rata.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _chiudi_dialog_paga_rata(self, e):
         self.dialog_paga_rata.open = False
-        self.page.update()
+        self.controller.page.update()
+        if self.dialog_paga_rata in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_paga_rata)
+        self.controller.page.update()
 
     def _esegui_pagamento_cliccato(self, e):
         try:
@@ -394,19 +402,19 @@ class PrestitoDialogs:
             traceback.print_exc()
             self.controller.show_error_dialog(f"Errore inaspettato: {ex}")
 
-        self.page.update()
+        self.controller.page.update()
 
     def _apri_date_picker_inizio(self, e):
         self.controller.date_picker.on_change = lambda ev: self._on_date_picker_change(ev, self.txt_data_inizio)
         self.controller.date_picker.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _apri_date_picker_pagamento(self, e):
         self.controller.date_picker.on_change = lambda ev: self._on_date_picker_change(ev, self.txt_data_pagamento)
         self.controller.date_picker.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _on_date_picker_change(self, e, target_field):
         if self.controller.date_picker.value:
             target_field.value = self.controller.date_picker.value.strftime('%Y-%m-%d')
-            self.page.update()
+            self.controller.page.update()

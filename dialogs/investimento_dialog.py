@@ -51,6 +51,9 @@ class InvestimentoDialog(ft.AlertDialog):
     def chiudi(self, e=None):
         self.open = False
         self.page.update()
+        if self in self.page.overlay:
+            self.page.overlay.remove(self)
+        self.page.update()
 
     def salva(self, e):
         nome = self.nome_broker.value.strip()
@@ -89,6 +92,7 @@ class InvestimentoDialog(ft.AlertDialog):
             if hasattr(self.page, "open"):
                 self.page.open(snack)
             else:
-                self.page.snack_bar = snack
+                if snack not in self.page.overlay:
+                    self.page.overlay.append(snack)
                 snack.open = True
                 self.page.update()

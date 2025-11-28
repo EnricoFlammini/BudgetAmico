@@ -31,7 +31,8 @@ class ContiCondivisiTab(ft.Container):
         print("Aggiornamento Scheda Conti Condivisi...")
         self.lv_conti_condivisi.controls.clear()
 
-        conti_condivisi = ottieni_conti_condivisi_utente(utente_id)
+        master_key_b64 = self.controller.page.session.get("master_key")
+        conti_condivisi = ottieni_conti_condivisi_utente(utente_id, master_key_b64=master_key_b64)
         if not conti_condivisi:
             self.lv_conti_condivisi.controls.append(AppStyles.body_text(self.controller.loc.get("no_shared_accounts")))
         else:

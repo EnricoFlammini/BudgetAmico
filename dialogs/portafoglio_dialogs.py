@@ -189,13 +189,18 @@ class PortafoglioDialogs:
         self.conto_selezionato = conto_data
         self.dialog_portafoglio.title.value = f"{self.loc.get('manage_portfolio_dialog')}: {conto_data['nome_conto']}"
         self._aggiorna_tabella_portafoglio()
-        self.page.dialog = self.dialog_portafoglio
+        self._aggiorna_tabella_portafoglio()
+        if self.dialog_portafoglio not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_portafoglio)
         self.dialog_portafoglio.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _chiudi_dialog_portafoglio(self, e):
         self.dialog_portafoglio.open = False
-        self.page.update()
+        self.controller.page.update()
+        if self.dialog_portafoglio in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_portafoglio)
+        self.controller.page.update()
 
     def _aggiorna_tabella_portafoglio(self):
         loc = self.loc
@@ -285,14 +290,23 @@ class PortafoglioDialogs:
         ]
         self.dd_conto_transazione.value = None
 
-        self.page.dialog = self.dialog_operazione_asset
+        if self.dialog_operazione_asset not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_operazione_asset)
         self.dialog_operazione_asset.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _chiudi_dialog_operazione(self, e):
         self.dialog_operazione_asset.open = False
-        self.page.dialog = self.dialog_portafoglio
-        self.page.update()
+        self.controller.page.update()
+        if self.dialog_operazione_asset in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_operazione_asset)
+        
+        # Riapri portafoglio se necessario (o assicurati che sia visibile se era sotto)
+        # In questo caso, stiamo tornando indietro, quindi riapriamo portafoglio
+        if self.dialog_portafoglio not in self.controller.page.overlay:
+             self.controller.page.overlay.append(self.dialog_portafoglio)
+        self.dialog_portafoglio.open = True
+        self.controller.page.update()
 
     def _on_asset_selezionato(self, e):
         """Chiamato quando un asset viene selezionato dal dropdown."""
@@ -398,14 +412,22 @@ class PortafoglioDialogs:
         self.asset_da_aggiornare = e.control.data
         self.txt_nuovo_prezzo.value = str(self.asset_da_aggiornare['prezzo_attuale_manuale'])
         self.dialog_aggiorna_prezzo.title.value = f"{self.loc.get('update_price')}: {self.asset_da_aggiornare['ticker']}"
-        self.page.dialog = self.dialog_aggiorna_prezzo
+        self.dialog_aggiorna_prezzo.title.value = f"{self.loc.get('update_price')}: {self.asset_da_aggiornare['ticker']}"
+        if self.dialog_aggiorna_prezzo not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_aggiorna_prezzo)
         self.dialog_aggiorna_prezzo.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _chiudi_dialog_aggiorna_prezzo(self, e):
         self.dialog_aggiorna_prezzo.open = False
-        self.page.dialog = self.dialog_portafoglio
-        self.page.update()
+        self.controller.page.update()
+        if self.dialog_aggiorna_prezzo in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_aggiorna_prezzo)
+            
+        if self.dialog_portafoglio not in self.controller.page.overlay:
+             self.controller.page.overlay.append(self.dialog_portafoglio)
+        self.dialog_portafoglio.open = True
+        self.controller.page.update()
 
     def _salva_nuovo_prezzo(self, e):
         try:
@@ -422,14 +444,22 @@ class PortafoglioDialogs:
         self.txt_modifica_ticker.value = self.asset_da_modificare['ticker']
         self.txt_modifica_nome.value = self.asset_da_modificare['nome_asset']
         self.dialog_modifica_asset.title.value = f"{self.loc.get('edit_asset_details')}: {self.asset_da_modificare['ticker']}"
-        self.page.dialog = self.dialog_modifica_asset
+        self.dialog_modifica_asset.title.value = f"{self.loc.get('edit_asset_details')}: {self.asset_da_modificare['ticker']}"
+        if self.dialog_modifica_asset not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_modifica_asset)
         self.dialog_modifica_asset.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _chiudi_dialog_modifica_asset(self, e):
         self.dialog_modifica_asset.open = False
-        self.page.dialog = self.dialog_portafoglio
-        self.page.update()
+        self.controller.page.update()
+        if self.dialog_modifica_asset in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_modifica_asset)
+            
+        if self.dialog_portafoglio not in self.controller.page.overlay:
+             self.controller.page.overlay.append(self.dialog_portafoglio)
+        self.dialog_portafoglio.open = True
+        self.controller.page.update()
 
     def _salva_modifica_asset(self, e):
         nuovo_ticker = self.txt_modifica_ticker.value.strip().upper()
@@ -467,15 +497,22 @@ class PortafoglioDialogs:
             ft.TextButton(self.loc.get("save"), on_click=self._salva_asset_esistente)
         ]
         
-        self.page.dialog = self.dialog_operazione_asset
+        if self.dialog_operazione_asset not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_operazione_asset)
         self.dialog_operazione_asset.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _chiudi_dialog_asset_esistente(self, e):
         # Chiudiamo il dialogo operazione (che stiamo usando come proxy)
         self.dialog_operazione_asset.open = False
-        self.page.dialog = self.dialog_portafoglio
-        self.page.update()
+        self.controller.page.update()
+        if self.dialog_operazione_asset in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_operazione_asset)
+            
+        if self.dialog_portafoglio not in self.controller.page.overlay:
+             self.controller.page.overlay.append(self.dialog_portafoglio)
+        self.dialog_portafoglio.open = True
+        self.controller.page.update()
         
         # IMPORTANTE: Ripristinare il contenuto originale del dialogo operazione?
         # Non strettamente necessario se _apri_dialog_operazione lo ricostruisce, 

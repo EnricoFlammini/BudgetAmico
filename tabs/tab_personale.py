@@ -74,7 +74,8 @@ class PersonaleTab(ft.Container):
                                                            data_formattata)
 
         # --- Aggiorna la lista delle transazioni ---
-        transazioni = ottieni_transazioni_utente(utente_id, anno, mese)
+        master_key_b64 = self.controller.page.session.get("master_key")
+        transazioni = ottieni_transazioni_utente(utente_id, anno, mese, master_key_b64=master_key_b64)
 
         self.lista_transazioni.controls.clear()
         for t in transazioni:

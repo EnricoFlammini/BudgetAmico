@@ -24,6 +24,9 @@ class ContiTab(ft.Container):
         self.content = ft.Column(expand=True, spacing=10)
 
     def update_view_data(self, is_initial_load=False):
+        # Get master_key from session for encryption
+        master_key_b64 = self.controller.page.session.get("master_key")
+        
         # Soluzione robusta per ottenere il tema
         theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
 
@@ -46,7 +49,7 @@ class ContiTab(ft.Container):
         self.txt_investimenti.visible = riepilogo.get('investimenti', 0) > 0
 
         self.lv_conti_personali.controls.clear()
-        conti_personali = ottieni_dettagli_conti_utente(utente_id)
+        conti_personali = ottieni_dettagli_conti_utente(utente_id, master_key_b64=master_key_b64)
         # Filtra i conti di investimento - questi vengono gestiti nel tab Investimenti
         conti_personali = [c for c in conti_personali if c['tipo'] != 'Investimento']
         if not conti_personali:

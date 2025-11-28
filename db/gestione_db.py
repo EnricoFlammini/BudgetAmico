@@ -8,6 +8,8 @@ from dateutil.parser import parse as parse_date
 import mimetypes
 import secrets
 import string
+import base64
+from utils.crypto_manager import CryptoManager
 
 # --- BLOCCO DI CODICE PER CORREGGERE IL PERCORSO ---
 script_dir = os.path.dirname(__file__)
@@ -17,6 +19,39 @@ if parent_dir not in sys.path:
 # --- FINE BLOCCO DI CODICE ---
 
 from db.crea_database import setup_database
+
+
+# --- Helper Functions for Encryption ---
+def _get_crypto_and_key(master_key_b64=None):
+    """
+    Returns CryptoManager instance and master_key.
+    If master_key_b64 is None, returns (crypto, None) for legacy support.
+    """
+    crypto = CryptoManager()
+    if master_key_b64:
+        try:
+            master_key = base64.urlsafe_b64decode(master_key_b64.encode())
+            return crypto, master_key
+        except Exception as e:
+            print(f"[ERRORE] Errore decodifica master_key: {e}")
+            return crypto, None
+    return crypto, None
+
+def _encrypt_if_key(data, master_key, crypto=None):
+    """Encrypts data if master_key is available, otherwise returns data as-is."""
+    if not master_key or not data:
+        return data
+    if not crypto:
+        crypto = CryptoManager()
+    return crypto.encrypt_data(data, master_key)
+
+def _decrypt_if_key(encrypted_data, master_key, crypto=None):
+    """Decrypts data if master_key is available, otherwise returns data as-is."""
+    if not master_key or not encrypted_data:
+        return encrypted_data
+    if not crypto:
+        crypto = CryptoManager()
+    return crypto.decrypt_data(encrypted_data, master_key)
 
 
 # --- Funzioni di Versioning ---
@@ -160,14 +195,47 @@ def ottieni_utenti_senza_famiglia():
 def verifica_login(login_identifier, password):
     try:
         with get_db_connection() as con:
-            # con.row_factory = sqlite3.Row # Removed for Supabase
             cur = con.cursor()
-            cur.execute("SELECT id_utente, password_hash, nome, cognome, username, email, forza_cambio_password FROM Utenti WHERE username = %s OR email = %s",
+            cur.execute("SELECT id_utente, password_hash, nome, cognome, username, email, forza_cambio_password, salt, encrypted_master_key FROM Utenti WHERE username = %s OR email = %s",
                         (login_identifier, login_identifier.lower()))
             risultato = cur.fetchone()
             if risultato and risultato['password_hash'] == hash_password(password):
-                return {"id": risultato['id_utente'], "username": risultato['username'], "forza_cambio_password": risultato['forza_cambio_password'], "nome": risultato['nome'],
-                        "cognome": risultato['cognome']}
+                # Decrypt master key if encryption is enabled
+                master_key = None
+                if risultato['salt'] and risultato['encrypted_master_key']:
+                    try:
+                        crypto = CryptoManager()
+                        salt = base64.urlsafe_b64decode(risultato['salt'].encode())
+                        kek = crypto.derive_key(password, salt)
+                        encrypted_mk = base64.urlsafe_b64decode(risultato['encrypted_master_key'].encode())
+                        master_key = crypto.decrypt_master_key(encrypted_mk, kek)
+                        
+                        # Decrypt nome and cognome for display
+                        nome = crypto.decrypt_data(risultato['nome'], master_key)
+                        cognome = crypto.decrypt_data(risultato['cognome'], master_key)
+                    except Exception as e:
+                        print(f"[ERRORE] Errore decryption: {e}")
+                        return None
+                else:
+                    # Legacy user without encryption
+                    nome = risultato['nome']
+                    cognome = risultato['cognome']
+                
+                print(f"[DEBUG] Login verificato. Master Key recuperata: {bool(master_key)}")
+                if master_key:
+                    print(f"[DEBUG] Master Key type: {type(master_key)}")
+                    print(f"[DEBUG] Master Key len: {len(master_key)}")
+                    print(f"[DEBUG] Master Key content (partial): {master_key[:10]}")
+                
+                return {
+                    "id": risultato['id_utente'], 
+                    "username": risultato['username'], 
+                    "forza_cambio_password": risultato['forza_cambio_password'], 
+                    "nome": nome,
+                    "cognome": cognome,
+                    "master_key": master_key.decode() if master_key else None
+                }
+            print("[DEBUG] Login fallito o password errata.")
             return None
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il login: {e}")
@@ -275,15 +343,43 @@ def ottieni_conto_default_utente(id_utente):
 
 def registra_utente(nome, cognome, username, password, email, data_nascita, codice_fiscale, indirizzo):
     try:
+        crypto = CryptoManager()
+        
+        # Generate encryption keys
+        salt = crypto.generate_salt()
+        kek = crypto.derive_key(password, salt)
+        master_key = crypto.generate_master_key()
+        encrypted_master_key = crypto.encrypt_master_key(master_key, kek)
+        recovery_key = crypto.generate_recovery_key()
+        recovery_key_hash = crypto.hash_recovery_key(recovery_key)
+        
+        # Encrypt PII
+        encrypted_nome = crypto.encrypt_data(nome, master_key)
+        encrypted_cognome = crypto.encrypt_data(cognome, master_key)
+        encrypted_codice_fiscale = crypto.encrypt_data(codice_fiscale, master_key)
+        encrypted_indirizzo = crypto.encrypt_data(indirizzo, master_key)
+        
         with get_db_connection() as con:
             cur = con.cursor()
-            # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
             cur.execute("""
-                        INSERT INTO Utenti (nome, cognome, username, password_hash, email, data_nascita, codice_fiscale, indirizzo)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id_utente
-                        """, (nome, cognome, username, hash_password(password), email.lower(), data_nascita, codice_fiscale, indirizzo))
-            return cur.fetchone()['id_utente']
-    except Exception as e: # Catch generic exception for now as psycopg2 errors might vary
+                        INSERT INTO Utenti (nome, cognome, username, password_hash, email, data_nascita, codice_fiscale, indirizzo, salt, encrypted_master_key, recovery_key_hash)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id_utente
+                        """, (
+                            encrypted_nome, 
+                            encrypted_cognome, 
+                            username, 
+                            hash_password(password), 
+                            email.lower(), 
+                            data_nascita, 
+                            encrypted_codice_fiscale, 
+                            encrypted_indirizzo,
+                            base64.urlsafe_b64encode(salt).decode(),
+                            base64.urlsafe_b64encode(encrypted_master_key).decode(),
+                            recovery_key_hash
+                        ))
+            id_utente = cur.fetchone()['id_utente']
+            return {"id_utente": id_utente, "recovery_key": recovery_key}
+    except Exception as e:
         print(f"[ERRORE] Errore durante la registrazione: {e}")
         return None
 
@@ -413,29 +509,49 @@ def cambia_password_e_username(id_utente, nuovo_password_hash, nuovo_username):
         print(f"[ERRORE] Errore cambio password e username: {e}")
         return False
 
-def ottieni_dettagli_utente(id_utente):
-    """Recupera tutti i dettagli di un utente dal suo ID."""
+def ottieni_dettagli_utente(id_utente, master_key_b64=None):
+    """Recupera tutti i dettagli di un utente dal suo ID, decriptando i dati sensibili se possibile."""
     try:
         with get_db_connection() as con:
-            # con.row_factory = sqlite3.Row # Removed for Supabase
             cur = con.cursor()
             cur.execute("SELECT * FROM Utenti WHERE id_utente = %s", (id_utente,))
             row = cur.fetchone()
-            return dict(row) if row else None
+            if not row:
+                return None
+            
+            dati = dict(row)
+            
+            # Decrypt PII if master key is provided
+            if master_key_b64:
+                print("[DEBUG] Decriptazione profilo con master key...")
+                dati['nome'] = _decrypt_if_key(dati.get('nome'), master_key_b64)
+                dati['cognome'] = _decrypt_if_key(dati.get('cognome'), master_key_b64)
+                dati['codice_fiscale'] = _decrypt_if_key(dati.get('codice_fiscale'), master_key_b64)
+                dati['indirizzo'] = _decrypt_if_key(dati.get('indirizzo'), master_key_b64)
+            else:
+                print("[DEBUG] Nessuna master key fornita per decriptazione profilo.")
+                
+            return dati
     except Exception as e:
         print(f"[ERRORE] Errore in ottieni_dettagli_utente: {e}")
         return None
 
-def aggiorna_profilo_utente(id_utente, dati_profilo):
-    """Aggiorna i campi del profilo di un utente."""
+def aggiorna_profilo_utente(id_utente, dati_profilo, master_key_b64=None):
+    """Aggiorna i campi del profilo di un utente, criptando i dati sensibili se possibile."""
     campi_da_aggiornare = []
     valori = []
     campi_validi = ['username', 'email', 'nome', 'cognome', 'data_nascita', 'codice_fiscale', 'indirizzo']
+    campi_sensibili = ['nome', 'cognome', 'codice_fiscale', 'indirizzo']
 
     for campo, valore in dati_profilo.items():
         if campo in campi_validi:
+            valore_da_salvare = valore
+            if master_key_b64 and campo in campi_sensibili:
+                print(f"[DEBUG] Criptazione campo {campo}...")
+                valore_da_salvare = _encrypt_if_key(valore, master_key_b64)
+            
             campi_da_aggiornare.append(f"{campo} = %s")
-            valori.append(valore)
+            valori.append(valore_da_salvare)
 
     if not campi_da_aggiornare:
         return True # Nessun campo da aggiornare
@@ -491,17 +607,23 @@ def ottieni_invito_per_token(token):
 
 
 # --- Funzioni Conti Personali ---
-def aggiungi_conto(id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=0.0, borsa_default=None):
+def aggiungi_conto(id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=0.0, borsa_default=None, master_key_b64=None):
     if not valida_iban_semplice(iban):
         return None, "IBAN non valido"
     iban_pulito = iban.strip().upper() if iban else None
+    
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    encrypted_nome = _encrypt_if_key(nome_conto, master_key, crypto)
+    encrypted_iban = _encrypt_if_key(iban_pulito, master_key, crypto)
+    
     try:
         with get_db_connection() as con:
             cur = con.cursor()
             # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
             cur.execute(
                 "INSERT INTO Conti (id_utente, nome_conto, tipo, iban, valore_manuale, borsa_default) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id_conto",
-                (id_utente, nome_conto, tipo_conto, iban_pulito, valore_manuale, borsa_default))
+                (id_utente, encrypted_nome, tipo_conto, encrypted_iban, valore_manuale, borsa_default))
             id_nuovo_conto = cur.fetchone()['id_conto']
             return id_nuovo_conto, "Conto creato con successo"
     except Exception as e:
@@ -509,19 +631,27 @@ def aggiungi_conto(id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=
         return None, f"Errore generico: {e}"
 
 
-def ottieni_conti_utente(id_utente):
+def ottieni_conti_utente(id_utente, master_key_b64=None):
     try:
         with get_db_connection() as con:
             # con.row_factory = sqlite3.Row # Removed for Supabase
             cur = con.cursor()
             cur.execute("SELECT id_conto, nome_conto, tipo FROM Conti WHERE id_utente = %s", (id_utente,))
-            return [dict(row) for row in cur.fetchall()]
+            results = [dict(row) for row in cur.fetchall()]
+            
+            # Decrypt if key available
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            if master_key:
+                for row in results:
+                    row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
+            
+            return results
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero conti: {e}")
         return []
 
 
-def ottieni_dettagli_conti_utente(id_utente):
+def ottieni_dettagli_conti_utente(id_utente, master_key_b64=None):
     try:
         with get_db_connection() as con:
             # con.row_factory = sqlite3.Row # Removed for Supabase
@@ -545,7 +675,16 @@ def ottieni_dettagli_conti_utente(id_utente):
                         WHERE C.id_utente = %s
                         ORDER BY C.nome_conto
                         """, (id_utente,))
-            return [dict(row) for row in cur.fetchall()]
+            results = [dict(row) for row in cur.fetchall()]
+            
+            # Decrypt if key available
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            if master_key:
+                for row in results:
+                    row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
+                    row['iban'] = _decrypt_if_key(row['iban'], master_key, crypto)
+            
+            return results
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero dettagli conti: {e}")
         return []
@@ -693,7 +832,11 @@ def admin_imposta_saldo_conto_condiviso(id_conto_condiviso, nuovo_saldo):
 
 
 # --- Funzioni Conti Condivisi ---
-def crea_conto_condiviso(id_famiglia, nome_conto, tipo_conto, tipo_condivisione, lista_utenti_ids=None):
+def crea_conto_condiviso(id_famiglia, nome_conto, tipo_conto, tipo_condivisione, lista_utenti_ids=None, master_key_b64=None):
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    encrypted_nome = _encrypt_if_key(nome_conto, master_key, crypto)
+    
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -701,7 +844,7 @@ def crea_conto_condiviso(id_famiglia, nome_conto, tipo_conto, tipo_condivisione,
 
             cur.execute(
                 "INSERT INTO ContiCondivisi (id_famiglia, nome_conto, tipo, tipo_condivisione) VALUES (%s, %s, %s, %s) RETURNING id_conto_condiviso",
-                (id_famiglia, nome_conto, tipo_conto, tipo_condivisione))
+                (id_famiglia, encrypted_nome, tipo_conto, tipo_condivisione))
             id_nuovo_conto_condiviso = cur.fetchone()['id_conto_condiviso']
 
             if tipo_condivisione == 'utenti' and lista_utenti_ids:
@@ -756,7 +899,7 @@ def elimina_conto_condiviso(id_conto_condiviso):
         return None
 
 
-def ottieni_conti_condivisi_utente(id_utente):
+def ottieni_conti_condivisi_utente(id_utente, master_key_b64=None):
     try:
         with get_db_connection() as con:
             # con.row_factory = sqlite3.Row # Removed for Supabase
@@ -780,7 +923,15 @@ def ottieni_conti_condivisi_utente(id_utente):
                                  CC.tipo_condivisione, CC.rettifica_saldo -- GROUP BY per tutte le colonne non aggregate
                         ORDER BY CC.nome_conto
                         """, (id_utente, id_utente))
-            return [dict(row) for row in cur.fetchall()]
+            results = [dict(row) for row in cur.fetchall()]
+            
+            # Decrypt if key available
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            if master_key:
+                for row in results:
+                    row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
+            
+            return results
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero conti condivisi utente: {e}")
         return []
@@ -841,13 +992,13 @@ def ottieni_utenti_famiglia(id_famiglia):
         return []
 
 
-def ottieni_tutti_i_conti_utente(id_utente):
+def ottieni_tutti_i_conti_utente(id_utente, master_key_b64=None):
     """
     Restituisce una lista unificata di conti personali e conti condivisi a cui l'utente partecipa.
     Ogni conto avrà un flag 'is_condiviso'.
     """
-    conti_personali = ottieni_dettagli_conti_utente(id_utente)  # Usa dettagli per avere saldo
-    conti_condivisi = ottieni_conti_condivisi_utente(id_utente)
+    conti_personali = ottieni_dettagli_conti_utente(id_utente, master_key_b64=master_key_b64)  # Usa dettagli per avere saldo
+    conti_condivisi = ottieni_conti_condivisi_utente(id_utente, master_key_b64=master_key_b64)
 
     risultato_unificato = []
     for conto in conti_personali:
@@ -1071,12 +1222,16 @@ def ottieni_categorie_e_sottocategorie(id_famiglia):
 
 
 # --- Funzioni Transazioni Personali ---
-def aggiungi_transazione(id_conto, data, descrizione, importo, id_sottocategoria=None, cursor=None):
+def aggiungi_transazione(id_conto, data, descrizione, importo, id_sottocategoria=None, cursor=None, master_key_b64=None):
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    encrypted_descrizione = _encrypt_if_key(descrizione, master_key, crypto)
+    
     # Permette di passare un cursore esistente per le transazioni atomiche
     if cursor:
         cursor.execute(
             "INSERT INTO Transazioni (id_conto, id_sottocategoria, data, descrizione, importo) VALUES (%s, %s, %s, %s, %s) RETURNING id_transazione",
-            (id_conto, id_sottocategoria, data, descrizione, importo))
+            (id_conto, id_sottocategoria, data, encrypted_descrizione, importo))
         return cursor.fetchone()['id_transazione']
     else:
         try:
@@ -1084,7 +1239,7 @@ def aggiungi_transazione(id_conto, data, descrizione, importo, id_sottocategoria
                 cur = con.cursor()
                 cur.execute(
                     "INSERT INTO Transazioni (id_conto, id_sottocategoria, data, descrizione, importo) VALUES (%s, %s, %s, %s, %s) RETURNING id_transazione",
-                    (id_conto, id_sottocategoria, data, descrizione, importo))
+                    (id_conto, id_sottocategoria, data, encrypted_descrizione, importo))
                 return cur.fetchone()['id_transazione']
         except Exception as e:
             print(f"[ERRORE] Errore generico: {e}")
@@ -1122,7 +1277,7 @@ def elimina_transazione(id_transazione):
         return None
 
 
-def ottieni_transazioni_utente(id_utente, anno, mese):
+def ottieni_transazioni_utente(id_utente, anno, mese, master_key_b64=None):
     data_inizio = f"{anno}-{mese:02d}-01"
     ultimo_giorno = (datetime.date(anno, mese, 1) + relativedelta(months=1) - relativedelta(days=1)).day
     data_fine = f"{anno}-{mese:02d}-{ultimo_giorno}"
@@ -1177,7 +1332,16 @@ def ottieni_transazioni_utente(id_utente, anno, mese):
 
                         ORDER BY data DESC, id_transazione DESC, id_transazione_condivisa DESC
                         """, (id_utente, data_inizio, data_fine, id_utente, id_utente, data_inizio, data_fine))
-            return [dict(row) for row in cur.fetchall()]
+            results = [dict(row) for row in cur.fetchall()]
+            
+            # Decrypt if key available
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            if master_key:
+                for row in results:
+                    row['descrizione'] = _decrypt_if_key(row['descrizione'], master_key, crypto)
+                    row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
+            
+            return results
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero transazioni: {e}")
         return []
@@ -1185,12 +1349,16 @@ def ottieni_transazioni_utente(id_utente, anno, mese):
 
 # --- Funzioni Transazioni Condivise ---
 def aggiungi_transazione_condivisa(id_utente_autore, id_conto_condiviso, data, descrizione, importo, id_sottocategoria=None,
-                                   cursor=None):
+                                   cursor=None, master_key_b64=None):
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    encrypted_descrizione = _encrypt_if_key(descrizione, master_key, crypto)
+    
     # Permette di passare un cursore esistente per le transazioni atomiche
     if cursor:
         cursor.execute(
             "INSERT INTO TransazioniCondivise (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, descrizione, importo) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id_transazione_condivisa",
-            (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, descrizione, importo))
+            (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, encrypted_descrizione, importo))
         return cursor.fetchone()['id_transazione_condivisa']
     else:
         try:
@@ -1198,14 +1366,18 @@ def aggiungi_transazione_condivisa(id_utente_autore, id_conto_condiviso, data, d
                 cur = con.cursor()
                 cur.execute(
                     "INSERT INTO TransazioniCondivise (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, descrizione, importo) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id_transazione_condivisa",
-                    (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, descrizione, importo))
+                    (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, encrypted_descrizione, importo))
                 return cur.fetchone()['id_transazione_condivisa']
         except Exception as e:
             print(f"[ERRORE] Errore generico durante l'aggiunta transazione condivisa: {e}")
             return None
 
 
-def modifica_transazione_condivisa(id_transazione_condivisa, data, descrizione, importo, id_sottocategoria=None):
+def modifica_transazione_condivisa(id_transazione_condivisa, data, descrizione, importo, id_sottocategoria=None, master_key_b64=None):
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    encrypted_descrizione = _encrypt_if_key(descrizione, master_key, crypto)
+    
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -1217,7 +1389,7 @@ def modifica_transazione_condivisa(id_transazione_condivisa, data, descrizione, 
                             importo      = %s,
                             id_sottocategoria = %s
                         WHERE id_transazione_condivisa = %s
-                        """, (data, descrizione, importo, id_sottocategoria, id_transazione_condivisa))
+                        """, (data, encrypted_descrizione, importo, id_sottocategoria, id_transazione_condivisa))
             return cur.rowcount > 0
     except Exception as e:
         print(f"[ERRORE] Errore generico durante la modifica transazione condivisa: {e}")

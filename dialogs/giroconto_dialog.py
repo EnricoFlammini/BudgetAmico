@@ -58,15 +58,18 @@ class GirocontoDialog(ft.AlertDialog):
 
     def _chiudi_dialog(self, e):
         self.open = False
-        self.page.update()
+        if self in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self)
+        self.controller.page.update()
 
     def apri_dialog(self):
         self._update_texts()
         self._reset_campi()
         self._popola_dropdowns()
-        self.page.dialog = self
+        if self not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self)
         self.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _reset_campi(self):
         self.dd_conto_sorgente.error_text = None
@@ -135,7 +138,7 @@ class GirocontoDialog(ft.AlertDialog):
                 is_valid = False
 
             if not is_valid:
-                self.page.update()
+                self.controller.page.update()
                 return
 
             # Estrai i dati
@@ -166,10 +169,10 @@ class GirocontoDialog(ft.AlertDialog):
             else:
                 self.controller.show_snack_bar("❌ Errore durante l'esecuzione del giroconto.", success=False)
 
-            self.page.update()
+            self.controller.page.update()
 
         except Exception as ex:
             print(f"Errore salvataggio giroconto: {ex}")
             traceback.print_exc()
             self.controller.show_snack_bar(f"Errore inaspettato: {ex}", success=False)
-            self.page.update()
+            self.controller.page.update()

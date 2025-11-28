@@ -133,42 +133,48 @@ class AppController:
             self.show_error_dialog(f"Errore durante il salvataggio: {ex}")
 
     def route_change(self, route):
-        self.page.views.clear()
-        parsed_url = urlparse(route.route)
-        route_path = parsed_url.path
-        query_params = {k: v[0] for k, v in parse_qs(parsed_url.query).items()}
+        try:
+            self.page.views.clear()
+            self.page.overlay.clear()  # Ensure no stuck dialogs/overlays
+            
+            parsed_url = urlparse(route.route)
+            route_path = parsed_url.path
+            query_params = {k: v[0] for k, v in parse_qs(parsed_url.query).items()}
 
-        if query_params.get("token") and route_path == "/registrazione":
-            self._handle_registration_token(query_params["token"])
-        elif route_path == "/":
-            self.page.views.append(self.auth_view.get_login_view())
-        elif route_path == "/registrazione":
-            self.page.views.append(self.auth_view.get_registration_view())
-        elif route_path == "/setup-admin":
-            self.page.views.append(self.build_setup_view())
-        elif route_path == "/in-attesa":
-            self.page.views.append(self.build_attesa_view())
-        elif route_path == "/dashboard":
-            if not self.get_user_id() or not self.get_family_id():
+            if query_params.get("token") and route_path == "/registrazione":
+                self._handle_registration_token(query_params["token"])
+            elif route_path == "/":
+                self.page.views.append(self.auth_view.get_login_view())
+            elif route_path == "/registrazione":
+                self.page.views.append(self.auth_view.get_registration_view())
+            elif route_path == "/setup-admin":
+                self.page.views.append(self.build_setup_view())
+            elif route_path == "/in-attesa":
+                self.page.views.append(self.build_attesa_view())
+            elif route_path == "/dashboard":
+                if not self.get_user_id() or not self.get_family_id():
+                    self.page.go("/")
+                    return
+                self._carica_dashboard()
+            elif route_path == "/export":
+                if not self.get_user_id() or not self.get_family_id():
+                    self.page.go("/")
+                    return
+                self.export_view.update_view_data()
+                self.page.views.append(self.export_view.build_view())
+            elif route_path == "/password-recovery":
+                self.page.views.append(self.auth_view.get_password_recovery_view())
+            elif route_path == "/force-change-password":
+                if not self.get_user_id():
+                    self.page.go("/")
+                    return
+                self.page.views.append(self.auth_view.get_force_change_password_view())
+            else:
                 self.page.go("/")
-                return
-            self._carica_dashboard()
-        elif route_path == "/export":
-            if not self.get_user_id() or not self.get_family_id():
-                self.page.go("/")
-                return
-            self.export_view.update_view_data()
-            self.page.views.append(self.export_view.build_view())
-        elif route_path == "/password-recovery":
-            self.page.views.append(self.auth_view.get_password_recovery_view())
-        elif route_path == "/force-change-password":
-            if not self.get_user_id():
-                self.page.go("/")
-                return
-            self.page.views.append(self.auth_view.get_force_change_password_view())
-        else:
-            self.page.go("/")
-        self.page.update()
+            self.page.update()
+        except Exception as e:
+            print(f"[ERRORE CRITICO] Errore in route_change: {e}")
+            traceback.print_exc()
 
     def _handle_registration_token(self, token):
         invito_data = ottieni_invito_per_token(token)
@@ -235,7 +241,9 @@ class AppController:
             self.show_snack_bar("Nessun file di backup selezionato.", success=False)
             return
         self.backup_path_da_ripristinare = e.files[0].path
-        self.page.dialog = self.confirm_restore_dialog
+        self.backup_path_da_ripristinare = e.files[0].path
+        if self.confirm_restore_dialog not in self.page.overlay:
+            self.page.overlay.append(self.confirm_restore_dialog)
         self.confirm_restore_dialog.open = True
         self.page.update()
 
@@ -243,10 +251,16 @@ class AppController:
         self.confirm_restore_dialog.open = False
         self.backup_path_da_ripristinare = None
         self.page.update()
+        if self.confirm_restore_dialog in self.page.overlay:
+            self.page.overlay.remove(self.confirm_restore_dialog)
+        self.page.update()
 
     def _ripristino_confermato(self, e):
         backup_path = self.backup_path_da_ripristinare
         self.confirm_restore_dialog.open = False
+        self.page.update()
+        if self.confirm_restore_dialog in self.page.overlay:
+            self.page.overlay.remove(self.confirm_restore_dialog)
         self.page.update()
         if not backup_path: return
 
@@ -278,21 +292,30 @@ class AppController:
     def open_info_dialog(self, e):
         db_version = ottieni_versione_db()
         self.info_dialog.content.value = f"Versione App: {VERSION}\nVersione Database: {db_version}\n\nSviluppato da Iscavar79."
-        self.page.dialog = self.info_dialog
+        self.info_dialog.content.value = f"Versione App: {VERSION}\nVersione Database: {db_version}\n\nSviluppato da Iscavar79."
+        if self.info_dialog not in self.page.overlay:
+            self.page.overlay.append(self.info_dialog)
         self.info_dialog.open = True
         self.page.update()
 
     def _chiudi_info_dialog(self, e):
         self.info_dialog.open = False
         self.page.update()
+        if self.info_dialog in self.page.overlay:
+            self.page.overlay.remove(self.info_dialog)
+        self.page.update()
 
     def _close_error_dialog(self, e):
         self.error_dialog.open = False
         self.page.update()
+        if self.error_dialog in self.page.overlay:
+            self.page.overlay.remove(self.error_dialog)
+        self.page.update()
 
     def show_error_dialog(self, message):
         self.error_dialog.content.value = str(message)
-        self.page.dialog = self.error_dialog
+        if self.error_dialog not in self.page.overlay:
+            self.page.overlay.append(self.error_dialog)
         self.error_dialog.open = True
         self.page.update()
 
@@ -300,12 +323,16 @@ class AppController:
         theme = self._get_current_theme_scheme() or ft.ColorScheme()
         self.confirm_delete_dialog.actions[0].style = ft.ButtonStyle(color=theme.error)
         self.page.session.set("delete_callback", delete_callback)
-        self.page.dialog = self.confirm_delete_dialog
+        if self.confirm_delete_dialog not in self.page.overlay:
+            self.page.overlay.append(self.confirm_delete_dialog)
         self.confirm_delete_dialog.open = True
         self.page.update()
 
     def _chiudi_dialog_conferma_eliminazione(self, e):
         self.confirm_delete_dialog.open = False
+        self.page.update()
+        if self.confirm_delete_dialog in self.page.overlay:
+            self.page.overlay.remove(self.confirm_delete_dialog)
         self.page.update()
 
     def _esegui_eliminazione_confermata(self, e):
@@ -313,11 +340,22 @@ class AppController:
         if callable(delete_callback): delete_callback()
         self.confirm_delete_dialog.open = False
         self.page.update()
+        if self.confirm_delete_dialog in self.page.overlay:
+            self.page.overlay.remove(self.confirm_delete_dialog)
+        self.page.update()
+        self.page.update()
 
     def post_login_setup(self, utente):
         id_utente = utente['id']
         id_famiglia = ottieni_prima_famiglia_utente(id_utente)
         self.page.session.set("utente_loggato", utente)
+        
+        # Save master_key to session for encryption/decryption
+        if utente.get("master_key"):
+            print(f"[DEBUG] Salvataggio Master Key in sessione. Valore: {utente['master_key'][:10]}...")
+            self.page.session.set("master_key", utente["master_key"])
+        else:
+            print("[DEBUG] ATTENZIONE: Nessuna Master Key trovata nell'oggetto utente!")
 
         if utente.get("forza_cambio_password"):
             self.page.go("/force-change-password")

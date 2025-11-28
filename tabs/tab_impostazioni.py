@@ -23,14 +23,14 @@ class ImpostazioniTab(ft.Container):
         """Callback per il cambio lingua."""
         lang_code = e.control.value
         self.controller.loc.set_language(lang_code)
-        self.page.client_storage.set("settings.language", lang_code)
+        self.controller.page.client_storage.set("settings.language", lang_code)
         self.controller.update_all_views(is_initial_load=True)
 
     def _valuta_cambiata(self, e):
         """Callback per il cambio valuta."""
         currency_code = e.control.value
         self.controller.loc.set_currency(currency_code)
-        self.page.client_storage.set("settings.currency", currency_code)
+        self.controller.page.client_storage.set("settings.currency", currency_code)
         self.controller.update_all_views()
 
     def _salva_conto_default_cliccato(self, e):
@@ -65,7 +65,11 @@ class ImpostazioniTab(ft.Container):
             "codice_fiscale": self.txt_codice_fiscale.value,
             "indirizzo": self.txt_indirizzo.value,
         }
-        successo_profilo = aggiorna_profilo_utente(id_utente, dati_profilo)
+        
+        master_key_b64 = self.controller.page.session.get("master_key")
+        print(f"[DEBUG] Salvataggio profilo. Master Key in sessione: {bool(master_key_b64)}")
+        
+        successo_profilo = aggiorna_profilo_utente(id_utente, dati_profilo, master_key_b64)
 
         # Aggiorna password se inserita
         nuova_password = self.txt_nuova_password.value
@@ -208,7 +212,10 @@ class ImpostazioniTab(ft.Container):
                 self.dd_conto_default.value = f"{conto_default_info['tipo'][0].upper()}{conto_default_info['id']}"
 
             # Popola i campi del profilo utente
-            dati_utente = ottieni_dettagli_utente(utente_id)
+            master_key_b64 = self.controller.page.session.get("master_key")
+            print(f"[DEBUG] Caricamento profilo. Master Key in sessione: {bool(master_key_b64)}")
+            dati_utente = ottieni_dettagli_utente(utente_id, master_key_b64)
+            
             if dati_utente:
                 self.txt_username.value = dati_utente.get("username", "")
                 self.txt_email.value = dati_utente.get("email", "")
@@ -218,5 +225,5 @@ class ImpostazioniTab(ft.Container):
                 self.txt_codice_fiscale.value = dati_utente.get("codice_fiscale", "")
                 self.txt_indirizzo.value = dati_utente.get("indirizzo", "")
         
-        if self.page:
-            self.page.update()
+        if self.controller.page:
+            self.controller.page.update()

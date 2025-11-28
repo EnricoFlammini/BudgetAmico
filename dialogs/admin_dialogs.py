@@ -124,13 +124,17 @@ class AdminDialogs:
             self.txt_nome_categoria.value = ""
             self.id_categoria_in_modifica = None
 
-        self.page.dialog = self.dialog_modifica_cat
+        if self.dialog_modifica_cat not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_modifica_cat)
         self.dialog_modifica_cat.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _chiudi_dialog_categoria(self, e):
         self.dialog_modifica_cat.open = False
-        self.page.update()
+        self.controller.page.update()
+        if self.dialog_modifica_cat in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_modifica_cat)
+        self.controller.page.update()
 
     def _salva_categoria_cliccato(self, e):
         nome_cat = self.txt_nome_categoria.value
@@ -171,13 +175,17 @@ class AdminDialogs:
         else:
             return # Non fare nulla se non ci sono dati sufficienti
 
-        self.page.dialog = self.dialog_sottocategoria
+        if self.dialog_sottocategoria not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_sottocategoria)
         self.dialog_sottocategoria.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _chiudi_dialog_sottocategoria(self, e):
         self.dialog_sottocategoria.open = False
-        self.page.update()
+        self.controller.page.update()
+        if self.dialog_sottocategoria in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_sottocategoria)
+        self.controller.page.update()
 
     def _salva_sottocategoria_cliccato(self, e):
         nome_sottocat = self.txt_nome_sottocategoria.value
@@ -212,13 +220,17 @@ class AdminDialogs:
         self.txt_username_o_email.value = ""
         self.txt_username_o_email.error_text = None
         
-        self.page.dialog = self.dialog_invito_membri
+        if self.dialog_invito_membri not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_invito_membri)
         self.dialog_invito_membri.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _chiudi_dialog_invito(self, e):
         self.dialog_invito_membri.open = False
-        self.page.update()
+        self.controller.page.update()
+        if self.dialog_invito_membri in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_invito_membri)
+        self.controller.page.update()
 
     def _invita_membro_cliccato(self, e):
         email = self.txt_username_o_email.value
@@ -265,13 +277,17 @@ class AdminDialogs:
         self.membro_in_modifica = membro_data
         self.dialog_modifica_ruolo.title.value = f"{self.loc.get('edit')} {self.loc.get('role')} - {membro_data['nome_visualizzato']}"
         self.dd_modifica_ruolo.value = membro_data['ruolo']
-        self.page.dialog = self.dialog_modifica_ruolo
+        if self.dialog_modifica_ruolo not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_modifica_ruolo)
         self.dialog_modifica_ruolo.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _chiudi_dialog_modifica_ruolo(self, e):
         self.dialog_modifica_ruolo.open = False
-        self.page.update()
+        self.controller.page.update()
+        if self.dialog_modifica_ruolo in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_modifica_ruolo)
+        self.controller.page.update()
 
     def _salva_ruolo_cliccato(self, e):
         if not self.membro_in_modifica:
@@ -319,13 +335,17 @@ class AdminDialogs:
         # Aggiorna prefisso valuta se è cambiato
         self.txt_budget_limite.prefix_text = loc.currencies[loc.currency]['symbol']
 
-        self.page.dialog = self.dialog_imposta_budget
+        if self.dialog_imposta_budget not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_imposta_budget)
         self.dialog_imposta_budget.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _chiudi_dialog_imposta_budget(self, e):
         self.dialog_imposta_budget.open = False
-        self.page.update()
+        self.controller.page.update()
+        if self.dialog_imposta_budget in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_imposta_budget)
+        self.controller.page.update()
 
     def _salva_budget_cliccato(self, e):
         loc = self.loc

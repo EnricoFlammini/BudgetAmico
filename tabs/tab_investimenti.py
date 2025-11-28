@@ -36,7 +36,8 @@ class InvestimentiTab(ft.Container):
             return
 
         # Ottieni tutti i conti di investimento dell'utente
-        conti_utente = ottieni_dettagli_conti_utente(utente_id)
+        master_key_b64 = self.controller.page.session.get("master_key")
+        conti_utente = ottieni_dettagli_conti_utente(utente_id, master_key_b64=master_key_b64)
         conti_investimento = [c for c in conti_utente if c['tipo'] == 'Investimento']
 
         # Calcola valori totali
@@ -394,12 +395,13 @@ class InvestimentiTab(ft.Container):
                 
             dialog = InvestimentoDialog(self.page, on_save)
             
-            if hasattr(self.page, "open"):
-                self.page.open(dialog)
+            if hasattr(self.controller.page, "open"):
+                self.controller.page.open(dialog)
             else:
-                self.page.dialog = dialog
+                if dialog not in self.controller.page.overlay:
+                    self.controller.page.overlay.append(dialog)
                 dialog.open = True
-                self.page.update()
+                self.controller.page.update()
             print("Dialogo aperto con successo.")
         except Exception as ex:
             print(f"Errore nell'apertura del dialogo: {ex}")
@@ -418,12 +420,13 @@ class InvestimentiTab(ft.Container):
                 
             dialog = InvestimentoDialog(self.page, on_save, conto_da_modificare=conto_data)
             
-            if hasattr(self.page, "open"):
-                self.page.open(dialog)
+            if hasattr(self.controller.page, "open"):
+                self.controller.page.open(dialog)
             else:
-                self.page.dialog = dialog
+                if dialog not in self.controller.page.overlay:
+                    self.controller.page.overlay.append(dialog)
                 dialog.open = True
-                self.page.update()
+                self.controller.page.update()
             print("Dialogo modifica aperto con successo.")
         except Exception as ex:
             print(f"Errore nell'apertura del dialogo modifica: {ex}")

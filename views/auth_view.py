@@ -164,6 +164,11 @@ class AuthView:
             self.page.update()
 
     def _registra_cliccato(self, e):
+        # Disable button to prevent double submission
+        btn_registra = e.control
+        btn_registra.disabled = True
+        btn_registra.update()
+
         username = self.txt_reg_username.value.strip()
         email = self.txt_reg_email.value.lower().strip()
         nome = self.txt_reg_nome.value.strip()
@@ -190,22 +195,70 @@ class AuthView:
             is_valid = False
 
         if not is_valid:
+            btn_registra.disabled = False
+            btn_registra.update()
             self.page.update()
             return
 
-        id_nuovo_utente = registra_utente(nome, cognome, username, password, email, data_nascita, codice_fiscale, indirizzo)
+        print("[DEBUG] Chiamata a registra_utente...")
+        result = registra_utente(nome, cognome, username, password, email, data_nascita, codice_fiscale, indirizzo)
 
-        if id_nuovo_utente:
+        if result:
+            print(f"[DEBUG] Registrazione OK. Result keys: {result.keys()}")
+            id_nuovo_utente = result.get("id_utente")
+            recovery_key = result.get("recovery_key")
+            
             invito_attivo = self.page.session.get("invito_attivo")
             if invito_attivo:
                 aggiungi_utente_a_famiglia(invito_attivo['id_famiglia'], id_nuovo_utente,
                                            invito_attivo['ruolo_assegnato'])
                 self.page.session.remove("invito_attivo")
 
-            self.controller.show_snack_bar("Registrazione completata! Effettua il login.", success=True)
-            self.page.go("/")
+            # Show recovery key dialog
+            def close_dialog(e):
+                print("[DEBUG] Dialog chiuso. Redirect a login.")
+                dialog.open = False
+                self.page.overlay.remove(dialog)
+                self.page.update()
+                self.controller.show_snack_bar("Registrazione completata! Effettua il login.", success=True)
+                self.page.go("/")
+            
+            print("[DEBUG] Apertura dialog recovery key...")
+            dialog = ft.AlertDialog(
+                modal=True,
+                title=ft.Text("⚠️ SALVA LA TUA CHIAVE DI RECUPERO", weight=ft.FontWeight.BOLD, size=18),
+                content=ft.Column([
+                    ft.Text("Questa è la tua chiave di recupero. SALVALA IN UN POSTO SICURO!", 
+                           size=14, weight=ft.FontWeight.BOLD),
+                    ft.Text("Se perdi la password, questa chiave è l'UNICO modo per recuperare i tuoi dati.", 
+                           size=12, color=ft.Colors.RED_400),
+                    ft.Container(height=10),
+                    ft.TextField(
+                        value=recovery_key,
+                        read_only=True,
+                        multiline=True,
+                        text_size=12,
+                        border_color=ft.Colors.BLUE_400,
+                        text_style=ft.TextStyle(font_family="Courier New")
+                    ),
+                    ft.Container(height=10),
+                    ft.Text("⚠️ Senza questa chiave, i dati criptati saranno PERSI per sempre!", 
+                           size=11, italic=True, color=ft.Colors.ORANGE_400, weight=ft.FontWeight.BOLD)
+                ], tight=True, scroll=ft.ScrollMode.AUTO, width=500),
+                actions=[
+                    ft.TextButton("✅ Ho salvato la chiave", on_click=close_dialog, 
+                                 style=ft.ButtonStyle(color=ft.Colors.GREEN_400))
+                ],
+                actions_alignment=ft.MainAxisAlignment.END
+            )
+            
+            self.page.overlay.append(dialog)
+            dialog.open = True
+            self.page.update()
         else:
             self.txt_reg_username.error_text = "Username o Email già in uso."
+            btn_registra.disabled = False
+            btn_registra.update()
             self.page.update()
 
     # --- VISTA E LOGICA RECUPERO PASSWORD ---
