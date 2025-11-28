@@ -235,7 +235,7 @@ class TransactionDialog(ft.AlertDialog):
                 return modifica_transazione_condivisa(id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], dati_nuovi['id_sottocategoria'], master_key_b64=master_key_b64)
             else:
                 id_trans = transazione_originale['id_transazione']
-                return modifica_transazione(id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], dati_nuovi['id_sottocategoria'], dati_nuovi['id_conto'])
+                return modifica_transazione(id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], dati_nuovi['id_sottocategoria'], dati_nuovi['id_conto'], master_key_b64=master_key_b64)
         
         # Caso 2: Il tipo di conto è cambiato (es. da Personale a Condiviso)
         # Trattiamo come un'operazione di "elimina e crea"

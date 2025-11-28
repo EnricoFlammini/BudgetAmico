@@ -1246,7 +1246,11 @@ def aggiungi_transazione(id_conto, data, descrizione, importo, id_sottocategoria
             return None
 
 
-def modifica_transazione(id_transazione, data, descrizione, importo, id_sottocategoria=None, id_conto=None):
+def modifica_transazione(id_transazione, data, descrizione, importo, id_sottocategoria=None, id_conto=None, master_key_b64=None):
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    encrypted_descrizione = _encrypt_if_key(descrizione, master_key, crypto)
+
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -1254,11 +1258,11 @@ def modifica_transazione(id_transazione, data, descrizione, importo, id_sottocat
             if id_conto is not None:
                 cur.execute(
                     "UPDATE Transazioni SET data = %s, descrizione = %s, importo = %s, id_sottocategoria = %s, id_conto = %s WHERE id_transazione = %s",
-                    (data, descrizione, importo, id_sottocategoria, id_conto, id_transazione))
+                    (data, encrypted_descrizione, importo, id_sottocategoria, id_conto, id_transazione))
             else:
                 cur.execute(
                     "UPDATE Transazioni SET data = %s, descrizione = %s, importo = %s, id_sottocategoria = %s WHERE id_transazione = %s",
-                    (data, descrizione, importo, id_sottocategoria, id_transazione))
+                    (data, encrypted_descrizione, importo, id_sottocategoria, id_transazione))
             return cur.rowcount > 0
     except Exception as e:
         print(f"[ERRORE] Errore generico durante la modifica: {e}")
