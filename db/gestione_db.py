@@ -690,10 +690,16 @@ def ottieni_dettagli_conti_utente(id_utente, master_key_b64=None):
         return []
 
 
-def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=None, borsa_default=None):
+def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=None, borsa_default=None, master_key_b64=None):
     if not valida_iban_semplice(iban):
         return False, "IBAN non valido"
     iban_pulito = iban.strip().upper() if iban else None
+    
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    encrypted_nome = _encrypt_if_key(nome_conto, master_key, crypto)
+    encrypted_iban = _encrypt_if_key(iban_pulito, master_key, crypto)
+
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -701,7 +707,60 @@ def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valor
             # Se il valore manuale non viene passato, non lo aggiorniamo (manteniamo quello esistente)
             if valore_manuale is not None:
                 cur.execute("UPDATE Conti SET nome_conto = %s, tipo = %s, iban = %s, valore_manuale = %s, borsa_default = %s WHERE id_conto = %s AND id_utente = %s",
-                            (nome_conto, tipo_conto, iban_pulito, valore_manuale, borsa_default, id_conto, id_utente))
+                            (encrypted_nome, tipo_conto, encrypted_iban, valore_manuale, borsa_default, id_conto, id_utente))
+            else:
+                 # Se valore_manuale è None, non aggiornarlo (o gestisci diversamente se necessario, ma la query originale lo aggiornava solo se presente?)
+                 # Wait, the original query ALWAYS updated valore_manuale if it was passed, but the logic was:
+                 # if valore_manuale is not None: update everything including valore_manuale
+                 # else: ... wait, the original code ONLY had the if block?
+                 # Let's check the original code again.
+                 # Original:
+                 # if valore_manuale is not None:
+                 #    cur.execute(..., (..., valore_manuale, ...))
+                 # It seems if valore_manuale IS None, it did NOTHING? That looks like a bug or I missed something.
+                 # Ah, looking at the original code:
+                 # if valore_manuale is not None:
+                 #    cur.execute(...)
+                 # It implies that if valore_manuale is None, NO UPDATE happens? That seems wrong for a "modifica_conto" function.
+                 # Let's assume I should handle the case where valore_manuale is None by NOT updating it, but updating others.
+                 # But for now I will stick to the original logic structure but with encryption.
+                 # Actually, looking at the original snippet:
+                 # if valore_manuale is not None:
+                 #    cur.execute(...)
+                 # It seems it ONLY updates if valore_manuale is not None. This might be because ContoDialog always passes it?
+                 # Let's check ContoDialog line 334:
+                 # valore_manuale_modifica = saldo_iniziale if tipo == 'Fondo Pensione' else None
+                 # So if it's NOT Fondo Pensione, valore_manuale is None.
+                 # So modifica_conto does NOTHING if it's not Fondo Pensione?
+                 # That explains why I might have missed something.
+                 # Let's look at the original code again very carefully.
+                 pass
+
+            # RE-READING ORIGINAL CODE:
+            # if valore_manuale is not None:
+            #     cur.execute("UPDATE ...")
+            # 
+            # This means for normal accounts (where valore_manuale is None), the update is SKIPPED!
+            # This looks like a bug in the existing code, or I am misinterpreting "valore_manuale is not None".
+            # If I modify a "Corrente" account, valore_manuale is None. So the update is skipped?
+            # User said "Ho modificato ula transazione...". Maybe they haven't modified accounts yet?
+            # Or maybe I should fix this "bug" too?
+            # Wait, let's check ContoDialog again.
+            # Line 334: valore_manuale_modifica = saldo_iniziale if tipo == 'Fondo Pensione' else None
+            # If I change the name of a checking account, valore_manuale is None.
+            # So `modifica_conto` returns `cur.rowcount > 0` which will be False (initially 0? No, if execute is not called...).
+            # Actually if execute is not called, it returns `UnboundLocalError` for `cur`? No, `cur` is defined.
+            # But `cur.rowcount` would be -1 or 0.
+            # So `modifica_conto` returns False.
+            # So the user probably CANNOT modify normal accounts right now?
+            # I should fix this logic to update other fields even if valore_manuale is None.
+            
+            if valore_manuale is not None:
+                cur.execute("UPDATE Conti SET nome_conto = %s, tipo = %s, iban = %s, valore_manuale = %s, borsa_default = %s WHERE id_conto = %s AND id_utente = %s",
+                            (encrypted_nome, tipo_conto, encrypted_iban, valore_manuale, borsa_default, id_conto, id_utente))
+            else:
+                cur.execute("UPDATE Conti SET nome_conto = %s, tipo = %s, iban = %s, borsa_default = %s WHERE id_conto = %s AND id_utente = %s",
+                            (encrypted_nome, tipo_conto, encrypted_iban, borsa_default, id_conto, id_utente))
             
             return cur.rowcount > 0, "Conto modificato con successo"
     except Exception as e:
@@ -859,14 +918,18 @@ def crea_conto_condiviso(id_famiglia, nome_conto, tipo_conto, tipo_condivisione,
         return None
 
 
-def modifica_conto_condiviso(id_conto_condiviso, nome_conto, tipo_conto, lista_utenti_ids=None):
+def modifica_conto_condiviso(id_conto_condiviso, nome_conto, tipo_conto, lista_utenti_ids=None, master_key_b64=None):
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    encrypted_nome = _encrypt_if_key(nome_conto, master_key, crypto)
+
     try:
         with get_db_connection() as con:
             cur = con.cursor()
             # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
 
             cur.execute("UPDATE ContiCondivisi SET nome_conto = %s, tipo = %s WHERE id_conto_condiviso = %s",
-                        (nome_conto, tipo_conto, id_conto_condiviso))
+                        (encrypted_nome, tipo_conto, id_conto_condiviso))
 
             cur.execute("SELECT tipo_condivisione FROM ContiCondivisi WHERE id_conto_condiviso = %s",
                         (id_conto_condiviso,))
@@ -1011,13 +1074,12 @@ def ottieni_tutti_i_conti_utente(id_utente, master_key_b64=None):
     return risultato_unificato
 
 
-def ottieni_tutti_i_conti_famiglia(id_famiglia):
+def ottieni_tutti_i_conti_famiglia(id_famiglia, master_key_b64=None):
     """
     Restituisce una lista unificata di TUTTI i conti (personali e condivisi)
     di una data famiglia, escludendo quelli di investimento.
     """
     try:
-        with get_db_connection() as con:
             # con.row_factory = sqlite3.Row # Removed for Supabase
             cur = con.cursor()
 
@@ -1042,8 +1104,16 @@ def ottieni_tutti_i_conti_famiglia(id_famiglia):
                         WHERE id_famiglia = %s
                         """, (id_famiglia,))
             conti_condivisi = [dict(row) for row in cur.fetchall()]
+            
+            results = conti_personali + conti_condivisi
+            
+            # Decrypt if key available
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            if master_key:
+                for row in results:
+                    row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
 
-            return conti_personali + conti_condivisi
+            return results
 
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero di tutti i conti famiglia: {e}")
@@ -1051,7 +1121,7 @@ def ottieni_tutti_i_conti_famiglia(id_famiglia):
 
 
 def esegui_giroconto(id_sorgente, tipo_sorgente, id_destinazione, tipo_destinazione, importo, data, descrizione,
-                     id_utente_autore):
+                     id_utente_autore, master_key_b64=None):
     """
     Esegue un giroconto tra due conti (personali o condivisi).
     Crea due transazioni opposte in modo atomico.
@@ -1066,17 +1136,17 @@ def esegui_giroconto(id_sorgente, tipo_sorgente, id_destinazione, tipo_destinazi
 
             # Debito sul conto sorgente
             if tipo_sorgente == 'P':
-                aggiungi_transazione(id_sorgente, data, desc_sorgente, -abs(importo), cursor=cur)
+                aggiungi_transazione(id_sorgente, data, desc_sorgente, -abs(importo), cursor=cur, master_key_b64=master_key_b64)
             elif tipo_sorgente == 'C':
                 aggiungi_transazione_condivisa(id_utente_autore, id_sorgente, data, desc_sorgente, -abs(importo),
-                                               cursor=cur)
+                                               cursor=cur, master_key_b64=master_key_b64)
 
             # Credito sul conto destinazione
             if tipo_destinazione == 'P':
-                aggiungi_transazione(id_destinazione, data, desc_destinazione, abs(importo), cursor=cur)
+                aggiungi_transazione(id_destinazione, data, desc_destinazione, abs(importo), cursor=cur, master_key_b64=master_key_b64)
             elif tipo_destinazione == 'C':
                 aggiungi_transazione_condivisa(id_utente_autore, id_destinazione, data, desc_destinazione, abs(importo),
-                                               cursor=cur)
+                                               cursor=cur, master_key_b64=master_key_b64)
 
             con.commit()
             return True

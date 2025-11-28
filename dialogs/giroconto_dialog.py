@@ -139,37 +139,6 @@ class GirocontoDialog(ft.AlertDialog):
                     is_valid = False
             except (ValueError, TypeError):
                 self.txt_importo.error_text = self.loc.get("invalid_amount")
-                is_valid = False
-
-            if not is_valid:
-                self.controller.page.update()
-                return
-
-            # Estrai i dati
-            tipo_sorgente = sorgente_key[0]
-            id_sorgente = int(sorgente_key[1:])
-            tipo_destinazione = destinazione_key[0]
-            id_destinazione = int(destinazione_key[1:])
-            descrizione = self.txt_descrizione.value
-            data = self.txt_data.value
-            id_utente_autore = self.controller.get_user_id()
-
-            # Esegui l'operazione sul DB
-            success = esegui_giroconto(
-                id_sorgente=id_sorgente,
-                tipo_sorgente=tipo_sorgente,
-                id_destinazione=id_destinazione,
-                tipo_destinazione=tipo_destinazione,
-                importo=importo,
-                data=data,
-                descrizione=descrizione,
-                id_utente_autore=id_utente_autore
-            )
-
-            if success:
-                self.controller.show_snack_bar("Giroconto eseguito con successo!", success=True)
-                self.open = False
-                self.controller.db_write_operation()
             else:
                 self.controller.show_snack_bar("❌ Errore durante l'esecuzione del giroconto.", success=False)
 

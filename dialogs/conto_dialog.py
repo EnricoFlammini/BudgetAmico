@@ -331,7 +331,7 @@ class ContoDialog(ft.AlertDialog):
                 # Passa il saldo_iniziale come valore_manuale solo se il tipo è 'Fondo Pensione'
                 valore_manuale_modifica = saldo_iniziale if tipo == 'Fondo Pensione' else None
                 
-                success, msg = modifica_conto(self.conto_id_in_modifica, utente_id, nome, tipo, iban, valore_manuale=valore_manuale_modifica)
+                success, msg = modifica_conto(self.conto_id_in_modifica, utente_id, nome, tipo, iban, valore_manuale=valore_manuale_modifica, master_key_b64=master_key_b64)
                 messaggio = "modificato" if success else "errore modifica"
                 new_conto_id = self.conto_id_in_modifica
                 
