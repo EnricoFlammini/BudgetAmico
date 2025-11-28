@@ -61,6 +61,79 @@ def valida_iban_semplice(iban):
     return iban_pulito.startswith("IT") and len(iban_pulito) == 27 and iban_pulito[2:].isalnum()
 
 
+
+# --- Funzioni Configurazioni ---
+def get_configurazione(chiave, id_famiglia=None):
+    """
+    Recupera il valore di una configurazione.
+    Se id_famiglia è None, cerca una configurazione globale.
+    Se id_famiglia è specificato, cerca una configurazione per quella famiglia.
+    """
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            if id_famiglia is None:
+                cur.execute("SELECT valore FROM Configurazioni WHERE chiave = %s AND id_famiglia IS NULL", (chiave,))
+            else:
+                cur.execute("SELECT valore FROM Configurazioni WHERE chiave = %s AND id_famiglia = %s", (chiave, id_famiglia))
+            
+            res = cur.fetchone()
+            return res['valore'] if res else None
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero configurazione {chiave}: {e}")
+        return None
+
+def set_configurazione(chiave, valore, id_famiglia=None):
+    """
+    Imposta o aggiorna una configurazione.
+    Se id_famiglia è None, imposta una configurazione globale.
+    """
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            if id_famiglia is None:
+                cur.execute("""
+                    INSERT INTO Configurazioni (chiave, valore, id_famiglia) 
+                    VALUES (%s, %s, NULL)
+                    ON CONFLICT (chiave, id_famiglia) WHERE id_famiglia IS NULL
+                    DO UPDATE SET valore = EXCLUDED.valore
+                """, (chiave, valore))
+            else:
+                cur.execute("""
+                    INSERT INTO Configurazioni (chiave, valore, id_famiglia) 
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (chiave, id_famiglia) 
+                    DO UPDATE SET valore = EXCLUDED.valore
+                """, (chiave, valore, id_famiglia))
+            con.commit()
+            return True
+    except Exception as e:
+        print(f"[ERRORE] Errore salvataggio configurazione {chiave}: {e}")
+        return False
+
+def get_smtp_config(id_famiglia=None):
+    """Recupera la configurazione SMTP completa."""
+    return {
+        'server': get_configurazione('smtp_server', id_famiglia),
+        'port': get_configurazione('smtp_port', id_famiglia),
+        'user': get_configurazione('smtp_user', id_famiglia),
+        'password': get_configurazione('smtp_password', id_famiglia),
+        'provider': get_configurazione('smtp_provider', id_famiglia)
+    }
+
+def save_smtp_config(settings, id_famiglia=None):
+    """Salva la configurazione SMTP."""
+    try:
+        set_configurazione('smtp_server', settings.get('server'), id_famiglia)
+        set_configurazione('smtp_port', settings.get('port'), id_famiglia)
+        set_configurazione('smtp_user', settings.get('user'), id_famiglia)
+        set_configurazione('smtp_password', settings.get('password'), id_famiglia)
+        set_configurazione('smtp_provider', settings.get('provider'), id_famiglia)
+        return True
+    except Exception as e:
+        print(f"[ERRORE] Errore salvataggio SMTP config: {e}")
+        return False
+
 # --- Funzioni Utenti & Login ---
 
 
@@ -2479,5 +2552,4 @@ if __name__ == "__main__":
     if os.path.exists(DB_FILE):
         os.remove(DB_FILE)
         print(f"File '{DB_FILE}' rimosso per un test pulito.")
-    setup_database()
-    print("\n[OK] Database vergine creato con successo.")
+

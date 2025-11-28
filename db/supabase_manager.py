@@ -63,8 +63,15 @@ class SupabaseManager:
             conn = cls._connection_pool.getconn()
             
             # Imposta contesto utente per Row Level Security
-            if id_utente is not None:
-                cls.set_user_context(conn, id_utente)
+            user_id_to_set = id_utente if id_utente is not None else cls._current_user_id
+            
+            if user_id_to_set is not None:
+                cls.set_user_context(conn, user_id_to_set)
+            else:
+                # Assicura che non ci sia un contesto residuo se la connessione è riciclata male
+                with conn.cursor() as cur:
+                    cur.execute("RESET app.current_user_id")
+                    conn.commit()
             
             return conn
         except Exception as e:

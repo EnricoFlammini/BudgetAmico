@@ -2,9 +2,7 @@ import flet as ft
 # Google Auth rimosso - ora usiamo Supabase PostgreSQL
 from functools import partial
 from utils.styles import AppColors, AppStyles
-from db.gestione_db import ottieni_categorie_e_sottocategorie, ottieni_membri_famiglia, rimuovi_utente_da_famiglia, ottieni_budget_famiglia
-
-from utils.config_manager import get_smtp_settings, save_smtp_settings
+from db.gestione_db import ottieni_categorie_e_sottocategorie, ottieni_membri_famiglia, rimuovi_utente_da_famiglia, ottieni_budget_famiglia, get_smtp_config, save_smtp_config
 from utils.email_sender import send_email
 
 class AdminTab(ft.Container):
@@ -315,14 +313,24 @@ class AdminTab(ft.Container):
             self.controller.show_snack_bar("Tutti i campi email sono obbligatori.", success=False)
             return
 
-        if save_smtp_settings(server, port, user, password, provider):
+        smtp_settings = {
+            'server': server,
+            'port': port,
+            'user': user,
+            'password': password,
+            'provider': provider
+        }
+
+        id_famiglia = self.controller.get_family_id()
+        if save_smtp_config(smtp_settings, id_famiglia):
             self.controller.show_snack_bar("Configurazione email salvata con successo!", success=True)
         else:
             self.controller.show_snack_bar("Errore durante il salvataggio della configurazione.", success=False)
 
     def update_tab_email(self):
         """Popola i campi email con i dati salvati."""
-        smtp_settings = get_smtp_settings()
+        id_famiglia = self.controller.get_family_id()
+        smtp_settings = get_smtp_config(id_famiglia)
         if smtp_settings:
             provider = smtp_settings.get('provider', 'custom')
             self.dd_email_provider.value = provider
