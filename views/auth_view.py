@@ -27,6 +27,9 @@ class AuthView:
         self.txt_reg_cognome = ft.TextField()
         self.txt_reg_password = ft.TextField(password=True, can_reveal_password=True)
         self.txt_reg_conferma_password = ft.TextField(password=True, can_reveal_password=True)
+        self.txt_reg_data_nascita = ft.TextField(label="Data di Nascita (YYYY-MM-DD)")
+        self.txt_reg_codice_fiscale = ft.TextField(label="Codice Fiscale")
+        self.txt_reg_indirizzo = ft.TextField(label="Indirizzo")
 
         # Controlli per il Recupero Password
         self.txt_recovery_email = ft.TextField(autofocus=True)
@@ -102,8 +105,8 @@ class AuthView:
 
         # Reset dei campi
         for field in [self.txt_reg_username, self.txt_reg_email, self.txt_reg_nome, self.txt_reg_cognome,
-                      self.txt_reg_password,
-                      self.txt_reg_conferma_password]:
+                      self.txt_reg_password, self.txt_reg_conferma_password,
+                      self.txt_reg_data_nascita, self.txt_reg_codice_fiscale, self.txt_reg_indirizzo]:
             field.value = ""
             field.error_text = None
 
@@ -119,6 +122,9 @@ class AuthView:
                         self.txt_reg_cognome,
                         self.txt_reg_password,
                         self.txt_reg_conferma_password,
+                        self.txt_reg_data_nascita,
+                        self.txt_reg_codice_fiscale,
+                        self.txt_reg_indirizzo,
                         ft.Container(height=10),
                         ft.ElevatedButton(
                             loc.get("register_now"),
@@ -164,16 +170,19 @@ class AuthView:
         cognome = self.txt_reg_cognome.value.strip()
         password = self.txt_reg_password.value
         conferma_password = self.txt_reg_conferma_password.value
+        data_nascita = self.txt_reg_data_nascita.value.strip()
+        codice_fiscale = self.txt_reg_codice_fiscale.value.strip()
+        indirizzo = self.txt_reg_indirizzo.value.strip()
 
         # Reset errori
         for field in [self.txt_reg_username, self.txt_reg_email, self.txt_reg_nome, self.txt_reg_cognome,
-                      self.txt_reg_password,
-                      self.txt_reg_conferma_password]:
+                      self.txt_reg_password, self.txt_reg_conferma_password,
+                      self.txt_reg_data_nascita, self.txt_reg_codice_fiscale, self.txt_reg_indirizzo]:
             field.error_text = None
 
         # Validazione
         is_valid = True
-        if not all([username, email, nome, cognome, password, conferma_password]):
+        if not all([username, email, nome, cognome, password, conferma_password, data_nascita, codice_fiscale, indirizzo]):
             self.controller.show_snack_bar("Tutti i campi sono obbligatori.", success=False)
             is_valid = False
         if password != conferma_password:
@@ -184,7 +193,7 @@ class AuthView:
             self.page.update()
             return
 
-        id_nuovo_utente = registra_utente(username, email, password, nome, cognome)
+        id_nuovo_utente = registra_utente(nome, cognome, username, password, email, data_nascita, codice_fiscale, indirizzo)
 
         if id_nuovo_utente:
             invito_attivo = self.page.session.get("invito_attivo")
