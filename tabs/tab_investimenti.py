@@ -39,9 +39,6 @@ class InvestimentiTab(ft.Container):
         master_key_b64 = self.controller.page.session.get("master_key")
         conti_utente = ottieni_dettagli_conti_utente(utente_id, master_key_b64=master_key_b64)
         conti_investimento = [c for c in conti_utente if c['tipo'] == 'Investimento']
-        print(f"[DEBUG] update_view_data: Trovati {len(conti_investimento)} conti investimento.")
-        for c in conti_investimento:
-            print(f"[DEBUG] - {c['nome_conto']} (ID: {c['id_conto']})")
 
         # Calcola valori totali
         valore_totale = 0
@@ -112,18 +109,13 @@ class InvestimentiTab(ft.Container):
                         icon_color=theme.primary,
                         on_click=self._aggiungi_conto_investimento
                     ),
+
                     ft.IconButton(
                         icon=ft.Icons.REFRESH,
                         tooltip=loc.get("sync_prices"),
                         icon_color=theme.primary,
                         on_click=self._sincronizza_tutti_prezzi,
                         disabled=self.sincronizzazione_in_corso
-                    ),
-                    ft.IconButton(
-                        icon=ft.Icons.ADD,
-                        tooltip=loc.get("add_operation"),
-                        icon_color=theme.primary,
-                        on_click=self._apri_menu_aggiungi_operazione
                     )
                 ])
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
@@ -338,57 +330,7 @@ class InvestimentiTab(ft.Container):
                 success=False
             )
 
-    def _apri_menu_aggiungi_operazione(self, e):
-        """Apre un menu per selezionare il conto su cui aggiungere un'operazione."""
-        utente_id = self.controller.get_user_id()
-        if not utente_id:
-            return
 
-        conti_utente = ottieni_dettagli_conti_utente(utente_id)
-        conti_investimento = [c for c in conti_utente if c['tipo'] == 'Investimento']
-        
-        if not conti_investimento:
-            self.controller.show_snack_bar(
-                self.controller.loc.get("no_investment_accounts"),
-                success=False
-            )
-            return
-        
-        # Se c'è un solo conto, apri direttamente il dialogo
-        if len(conti_investimento) == 1:
-            self.controller.portafoglio_dialogs.apri_dialog_portafoglio(e, conti_investimento[0])
-            return
-        
-        # Altrimenti mostra un menu di selezione
-        def close_bs(e):
-            bs.open = False
-            bs.update()
-        
-        def apri_portafoglio(conto):
-            close_bs(None)
-            self.controller.portafoglio_dialogs.apri_dialog_portafoglio(None, conto)
-        
-        bs = ft.BottomSheet(
-            ft.Container(
-                ft.Column([
-                    ft.Text(self.controller.loc.get("select_investment_account"), 
-                           size=16, weight=ft.FontWeight.BOLD),
-                    ft.Divider(),
-                    *[
-                        ft.ListTile(
-                            title=ft.Text(conto['nome_conto']),
-                            subtitle=ft.Text(f"{self.controller.loc.get('value')}: {self.controller.loc.format_currency(conto['saldo_calcolato'])}"),
-                            on_click=lambda _, c=conto: apri_portafoglio(c)
-                        ) for conto in conti_investimento
-                    ]
-                ], tight=True, spacing=5),
-                padding=20
-            ),
-            open=True
-        )
-        
-        self.page.overlay.append(bs)
-        self.page.update()
 
     def _aggiungi_conto_investimento(self, e):
         """Apre il dialogo per creare un nuovo conto di investimento."""
