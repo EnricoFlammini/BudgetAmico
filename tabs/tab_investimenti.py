@@ -39,6 +39,9 @@ class InvestimentiTab(ft.Container):
         master_key_b64 = self.controller.page.session.get("master_key")
         conti_utente = ottieni_dettagli_conti_utente(utente_id, master_key_b64=master_key_b64)
         conti_investimento = [c for c in conti_utente if c['tipo'] == 'Investimento']
+        print(f"[DEBUG] update_view_data: Trovati {len(conti_investimento)} conti investimento.")
+        for c in conti_investimento:
+            print(f"[DEBUG] - {c['nome_conto']} (ID: {c['id_conto']})")
 
         # Calcola valori totali
         valore_totale = 0
@@ -52,7 +55,7 @@ class InvestimentiTab(ft.Container):
             )
         else:
             for conto in conti_investimento:
-                portafoglio = ottieni_portafoglio(conto['id_conto'])
+                portafoglio = ottieni_portafoglio(conto['id_conto'], master_key_b64=master_key_b64)
                 
                 # Calcola valore e gain/loss per questo portafoglio
                 valore_portafoglio = 0
@@ -291,13 +294,14 @@ class InvestimentiTab(ft.Container):
             return
 
         # Ottieni tutti i conti di investimento
-        conti_utente = ottieni_dettagli_conti_utente(utente_id)
+        master_key_b64 = self.controller.page.session.get("master_key")
+        conti_utente = ottieni_dettagli_conti_utente(utente_id, master_key_b64=master_key_b64)
         conti_investimento = [c for c in conti_utente if c['tipo'] == 'Investimento']
         
         # Raccogli tutti i ticker unici
         tutti_asset = []
         for conto in conti_investimento:
-            portafoglio = ottieni_portafoglio(conto['id_conto'])
+            portafoglio = ottieni_portafoglio(conto['id_conto'], master_key_b64=master_key_b64)
             tutti_asset.extend(portafoglio)
         
         if not tutti_asset:

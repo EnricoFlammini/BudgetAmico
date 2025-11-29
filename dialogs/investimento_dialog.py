@@ -49,50 +49,65 @@ class InvestimentoDialog(ft.AlertDialog):
         self.actions_alignment = ft.MainAxisAlignment.END
 
     def chiudi(self, e=None):
-        self.open = False
-        self.page.update()
-        if self in self.page.overlay:
-            self.page.overlay.remove(self)
-        self.page.update()
+        try:
+            self.page.close(self)
+            self.page.update()
+        except Exception as ex:
+            print(f"Errore chiusura dialog investimento: {ex}")
+            import traceback
+            traceback.print_exc()
 
     def salva(self, e):
-        nome = self.nome_broker.value.strip()
+        try:
+            nome = self.nome_broker.value.strip()
+            borsa = self.borsa_default.value
 
+            if not nome:
+                self.nome_broker.error_text = loc.get("required_field")
+                self.nome_broker.update()
+                return
 
-        borsa = self.borsa_default.value
+            master_key_b64 = self.page.session.get("master_key")
+            user_id = self.page.session.get("utente_loggato")['id']
 
-        if not nome:
-            self.nome_broker.error_text = loc.get("required_field")
-            self.nome_broker.update()
-            return
-
-        if self.conto_da_modificare:
-            successo, msg = modifica_conto(
-                self.conto_da_modificare['id_conto'], 
-                1, # ID utente hardcoded
-                nome, 
-                "Investimento", 
-                valore_manuale=0.0, 
-                borsa_default=borsa
-            )
-        else:
-            # ID utente hardcoded a 1 per ora, come nel resto dell'app
-            res = aggiungi_conto(1, nome, "Investimento", valore_manuale=0.0, borsa_default=borsa)
-            if isinstance(res, tuple):
-                successo, msg = True, res[1]
+            if self.conto_da_modificare:
+                successo, msg = modifica_conto(
+                    self.conto_da_modificare['id_conto'], 
+                    user_id, 
+                    nome, 
+                    "Investimento", 
+                    valore_manuale=0.0, 
+                    borsa_default=borsa,
+                    master_key_b64=master_key_b64
+                )
             else:
-                successo, msg = False, "Errore generico"
+                res = aggiungi_conto(user_id, nome, "Investimento", valore_manuale=0.0, borsa_default=borsa, master_key_b64=master_key_b64)
+                if isinstance(res, tuple):
+                    successo, msg = True, res[1]
+                else:
+                    successo, msg = False, "Errore generico"
 
-        if successo:
-            self.chiudi()
-            if self.on_save:
-                self.on_save()
-        else:
-            snack = ft.SnackBar(content=ft.Text(f"Errore: {msg}"))
+            if successo:
+                self.chiudi()
+                if self.on_save:
+                    self.on_save()
+            else:
+                snack = ft.SnackBar(content=ft.Text(f"Errore: {msg}"))
+                if hasattr(self.page, "open"):
+                    self.page.open(snack)
+                else:
+                    self.page.snack_bar = snack
+                    snack.open = True
+                    self.page.update()
+        except Exception as ex:
+            print(f"Errore salvataggio investimento: {ex}")
+            import traceback
+            traceback.print_exc()
+            self.chiudi() # Chiudi comunque per evitare blocco
+            snack = ft.SnackBar(content=ft.Text(f"Errore inaspettato: {ex}"))
             if hasattr(self.page, "open"):
                 self.page.open(snack)
             else:
-                if snack not in self.page.overlay:
-                    self.page.overlay.append(snack)
+                self.page.snack_bar = snack
                 snack.open = True
                 self.page.update()

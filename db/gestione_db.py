@@ -2492,34 +2492,57 @@ def ottieni_immobili_famiglia(id_famiglia):
 
 # --- Funzioni Asset ---
 def compra_asset(id_conto_investimento, ticker, nome_asset, quantita, costo_unitario_nuovo, tipo_mov='COMPRA',
-                 prezzo_attuale_override=None):
+                 prezzo_attuale_override=None, master_key_b64=None):
     ticker_upper = ticker.upper()
     nome_asset_upper = nome_asset.upper()
+    
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
+            
+            # Fetch all assets to find match (since encryption is non-deterministic)
             cur.execute(
-                "SELECT id_asset, quantita, costo_iniziale_unitario FROM Asset WHERE id_conto = %s AND ticker = %s",
-                (id_conto_investimento, ticker_upper))
-            risultato = cur.fetchone()
+                "SELECT id_asset, ticker, quantita, costo_iniziale_unitario FROM Asset WHERE id_conto = %s",
+                (id_conto_investimento,))
+            assets = cur.fetchall()
+            
+            risultato = None
+            for asset in assets:
+                db_ticker = asset['ticker']
+                # Decrypt if possible
+                decrypted_ticker = _decrypt_if_key(db_ticker, master_key, crypto)
+                if decrypted_ticker == ticker_upper:
+                    risultato = asset
+                    break
+            
+            # Encrypt for storage
+            encrypted_ticker = _encrypt_if_key(ticker_upper, master_key, crypto)
+            encrypted_nome_asset = _encrypt_if_key(nome_asset_upper, master_key, crypto)
+
             cur.execute(
-                "INSERT INTO Storico_Asset (id_conto, ticker, data, tipo_movimento, quantita, prezzo_unitario_movimento) VALUES (?, %s, %s, %s, %s, %s)",
-                (id_conto_investimento, ticker_upper, datetime.date.today().strftime('%Y-%m-%d'), tipo_mov, quantita,
+                "INSERT INTO Storico_Asset (id_conto, ticker, data, tipo_movimento, quantita, prezzo_unitario_movimento) VALUES (%s, %s, %s, %s, %s, %s)",
+                (id_conto_investimento, encrypted_ticker, datetime.date.today().strftime('%Y-%m-%d'), tipo_mov, quantita,
                  costo_unitario_nuovo))
+                 
             if risultato:
-                id_asset_aggiornato, vecchia_quantita, vecchio_costo_medio = risultato
+                id_asset_aggiornato = risultato['id_asset']
+                vecchia_quantita = risultato['quantita']
+                vecchio_costo_medio = risultato['costo_iniziale_unitario']
+                
                 nuova_quantita_totale = vecchia_quantita + quantita
                 nuovo_costo_medio = (
                                                 vecchia_quantita * vecchio_costo_medio + quantita * costo_unitario_nuovo) / nuova_quantita_totale
                 cur.execute(
                     "UPDATE Asset SET quantita = %s, nome_asset = %s, costo_iniziale_unitario = %s WHERE id_asset = %s",
-                    (nuova_quantita_totale, nome_asset_upper, nuovo_costo_medio, id_asset_aggiornato))
+                    (nuova_quantita_totale, encrypted_nome_asset, nuovo_costo_medio, id_asset_aggiornato))
             else:
                 prezzo_attuale = prezzo_attuale_override if prezzo_attuale_override is not None else costo_unitario_nuovo
                 cur.execute(
-                    "INSERT INTO Asset (id_conto, ticker, nome_asset, quantita, costo_iniziale_unitario, prezzo_attuale_manuale) VALUES (?, %s, %s, %s, %s, %s)",
-                    (id_conto_investimento, ticker_upper, nome_asset_upper, quantita, costo_unitario_nuovo,
+                    "INSERT INTO Asset (id_conto, ticker, nome_asset, quantita, costo_iniziale_unitario, prezzo_attuale_manuale) VALUES (%s, %s, %s, %s, %s, %s)",
+                    (id_conto_investimento, encrypted_ticker, encrypted_nome_asset, quantita, costo_unitario_nuovo,
                      prezzo_attuale))
             return True
     except Exception as e:
@@ -2527,25 +2550,48 @@ def compra_asset(id_conto_investimento, ticker, nome_asset, quantita, costo_unit
         return False
 
 
-def vendi_asset(id_conto_investimento, ticker, quantita_da_vendere, prezzo_di_vendita_unitario):
+def vendi_asset(id_conto_investimento, ticker, quantita_da_vendere, prezzo_di_vendita_unitario, master_key_b64=None):
     ticker_upper = ticker.upper()
+    
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    
     try:
         with get_db_connection() as con:
             cur = con.cursor()
             # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
-            cur.execute("SELECT id_asset, quantita FROM Asset WHERE id_conto = %s AND ticker = %s",
-                        (id_conto_investimento, ticker_upper))
-            risultato = cur.fetchone()
+            
+            # Fetch all assets to find match (encryption non-deterministic)
+            cur.execute("SELECT id_asset, ticker, quantita FROM Asset WHERE id_conto = %s",
+                        (id_conto_investimento,))
+            assets = cur.fetchall()
+            
+            risultato = None
+            for asset in assets:
+                db_ticker = asset['ticker']
+                decrypted_ticker = _decrypt_if_key(db_ticker, master_key, crypto)
+                if decrypted_ticker == ticker_upper:
+                    risultato = asset
+                    break
+            
             if not risultato: return False
-            id_asset, quantita_attuale = risultato
+            
+            id_asset = risultato['id_asset']
+            quantita_attuale = risultato['quantita']
+            
             if quantita_da_vendere > quantita_attuale and abs(
                 quantita_da_vendere - quantita_attuale) > 1e-9: return False
 
             nuova_quantita = quantita_attuale - quantita_da_vendere
+            
+            # Encrypt ticker for history
+            encrypted_ticker = _encrypt_if_key(ticker_upper, master_key, crypto)
+            
             cur.execute(
-                "INSERT INTO Storico_Asset (id_conto, ticker, data, tipo_movimento, quantita, prezzo_unitario_movimento) VALUES (?, %s, %s, %s, %s, %s)",
-                (id_conto_investimento, ticker_upper, datetime.date.today().strftime('%Y-%m-%d'), 'VENDI',
+                "INSERT INTO Storico_Asset (id_conto, ticker, data, tipo_movimento, quantita, prezzo_unitario_movimento) VALUES (%s, %s, %s, %s, %s, %s)",
+                (id_conto_investimento, encrypted_ticker, datetime.date.today().strftime('%Y-%m-%d'), 'VENDI',
                  quantita_da_vendere, prezzo_di_vendita_unitario))
+                 
             if nuova_quantita < 1e-9:
                 cur.execute("DELETE FROM Asset WHERE id_asset = %s", (id_asset,))
             else:
@@ -2556,7 +2602,10 @@ def vendi_asset(id_conto_investimento, ticker, quantita_da_vendere, prezzo_di_ve
         return False
 
 
-def ottieni_portafoglio(id_conto_investimento):
+def ottieni_portafoglio(id_conto_investimento, master_key_b64=None):
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    
     try:
         with get_db_connection() as con:
             # con.row_factory = sqlite3.Row # Removed for Supabase
@@ -2573,15 +2622,26 @@ def ottieni_portafoglio(id_conto_investimento):
                                (quantita * (prezzo_attuale_manuale - costo_iniziale_unitario)) AS gain_loss_totale
                         FROM Asset
                         WHERE id_conto = %s
-                        ORDER BY ticker
                         """, (id_conto_investimento,))
-            return [dict(row) for row in cur.fetchall()]
+            results = [dict(row) for row in cur.fetchall()]
+            
+            # Decrypt fields
+            if master_key:
+                for row in results:
+                    row['ticker'] = _decrypt_if_key(row['ticker'], master_key, crypto)
+                    row['nome_asset'] = _decrypt_if_key(row['nome_asset'], master_key, crypto)
+            
+            # Sort by ticker (in Python because DB has encrypted data)
+            results.sort(key=lambda x: x['ticker'])
+            
+            return results
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero portafoglio: {e}")
         return []
 
 
 def aggiorna_prezzo_manuale_asset(id_asset, nuovo_prezzo):
+    # No encryption needed for price
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -2594,15 +2654,21 @@ def aggiorna_prezzo_manuale_asset(id_asset, nuovo_prezzo):
         return False
 
 
-def modifica_asset_dettagli(id_asset, nuovo_ticker, nuovo_nome):
+def modifica_asset_dettagli(id_asset, nuovo_ticker, nuovo_nome, master_key_b64=None):
     nuovo_ticker_upper = nuovo_ticker.upper()
     nuovo_nome_upper = nuovo_nome.upper()
+    
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    encrypted_ticker = _encrypt_if_key(nuovo_ticker_upper, master_key, crypto)
+    encrypted_nome = _encrypt_if_key(nuovo_nome_upper, master_key, crypto)
+    
     try:
         with get_db_connection() as con:
             cur = con.cursor()
             # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
             cur.execute("UPDATE Asset SET ticker = %s, nome_asset = %s WHERE id_asset = %s",
-                        (nuovo_ticker_upper, nuovo_nome_upper, id_asset))
+                        (encrypted_ticker, encrypted_nome, id_asset))
             return cur.rowcount > 0
     except sqlite3.IntegrityError:
         return False

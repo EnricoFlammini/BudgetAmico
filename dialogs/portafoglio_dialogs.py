@@ -189,22 +189,22 @@ class PortafoglioDialogs:
         self.conto_selezionato = conto_data
         self.dialog_portafoglio.title.value = f"{self.loc.get('manage_portfolio_dialog')}: {conto_data['nome_conto']}"
         self._aggiorna_tabella_portafoglio()
-        self._aggiorna_tabella_portafoglio()
-        if self.dialog_portafoglio not in self.controller.page.overlay:
-            self.controller.page.overlay.append(self.dialog_portafoglio)
-        self.dialog_portafoglio.open = True
+        self.controller.page.open(self.dialog_portafoglio)
         self.controller.page.update()
 
     def _chiudi_dialog_portafoglio(self, e):
-        self.dialog_portafoglio.open = False
-        self.controller.page.update()
-        if self.dialog_portafoglio in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_portafoglio)
-        self.controller.page.update()
+        try:
+            self.controller.page.close(self.dialog_portafoglio)
+            self.controller.page.update()
+        except Exception as ex:
+            print(f"Errore chiusura dialog portafoglio: {ex}")
+            import traceback
+            traceback.print_exc()
 
     def _aggiorna_tabella_portafoglio(self):
         loc = self.loc
-        portafoglio = ottieni_portafoglio(self.conto_selezionato['id_conto'])
+        master_key_b64 = self.page.session.get("master_key")
+        portafoglio = ottieni_portafoglio(self.conto_selezionato['id_conto'], master_key_b64=master_key_b64)
         self.dt_portafoglio.rows.clear()
         valore_totale = 0
         gain_loss_totale = 0
@@ -290,23 +290,17 @@ class PortafoglioDialogs:
         ]
         self.dd_conto_transazione.value = None
 
-        if self.dialog_operazione_asset not in self.controller.page.overlay:
-            self.controller.page.overlay.append(self.dialog_operazione_asset)
-        self.dialog_operazione_asset.open = True
+        self.controller.page.open(self.dialog_operazione_asset)
         self.controller.page.update()
 
     def _chiudi_dialog_operazione(self, e):
-        self.dialog_operazione_asset.open = False
-        self.controller.page.update()
-        if self.dialog_operazione_asset in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_operazione_asset)
-        
-        # Riapri portafoglio se necessario (o assicurati che sia visibile se era sotto)
-        # In questo caso, stiamo tornando indietro, quindi riapriamo portafoglio
-        if self.dialog_portafoglio not in self.controller.page.overlay:
-             self.controller.page.overlay.append(self.dialog_portafoglio)
-        self.dialog_portafoglio.open = True
-        self.controller.page.update()
+        try:
+            self.controller.page.close(self.dialog_operazione_asset)
+            self.controller.page.update()
+        except Exception as ex:
+            print(f"Errore chiusura dialog operazione: {ex}")
+            import traceback
+            traceback.print_exc()
 
     def _on_asset_selezionato(self, e):
         """Chiamato quando un asset viene selezionato dal dropdown."""
@@ -368,7 +362,7 @@ class PortafoglioDialogs:
                 importo_transazione = -abs(importo_totale)
                 
                 # Compra l'asset
-                compra_asset(self.conto_selezionato['id_conto'], ticker, nome_asset, quantita, prezzo)
+                compra_asset(self.conto_selezionato['id_conto'], ticker, nome_asset, quantita, prezzo, master_key_b64=master_key_b64)
                 
             elif tipo_op == "VENDI":
                 # Vendita: aggiungi denaro al conto
@@ -376,7 +370,7 @@ class PortafoglioDialogs:
                 importo_transazione = abs(importo_totale)
                 
                 # Vendi l'asset
-                vendi_asset(self.conto_selezionato['id_conto'], ticker, quantita, prezzo)
+                vendi_asset(self.conto_selezionato['id_conto'], ticker, quantita, prezzo, master_key_b64=master_key_b64)
             else:
                 self.controller.show_snack_bar(self.loc.get("fill_all_fields"), success=False)
                 return
@@ -412,22 +406,17 @@ class PortafoglioDialogs:
         self.asset_da_aggiornare = e.control.data
         self.txt_nuovo_prezzo.value = str(self.asset_da_aggiornare['prezzo_attuale_manuale'])
         self.dialog_aggiorna_prezzo.title.value = f"{self.loc.get('update_price')}: {self.asset_da_aggiornare['ticker']}"
-        self.dialog_aggiorna_prezzo.title.value = f"{self.loc.get('update_price')}: {self.asset_da_aggiornare['ticker']}"
-        if self.dialog_aggiorna_prezzo not in self.controller.page.overlay:
-            self.controller.page.overlay.append(self.dialog_aggiorna_prezzo)
-        self.dialog_aggiorna_prezzo.open = True
+        self.controller.page.open(self.dialog_aggiorna_prezzo)
         self.controller.page.update()
 
     def _chiudi_dialog_aggiorna_prezzo(self, e):
-        self.dialog_aggiorna_prezzo.open = False
-        self.controller.page.update()
-        if self.dialog_aggiorna_prezzo in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_aggiorna_prezzo)
-            
-        if self.dialog_portafoglio not in self.controller.page.overlay:
-             self.controller.page.overlay.append(self.dialog_portafoglio)
-        self.dialog_portafoglio.open = True
-        self.controller.page.update()
+        try:
+            self.controller.page.close(self.dialog_aggiorna_prezzo)
+            self.controller.page.update()
+        except Exception as ex:
+            print(f"Errore chiusura dialog aggiorna prezzo: {ex}")
+            import traceback
+            traceback.print_exc()
 
     def _salva_nuovo_prezzo(self, e):
         try:
@@ -445,27 +434,25 @@ class PortafoglioDialogs:
         self.txt_modifica_nome.value = self.asset_da_modificare['nome_asset']
         self.dialog_modifica_asset.title.value = f"{self.loc.get('edit_asset_details')}: {self.asset_da_modificare['ticker']}"
         self.dialog_modifica_asset.title.value = f"{self.loc.get('edit_asset_details')}: {self.asset_da_modificare['ticker']}"
-        if self.dialog_modifica_asset not in self.controller.page.overlay:
-            self.controller.page.overlay.append(self.dialog_modifica_asset)
-        self.dialog_modifica_asset.open = True
+        self.controller.page.open(self.dialog_modifica_asset)
         self.controller.page.update()
 
     def _chiudi_dialog_modifica_asset(self, e):
-        self.dialog_modifica_asset.open = False
-        self.controller.page.update()
-        if self.dialog_modifica_asset in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_modifica_asset)
-            
-        if self.dialog_portafoglio not in self.controller.page.overlay:
-             self.controller.page.overlay.append(self.dialog_portafoglio)
-        self.dialog_portafoglio.open = True
-        self.controller.page.update()
+        try:
+            self.controller.page.close(self.dialog_modifica_asset)
+            self.controller.page.update()
+        except Exception as ex:
+            print(f"Errore chiusura dialog modifica asset: {ex}")
+            import traceback
+            traceback.print_exc()
 
     def _salva_modifica_asset(self, e):
         nuovo_ticker = self.txt_modifica_ticker.value.strip().upper()
         nuovo_nome = self.txt_modifica_nome.value.strip()
+        master_key_b64 = self.page.session.get("master_key")
+        
         if nuovo_ticker and nuovo_nome:
-            modifica_asset_dettagli(self.asset_da_modificare['id_asset'], nuovo_ticker, nuovo_nome)
+            modifica_asset_dettagli(self.asset_da_modificare['id_asset'], nuovo_ticker, nuovo_nome, master_key_b64=master_key_b64)
             self.controller.db_write_operation()
             self._aggiorna_tabella_portafoglio()
             self._chiudi_dialog_modifica_asset(e)
@@ -503,22 +490,13 @@ class PortafoglioDialogs:
         self.controller.page.update()
 
     def _chiudi_dialog_asset_esistente(self, e):
-        # Chiudiamo il dialogo operazione (che stiamo usando come proxy)
-        self.dialog_operazione_asset.open = False
-        self.controller.page.update()
-        if self.dialog_operazione_asset in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_operazione_asset)
-            
-        if self.dialog_portafoglio not in self.controller.page.overlay:
-             self.controller.page.overlay.append(self.dialog_portafoglio)
-        self.dialog_portafoglio.open = True
-        self.controller.page.update()
-        
-        # IMPORTANTE: Ripristinare il contenuto originale del dialogo operazione?
-        # Non strettamente necessario se _apri_dialog_operazione lo ricostruisce, 
-        # ma controlliamo _apri_dialog_operazione.
-        # _apri_dialog_operazione NON ricostruisce il contenuto, quindi dovremmo farlo qui o lì.
-        # Per ora lasciamo così, verificheremo se rompe l'altro dialogo.
+        try:
+            self.controller.page.close(self.dialog_operazione_asset)
+            self.controller.page.update()
+        except Exception as ex:
+            print(f"Errore chiusura dialog asset esistente: {ex}")
+            import traceback
+            traceback.print_exc()
 
     def _salva_asset_esistente(self, e):
         try:
@@ -537,6 +515,8 @@ class PortafoglioDialogs:
                 suffix = self.conto_selezionato['borsa_default']
                 if "." not in ticker:
                     ticker += suffix
+            
+            master_key_b64 = self.page.session.get("master_key")
 
             # Usa compra_asset per aggiungere l'asset con il costo storico e il valore attuale
             compra_asset(
@@ -546,7 +526,8 @@ class PortafoglioDialogs:
                 quantita, 
                 prezzo_medio, # Questo diventa il costo_iniziale_unitario
                 tipo_mov="APERTURA", # O altro identificativo per saldo iniziale
-                prezzo_attuale_override=valore_attuale # Questo imposta il prezzo attuale manuale
+                prezzo_attuale_override=valore_attuale, # Questo imposta il prezzo attuale manuale
+                master_key_b64=master_key_b64
             )
 
             self.controller.db_write_operation()
