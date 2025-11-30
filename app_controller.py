@@ -111,7 +111,7 @@ class AppController:
             self.transaction_dialog, self.conto_dialog, self.conto_dialog.dialog_rettifica_saldo,
             self.admin_dialogs.dialog_modifica_cat, self.admin_dialogs.dialog_sottocategoria,
             self.admin_dialogs.dialog_modifica_ruolo, self.admin_dialogs.dialog_invito_membri,
-            self.admin_dialogs.dialog_imposta_budget, self.portafoglio_dialogs.dialog_portafoglio,
+            self.portafoglio_dialogs.dialog_portafoglio,
             self.portafoglio_dialogs.dialog_operazione_asset, self.portafoglio_dialogs.dialog_aggiorna_prezzo,
             self.portafoglio_dialogs.dialog_modifica_asset, self.date_picker, self.file_picker_salva_excel,
             self.prestito_dialogs.dialog_prestito, self.prestito_dialogs.dialog_paga_rata,

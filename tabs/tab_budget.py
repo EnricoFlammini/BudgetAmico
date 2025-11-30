@@ -39,7 +39,11 @@ class BudgetTab(ft.Container):
 
         # Usa il mese selezionato dal dropdown
         anno, mese = self._get_anno_mese_selezionato()
-        riepilogo = ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese)
+        
+        # Pass master_key_b64
+        master_key_b64 = self.controller.page.session.get("master_key")
+        riepilogo = ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64)
+        
         self.lv_budget.controls.clear()
 
         if not riepilogo:

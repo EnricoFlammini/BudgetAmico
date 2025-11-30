@@ -96,6 +96,8 @@ class AdminDialogs:
             actions_alignment=ft.MainAxisAlignment.END,
         )
 
+
+
         # --- NUOVO DIALOGO: IMPOSTA BUDGET ---
         self.dd_budget_sottocategorie = ft.Dropdown(label=self.loc.get("subcategory"))
         self.txt_budget_limite = ft.TextField(label=self.loc.get("limit_amount"),
@@ -335,17 +337,14 @@ class AdminDialogs:
         # Aggiorna prefisso valuta se è cambiato
         self.txt_budget_limite.prefix_text = loc.currencies[loc.currency]['symbol']
 
-        if self.dialog_imposta_budget not in self.controller.page.overlay:
-            self.controller.page.overlay.append(self.dialog_imposta_budget)
-        self.dialog_imposta_budget.open = True
-        self.controller.page.update()
+        # Use page.open instead of overlay manipulation
+        self.page.open(self.dialog_imposta_budget)
+        self.page.update()
 
     def _chiudi_dialog_imposta_budget(self, e):
-        self.dialog_imposta_budget.open = False
-        self.controller.page.update()
-        if self.dialog_imposta_budget in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_imposta_budget)
-        self.controller.page.update()
+        # Use page.close
+        self.page.close(self.dialog_imposta_budget)
+        self.page.update()
 
     def _salva_budget_cliccato(self, e):
         loc = self.loc
@@ -356,9 +355,14 @@ class AdminDialogs:
         if id_sottocategoria and limite_str:
             try:
                 limite = float(limite_str.replace(",", "."))
-                imposta_budget(id_famiglia, id_sottocategoria, limite)
+                
+                # Pass master_key_b64
+                master_key_b64 = self.controller.page.session.get("master_key")
+                print(f"[DEBUG] admin_dialogs - master_key in session: {bool(master_key_b64)}")
+                
+                imposta_budget(id_famiglia, id_sottocategoria, limite, master_key_b64)
 
-                self.dialog_imposta_budget.open = False
+                self.page.close(self.dialog_imposta_budget)
                 self.controller.show_snack_bar(loc.get("budget_saved"), success=True)
 
                 # Aggiorna tutte le viste (così la scheda Budget si aggiorna)

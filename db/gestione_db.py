@@ -30,7 +30,9 @@ def _get_crypto_and_key(master_key_b64=None):
     crypto = CryptoManager()
     if master_key_b64:
         try:
-            master_key = base64.urlsafe_b64decode(master_key_b64.encode())
+            # master_key_b64 is the string representation of the base64 encoded key
+            # We just need to convert it to bytes
+            master_key = master_key_b64.encode()
             return crypto, master_key
         except Exception as e:
             print(f"[ERRORE] Errore decodifica master_key: {e}")
@@ -51,7 +53,19 @@ def _decrypt_if_key(encrypted_data, master_key, crypto=None):
         return encrypted_data
     if not crypto:
         crypto = CryptoManager()
-    return crypto.decrypt_data(encrypted_data, master_key)
+    
+    decrypted = crypto.decrypt_data(encrypted_data, master_key)
+    
+    # Fallback for unencrypted numbers (during migration)
+    if decrypted == "[ENCRYPTED]":
+        try:
+            # Check if it's a valid number
+            float(encrypted_data)
+            return encrypted_data
+        except ValueError:
+            pass
+            
+    return decrypted
 
 
 # --- Funzioni di Versioning ---
@@ -168,7 +182,6 @@ def save_smtp_config(settings, id_famiglia=None):
     except Exception as e:
         print(f"[ERRORE] Errore salvataggio SMTP config: {e}")
         return False
-
 # --- Funzioni Utenti & Login ---
 
 
@@ -239,6 +252,48 @@ def verifica_login(login_identifier, password):
             return None
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il login: {e}")
+        return None
+
+
+def crea_utente_invitato(email, ruolo, id_famiglia):
+    """
+    Crea un nuovo utente invitato con credenziali temporanee.
+    Restituisce un dizionario con le credenziali o None in caso di errore.
+    """
+    try:
+        # Genera credenziali temporanee
+        temp_password = secrets.token_urlsafe(10)
+        temp_username = f"user_{secrets.token_hex(4)}"
+        password_hash = hash_password(temp_password)
+        
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # 1. Crea l'utente
+            cur.execute("""
+                INSERT INTO Utenti (username, email, password_hash, nome, cognome, forza_cambio_password)
+                VALUES (%s, %s, %s, %s, %s, TRUE)
+                RETURNING id_utente
+            """, (temp_username, email, password_hash, "Nuovo", "Utente"))
+            
+            id_utente = cur.fetchone()['id_utente']
+            
+            # 2. Aggiungi alla famiglia
+            cur.execute("""
+                INSERT INTO Appartenenza_Famiglia (id_utente, id_famiglia, ruolo)
+                VALUES (%s, %s, %s)
+            """, (id_utente, id_famiglia, ruolo))
+            
+            con.commit()
+            
+            return {
+                "email": email,
+                "username": temp_username,
+                "password": temp_password
+            }
+            
+    except Exception as e:
+        print(f"[ERRORE] Errore creazione utente invitato: {e}")
         return None
 
 
@@ -1998,22 +2053,29 @@ def esegui_operazione_fondo_pensione(id_fondo_pensione, tipo_operazione, importo
 
 
 # --- Funzioni Budget ---
-def imposta_budget(id_famiglia, id_sottocategoria, importo_limite):
+def imposta_budget(id_famiglia, id_sottocategoria, importo_limite, master_key_b64=None):
     try:
+        # Encrypt importo_limite
+        print(f"[DEBUG] imposta_budget - master_key_b64 present: {bool(master_key_b64)}")
+        crypto, master_key = _get_crypto_and_key(master_key_b64)
+        print(f"[DEBUG] imposta_budget - master_key valid: {bool(master_key)}")
+        encrypted_importo = _encrypt_if_key(str(importo_limite), master_key, crypto)
+        print(f"[DEBUG] imposta_budget - encrypted_importo: {encrypted_importo}")
+        
         with get_db_connection() as con:
             cur = con.cursor()
             # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
             cur.execute("""
                         INSERT INTO Budget (id_famiglia, id_sottocategoria, importo_limite, periodo)
-                        VALUES (?, %s, %s, 'Mensile') ON CONFLICT(id_famiglia, id_sottocategoria, periodo) DO
+                        VALUES (%s, %s, %s, 'Mensile') ON CONFLICT(id_famiglia, id_sottocategoria, periodo) DO
                         UPDATE SET importo_limite = excluded.importo_limite
-                        """, (id_famiglia, id_sottocategoria, importo_limite))
+                        """, (id_famiglia, id_sottocategoria, encrypted_importo))
             return True
     except Exception as e:
         print(f"[ERRORE] Errore generico durante l'impostazione del budget: {e}")
         return False
 
-def ottieni_budget_famiglia(id_famiglia):
+def ottieni_budget_famiglia(id_famiglia, master_key_b64=None):
     try:
         with get_db_connection() as con:
             # con.row_factory = sqlite3.Row # Removed for Supabase
@@ -2027,13 +2089,24 @@ def ottieni_budget_famiglia(id_famiglia):
                           AND B.periodo = 'Mensile'
                         ORDER BY C.nome_categoria, S.nome_sottocategoria
                         """, (id_famiglia,))
-            return [dict(row) for row in cur.fetchall()]
+            rows = [dict(row) for row in cur.fetchall()]
+            
+            # Decrypt
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            for row in rows:
+                decrypted = _decrypt_if_key(row['importo_limite'], master_key, crypto)
+                try:
+                    row['importo_limite'] = float(decrypted)
+                except (ValueError, TypeError):
+                    row['importo_limite'] = 0.0
+            
+            return rows
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero budget: {e}")
         return []
 
 
-def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese):
+def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64=None):
     data_inizio = f"{anno}-{mese:02d}-01"
     ultimo_giorno = (datetime.date(anno, mese, 1) + relativedelta(months=1) - relativedelta(days=1)).day
     data_fine = f"{anno}-{mese:02d}-{ultimo_giorno}"
@@ -2047,7 +2120,7 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese):
                     C.nome_categoria,
                     S.id_sottocategoria,
                     S.nome_sottocategoria,
-                    COALESCE(BS.importo_limite, B.importo_limite, 0.0) as importo_limite,
+                    COALESCE(BS.importo_limite, B.importo_limite, '0.0') as importo_limite,
                     COALESCE(T_SPESE.spesa_totale, 0.0) as spesa_totale
                 FROM Categorie C
                 JOIN Sottocategorie S ON C.id_categoria = S.id_categoria
@@ -2059,28 +2132,34 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese):
                     AND B.id_famiglia = C.id_famiglia 
                     AND B.periodo = 'Mensile'
                 LEFT JOIN (
-                    SELECT
-                        T.id_sottocategoria,
-                        SUM(T.importo) as spesa_totale
-                    FROM Transazioni T
-                    JOIN Conti CO ON T.id_conto = CO.id_conto
-                    JOIN Appartenenza_Famiglia AF ON CO.id_utente = AF.id_utente
-                    WHERE AF.id_famiglia = %s AND T.importo < 0 AND T.data BETWEEN %s AND %s
-                    GROUP BY T.id_sottocategoria
-                    UNION ALL
-                    SELECT
-                        TC.id_sottocategoria,
-                        SUM(TC.importo) as spesa_totale
-                    FROM TransazioniCondivise TC
-                    JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
-                    WHERE CC.id_famiglia = %s AND TC.importo < 0 AND TC.data BETWEEN %s AND %s
-                    GROUP BY TC.id_sottocategoria
+                    SELECT id_sottocategoria, SUM(spesa_totale) as spesa_totale
+                    FROM (
+                        SELECT
+                            T.id_sottocategoria,
+                            SUM(T.importo) as spesa_totale
+                        FROM Transazioni T
+                        JOIN Conti CO ON T.id_conto = CO.id_conto
+                        JOIN Appartenenza_Famiglia AF ON CO.id_utente = AF.id_utente
+                        WHERE AF.id_famiglia = %s AND T.importo < 0 AND T.data BETWEEN %s AND %s
+                        GROUP BY T.id_sottocategoria
+                        UNION ALL
+                        SELECT
+                            TC.id_sottocategoria,
+                            SUM(TC.importo) as spesa_totale
+                        FROM TransazioniCondivise TC
+                        JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
+                        WHERE CC.id_famiglia = %s AND TC.importo < 0 AND TC.data BETWEEN %s AND %s
+                        GROUP BY TC.id_sottocategoria
+                    ) AS U
+                    GROUP BY id_sottocategoria
                 ) AS T_SPESE ON S.id_sottocategoria = T_SPESE.id_sottocategoria
                 WHERE C.id_famiglia = %s
                 ORDER BY C.nome_categoria, S.nome_sottocategoria;
             """, (anno, mese, id_famiglia, data_inizio, data_fine, id_famiglia, data_inizio, data_fine, id_famiglia))
             
             riepilogo = {}
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            
             for row in cur.fetchall():
                 cat_id = row['id_categoria']
                 if cat_id not in riepilogo:
@@ -2092,7 +2171,14 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese):
                     }
                 
                 spesa = abs(row['spesa_totale'])
-                limite = row['importo_limite']
+                
+                # Decrypt importo_limite
+                decrypted_limite = _decrypt_if_key(row['importo_limite'], master_key, crypto)
+                try:
+                    limite = float(decrypted_limite)
+                except (ValueError, TypeError):
+                    limite = 0.0
+
                 riepilogo[cat_id]['importo_limite_totale'] += limite
                 riepilogo[cat_id]['spesa_totale_categoria'] += spesa
                 
@@ -2115,11 +2201,14 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese):
         return {}
 
 
-def salva_budget_mese_corrente(id_famiglia, anno, mese):
+def salva_budget_mese_corrente(id_famiglia, anno, mese, master_key_b64=None):
     try:
-        riepilogo_corrente = ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese)
+        riepilogo_corrente = ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64)
         if not riepilogo_corrente:
             return False
+            
+        crypto, master_key = _get_crypto_and_key(master_key_b64)
+        
         with get_db_connection() as con:
             cur = con.cursor()
             # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
@@ -2127,15 +2216,19 @@ def salva_budget_mese_corrente(id_famiglia, anno, mese):
             # Salva per ogni sottocategoria
             for cat_id, cat_data in riepilogo_corrente.items():
                 for sub_data in cat_data['sottocategorie']:
+                    # Encrypt amounts
+                    enc_limite = _encrypt_if_key(str(sub_data['importo_limite']), master_key, crypto)
+                    enc_speso = _encrypt_if_key(str(abs(sub_data['spesa_totale'])), master_key, crypto)
+                    
                     dati_da_salvare.append((
                         id_famiglia, sub_data['id_sottocategoria'], sub_data['nome_sottocategoria'],
-                        anno, mese, sub_data['importo_limite'], abs(sub_data['spesa_totale'])
+                        anno, mese, enc_limite, enc_speso
                     ))
             
             cur.executemany("""
                             INSERT INTO Budget_Storico (id_famiglia, id_sottocategoria, nome_sottocategoria, anno, mese,
                                                         importo_limite, importo_speso)
-                            VALUES (?, %s, %s, %s, %s, %s, %s) ON CONFLICT(id_famiglia, id_sottocategoria, anno, mese) DO
+                            VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT(id_famiglia, id_sottocategoria, anno, mese) DO
                             UPDATE SET importo_limite = excluded.importo_limite, importo_speso = excluded.importo_speso, nome_sottocategoria = excluded.nome_sottocategoria
                             """, dati_da_salvare)
             return True
@@ -2144,7 +2237,7 @@ def salva_budget_mese_corrente(id_famiglia, anno, mese):
         return False
 
 
-def storicizza_budget_retroattivo(id_famiglia):
+def storicizza_budget_retroattivo(id_famiglia, master_key_b64=None):
     """
     Storicizza automaticamente i budget per tutti i mesi passati con transazioni.
     Usa i limiti correnti dalla tabella Budget come baseline per i mesi storici.
@@ -2188,7 +2281,7 @@ def storicizza_budget_retroattivo(id_famiglia):
                     continue
                 
                 # Storicizza il mese usando i limiti correnti
-                if salva_budget_mese_corrente(id_famiglia, anno, mese):
+                if salva_budget_mese_corrente(id_famiglia, anno, mese, master_key_b64):
                     mesi_storicizzati += 1
                     print(f"  Storicizzato {anno}-{mese:02d}")
                 else:

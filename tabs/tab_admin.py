@@ -123,13 +123,11 @@ class AdminTab(ft.Container):
         self.lv_categorie.controls.clear()
         categorie_data = ottieni_categorie_e_sottocategorie(id_famiglia)
         
-
         # Recupera i budget impostati
-
-        budget_impostati = ottieni_budget_famiglia(id_famiglia)
+        master_key_b64 = self.controller.page.session.get("master_key")
+        budget_impostati = ottieni_budget_famiglia(id_famiglia, master_key_b64)
 
         mappa_budget = {b['id_sottocategoria']: b['importo_limite'] for b in budget_impostati}
-
 
         if not categorie_data:
             self.lv_categorie.controls.append(AppStyles.body_text(loc.get("no_categories_found")))
@@ -176,7 +174,6 @@ class AdminTab(ft.Container):
             # Aggiungi spazio in basso per evitare interferenze con il pulsante +
 
             self.lv_categorie.controls.append(ft.Container(height=80))
-
 
     def update_tab_membri(self):
         loc = self.controller.loc
