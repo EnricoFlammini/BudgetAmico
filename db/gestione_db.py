@@ -48,12 +48,17 @@ def _encrypt_if_key(data, master_key, crypto=None):
     return crypto.encrypt_data(data, master_key)
 
 def _decrypt_if_key(encrypted_data, master_key, crypto=None):
-    """Decrypts data if master_key is available, otherwise returns data as-is."""
     if not master_key or not encrypted_data:
         return encrypted_data
     if not crypto:
         crypto = CryptoManager()
     
+    # print(f"[DEBUG] _decrypt_if_key called. Key len: {len(master_key)}, Data len: {len(encrypted_data)}")
+    
+    # Check if data looks like a Fernet token (starts with gAAAAA)
+    if not encrypted_data.startswith("gAAAAA"):
+        return encrypted_data
+
     decrypted = crypto.decrypt_data(encrypted_data, master_key)
     
     # Fallback for unencrypted numbers (during migration)
@@ -229,25 +234,6 @@ def verifica_login(login_identifier, password):
                     except Exception as e:
                         print(f"[ERRORE] Errore decryption: {e}")
                         return None
-                else:
-                    # Legacy user without encryption
-                    nome = risultato['nome']
-                    cognome = risultato['cognome']
-                
-                print(f"[DEBUG] Login verificato. Master Key recuperata: {bool(master_key)}")
-                if master_key:
-                    print(f"[DEBUG] Master Key type: {type(master_key)}")
-                    print(f"[DEBUG] Master Key len: {len(master_key)}")
-                    print(f"[DEBUG] Master Key content (partial): {master_key[:10]}")
-                
-                return {
-                    "id": risultato['id_utente'], 
-                    "username": risultato['username'], 
-                    "forza_cambio_password": risultato['forza_cambio_password'], 
-                    "nome": nome,
-                    "cognome": cognome,
-                    "master_key": master_key.decode() if master_key else None
-                }
             print("[DEBUG] Login fallito o password errata.")
             return None
     except Exception as e:
@@ -255,6 +241,7 @@ def verifica_login(login_identifier, password):
         return None
 
 
+
 def crea_utente_invitato(email, ruolo, id_famiglia):
     """
     Crea un nuovo utente invitato con credenziali temporanee.
@@ -297,46 +284,435 @@ def crea_utente_invitato(email, ruolo, id_famiglia):
         return None
 
 
-def crea_utente_invitato(email, ruolo, id_famiglia):
-    """
-    Crea un nuovo utente invitato con credenziali temporanee.
-    Restituisce un dizionario con le credenziali o None in caso di errore.
-    """
+def registra_utente(nome, cognome, username, password, email, data_nascita, codice_fiscale, indirizzo):
     try:
-        # Genera credenziali temporanee
-        temp_password = secrets.token_urlsafe(10)
-        temp_username = f"user_{secrets.token_hex(4)}"
-        password_hash = hash_password(temp_password)
+        password_hash = hash_password(password)
         
+        # Generate Master Key and Salt
+        crypto = CryptoManager()
+        salt = os.urandom(16)
+        kek = crypto.derive_key(password, salt)
+        master_key = crypto.generate_key()
+        encrypted_mk = crypto.encrypt_master_key(master_key, kek)
+        
+        # Generate Recovery Key
+        recovery_key = crypto.generate_recovery_key()
+        recovery_key_hash = hashlib.sha256(recovery_key.encode()).hexdigest()
+        encrypted_mk_recovery = crypto.encrypt_master_key(master_key, crypto.derive_key(recovery_key, salt))
+
         with get_db_connection() as con:
             cur = con.cursor()
-            
-            # 1. Crea l'utente
             cur.execute("""
-                INSERT INTO Utenti (username, email, password_hash, nome, cognome, forza_cambio_password)
-                VALUES (%s, %s, %s, %s, %s, TRUE)
+                INSERT INTO Utenti (nome, cognome, username, password_hash, email, data_nascita, codice_fiscale, indirizzo, salt, encrypted_master_key, recovery_key_hash, encrypted_master_key_recovery)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id_utente
-            """, (temp_username, email, password_hash, "Nuovo", "Utente"))
+            """, (nome, cognome, username, password_hash, email, data_nascita, codice_fiscale, indirizzo, 
+                  base64.urlsafe_b64encode(salt).decode(), 
+                  base64.urlsafe_b64encode(encrypted_mk).decode(),
+                  recovery_key_hash,
+                  base64.urlsafe_b64encode(encrypted_mk_recovery).decode()))
             
             id_utente = cur.fetchone()['id_utente']
-            
-            # 2. Aggiungi alla famiglia
-            cur.execute("""
-                INSERT INTO Appartenenza_Famiglia (id_utente, id_famiglia, ruolo)
-                VALUES (%s, %s, %s)
-            """, (id_utente, id_famiglia, ruolo))
-            
             con.commit()
             
             return {
-                "email": email,
-                "username": temp_username,
-                "password": temp_password
+                "id_utente": id_utente,
+                "recovery_key": recovery_key,
+                "master_key": master_key.decode()
             }
-            
     except Exception as e:
-        print(f"[ERRORE] Errore creazione utente invitato: {e}")
+        print(f"[ERRORE] Errore durante la registrazione: {e}")
         return None
+
+def cambia_password(id_utente, vecchia_password_hash, nuova_password_hash):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("UPDATE Utenti SET password_hash = %s WHERE id_utente = %s AND password_hash = %s",
+                        (nuova_password_hash, id_utente, vecchia_password_hash))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"[ERRORE] Errore cambio password: {e}")
+        return False
+
+def imposta_password_temporanea(id_utente, temp_password_hash):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("UPDATE Utenti SET password_hash = %s, forza_cambio_password = TRUE WHERE id_utente = %s",
+                        (temp_password_hash, id_utente))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"[ERRORE] Errore impostazione password temporanea: {e}")
+        return False
+
+def trova_utente_per_email(email):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT * FROM Utenti WHERE email = %s", (email,))
+            res = cur.fetchone()
+            return dict(res) if res else None
+    except Exception as e:
+        print(f"[ERRORE] Errore ricerca utente per email: {e}")
+        return None
+
+def cambia_password_e_username(id_utente, nuova_password_hash, nuovo_username):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("""
+                UPDATE Utenti 
+                SET password_hash = %s, username = %s, forza_cambio_password = FALSE 
+                WHERE id_utente = %s
+            """, (nuova_password_hash, nuovo_username, id_utente))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"[ERRORE] Errore cambio password e username: {e}")
+        return False
+
+def accetta_invito(id_utente, token, master_key_b64):
+    # Placeholder implementation if needed, logic might be in AuthView
+    pass
+
+def aggiungi_utente_a_famiglia(id_utente, id_famiglia, ruolo='user'):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("INSERT INTO Appartenenza_Famiglia (id_utente, id_famiglia, ruolo) VALUES (%s, %s, %s)",
+                        (id_utente, id_famiglia, ruolo))
+            return True
+    except Exception as e:
+        print(f"[ERRORE] Errore aggiunta utente a famiglia: {e}")
+        return False
+
+def rimuovi_utente_da_famiglia(id_utente, id_famiglia):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("DELETE FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s",
+                        (id_utente, id_famiglia))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"[ERRORE] Errore rimozione utente da famiglia: {e}")
+        return False
+
+def ottieni_membri_famiglia(id_famiglia):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("""
+                SELECT U.id_utente, U.username, U.email, AF.ruolo 
+                FROM Utenti U
+                JOIN Appartenenza_Famiglia AF ON U.id_utente = AF.id_utente
+                WHERE AF.id_famiglia = %s
+            """, (id_famiglia,))
+            return [dict(row) for row in cur.fetchall()]
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero membri famiglia: {e}")
+        return []
+
+
+def ottieni_ruolo_utente(id_utente, id_famiglia):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT ruolo FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s",
+                        (id_utente, id_famiglia))
+            res = cur.fetchone()
+            return res['ruolo'] if res else None
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero ruolo utente: {e}")
+        return None
+
+# --- Funzioni Conti ---
+def ottieni_conti(id_utente, master_key_b64=None):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT id_conto, nome_conto, tipo, saldo_iniziale, data_saldo_iniziale FROM Conti WHERE id_utente = %s", (id_utente,))
+            conti = [dict(row) for row in cur.fetchall()]
+            
+            # Decrypt if key available
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            if master_key:
+                for conto in conti:
+                    conto['nome_conto'] = _decrypt_if_key(conto['nome_conto'], master_key, crypto)
+            
+            return conti
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero conti: {e}")
+        return []
+
+def aggiungi_conto(id_utente, nome_conto, tipo, saldo_iniziale=0.0, data_saldo_iniziale=None, master_key_b64=None):
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    encrypted_nome = _encrypt_if_key(nome_conto, master_key, crypto)
+    
+    if not data_saldo_iniziale:
+        data_saldo_iniziale = datetime.date.today().strftime('%Y-%m-%d')
+
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute(
+                "INSERT INTO Conti (id_utente, nome_conto, tipo, saldo_iniziale, data_saldo_iniziale) VALUES (%s, %s, %s, %s, %s) RETURNING id_conto",
+                (id_utente, encrypted_nome, tipo, saldo_iniziale, data_saldo_iniziale))
+            id_conto = cur.fetchone()['id_conto']
+            
+            # Add initial balance transaction
+            if saldo_iniziale != 0:
+                # Note: "Saldo Iniziale" is NOT encrypted to allow filtering in UI
+                cur.execute(
+                    "INSERT INTO Transazioni (id_conto, data, descrizione, importo) VALUES (%s, %s, %s, %s)",
+                    (id_conto, data_saldo_iniziale, "Saldo Iniziale", saldo_iniziale))
+            
+            con.commit()
+            return id_conto
+    except Exception as e:
+        print(f"[ERRORE] Errore aggiunta conto: {e}")
+        return None
+
+def modifica_conto(id_conto, nome_conto, tipo, saldo_iniziale, data_saldo_iniziale, master_key_b64=None):
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    encrypted_nome = _encrypt_if_key(nome_conto, master_key, crypto)
+
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute(
+                "UPDATE Conti SET nome_conto = %s, tipo = %s, saldo_iniziale = %s, data_saldo_iniziale = %s WHERE id_conto = %s",
+                (encrypted_nome, tipo, saldo_iniziale, data_saldo_iniziale, id_conto))
+            
+            # Update initial balance transaction
+            # Find existing "Saldo Iniziale" transaction
+            cur.execute("SELECT id_transazione FROM Transazioni WHERE id_conto = %s AND descrizione = 'Saldo Iniziale'", (id_conto,))
+            res = cur.fetchone()
+            
+            if res:
+                if saldo_iniziale != 0:
+                    cur.execute("UPDATE Transazioni SET importo = %s, data = %s WHERE id_transazione = %s",
+                                (saldo_iniziale, data_saldo_iniziale, res['id_transazione']))
+                else:
+                    cur.execute("DELETE FROM Transazioni WHERE id_transazione = %s", (res['id_transazione'],))
+            elif saldo_iniziale != 0:
+                cur.execute(
+                    "INSERT INTO Transazioni (id_conto, data, descrizione, importo) VALUES (%s, %s, 'Saldo Iniziale', %s)",
+                    (id_conto, data_saldo_iniziale, saldo_iniziale))
+            
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"[ERRORE] Errore modifica conto: {e}")
+        return False
+
+
+def elimina_conto(id_conto):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("DELETE FROM Conti WHERE id_conto = %s", (id_conto,))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"[ERRORE] Errore eliminazione conto: {e}")
+        return False
+
+# --- Funzioni Categorie ---
+def ottieni_categorie(id_famiglia, master_key_b64=None, id_utente=None):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT id_categoria, nome_categoria, id_famiglia FROM Categorie WHERE id_famiglia = %s", (id_famiglia,))
+            categorie = [dict(row) for row in cur.fetchall()]
+            
+            # Decrypt if key available
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            family_key = None
+            if master_key and id_utente:
+                family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+
+            if family_key:
+                for cat in categorie:
+                    cat['nome_categoria'] = _decrypt_if_key(cat['nome_categoria'], family_key, crypto)
+            
+            # Sort in Python after decryption
+            categorie.sort(key=lambda x: x['nome_categoria'].lower())
+            
+            return categorie
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero categorie: {e}")
+        return []
+
+def aggiungi_categoria(id_famiglia, nome_categoria, master_key_b64=None, id_utente=None):
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    family_key = None
+    if master_key and id_utente:
+        family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+    
+    encrypted_nome = _encrypt_if_key(nome_categoria, family_key, crypto)
+
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute(
+                "INSERT INTO Categorie (id_famiglia, nome_categoria) VALUES (%s, %s) RETURNING id_categoria",
+                (id_famiglia, encrypted_nome))
+            return cur.fetchone()['id_categoria']
+    except Exception as e:
+        print(f"[ERRORE] Errore aggiunta categoria: {e}")
+        return None
+
+def modifica_categoria(id_categoria, nome_categoria, master_key_b64=None, id_utente=None):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # Get id_famiglia to retrieve key
+            cur.execute("SELECT id_famiglia FROM Categorie WHERE id_categoria = %s", (id_categoria,))
+            res = cur.fetchone()
+            if not res: return False
+            id_famiglia = res['id_famiglia']
+
+            # Encrypt if key available
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            family_key = None
+            if master_key and id_utente:
+                family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+            
+            encrypted_nome = _encrypt_if_key(nome_categoria, family_key, crypto)
+
+            cur.execute("UPDATE Categorie SET nome_categoria = %s WHERE id_categoria = %s",
+                        (encrypted_nome, id_categoria))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"[ERRORE] Errore modifica categoria: {e}")
+        return False
+
+def elimina_categoria(id_categoria):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("DELETE FROM Categorie WHERE id_categoria = %s", (id_categoria,))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"[ERRORE] Errore eliminazione categoria: {e}")
+        return False
+
+# --- Funzioni Sottocategorie ---
+def ottieni_sottocategorie(id_categoria, master_key_b64=None, id_utente=None):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT id_sottocategoria, nome_sottocategoria, id_categoria FROM Sottocategorie WHERE id_categoria = %s", (id_categoria,))
+            sottocategorie = [dict(row) for row in cur.fetchall()]
+            
+            # Decrypt if key available
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            family_key = None
+            
+            if master_key and id_utente:
+                 # Need id_famiglia to get key. Get it from category.
+                 cur.execute("SELECT id_famiglia FROM Categorie WHERE id_categoria = %s", (id_categoria,))
+                 res = cur.fetchone()
+                 if res:
+                     family_key = _get_family_key_for_user(res['id_famiglia'], id_utente, master_key, crypto)
+
+            if family_key:
+                for sub in sottocategorie:
+                    sub['nome_sottocategoria'] = _decrypt_if_key(sub['nome_sottocategoria'], family_key, crypto)
+            
+            # Sort in Python
+            sottocategorie.sort(key=lambda x: x['nome_sottocategoria'].lower())
+            
+            return sottocategorie
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero sottocategorie: {e}")
+        return []
+
+def aggiungi_sottocategoria(id_categoria, nome_sottocategoria, master_key_b64=None, id_utente=None):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # Get id_famiglia
+            cur.execute("SELECT id_famiglia FROM Categorie WHERE id_categoria = %s", (id_categoria,))
+            res = cur.fetchone()
+            if not res: return None
+            id_famiglia = res['id_famiglia']
+
+            # Encrypt
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            family_key = None
+            if master_key and id_utente:
+                family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+            
+            encrypted_nome = _encrypt_if_key(nome_sottocategoria, family_key, crypto)
+
+            cur.execute(
+                "INSERT INTO Sottocategorie (id_categoria, nome_sottocategoria) VALUES (%s, %s) RETURNING id_sottocategoria",
+                (id_categoria, encrypted_nome))
+            return cur.fetchone()['id_sottocategoria']
+    except Exception as e:
+        print(f"[ERRORE] Errore aggiunta sottocategoria: {e}")
+        return None
+
+def modifica_sottocategoria(id_sottocategoria, nome_sottocategoria, master_key_b64=None, id_utente=None):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # Get id_famiglia via category
+            cur.execute("""
+                SELECT C.id_famiglia 
+                FROM Sottocategorie S 
+                JOIN Categorie C ON S.id_categoria = C.id_categoria 
+                WHERE S.id_sottocategoria = %s
+            """, (id_sottocategoria,))
+            res = cur.fetchone()
+            if not res: return False
+            id_famiglia = res['id_famiglia']
+
+            # Encrypt
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            family_key = None
+            if master_key and id_utente:
+                family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+            
+            encrypted_nome = _encrypt_if_key(nome_sottocategoria, family_key, crypto)
+
+            cur.execute("UPDATE Sottocategorie SET nome_sottocategoria = %s WHERE id_sottocategoria = %s",
+                        (encrypted_nome, id_sottocategoria))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"[ERRORE] Errore modifica sottocategoria: {e}")
+        return False
+
+def elimina_sottocategoria(id_sottocategoria):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("DELETE FROM Sottocategorie WHERE id_sottocategoria = %s", (id_sottocategoria,))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"[ERRORE] Errore eliminazione sottocategoria: {e}")
+        return False
+
+def ottieni_categorie_e_sottocategorie(id_famiglia, master_key_b64=None, id_utente=None):
+    try:
+        categorie = ottieni_categorie(id_famiglia, master_key_b64, id_utente)
+        for cat in categorie:
+            cat['sottocategorie'] = ottieni_sottocategorie(cat['id_categoria'], master_key_b64, id_utente)
+        return categorie
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero categorie e sottocategorie: {e}")
+        return []
+
+
+
+
+
+
 
 
 def ottieni_utente_da_email(email):
@@ -591,14 +967,14 @@ def ottieni_dettagli_utente(id_utente, master_key_b64=None):
             dati = dict(row)
             
             # Decrypt PII if master key is provided
-            if master_key_b64:
-                print("[DEBUG] Decriptazione profilo con master key...")
-                dati['nome'] = _decrypt_if_key(dati.get('nome'), master_key_b64)
-                dati['cognome'] = _decrypt_if_key(dati.get('cognome'), master_key_b64)
-                dati['codice_fiscale'] = _decrypt_if_key(dati.get('codice_fiscale'), master_key_b64)
-                dati['indirizzo'] = _decrypt_if_key(dati.get('indirizzo'), master_key_b64)
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            if master_key:
+                dati['nome'] = _decrypt_if_key(dati.get('nome'), master_key, crypto)
+                dati['cognome'] = _decrypt_if_key(dati.get('cognome'), master_key, crypto)
+                dati['codice_fiscale'] = _decrypt_if_key(dati.get('codice_fiscale'), master_key, crypto)
+                dati['indirizzo'] = _decrypt_if_key(dati.get('indirizzo'), master_key, crypto)
             else:
-                print("[DEBUG] Nessuna master key fornita per decriptazione profilo.")
+                pass
                 
             return dati
     except Exception as e:
@@ -1249,177 +1625,20 @@ def ottieni_tutti_i_conti_famiglia(id_famiglia, master_key_b64=None):
         print(f"[ERRORE] Errore generico durante il recupero di tutti i conti famiglia: {e}")
         return []
 
+# --- Helper Functions for Encryption (Family) ---
 
-def esegui_giroconto(id_sorgente, tipo_sorgente, id_destinazione, tipo_destinazione, importo, data, descrizione,
-                     id_utente_autore, master_key_b64=None):
-    """
-    Esegue un giroconto tra due conti (personali o condivisi).
-    Crea due transazioni opposte in modo atomico.
-    """
+def _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto):
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("BEGIN TRANSACTION;")
-
-            desc_sorgente = f"Giroconto Uscita: {descrizione}"
-            desc_destinazione = f"Giroconto Entrata: {descrizione}"
-
-            # Debito sul conto sorgente
-            if tipo_sorgente == 'P':
-                aggiungi_transazione(id_sorgente, data, desc_sorgente, -abs(importo), cursor=cur, master_key_b64=master_key_b64)
-            elif tipo_sorgente == 'C':
-                aggiungi_transazione_condivisa(id_utente_autore, id_sorgente, data, desc_sorgente, -abs(importo),
-                                               cursor=cur, master_key_b64=master_key_b64)
-
-            # Credito sul conto destinazione
-            if tipo_destinazione == 'P':
-                aggiungi_transazione(id_destinazione, data, desc_destinazione, abs(importo), cursor=cur, master_key_b64=master_key_b64)
-            elif tipo_destinazione == 'C':
-                aggiungi_transazione_condivisa(id_utente_autore, id_destinazione, data, desc_destinazione, abs(importo),
-                                               cursor=cur, master_key_b64=master_key_b64)
-
-            con.commit()
-            return True
-    except Exception as e:
-        print(f"[ERRORE] Errore durante l'esecuzione del giroconto: {e}")
-        if con: con.rollback()
-        return False
-
-
-# --- Funzioni Categorie ---
-def aggiungi_categoria(id_famiglia, nome_categoria):
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
-            cur.execute("INSERT INTO Categorie (id_famiglia, nome_categoria) VALUES (%s, %s) RETURNING id_categoria",
-                        (id_famiglia, nome_categoria.upper()))
-            return cur.fetchone()['id_categoria']
+            cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
+            row = cur.fetchone()
+            if row and row['chiave_famiglia_criptata']:
+                fk_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+                return base64.b64decode(fk_b64)
     except Exception:
-        return None
-    except Exception as e:
-        print(f"[ERRORE] Errore generico: {e}")
-        return None
-
-
-def modifica_categoria(id_categoria, nuovo_nome):
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
-            cur.execute("UPDATE Categorie SET nome_categoria = %s WHERE id_categoria = %s",
-                        (nuovo_nome.upper(), id_categoria))
-            return cur.rowcount > 0
-    except Exception:
-        return False
-    except Exception as e:
-        print(f"[ERRORE] Errore generico durante la modifica della categoria: {e}")
-        return False
-
-
-def elimina_categoria(id_categoria):
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
-            cur.execute("DELETE FROM Categorie WHERE id_categoria = %s", (id_categoria,))
-            return cur.rowcount > 0
-    except Exception as e:
-        print(f"[ERRORE] Errore generico durante l'eliminazione della categoria: {e}")
-        return False
-
-
-def ottieni_categorie(id_famiglia):
-    try:
-        with get_db_connection() as con:
-            # con.row_factory = sqlite3.Row # Removed for Supabase
-            cur = con.cursor()
-            cur.execute("SELECT id_categoria, nome_categoria FROM Categorie WHERE id_famiglia = %s", (id_famiglia,))
-            return [dict(row) for row in cur.fetchall()]
-    except Exception as e:
-        print(f"[ERRORE] Errore generico durante il recupero categorie: {e}")
-        return []
-
-# --- Funzioni Sottocategorie ---
-def aggiungi_sottocategoria(id_categoria, nome_sottocategoria):
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            cur.execute("INSERT INTO Sottocategorie (id_categoria, nome_sottocategoria) VALUES (%s, %s) RETURNING id_sottocategoria",
-                        (id_categoria, nome_sottocategoria.upper()))
-            return cur.fetchone()['id_sottocategoria']
-    except Exception:
-        return None
-    except Exception as e:
-        print(f"[ERRORE] Errore durante l'aggiunta della sottocategoria: {e}")
-        return None
-
-def modifica_sottocategoria(id_sottocategoria, nuovo_nome):
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            cur.execute("UPDATE Sottocategorie SET nome_sottocategoria = %s WHERE id_sottocategoria = %s",
-                        (nuovo_nome.upper(), id_sottocategoria))
-            return cur.rowcount > 0
-    except Exception:
-        return False
-    except Exception as e:
-        print(f"[ERRORE] Errore durante la modifica della sottocategoria: {e}")
-        return False
-
-def elimina_sottocategoria(id_sottocategoria):
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
-            cur.execute("DELETE FROM Sottocategorie WHERE id_sottocategoria = %s", (id_sottocategoria,))
-            return cur.rowcount > 0
-    except Exception as e:
-        print(f"[ERRORE] Errore durante l'eliminazione della sottocategoria: {e}")
-        return False
-
-def ottieni_sottocategorie(id_categoria):
-    try:
-        with get_db_connection() as con:
-            # con.row_factory = sqlite3.Row # Removed for Supabase
-            cur = con.cursor()
-            cur.execute("SELECT id_sottocategoria, nome_sottocategoria FROM Sottocategorie WHERE id_categoria = %s", (id_categoria,))
-            return [dict(row) for row in cur.fetchall()]
-    except Exception as e:
-        print(f"[ERRORE] Errore durante il recupero sottocategorie: {e}")
-        return []
-
-def ottieni_categorie_e_sottocategorie(id_famiglia):
-    try:
-        with get_db_connection() as con:
-            # con.row_factory = sqlite3.Row # Removed for Supabase
-            cur = con.cursor()
-            cur.execute("""
-                SELECT C.id_categoria, C.nome_categoria, S.id_sottocategoria, S.nome_sottocategoria
-                FROM Categorie C
-                LEFT JOIN Sottocategorie S ON C.id_categoria = S.id_categoria
-                WHERE C.id_famiglia = %s
-                ORDER BY C.nome_categoria, S.nome_sottocategoria
-            """, (id_famiglia,))
-            
-            categorie = {}
-            for row in cur.fetchall():
-                if row['id_categoria'] not in categorie:
-                    categorie[row['id_categoria']] = {
-                        'nome_categoria': row['nome_categoria'],
-                        'sottocategorie': []
-                    }
-                if row['id_sottocategoria']:
-                    categorie[row['id_categoria']]['sottocategorie'].append({
-                        'id_sottocategoria': row['id_sottocategoria'],
-                        'nome_sottocategoria': row['nome_sottocategoria'],
-                        'id_categoria': row['id_categoria']
-                    })
-            return categorie
-    except Exception as e:
-        print(f"[ERRORE] Errore durante il recupero di categorie e sottocategorie: {e}")
-        return {}
-
+        pass
+    return None
 
 # --- Funzioni Transazioni Personali ---
 def aggiungi_transazione(id_conto, data, descrizione, importo, id_sottocategoria=None, cursor=None, master_key_b64=None):
@@ -1498,7 +1717,7 @@ def ottieni_transazioni_utente(id_utente, anno, mese, master_key_b64=None):
                                T.importo,
                                C.nome_conto,
                                C.id_conto,
-                               COALESCE(Cat.nome_categoria || ' - ' || SCat.nome_sottocategoria, Cat.nome_categoria, SCat.nome_sottocategoria) AS nome_sottocategoria,
+                               Cat.nome_categoria,
                                SCat.nome_sottocategoria,
                                SCat.id_sottocategoria,
                                'personale' AS tipo_transazione,
@@ -1507,7 +1726,7 @@ def ottieni_transazioni_utente(id_utente, anno, mese, master_key_b64=None):
                                  JOIN Conti C ON T.id_conto = C.id_conto
                                  LEFT JOIN Sottocategorie SCat ON T.id_sottocategoria = SCat.id_sottocategoria
                                  LEFT JOIN Categorie Cat ON SCat.id_categoria = Cat.id_categoria
-        WHERE C.id_utente = %s
+                        WHERE C.id_utente = %s
                           AND C.tipo != 'Fondo Pensione' AND T.data BETWEEN %s AND %s
                         
                         UNION ALL
@@ -1519,7 +1738,7 @@ def ottieni_transazioni_utente(id_utente, anno, mese, master_key_b64=None):
                                TC.importo,
                                CC.nome_conto,
                                CC.id_conto_condiviso AS id_conto,
-                               COALESCE(Cat.nome_categoria || ' - ' || SCat.nome_sottocategoria, Cat.nome_categoria, SCat.nome_sottocategoria) AS nome_sottocategoria,
+                               Cat.nome_categoria,
                                SCat.nome_sottocategoria,
                                SCat.id_sottocategoria,
                                'condivisa'           AS tipo_transazione,
@@ -1540,10 +1759,60 @@ def ottieni_transazioni_utente(id_utente, anno, mese, master_key_b64=None):
             
             # Decrypt if key available
             crypto, master_key = _get_crypto_and_key(master_key_b64)
+            
+            # Get Family Key for shared accounts AND categories
+            family_key = None
+            if master_key:
+                try:
+                    # Get family ID (assuming single family for now)
+                    cur.execute("SELECT id_famiglia, chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s LIMIT 1", (id_utente,))
+                    fam_row = cur.fetchone()
+                    if fam_row and fam_row['chiave_famiglia_criptata']:
+                        family_key_b64 = crypto.decrypt_data(fam_row['chiave_famiglia_criptata'], master_key)
+                        family_key = base64.b64decode(family_key_b64)
+                except Exception as e:
+                    print(f"[ERRORE] Failed to retrieve family key: {e}")
+
             if master_key:
                 for row in results:
-                    row['descrizione'] = _decrypt_if_key(row['descrizione'], master_key, crypto)
-                    row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
+                    original_desc = row['descrizione']
+                    
+                    # Determine key based on transaction type
+                    current_key = master_key
+                    if row['tipo_transazione'] == 'condivisa':
+                        current_key = family_key
+                    
+                    decrypted_desc = _decrypt_if_key(original_desc, current_key, crypto)
+                    
+                    # Fix for unencrypted "Saldo Iniziale" in shared accounts
+                    if decrypted_desc == "[ENCRYPTED]" and original_desc == "Saldo Iniziale":
+                        decrypted_desc = "Saldo Iniziale"
+                        
+                    row['descrizione'] = decrypted_desc
+                    
+                    # Decrypt other fields
+                    row['nome_conto'] = _decrypt_if_key(row['nome_conto'], current_key, crypto)
+                    
+                    # Categories are always encrypted with Family Key
+                    cat_name = row['nome_categoria']
+                    sub_name = row['nome_sottocategoria']
+                    
+                    if family_key:
+                        cat_name = _decrypt_if_key(cat_name, family_key, crypto)
+                        sub_name = _decrypt_if_key(sub_name, family_key, crypto)
+                        
+                    row['nome_categoria'] = cat_name
+                    row['nome_sottocategoria'] = sub_name
+
+                    # Format nome_sottocategoria for display
+                    if cat_name and sub_name:
+                        row['nome_sottocategoria'] = f"{cat_name} - {sub_name}"
+                    elif cat_name:
+                        row['nome_sottocategoria'] = cat_name
+                    elif sub_name:
+                        row['nome_sottocategoria'] = sub_name
+                    else:
+                        row['nome_sottocategoria'] = ""
             
             return results
     except Exception as e:
@@ -1556,7 +1825,28 @@ def aggiungi_transazione_condivisa(id_utente_autore, id_conto_condiviso, data, d
                                    cursor=None, master_key_b64=None):
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
-    encrypted_descrizione = _encrypt_if_key(descrizione, master_key, crypto)
+    
+    # Retrieve Family Key for encryption
+    family_key = None
+    if master_key:
+        try:
+            # We need the family ID associated with the shared account or the user.
+            # Since shared accounts belong to a family, we should use that family's key.
+            # First, get id_famiglia from the shared account
+            with get_db_connection() as con:
+                cur = con.cursor()
+                cur.execute("SELECT id_famiglia FROM ContiCondivisi WHERE id_conto_condiviso = %s", (id_conto_condiviso,))
+                res = cur.fetchone()
+                if res:
+                    id_famiglia = res['id_famiglia']
+                    # Now get the family key for this user and family
+                    family_key = _get_family_key_for_user(id_famiglia, id_utente_autore, master_key, crypto)
+        except Exception as e:
+            print(f"[ERRORE] Failed to retrieve family key for encryption: {e}")
+
+    # Use Family Key if available, otherwise Master Key (fallback, though not ideal for sharing)
+    key_to_use = family_key if family_key else master_key
+    encrypted_descrizione = _encrypt_if_key(descrizione, key_to_use, crypto)
     
     # Permette di passare un cursore esistente per le transazioni atomiche
     if cursor:
@@ -1577,10 +1867,33 @@ def aggiungi_transazione_condivisa(id_utente_autore, id_conto_condiviso, data, d
             return None
 
 
-def modifica_transazione_condivisa(id_transazione_condivisa, data, descrizione, importo, id_sottocategoria=None, master_key_b64=None):
+def modifica_transazione_condivisa(id_transazione_condivisa, data, descrizione, importo, id_sottocategoria=None, master_key_b64=None, id_utente=None):
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
-    encrypted_descrizione = _encrypt_if_key(descrizione, master_key, crypto)
+    
+    # Retrieve Family Key for encryption
+    family_key = None
+    if master_key and id_utente:
+        try:
+            with get_db_connection() as con:
+                cur = con.cursor()
+                # Get id_famiglia from the transaction's account
+                cur.execute("""
+                    SELECT CC.id_famiglia 
+                    FROM TransazioniCondivise TC
+                    JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
+                    WHERE TC.id_transazione_condivisa = %s
+                """, (id_transazione_condivisa,))
+                res = cur.fetchone()
+                if res:
+                    id_famiglia = res['id_famiglia']
+                    family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+        except Exception as e:
+            print(f"[ERRORE] Failed to retrieve family key for encryption: {e}")
+
+    # Use Family Key if available, otherwise Master Key (fallback)
+    key_to_use = family_key if family_key else master_key
+    encrypted_descrizione = _encrypt_if_key(descrizione, key_to_use, crypto)
     
     try:
         with get_db_connection() as con:
@@ -1600,20 +1913,19 @@ def modifica_transazione_condivisa(id_transazione_condivisa, data, descrizione, 
         return False
 
 
+
 def elimina_transazione_condivisa(id_transazione_condivisa):
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
-            cur.execute("DELETE FROM TransazioniCondivise WHERE id_transazione_condivisa = %s",
-                        (id_transazione_condivisa,))
+            cur.execute("DELETE FROM TransazioniCondivise WHERE id_transazione_condivisa = %s", (id_transazione_condivisa,))
             return cur.rowcount > 0
     except Exception as e:
         print(f"[ERRORE] Errore generico durante l'eliminazione transazione condivisa: {e}")
-        return None
+        return False
 
 
-def ottieni_transazioni_condivise_utente(id_utente):
+def ottieni_transazioni_condivise_utente(id_utente, master_key_b64=None):
     try:
         with get_db_connection() as con:
             # con.row_factory = sqlite3.Row # Removed for Supabase
@@ -1626,6 +1938,7 @@ def ottieni_transazioni_condivise_utente(id_utente):
                                CC.nome_conto,
                                CC.id_conto_condiviso,
                                Cat.nome_categoria,
+                               Cat.id_famiglia,
                                SCat.nome_sottocategoria,
                                SCat.id_sottocategoria
                         FROM TransazioniCondivise TC
@@ -1639,13 +1952,38 @@ def ottieni_transazioni_condivise_utente(id_utente):
                                CC.tipo_condivisione = 'famiglia')
                         ORDER BY TC.data DESC, TC.id_transazione_condivisa DESC
                         """, (id_utente, id_utente))
-            return [dict(row) for row in cur.fetchall()]
+            results = [dict(row) for row in cur.fetchall()]
+            
+            if master_key_b64:
+                crypto, master_key = _get_crypto_and_key(master_key_b64)
+                
+                # Fetch all family keys for the user
+                family_keys = {}
+                try:
+                    cur.execute("SELECT id_famiglia, chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s", (id_utente,))
+                    for row in cur.fetchall():
+                        if row['chiave_famiglia_criptata']:
+                            fk_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+                            family_keys[row['id_famiglia']] = base64.b64decode(fk_b64)
+                except Exception:
+                    pass
+
+                for row in results:
+                    fam_id = row.get('id_famiglia')
+                    if fam_id and fam_id in family_keys:
+                        f_key = family_keys[fam_id]
+                        row['descrizione'] = _decrypt_if_key(row['descrizione'], f_key, crypto)
+                        row['nome_categoria'] = _decrypt_if_key(row['nome_categoria'], f_key, crypto)
+                        row['nome_sottocategoria'] = _decrypt_if_key(row['nome_sottocategoria'], f_key, crypto)
+                        # Decrypt account name (assuming it uses family key as it is a shared account)
+                        row['nome_conto'] = _decrypt_if_key(row['nome_conto'], f_key, crypto)
+
+            return results
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero transazioni condivise utente: {e}")
         return []
 
-
-def ottieni_transazioni_condivise_famiglia(id_famiglia):
+def ottieni_transazioni_condivise_famiglia(id_famiglia, id_utente=None, master_key_b64=None):
     try:
         with get_db_connection() as con:
             # con.row_factory = sqlite3.Row # Removed for Supabase
@@ -1668,7 +2006,20 @@ def ottieni_transazioni_condivise_famiglia(id_famiglia):
                           AND CC.tipo_condivisione = 'famiglia'
                         ORDER BY TC.data DESC, TC.id_transazione_condivisa DESC
                         """, (id_famiglia,))
-            return [dict(row) for row in cur.fetchall()]
+            results = [dict(row) for row in cur.fetchall()]
+            
+            if id_utente and master_key_b64:
+                crypto, master_key = _get_crypto_and_key(master_key_b64)
+                family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+                
+                if family_key:
+                    for row in results:
+                        row['descrizione'] = _decrypt_if_key(row['descrizione'], family_key, crypto)
+                        row['nome_conto'] = _decrypt_if_key(row['nome_conto'], family_key, crypto)
+                        row['nome_categoria'] = _decrypt_if_key(row['nome_categoria'], family_key, crypto)
+                        row['nome_sottocategoria'] = _decrypt_if_key(row['nome_sottocategoria'], family_key, crypto)
+
+            return results
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero transazioni condivise famiglia: {e}")
         return []
@@ -2053,14 +2404,19 @@ def esegui_operazione_fondo_pensione(id_fondo_pensione, tipo_operazione, importo
 
 
 # --- Funzioni Budget ---
-def imposta_budget(id_famiglia, id_sottocategoria, importo_limite, master_key_b64=None):
+def imposta_budget(id_famiglia, id_sottocategoria, importo_limite, master_key_b64=None, id_utente=None):
     try:
         # Encrypt importo_limite
-        print(f"[DEBUG] imposta_budget - master_key_b64 present: {bool(master_key_b64)}")
         crypto, master_key = _get_crypto_and_key(master_key_b64)
-        print(f"[DEBUG] imposta_budget - master_key valid: {bool(master_key)}")
-        encrypted_importo = _encrypt_if_key(str(importo_limite), master_key, crypto)
-        print(f"[DEBUG] imposta_budget - encrypted_importo: {encrypted_importo}")
+        
+        # Retrieve Family Key for encryption
+        family_key = None
+        if master_key and id_utente:
+             family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+        
+        # Use Family Key if available, otherwise Master Key (fallback)
+        key_to_use = family_key if family_key else master_key
+        encrypted_importo = _encrypt_if_key(str(importo_limite), key_to_use, crypto)
         
         with get_db_connection() as con:
             cur = con.cursor()
@@ -2075,7 +2431,7 @@ def imposta_budget(id_famiglia, id_sottocategoria, importo_limite, master_key_b6
         print(f"[ERRORE] Errore generico durante l'impostazione del budget: {e}")
         return False
 
-def ottieni_budget_famiglia(id_famiglia, master_key_b64=None):
+def ottieni_budget_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
     try:
         with get_db_connection() as con:
             # con.row_factory = sqlite3.Row # Removed for Supabase
@@ -2087,18 +2443,34 @@ def ottieni_budget_famiglia(id_famiglia, master_key_b64=None):
                                  JOIN Categorie C ON S.id_categoria = C.id_categoria
                         WHERE B.id_famiglia = %s
                           AND B.periodo = 'Mensile'
-                        ORDER BY C.nome_categoria, S.nome_sottocategoria
                         """, (id_famiglia,))
             rows = [dict(row) for row in cur.fetchall()]
             
             # Decrypt
             crypto, master_key = _get_crypto_and_key(master_key_b64)
+            
+            family_key = None
+            if master_key and id_utente:
+                family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+            
             for row in rows:
-                decrypted = _decrypt_if_key(row['importo_limite'], master_key, crypto)
+                # Decrypt budget limit (ALWAYS Family Key)
+                if family_key:
+                    decrypted = _decrypt_if_key(row['importo_limite'], family_key, crypto)
+                else:
+                    decrypted = row['importo_limite'] # Cannot decrypt without family key
                 try:
                     row['importo_limite'] = float(decrypted)
                 except (ValueError, TypeError):
                     row['importo_limite'] = 0.0
+                
+                # Decrypt category and subcategory names (always Family Key)
+                if family_key:
+                    row['nome_categoria'] = _decrypt_if_key(row['nome_categoria'], family_key, crypto)
+                    row['nome_sottocategoria'] = _decrypt_if_key(row['nome_sottocategoria'], family_key, crypto)
+            
+            # Sort in Python
+            rows.sort(key=lambda x: (x['nome_categoria'] or "", x['nome_sottocategoria'] or ""))
             
             return rows
     except Exception as e:
@@ -2106,7 +2478,7 @@ def ottieni_budget_famiglia(id_famiglia, master_key_b64=None):
         return []
 
 
-def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64=None):
+def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64=None, id_utente=None):
     data_inizio = f"{anno}-{mese:02d}-01"
     ultimo_giorno = (datetime.date(anno, mese, 1) + relativedelta(months=1) - relativedelta(days=1)).day
     data_fine = f"{anno}-{mese:02d}-{ultimo_giorno}"
@@ -2160,11 +2532,20 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64=Non
             riepilogo = {}
             crypto, master_key = _get_crypto_and_key(master_key_b64)
             
+            family_key = None
+            if master_key and id_utente:
+                family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+            
             for row in cur.fetchall():
                 cat_id = row['id_categoria']
                 if cat_id not in riepilogo:
+                    # Decrypt category name
+                    cat_name = row['nome_categoria']
+                    if family_key:
+                        cat_name = _decrypt_if_key(cat_name, family_key, crypto)
+                        
                     riepilogo[cat_id] = {
-                        'nome_categoria': row['nome_categoria'],
+                        'nome_categoria': cat_name,
                         'importo_limite_totale': 0,
                         'spesa_totale_categoria': 0,
                         'sottocategorie': []
@@ -2172,8 +2553,11 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64=Non
                 
                 spesa = abs(row['spesa_totale'])
                 
-                # Decrypt importo_limite
-                decrypted_limite = _decrypt_if_key(row['importo_limite'], master_key, crypto)
+                # Decrypt importo_limite (ALWAYS Family Key)
+                if family_key:
+                    decrypted_limite = _decrypt_if_key(row['importo_limite'], family_key, crypto)
+                else:
+                    decrypted_limite = row['importo_limite'] # Cannot decrypt without family key
                 try:
                     limite = float(decrypted_limite)
                 except (ValueError, TypeError):
@@ -2182,9 +2566,14 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64=Non
                 riepilogo[cat_id]['importo_limite_totale'] += limite
                 riepilogo[cat_id]['spesa_totale_categoria'] += spesa
                 
+                # Decrypt subcategory name
+                sub_name = row['nome_sottocategoria']
+                if family_key:
+                    sub_name = _decrypt_if_key(sub_name, family_key, crypto)
+
                 riepilogo[cat_id]['sottocategorie'].append({
                     'id_sottocategoria': row['id_sottocategoria'],
-                    'nome_sottocategoria': row['nome_sottocategoria'],
+                    'nome_sottocategoria': sub_name,
                     'importo_limite': limite,
                     'spesa_totale': spesa,
                     'rimanente': limite - spesa
@@ -2193,21 +2582,37 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64=Non
             # Calcola il rimanente totale per categoria
             for cat_id in riepilogo:
                 riepilogo[cat_id]['rimanente_totale'] = riepilogo[cat_id]['importo_limite_totale'] - riepilogo[cat_id]['spesa_totale_categoria']
+            
+            # Sort categories and subcategories in Python
+            # Convert dict to list of values for sorting, but we return a dict keyed by cat_id.
+            # Actually, the caller expects a dict. But we can't sort a dict in place reliably across versions (though 3.7+ preserves insertion order).
+            # Let's sort the subcategories list within each category.
+            for cat_id in riepilogo:
+                riepilogo[cat_id]['sottocategorie'].sort(key=lambda x: x['nome_sottocategoria'] or "")
+            
+            # To sort categories, we might need to return a sorted dict or list.
+            # The current implementation returns a dict. The caller iterates over values.
+            # Let's return a dict with sorted keys (insertion order).
+            sorted_riepilogo = dict(sorted(riepilogo.items(), key=lambda item: item[1]['nome_categoria'] or ""))
 
-            return riepilogo
+            return sorted_riepilogo
 
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero riepilogo budget: {e}")
         return {}
 
 
-def salva_budget_mese_corrente(id_famiglia, anno, mese, master_key_b64=None):
+def salva_budget_mese_corrente(id_famiglia, anno, mese, master_key_b64=None, id_utente=None):
     try:
-        riepilogo_corrente = ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64)
+        riepilogo_corrente = ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64, id_utente)
         if not riepilogo_corrente:
             return False
             
         crypto, master_key = _get_crypto_and_key(master_key_b64)
+        
+        family_key = None
+        if master_key and id_utente:
+            family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
         
         with get_db_connection() as con:
             cur = con.cursor()
@@ -2217,11 +2622,17 @@ def salva_budget_mese_corrente(id_famiglia, anno, mese, master_key_b64=None):
             for cat_id, cat_data in riepilogo_corrente.items():
                 for sub_data in cat_data['sottocategorie']:
                     # Encrypt amounts
-                    enc_limite = _encrypt_if_key(str(sub_data['importo_limite']), master_key, crypto)
-                    enc_speso = _encrypt_if_key(str(abs(sub_data['spesa_totale'])), master_key, crypto)
+                    key_to_use = family_key if family_key else master_key
+                    enc_limite = _encrypt_if_key(str(sub_data['importo_limite']), key_to_use, crypto)
+                    enc_speso = _encrypt_if_key(str(abs(sub_data['spesa_totale'])), key_to_use, crypto)
                     
+                    # Encrypt subcategory name (for history snapshot)
+                    enc_sub_name = sub_data['nome_sottocategoria']
+                    if family_key: # Re-encrypt if it was decrypted
+                         enc_sub_name = _encrypt_if_key(sub_data['nome_sottocategoria'], family_key, crypto)
+
                     dati_da_salvare.append((
-                        id_famiglia, sub_data['id_sottocategoria'], sub_data['nome_sottocategoria'],
+                        id_famiglia, sub_data['id_sottocategoria'], enc_sub_name,
                         anno, mese, enc_limite, enc_speso
                     ))
             
@@ -2767,6 +3178,234 @@ def modifica_asset_dettagli(id_asset, nuovo_ticker, nuovo_nome, master_key_b64=N
         return False
     except Exception as e:
         print(f"[ERRORE] Errore generico durante l'aggiornamento dettagli asset: {e}")
+        return False
+
+
+
+
+# --- Funzioni Investimenti ---
+def aggiungi_investimento(id_conto, ticker, nome_asset, quantita, costo_unitario, data_acquisto, master_key_b64=None):
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    encrypted_ticker = _encrypt_if_key(ticker.upper(), master_key, crypto)
+    encrypted_nome = _encrypt_if_key(nome_asset, master_key, crypto)
+
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute(
+                "INSERT INTO Asset (id_conto, ticker, nome_asset, quantita, costo_iniziale_unitario, data_acquisto, prezzo_attuale_manuale) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id_asset",
+                (id_conto, encrypted_ticker, encrypted_nome, quantita, costo_unitario, data_acquisto, costo_unitario))
+            return cur.fetchone()['id_asset']
+    except Exception as e:
+        print(f"[ERRORE] Errore aggiunta investimento: {e}")
+        return None
+
+def modifica_investimento(id_asset, ticker, nome_asset, quantita, costo_unitario, data_acquisto, master_key_b64=None):
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    encrypted_ticker = _encrypt_if_key(ticker.upper(), master_key, crypto)
+    encrypted_nome = _encrypt_if_key(nome_asset, master_key, crypto)
+
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute(
+                "UPDATE Asset SET ticker = %s, nome_asset = %s, quantita = %s, costo_iniziale_unitario = %s, data_acquisto = %s WHERE id_asset = %s",
+                (encrypted_ticker, encrypted_nome, quantita, costo_unitario, data_acquisto, id_asset))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"[ERRORE] Errore modifica investimento: {e}")
+        return False
+
+def elimina_investimento(id_asset):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("DELETE FROM Asset WHERE id_asset = %s", (id_asset,))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"[ERRORE] Errore eliminazione investimento: {e}")
+        return False
+
+def ottieni_investimenti(id_conto, master_key_b64=None):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT * FROM Asset WHERE id_conto = %s", (id_conto,))
+            assets = [dict(row) for row in cur.fetchall()]
+            
+            # Decrypt if key available
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            if master_key:
+                for asset in assets:
+                    asset['ticker'] = _decrypt_if_key(asset['ticker'], master_key, crypto)
+                    asset['nome_asset'] = _decrypt_if_key(asset['nome_asset'], master_key, crypto)
+            
+            return assets
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero investimenti: {e}")
+        return []
+
+def ottieni_dettaglio_asset(id_asset, master_key_b64=None):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT * FROM Asset WHERE id_asset = %s", (id_asset,))
+            res = cur.fetchone()
+            if not res: return None
+            
+            asset = dict(res)
+            # Decrypt if key available
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            if master_key:
+                asset['ticker'] = _decrypt_if_key(asset['ticker'], master_key, crypto)
+                asset['nome_asset'] = _decrypt_if_key(asset['nome_asset'], master_key, crypto)
+            
+            return asset
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero dettaglio asset: {e}")
+        return None
+
+def aggiorna_prezzo_asset(id_asset, nuovo_prezzo):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("UPDATE Asset SET prezzo_attuale_manuale = %s, data_ultimo_aggiornamento = CURRENT_TIMESTAMP WHERE id_asset = %s",
+                        (nuovo_prezzo, id_asset))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"[ERRORE] Errore aggiornamento prezzo asset: {e}")
+        return False
+
+
+
+# --- Funzioni Prestiti ---
+def aggiungi_prestito(id_conto, nome_debitore, importo_totale, data_inizio, data_scadenza, tasso_interesse, descrizione, master_key_b64=None):
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    encrypted_nome = _encrypt_if_key(nome_debitore, master_key, crypto)
+    encrypted_desc = _encrypt_if_key(descrizione, master_key, crypto)
+
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute(
+                "INSERT INTO Prestiti (id_conto, nome_debitore, importo_totale, data_inizio, data_scadenza, tasso_interesse, descrizione) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id_prestito",
+                (id_conto, encrypted_nome, importo_totale, data_inizio, data_scadenza, tasso_interesse, encrypted_desc))
+            return cur.fetchone()['id_prestito']
+    except Exception as e:
+        print(f"[ERRORE] Errore aggiunta prestito: {e}")
+        return None
+
+def modifica_prestito(id_prestito, nome_debitore, importo_totale, data_inizio, data_scadenza, tasso_interesse, descrizione, master_key_b64=None):
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    encrypted_nome = _encrypt_if_key(nome_debitore, master_key, crypto)
+    encrypted_desc = _encrypt_if_key(descrizione, master_key, crypto)
+
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute(
+                "UPDATE Prestiti SET nome_debitore = %s, importo_totale = %s, data_inizio = %s, data_scadenza = %s, tasso_interesse = %s, descrizione = %s WHERE id_prestito = %s",
+                (encrypted_nome, importo_totale, data_inizio, data_scadenza, tasso_interesse, encrypted_desc, id_prestito))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"[ERRORE] Errore modifica prestito: {e}")
+        return False
+
+def elimina_prestito(id_prestito):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("DELETE FROM Prestiti WHERE id_prestito = %s", (id_prestito,))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"[ERRORE] Errore eliminazione prestito: {e}")
+        return False
+
+def ottieni_prestiti(id_conto, master_key_b64=None):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT * FROM Prestiti WHERE id_conto = %s", (id_conto,))
+            prestiti = [dict(row) for row in cur.fetchall()]
+            
+            # Decrypt if key available
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            if master_key:
+                for p in prestiti:
+                    p['nome_debitore'] = _decrypt_if_key(p['nome_debitore'], master_key, crypto)
+                    p['descrizione'] = _decrypt_if_key(p['descrizione'], master_key, crypto)
+            
+            return prestiti
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero prestiti: {e}")
+        return []
+
+def aggiungi_rata_prestito(id_prestito, data_pagamento, importo_rata, note, master_key_b64=None):
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    encrypted_note = _encrypt_if_key(note, master_key, crypto)
+
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute(
+                "INSERT INTO RatePrestiti (id_prestito, data_pagamento, importo_rata, note) VALUES (%s, %s, %s, %s) RETURNING id_rata",
+                (id_prestito, data_pagamento, importo_rata, encrypted_note))
+            return cur.fetchone()['id_rata']
+    except Exception as e:
+        print(f"[ERRORE] Errore aggiunta rata prestito: {e}")
+        return None
+
+def ottieni_rate_prestito(id_prestito, master_key_b64=None):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT * FROM RatePrestiti WHERE id_prestito = %s ORDER BY data_pagamento", (id_prestito,))
+            rate = [dict(row) for row in cur.fetchall()]
+            
+            # Decrypt if key available
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            if master_key:
+                for r in rate:
+                    r['note'] = _decrypt_if_key(r['note'], master_key, crypto)
+            
+            return rate
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero rate prestito: {e}")
+        return []
+
+
+# --- Funzioni Giroconti ---
+def esegui_giroconto(id_conto_origine, id_conto_destinazione, importo, data, descrizione=None, master_key_b64=None):
+    if not descrizione:
+        descrizione = "Giroconto"
+    
+    # Encrypt if key available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    encrypted_descrizione = _encrypt_if_key(descrizione, master_key, crypto)
+
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # 1. Prelievo dal conto origine
+            cur.execute(
+                "INSERT INTO Transazioni (id_conto, data, descrizione, importo) VALUES (%s, %s, %s, %s)",
+                (id_conto_origine, data, encrypted_descrizione, -abs(importo)))
+            
+            # 2. Versamento sul conto destinazione
+            cur.execute(
+                "INSERT INTO Transazioni (id_conto, data, descrizione, importo) VALUES (%s, %s, %s, %s)",
+                (id_conto_destinazione, data, encrypted_descrizione, abs(importo)))
+            
+            con.commit()
+            return True
+    except Exception as e:
+        print(f"[ERRORE] Errore esecuzione giroconto: {e}")
         return False
 
 

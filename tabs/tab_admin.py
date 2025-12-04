@@ -125,14 +125,16 @@ class AdminTab(ft.Container):
         
         # Recupera i budget impostati
         master_key_b64 = self.controller.page.session.get("master_key")
-        budget_impostati = ottieni_budget_famiglia(id_famiglia, master_key_b64)
+        current_user_id = self.controller.get_user_id()
+        budget_impostati = ottieni_budget_famiglia(id_famiglia, master_key_b64, current_user_id)
 
         mappa_budget = {b['id_sottocategoria']: b['importo_limite'] for b in budget_impostati}
 
         if not categorie_data:
             self.lv_categorie.controls.append(AppStyles.body_text(loc.get("no_categories_found")))
         else:
-            for cat_id, cat_info in categorie_data.items():
+            for cat_info in categorie_data:
+                cat_id = cat_info['id_categoria']
                 sottocategorie_list = ft.Column()
                 for sub in cat_info['sottocategorie']:
                     sottocategorie_list.controls.append(

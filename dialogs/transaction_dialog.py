@@ -232,7 +232,8 @@ class TransactionDialog(ft.AlertDialog):
         if is_originale_condivisa == is_nuova_condivisa:
             if is_originale_condivisa:
                 id_trans = transazione_originale['id_transazione_condivisa']
-                return modifica_transazione_condivisa(id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], dati_nuovi['id_sottocategoria'], master_key_b64=master_key_b64)
+                id_utente = self.controller.get_user_id()
+                return modifica_transazione_condivisa(id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], dati_nuovi['id_sottocategoria'], master_key_b64=master_key_b64, id_utente=id_utente)
             else:
                 id_trans = transazione_originale['id_transazione']
                 return modifica_transazione(id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], dati_nuovi['id_sottocategoria'], dati_nuovi['id_conto'], master_key_b64=master_key_b64)

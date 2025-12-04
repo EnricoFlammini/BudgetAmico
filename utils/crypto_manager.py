@@ -84,7 +84,9 @@ class CryptoManager:
             # Fernet.decrypt expects bytes (the token)
             return f.decrypt(encrypted_data.encode()).decode()
         except Exception as e:
-            print(f"[CRYPTO ERROR] Decryption failed: {e}")
+            print(f"[CRYPTO ERROR] Decryption failed. Type: {type(e)}")
+            print(f"[CRYPTO ERROR] Key (repr): {repr(master_key)}")
+            print(f"[CRYPTO ERROR] Data (repr): {repr(encrypted_data)}")
             return "[ENCRYPTED]"
         except Exception as e:
             print(f"[CRYPTO ERROR] Decryption failed: {e}")
