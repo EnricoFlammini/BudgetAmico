@@ -22,6 +22,7 @@ from dialogs.giroconto_dialog import GirocontoDialog
 from dialogs.conto_condiviso_dialog import ContoCondivisoDialog
 from dialogs.spesa_fissa_dialog import SpesaFissaDialog
 from utils.localization import LocalizationManager
+from utils.styles import LoadingOverlay
 from db.gestione_db import (
     ottieni_prima_famiglia_utente, ottieni_ruolo_utente, check_e_paga_rate_scadute,
     check_e_processa_spese_fisse, get_user_count, crea_famiglia_e_admin,
@@ -42,6 +43,9 @@ class AppController:
         # Controlli UI
         self.txt_nome_famiglia = ft.TextField(label="Nome della tua Famiglia", autofocus=True)
         self.txt_errore_setup = ft.Text(value="", visible=False)
+        
+        # Overlay di caricamento globale
+        self.loading_overlay = LoadingOverlay()
         
         # Inizializza tutti i dialoghi e le viste
         self._init_dialogs_and_views()
@@ -117,7 +121,8 @@ class AppController:
             self.prestito_dialogs.dialog_prestito, self.prestito_dialogs.dialog_paga_rata,
             self.immobile_dialog, self.fondo_pensione_dialog, self.giroconto_dialog,
             self.conto_condiviso_dialog, self.spesa_fissa_dialog, self.confirm_delete_dialog,
-            self.file_picker_salva_backup, self.file_picker_apri_backup, self.error_dialog, self.info_dialog
+            self.file_picker_salva_backup, self.file_picker_apri_backup, self.error_dialog, self.info_dialog,
+            self.loading_overlay
         ])
 
     def on_file_picker_result(self, e: ft.FilePickerResultEvent):
@@ -187,26 +192,32 @@ class AppController:
             self.page.go("/")
 
     def _carica_dashboard(self):
-        self.page.views.clear()
-        self.page.views.append(self.dashboard_view.build_view())
-        self.dashboard_view.update_sidebar()
+        # Mostra spinner durante il caricamento della dashboard
+        self.show_loading("Caricamento dati...")
+        
+        try:
+            self.page.views.clear()
+            self.page.views.append(self.dashboard_view.build_view())
+            self.dashboard_view.update_sidebar()
 
-        saved_lang = self.page.client_storage.get("settings.language")
-        if saved_lang: self.loc.set_language(saved_lang)
-        saved_currency = self.page.client_storage.get("settings.currency")
-        if saved_currency: self.loc.set_currency(saved_currency)
+            saved_lang = self.page.client_storage.get("settings.language")
+            if saved_lang: self.loc.set_language(saved_lang)
+            saved_currency = self.page.client_storage.get("settings.currency")
+            if saved_currency: self.loc.set_currency(saved_currency)
 
-        id_famiglia = self.get_family_id()
-        if id_famiglia:
-            pagamenti_fatti = check_e_paga_rate_scadute(id_famiglia)
-            master_key_b64 = self.page.session.get("master_key")
-            id_utente = self.get_user_id()
-            spese_fisse_eseguite = check_e_processa_spese_fisse(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
-            if pagamenti_fatti > 0: self.show_snack_bar(f"{pagamenti_fatti} pagamenti rata automatici eseguiti.", success=True)
-            if spese_fisse_eseguite > 0: self.show_snack_bar(f"{spese_fisse_eseguite} spese fisse automatiche eseguite.", success=True)
+            id_famiglia = self.get_family_id()
+            if id_famiglia:
+                pagamenti_fatti = check_e_paga_rate_scadute(id_famiglia)
+                master_key_b64 = self.page.session.get("master_key")
+                id_utente = self.get_user_id()
+                spese_fisse_eseguite = check_e_processa_spese_fisse(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
+                if pagamenti_fatti > 0: self.show_snack_bar(f"{pagamenti_fatti} pagamenti rata automatici eseguiti.", success=True)
+                if spese_fisse_eseguite > 0: self.show_snack_bar(f"{spese_fisse_eseguite} spese fisse automatiche eseguite.", success=True)
 
-        self.update_all_views(is_initial_load=True)
-        self.page.update()
+            self.update_all_views(is_initial_load=True)
+            self.page.update()
+        finally:
+            self.hide_loading()
 
     def _download_confirmato(self, e): pass
     def _download_rifiutato(self, e): pass
@@ -459,6 +470,16 @@ class AppController:
             bgcolor=theme.primary_container if success else theme.error_container
         )
         self.page.snack_bar.open = True
+        self.page.update()
+
+    def show_loading(self, messaggio: str = "Attendere..."):
+        """Mostra l'overlay di caricamento che blocca l'interfaccia."""
+        self.loading_overlay.show(messaggio)
+        self.page.update()
+
+    def hide_loading(self):
+        """Nasconde l'overlay di caricamento."""
+        self.loading_overlay.hide()
         self.page.update()
 
     def get_user_id(self):

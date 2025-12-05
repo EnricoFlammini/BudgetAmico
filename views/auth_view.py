@@ -154,14 +154,20 @@ class AuthView:
             self.page.update()
             return
 
-        utente = verifica_login(username, password)
-        if utente:
-            self.txt_errore_login.visible = False
-            self.controller.post_login_setup(utente)
-        else:
-            self.txt_errore_login.value = "Username o password non validi."
-            self.txt_errore_login.visible = True
-            self.page.update()
+        # Mostra spinner durante il login
+        self.controller.show_loading("Accesso in corso...")
+        
+        try:
+            utente = verifica_login(username, password)
+            if utente:
+                self.txt_errore_login.visible = False
+                self.controller.post_login_setup(utente)
+            else:
+                self.txt_errore_login.value = "Username o password non validi."
+                self.txt_errore_login.visible = True
+                self.page.update()
+        finally:
+            self.controller.hide_loading()
 
     def _registra_cliccato(self, e):
         # Disable button to prevent double submission
@@ -201,7 +207,14 @@ class AuthView:
             return
 
         print("[DEBUG] Chiamata a registra_utente...")
-        result = registra_utente(nome, cognome, username, password, email, data_nascita, codice_fiscale, indirizzo)
+        
+        # Mostra spinner durante la registrazione
+        self.controller.show_loading("Registrazione in corso...")
+        
+        try:
+            result = registra_utente(nome, cognome, username, password, email, data_nascita, codice_fiscale, indirizzo)
+        finally:
+            self.controller.hide_loading()
 
         if result:
             print(f"[DEBUG] Registrazione OK. Result keys: {result.keys()}")

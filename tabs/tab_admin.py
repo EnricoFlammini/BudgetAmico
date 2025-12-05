@@ -318,6 +318,9 @@ class AdminTab(ft.Container):
             'password': password
         }
 
+        # Mostra spinner durante il test
+        self.controller.show_loading("Invio email di test...")
+        
         try:
             successo, errore = send_email(
                 to_email=destinatario,
@@ -332,6 +335,8 @@ class AdminTab(ft.Container):
                 self.controller.show_error_dialog(f"Errore invio email: {errore}")
         except Exception as ex:
             self.controller.show_error_dialog(f"Eccezione durante il test: {str(ex)}")
+        finally:
+            self.controller.hide_loading()
 
     def _salva_email_cliccato(self, e):
         """Salva la configurazione email."""
@@ -353,13 +358,19 @@ class AdminTab(ft.Container):
             'provider': provider
         }
 
-        id_famiglia = self.controller.get_family_id()
-        master_key_b64 = self.controller.page.session.get("master_key")
-        current_user_id = self.controller.get_user_id()
-        if save_smtp_config(smtp_settings, id_famiglia, master_key_b64, current_user_id):
-            self.controller.show_snack_bar("Configurazione email salvata con successo!", success=True)
-        else:
-            self.controller.show_snack_bar("Errore durante il salvataggio della configurazione.", success=False)
+        # Mostra spinner durante il salvataggio
+        self.controller.show_loading("Salvataggio configurazione...")
+        
+        try:
+            id_famiglia = self.controller.get_family_id()
+            master_key_b64 = self.controller.page.session.get("master_key")
+            current_user_id = self.controller.get_user_id()
+            if save_smtp_config(smtp_settings, id_famiglia, master_key_b64, current_user_id):
+                self.controller.show_snack_bar("Configurazione email salvata con successo!", success=True)
+            else:
+                self.controller.show_snack_bar("Errore durante il salvataggio della configurazione.", success=False)
+        finally:
+            self.controller.hide_loading()
 
     def _esporta_dati_cliccato(self, e):
         """Esporta la family_key e le configurazioni in un file JSON."""
@@ -371,7 +382,13 @@ class AdminTab(ft.Container):
             self.controller.show_snack_bar("Sessione non valida. Effettua nuovamente il login.", success=False)
             return
         
-        export_data, errore = esporta_dati_famiglia(id_famiglia, id_utente, master_key_b64)
+        # Mostra spinner durante l'export
+        self.controller.show_loading("Esportazione dati...")
+        
+        try:
+            export_data, errore = esporta_dati_famiglia(id_famiglia, id_utente, master_key_b64)
+        finally:
+            self.controller.hide_loading()
         
         if errore:
             self.controller.show_snack_bar(f"Errore: {errore}", success=False)
