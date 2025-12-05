@@ -93,10 +93,20 @@ class SpesaFissaDialog(ft.AlertDialog):
         self.controller.page.update()
 
     def _chiudi_dialog(self, e):
+        """Chiude il dialog (pulsante Annulla)."""
+        self.controller.show_loading("Attendere...")
+        try:
+            self.open = False
+            self.controller.page.update()
+        except Exception as ex:
+            print(f"Errore chiusura dialog spesa fissa: {ex}")
+            traceback.print_exc()
+        finally:
+            self.controller.hide_loading()
+
+    def _chiudi_dopo_salvataggio(self):
+        """Chiude il dialog dopo un salvataggio riuscito."""
         self.open = False
-        self.controller.page.update()
-        if self in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self)
         self.controller.page.update()
 
     def _reset_campi(self):
@@ -119,9 +129,12 @@ class SpesaFissaDialog(ft.AlertDialog):
         conti = ottieni_tutti_i_conti_famiglia(self.controller.get_family_id(), master_key_b64=master_key, id_utente=user_id)
         options_conti = []
         for conto in conti:
-            tipo_prefix = "C" if conto.get('condiviso') else "P"
+            is_condiviso = conto.get('is_condiviso') or conto.get('condiviso')
+            tipo_prefix = "C" if is_condiviso else "P"
             key = f"{tipo_prefix}{conto['id_conto']}"
-            text = f"{conto['nome_conto']} ({'Condiviso' if conto.get('condiviso') else 'Personale'})"
+            # Mostra solo il nome per i conti personali, aggiungi "(Condiviso)" solo per i condivisi
+            suffix = " (Condiviso)" if is_condiviso else ""
+            text = f"{conto['nome_conto']}{suffix}"
             options_conti.append(ft.dropdown.Option(key, text))
         self.dd_conto_addebito.options = options_conti
 
@@ -134,8 +147,10 @@ class SpesaFissaDialog(ft.AlertDialog):
         self.dd_sottocategoria.options = options_subcats
 
     def _salva_cliccato(self, e):
+        self.controller.show_loading("Attendere...")
         if not self._valida_campi():
             self.content.update()
+            self.controller.hide_loading()
             return
 
         try:
@@ -189,7 +204,7 @@ class SpesaFissaDialog(ft.AlertDialog):
 
             if success:
                 self.controller.show_snack_bar("Spesa fissa salvata!", success=True)
-                self._chiudi_dialog(None)
+                self._chiudi_dopo_salvataggio()
                 self.controller.update_all_views()
             else:
                 self.controller.show_snack_bar("Errore nel salvataggio.", success=False)
@@ -198,6 +213,8 @@ class SpesaFissaDialog(ft.AlertDialog):
             print(f"Errore salvataggio spesa fissa: {ex}")
             traceback.print_exc()
             self.controller.show_snack_bar(f"Errore: {ex}", success=False)
+        finally:
+            self.controller.hide_loading()
 
     def _valida_campi(self):
         is_valid = True

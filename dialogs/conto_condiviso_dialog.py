@@ -146,10 +146,15 @@ class ContoCondivisoDialog(ft.AlertDialog):
         self.controller.page.update()
 
     def _chiudi_dialog(self, e):
-        self.open = False
-        self.controller.page.update()
+        self.controller.show_loading("Attendere...")
+        try:
+            self.open = False
+            self.controller.page.update()
+        finally:
+            self.controller.hide_loading()
 
     def _salva_conto_condiviso(self, e):
+        self.controller.show_loading("Attendere...")
         try:
             is_valid = True
             self.txt_nome_conto.error_text = None
@@ -182,6 +187,7 @@ class ContoCondivisoDialog(ft.AlertDialog):
 
             if not is_valid:
                 self.content.update()
+                self.controller.hide_loading()
                 return
 
             famiglia_id = self.controller.get_family_id()
@@ -241,3 +247,5 @@ class ContoCondivisoDialog(ft.AlertDialog):
             traceback.print_exc()
             self.controller.show_snack_bar(f"Errore inaspettato: {ex}", success=False)
             self.controller.page.update()
+        finally:
+            self.controller.hide_loading()

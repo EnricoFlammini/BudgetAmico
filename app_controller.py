@@ -344,19 +344,18 @@ class AppController:
     def _chiudi_dialog_conferma_eliminazione(self, e):
         self.confirm_delete_dialog.open = False
         self.page.update()
-        if self.confirm_delete_dialog in self.page.overlay:
-            self.page.overlay.remove(self.confirm_delete_dialog)
-        self.page.update()
 
     def _esegui_eliminazione_confermata(self, e):
-        delete_callback = self.page.session.get("delete_callback")
-        if callable(delete_callback): delete_callback()
+        # Prima chiudo il dialog
         self.confirm_delete_dialog.open = False
         self.page.update()
-        if self.confirm_delete_dialog in self.page.overlay:
-            self.page.overlay.remove(self.confirm_delete_dialog)
-        self.page.update()
-        self.page.update()
+        # Poi mostro lo spinner per l'operazione
+        self.show_loading("Attendere...")
+        try:
+            delete_callback = self.page.session.get("delete_callback")
+            if callable(delete_callback): delete_callback()
+        finally:
+            self.hide_loading()
 
     def post_login_setup(self, utente):
         id_utente = utente['id']
@@ -460,8 +459,11 @@ class AppController:
 
     def db_write_operation(self):
         """Chiamato dopo operazioni di scrittura sul database."""
-        self.update_all_views()
-        # Auto-sync rimosso - Supabase gestisce la sincronizzazione automaticamente
+        self.show_loading("Attendere...")
+        try:
+            self.update_all_views()
+        finally:
+            self.hide_loading()
 
     def show_snack_bar(self, messaggio, success=True):
         theme = self._get_current_theme_scheme() or ft.ColorScheme()

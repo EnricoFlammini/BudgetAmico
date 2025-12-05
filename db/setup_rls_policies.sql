@@ -49,12 +49,12 @@ RETURNS INTEGER AS $$
 BEGIN
     RETURN (
         SELECT id_famiglia 
-        FROM Appartenenza_Famiglia 
+        FROM public.Appartenenza_Famiglia 
         WHERE id_utente = current_setting('app.current_user_id', true)::INTEGER
         LIMIT 1
     );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
 
 -- ============================================================================
 -- Policy per Utenti

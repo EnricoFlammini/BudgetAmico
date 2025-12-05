@@ -178,8 +178,12 @@ class ContoDialog(ft.AlertDialog):
             self.content.update()
 
     def _chiudi_dialog_conto(self, e):
-        self.open = False
-        self.page.update()
+        self.controller.show_loading("Attendere...")
+        try:
+            self.open = False
+            self.page.update()
+        finally:
+            self.controller.hide_loading()
 
     def apri_dialog_conto(self, e, conto_data=None, escludi_investimento=False):
         self._update_texts()
@@ -237,14 +241,10 @@ class ContoDialog(ft.AlertDialog):
         self.controller.page.update()
 
     def _salva_conto(self, e):
+        self.controller.show_loading("Attendere...")
         try:
             # Get master_key from session for encryption
             master_key_b64 = self.controller.page.session.get("master_key")
-            print(f"[DEBUG] Salva Conto. Master Key in sessione: {bool(master_key_b64)}")
-            if master_key_b64:
-                print(f"[DEBUG] Master Key type: {type(master_key_b64)}")
-                print(f"[DEBUG] Master Key len: {len(master_key_b64)}")
-                print(f"[DEBUG] Master Key content (partial): {master_key_b64[:10]}")
             
             is_valid = True
             self.txt_conto_nome.error_text = None
@@ -320,6 +320,7 @@ class ContoDialog(ft.AlertDialog):
 
             if not is_valid:
                 self.content.update()
+                self.controller.hide_loading()
                 return
 
             utente_id = self.controller.get_user_id()
@@ -396,6 +397,7 @@ class ContoDialog(ft.AlertDialog):
             traceback.print_exc()
             self.controller.show_error_dialog(f"Errore inaspettato: {ex}")
         finally:
+            self.controller.hide_loading()
             if self.page: self.page.update()
 
     # --- Logica per Rettifica Saldo (Admin) ---
@@ -414,10 +416,15 @@ class ContoDialog(ft.AlertDialog):
         self.controller.page.update()
 
     def _chiudi_dialog_rettifica(self, e):
-        self.dialog_rettifica_saldo.open = False
-        self.controller.page.update()
+        self.controller.show_loading("Attendere...")
+        try:
+            self.dialog_rettifica_saldo.open = False
+            self.controller.page.update()
+        finally:
+            self.controller.hide_loading()
 
     def _salva_rettifica_saldo(self, e):
+        self.controller.show_loading("Attendere...")
         try:
             nuovo_saldo = float(self.txt_nuovo_saldo.value.replace(",", "."))
             id_conto = self.conto_id_in_modifica
@@ -433,6 +440,8 @@ class ContoDialog(ft.AlertDialog):
                 self._chiudi_dialog_rettifica(e)
             else:
                 self.controller.show_snack_bar("Errore durante la rettifica del saldo.", success=False)
+                self.controller.hide_loading()
         except (ValueError, TypeError):
             self.txt_nuovo_saldo.error_text = "Inserire un importo numerico valido."
             self.dialog_rettifica_saldo.update()
+            self.controller.hide_loading()

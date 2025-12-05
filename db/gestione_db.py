@@ -2019,15 +2019,29 @@ def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese, master_key_b64=No
                     except (ValueError, TypeError):
                         pass
             
+            # 4. Conti Risparmio (somma transazioni dei conti di tipo Risparmio)
+            cur.execute("""
+                SELECT COALESCE(SUM(T.importo), 0.0) as val
+                FROM Transazioni T
+                JOIN Conti C ON T.id_conto = C.id_conto
+                WHERE C.id_utente = %s
+                  AND C.tipo = 'Risparmio'
+                  AND T.data <= %s
+            """, (id_utente, data_limite_str))
+            risparmio = cur.fetchone()['val'] or 0.0
+            
             patrimonio_netto = liquidita + investimenti + fondi_pensione
             
             return {
                 'patrimonio_netto': patrimonio_netto,
-                'liquidita': liquidita
+                'liquidita': liquidita,
+                'investimenti': investimenti,
+                'fondi_pensione': fondi_pensione,
+                'risparmio': risparmio
             }
     except Exception as e:
         print(f"[ERRORE] Errore in ottieni_riepilogo_patrimonio_utente: {e}")
-        return {'patrimonio_netto': 0.0, 'liquidita': 0.0}
+        return {'patrimonio_netto': 0.0, 'liquidita': 0.0, 'investimenti': 0.0, 'fondi_pensione': 0.0, 'risparmio': 0.0}
 
 
 def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese, master_key_b64=None):
@@ -2100,16 +2114,30 @@ def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese, mas
                     except (ValueError, TypeError):
                         pass
             
+            # 4. Conti Risparmio (Tutti i membri)
+            cur.execute("""
+                SELECT COALESCE(SUM(T.importo), 0.0) as val
+                FROM Transazioni T
+                JOIN Conti C ON T.id_conto = C.id_conto
+                JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
+                WHERE AF.id_famiglia = %s
+                  AND C.tipo = 'Risparmio'
+                  AND T.data <= %s
+            """, (id_famiglia, data_limite_str))
+            risparmio = cur.fetchone()['val'] or 0.0
+            
             patrimonio_netto = liquidita + investimenti + fondi_pensione
             
             return {
                 'patrimonio_netto': patrimonio_netto,
                 'liquidita': liquidita,
-                'investimenti': investimenti
+                'investimenti': investimenti,
+                'fondi_pensione': fondi_pensione,
+                'risparmio': risparmio
             }
     except Exception as e:
         print(f"[ERRORE] Errore in ottieni_riepilogo_patrimonio_famiglia_aggregato: {e}")
-        return {'patrimonio_netto': 0.0, 'liquidita': 0.0, 'investimenti': 0.0}
+        return {'patrimonio_netto': 0.0, 'liquidita': 0.0, 'investimenti': 0.0, 'fondi_pensione': 0.0, 'risparmio': 0.0}
 
 
 def ottieni_transazioni_utente(id_utente, anno, mese, master_key_b64=None):
@@ -2539,7 +2567,7 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese, master_key_b64=None, id_u
                                  LEFT JOIN Sottocategorie SCat ON T.id_sottocategoria = SCat.id_sottocategoria
                                  LEFT JOIN Categorie Cat ON SCat.id_categoria = Cat.id_categoria
                         WHERE AF.id_famiglia = %s
-                          AND C.tipo != 'Fondo Pensione' AND T.data BETWEEN %s AND %s AND UPPER(T.descrizione) NOT LIKE '%%SALDO INIZIALE%%'
+                          AND C.tipo != 'Fondo Pensione' AND T.data BETWEEN %s AND %s
                         UNION ALL
                         -- Transazioni Condivise
                         SELECT U.username AS utente_username,
@@ -2560,7 +2588,6 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese, master_key_b64=None, id_u
                                  LEFT JOIN Categorie Cat ON SCat.id_categoria = Cat.id_categoria
                         WHERE CC.id_famiglia = %s
                           AND TC.data BETWEEN %s AND %s
-                          AND UPPER(TC.descrizione) NOT LIKE '%%SALDO INIZIALE%%' -- Include tutti i conti condivisi della famiglia
                         ORDER BY data DESC, utente_username, conto_nome
                         """, (id_famiglia, data_inizio, data_fine, id_famiglia, data_inizio, data_fine))
             results = [dict(row) for row in cur.fetchall()]
@@ -2633,6 +2660,10 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese, master_key_b64=None, id_u
                 elif cat:
                     row['nome_sottocategoria'] = cat
                 # else: subcat only, or empty
+            
+            # Filtra le transazioni "Saldo Iniziale" DOPO la decrittografia
+            # (il filtro SQL non funziona sui dati crittografati)
+            results = [r for r in results if 'saldo iniziale' not in (r.get('descrizione') or '').lower()]
             
             return results
     except Exception as e:
@@ -3291,11 +3322,11 @@ def effettua_pagamento_rata(id_prestito, id_conto_pagamento, importo_pagato, dat
                         (importo_pagato, id_prestito))
             descrizione = f"Pagamento rata {nome_prestito} (Prestito ID: {id_prestito})"
             cur.execute(
-                "INSERT INTO Transazioni (id_conto, id_sottocategoria, data, descrizione, importo) VALUES (?, %s, %s, %s, %s)",
+                "INSERT INTO Transazioni (id_conto, id_sottocategoria, data, descrizione, importo) VALUES (%s, %s, %s, %s, %s)",
                 (id_conto_pagamento, id_sottocategoria, data_pagamento, descrizione, -abs(importo_pagato)))
             data_dt = parse_date(data_pagamento)
             cur.execute(
-                "INSERT INTO StoricoPagamentiRate (id_prestito, anno, mese, data_pagamento, importo_pagato) VALUES (?, %s, %s, %s, %s) ON CONFLICT(id_prestito, anno, mese) DO NOTHING",
+                "INSERT INTO StoricoPagamentiRate (id_prestito, anno, mese, data_pagamento, importo_pagato) VALUES (%s, %s, %s, %s, %s) ON CONFLICT(id_prestito, anno, mese) DO NOTHING",
                 (id_prestito, data_dt.year, data_dt.month, data_pagamento, importo_pagato))
             con.commit()
             return True
@@ -3754,27 +3785,50 @@ def aggiorna_prezzo_asset(id_asset, nuovo_prezzo):
 
 
 # --- Funzioni Giroconti ---
-def esegui_giroconto(id_conto_origine, id_conto_destinazione, importo, data, descrizione=None, master_key_b64=None):
+def esegui_giroconto(id_conto_origine, id_conto_destinazione, importo, data, descrizione=None, master_key_b64=None, tipo_origine="personale", tipo_destinazione="personale", id_utente_autore=None, id_famiglia=None):
+    """
+    Esegue un giroconto tra conti personali e/o condivisi.
+    tipo_origine/tipo_destinazione: "personale" o "condiviso"
+    """
     if not descrizione:
         descrizione = "Giroconto"
     
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
-    encrypted_descrizione = _encrypt_if_key(descrizione, master_key, crypto)
+    
+    # Per conti condivisi, usa la family key
+    family_key = None
+    if (tipo_origine == "condiviso" or tipo_destinazione == "condiviso") and id_utente_autore and id_famiglia:
+        family_key = _get_family_key_for_user(id_famiglia, id_utente_autore, master_key, crypto)
+    
+    # Cripta la descrizione con la chiave appropriata
+    # Se coinvolge conti condivisi, usa family_key per quelli
+    encrypted_descrizione_personale = _encrypt_if_key(descrizione, master_key, crypto)
+    encrypted_descrizione_condivisa = _encrypt_if_key(descrizione, family_key if family_key else master_key, crypto)
 
     try:
         with get_db_connection() as con:
             cur = con.cursor()
             
             # 1. Prelievo dal conto origine
-            cur.execute(
-                "INSERT INTO Transazioni (id_conto, data, descrizione, importo) VALUES (%s, %s, %s, %s)",
-                (id_conto_origine, data, encrypted_descrizione, -abs(importo)))
+            if tipo_origine == "personale":
+                cur.execute(
+                    "INSERT INTO Transazioni (id_conto, data, descrizione, importo) VALUES (%s, %s, %s, %s)",
+                    (id_conto_origine, data, encrypted_descrizione_personale, -abs(importo)))
+            else:  # condiviso
+                cur.execute(
+                    "INSERT INTO TransazioniCondivise (id_utente_autore, id_conto_condiviso, data, descrizione, importo) VALUES (%s, %s, %s, %s, %s)",
+                    (id_utente_autore, id_conto_origine, data, encrypted_descrizione_condivisa, -abs(importo)))
             
             # 2. Versamento sul conto destinazione
-            cur.execute(
-                "INSERT INTO Transazioni (id_conto, data, descrizione, importo) VALUES (%s, %s, %s, %s)",
-                (id_conto_destinazione, data, encrypted_descrizione, abs(importo)))
+            if tipo_destinazione == "personale":
+                cur.execute(
+                    "INSERT INTO Transazioni (id_conto, data, descrizione, importo) VALUES (%s, %s, %s, %s)",
+                    (id_conto_destinazione, data, encrypted_descrizione_personale, abs(importo)))
+            else:  # condiviso
+                cur.execute(
+                    "INSERT INTO TransazioniCondivise (id_utente_autore, id_conto_condiviso, data, descrizione, importo) VALUES (%s, %s, %s, %s, %s)",
+                    (id_utente_autore, id_conto_destinazione, data, encrypted_descrizione_condivisa, abs(importo)))
             
             con.commit()
             return True
@@ -4010,6 +4064,7 @@ def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=Non
                     SF.id_sottocategoria,
                     SF.giorno_addebito,
                     SF.attiva,
+                    SF.addebito_automatico,
                     COALESCE(CP.nome_conto, CC.nome_conto) as nome_conto
                 FROM SpeseFisse SF
                 LEFT JOIN Conti CP ON SF.id_conto_personale_addebito = CP.id_conto
@@ -4035,6 +4090,14 @@ def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=Non
             if family_key:
                 for spesa in spese:
                     spesa['nome'] = _decrypt_if_key(spesa['nome'], family_key, crypto)
+                    # Decripta anche il nome del conto
+                    if spesa.get('nome_conto'):
+                        # Prova prima con family_key (per conti condivisi)
+                        if spesa.get('id_conto_condiviso_addebito'):
+                            spesa['nome_conto'] = _decrypt_if_key(spesa['nome_conto'], family_key, crypto, silent=True)
+                        else:
+                            # Conto personale: prova con master_key
+                            spesa['nome_conto'] = _decrypt_if_key(spesa['nome_conto'], master_key, crypto, silent=True)
 
             return spese
     except Exception as e:

@@ -80,16 +80,17 @@ class TransactionDialog(ft.AlertDialog):
             if self.controller.page: self.controller.page.update()
 
     def chiudi_dialog(self, e=None):
-        print(f"DEBUG: chiudi_dialog chiamato per {self}")
+        self.controller.show_loading("Attendere...")
         try:
             self.open = False
             self.controller.page.session.set("transazione_in_modifica", None)
             if self.controller.page:
                 self.controller.page.update()
-            print("DEBUG: chiudi_dialog completato (solo open=False)")
         except Exception as ex:
             print(f"Errore chiusura dialog transazione: {ex}")
             traceback.print_exc()
+        finally:
+            self.controller.hide_loading()
 
     def _popola_dropdowns(self):
         utente_id = self.controller.get_user_id()
@@ -268,8 +269,10 @@ class TransactionDialog(ft.AlertDialog):
             ) is not None
 
     def _salva_nuova_transazione(self, e):
+        self.controller.show_loading("Attendere...")
         dati_validati = self._valida_e_raccogli_dati()
         if not dati_validati:
+            self.controller.hide_loading()
             return
 
         transazione_in_modifica = self.controller.page.session.get("transazione_in_modifica")

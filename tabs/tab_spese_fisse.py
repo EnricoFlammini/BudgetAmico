@@ -72,6 +72,12 @@ class SpeseFisseTab(ft.Container):
                         ft.DataCell(ft.Text(str(spesa['giorno_addebito']))),
                         ft.DataCell(ft.Switch(value=bool(spesa['attiva']), data=spesa['id_spesa_fissa'], on_change=self._cambia_stato_attiva)),
                         ft.DataCell(ft.Row([
+                            # Icona addebito automatico
+                            ft.Icon(
+                                name=ft.Icons.AUTO_MODE if spesa.get('addebito_automatico') else ft.Icons.BLOCK,
+                                color=AppColors.SUCCESS if spesa.get('addebito_automatico') else ft.Colors.GREY_400,
+                                size=20
+                            ),
                             ft.IconButton(icon=ft.Icons.PAYMENT, tooltip="Paga", data=spesa,
                                           icon_color=AppColors.SUCCESS,
                                           on_click=self._paga_spesa_fissa),

@@ -516,24 +516,32 @@ class PortafoglioDialogs:
                 if "." not in ticker:
                     ticker += suffix
             
-            master_key_b64 = self.page.session.get("master_key")
-
-            # Usa compra_asset per aggiungere l'asset con il costo storico e il valore attuale
-            compra_asset(
-                self.conto_selezionato['id_conto'], 
-                ticker, 
-                nome_asset, 
-                quantita, 
-                prezzo_medio, # Questo diventa il costo_iniziale_unitario
-                tipo_mov="APERTURA", # O altro identificativo per saldo iniziale
-                prezzo_attuale_override=valore_attuale, # Questo imposta il prezzo attuale manuale
-                master_key_b64=master_key_b64
-            )
-
-            self.controller.db_write_operation()
-            self._aggiorna_tabella_portafoglio()
+            # Prima chiudo il dialog
             self._chiudi_dialog_asset_esistente(e)
-            self.controller.show_snack_bar("Asset aggiunto con successo", success=True)
+            
+            # Poi mostro lo spinner
+            self.controller.show_loading("Attendere...")
+            
+            try:
+                master_key_b64 = self.page.session.get("master_key")
+
+                # Usa compra_asset per aggiungere l'asset con il costo storico e il valore attuale
+                compra_asset(
+                    self.conto_selezionato['id_conto'], 
+                    ticker, 
+                    nome_asset, 
+                    quantita, 
+                    prezzo_medio, # Questo diventa il costo_iniziale_unitario
+                    tipo_mov="APERTURA", # O altro identificativo per saldo iniziale
+                    prezzo_attuale_override=valore_attuale, # Questo imposta il prezzo attuale manuale
+                    master_key_b64=master_key_b64
+                )
+
+                self.controller.db_write_operation()
+                self._aggiorna_tabella_portafoglio()
+                self.controller.show_snack_bar("Asset aggiunto con successo", success=True)
+            finally:
+                self.controller.hide_loading()
 
         except (ValueError, TypeError):
             self.controller.show_snack_bar(self.loc.get("invalid_amount"), success=False)

@@ -70,14 +70,15 @@ class GirocontoDialog(ft.AlertDialog):
             if self.controller.page: self.controller.page.update()
 
     def chiudi_dialog(self, e):
-        print(f"DEBUG: chiudi_dialog chiamato per {self}")
+        self.controller.show_loading("Attendere...")
         try:
             self.open = False
             self.controller.page.update()
-            print("DEBUG: chiudi_dialog completato (solo open=False)")
         except Exception as ex:
             print(f"Errore chiusura dialog: {ex}")
             traceback.print_exc()
+        finally:
+            self.controller.hide_loading()
 
     def apri_dialog(self):
         self._update_texts()
@@ -127,6 +128,7 @@ class GirocontoDialog(ft.AlertDialog):
         self.dd_conto_destinazione.options = opzioni_destinazione
 
     def _salva_giroconto(self, e):
+        self.controller.show_loading("Attendere...")
         try:
             is_valid = True
             # Reset errori
@@ -159,6 +161,7 @@ class GirocontoDialog(ft.AlertDialog):
 
             if not is_valid:
                 self.controller.page.update()
+                self.controller.hide_loading()
                 return
 
             # Esegui giroconto
@@ -168,23 +171,30 @@ class GirocontoDialog(ft.AlertDialog):
             tipo_destinazione = "personale" if destinazione_key.startswith("P") else "condiviso"
             
             master_key_b64 = self.controller.page.session.get("master_key")
-
-            success, msg = esegui_giroconto(
-                id_conto_sorgente, tipo_sorgente,
-                id_conto_destinazione, tipo_destinazione,
-                importo, self.txt_descrizione.value,
-                self.txt_data_selezionata.value,
-                master_key_b64=master_key_b64
+            id_utente = self.controller.get_user_id()
+            id_famiglia = self.controller.get_family_id()
+            
+            success = esegui_giroconto(
+                id_conto_sorgente, id_conto_destinazione,
+                importo, self.txt_data_selezionata.value,
+                self.txt_descrizione.value,
+                master_key_b64=master_key_b64,
+                tipo_origine=tipo_sorgente,
+                tipo_destinazione=tipo_destinazione,
+                id_utente_autore=id_utente,
+                id_famiglia=id_famiglia
             )
 
             if success:
-                self.controller.show_snack_bar(msg, success=True)
+                self.controller.show_snack_bar("Giroconto eseguito con successo!", success=True)
                 self.chiudi_dialog(None)
                 self.controller.db_write_operation()
             else:
-                self.controller.show_snack_bar(f"Errore: {msg}", success=False)
+                self.controller.show_snack_bar("Errore durante l'esecuzione del giroconto", success=False)
 
         except Exception as ex:
             print(f"Errore salvataggio giroconto: {ex}")
             traceback.print_exc()
             self.controller.show_snack_bar(f"Errore inaspettato: {ex}", success=False)
+        finally:
+            self.controller.hide_loading()

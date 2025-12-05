@@ -39,9 +39,6 @@ class PersonaleTab(ft.Container):
         self.content = ft.Column(expand=True)
 
     def update_view_data(self, is_initial_load=False):
-        # Ricostruisce l'interfaccia con le traduzioni corrette ogni volta
-        self.content.controls = self.build_controls()
-
         # Popola il filtro sempre per aggiornare i mesi disponibili
         self._popola_filtro_mese()
 
@@ -59,40 +56,100 @@ class PersonaleTab(ft.Container):
 
         # --- Aggiorna i totali usando la funzione centralizzata ---
         master_key_b64 = self.controller.page.session.get("master_key")
-        riepilogo_patrimonio = ottieni_riepilogo_patrimonio_utente(utente_id, anno, mese, master_key_b64=master_key_b64)
-        patrimonio_totale = riepilogo_patrimonio.get('patrimonio_netto', 0.0)
-        liquidita_totale = riepilogo_patrimonio.get('liquidita', 0.0)
-
-        self.txt_bentornato.value = self.controller.loc.get("welcome_back", utente['nome'])
+        riepilogo = ottieni_riepilogo_patrimonio_utente(utente_id, anno, mese, master_key_b64=master_key_b64)
         
-        # Aggiorna il testo del patrimonio con formattazione valuta
-        self.txt_patrimonio.value = f"{self.controller.loc.get('total_wealth')}: {self.controller.loc.format_currency(patrimonio_totale)}"
-        self.txt_patrimonio.color = AppColors.SUCCESS if patrimonio_totale >= 0 else AppColors.ERROR
-
-        data_formattata = datetime.date(anno, mese, 1).strftime('%d/%m/%Y')
-        self.txt_liquidita.value = self.controller.loc.get("liquidity_details",
-                                                           self.controller.loc.format_currency(liquidita_totale),
-                                                           data_formattata)
+        # Estrai i valori
+        val_patrimonio = riepilogo.get('patrimonio_netto', 0)
+        val_liquidita = riepilogo.get('liquidita', 0)
+        val_investimenti = riepilogo.get('investimenti', 0)
+        val_fondi_pensione = riepilogo.get('fondi_pensione', 0)
+        val_risparmio = riepilogo.get('risparmio', 0)
+        
+        loc = self.controller.loc
+        
+        # Costruisci il riepilogo schematico
+        righe_dettaglio = []
+        
+        # Liquidità (sempre visibile)
+        righe_dettaglio.append(ft.Row([
+            AppStyles.body_text(loc.get("liquidity")),
+            AppStyles.currency_text(loc.format_currency(val_liquidita))
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+        
+        # Risparmio (se presente)
+        if val_risparmio > 0:
+            righe_dettaglio.append(ft.Row([
+                AppStyles.body_text(loc.get("savings")),
+                AppStyles.currency_text(loc.format_currency(val_risparmio))
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+        
+        # Investimenti (se presenti)
+        if val_investimenti > 0:
+            righe_dettaglio.append(ft.Row([
+                AppStyles.body_text(loc.get("investments")),
+                AppStyles.currency_text(loc.format_currency(val_investimenti))
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+        
+        # Fondi Pensione (se presenti)
+        if val_fondi_pensione > 0:
+            righe_dettaglio.append(ft.Row([
+                AppStyles.body_text(loc.get("pension_funds")),
+                AppStyles.currency_text(loc.format_currency(val_fondi_pensione))
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+        
+        self.txt_bentornato.value = loc.get("welcome_back", utente['nome'])
+        
+        # Costruisci la card del riepilogo
+        card_riepilogo = AppStyles.card_container(
+            content=ft.Row([
+                # Colonna sinistra: Patrimonio Netto grande
+                ft.Column([
+                    AppStyles.caption_text(loc.get("net_worth")),
+                    AppStyles.big_currency_text(loc.format_currency(val_patrimonio),
+                        color=AppColors.SUCCESS if val_patrimonio >= 0 else AppColors.ERROR)
+                ], expand=1),
+                # Colonna destra: dettagli in righe
+                ft.Column(righe_dettaglio, spacing=8, expand=2, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.START),
+            padding=20
+        )
+        
+        # Ricostruisce l'interfaccia
+        self.dd_mese_filtro.label = loc.get("filter_by_month")
+        
+        self.content.controls = [
+            ft.Container(
+                content=self.txt_bentornato,
+                padding=ft.padding.only(left=10, top=10, bottom=5)
+            ),
+            card_riepilogo,
+            ft.Container(
+                content=self.dd_mese_filtro,
+                padding=ft.padding.only(left=10, right=10, top=10)
+            ),
+            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+            ft.Container(
+                content=AppStyles.subheader_text(loc.get("latest_transactions")),
+                padding=ft.padding.only(left=10, bottom=10)
+            ),
+            self.lista_transazioni
+        ]
 
         # --- Aggiorna la lista delle transazioni ---
         transazioni = ottieni_transazioni_utente(utente_id, anno, mese, master_key_b64=master_key_b64)
 
         self.lista_transazioni.controls.clear()
         for t in transazioni:
-            # Filtra transazioni condivise (vengono mostrate nel tab Conti Condivisi)
-            # if t.get('tipo_transazione') == 'condivisa':
-            #    continue
-
             descrizione_transazione = t.get('descrizione', '').upper()
             if descrizione_transazione.startswith("SALDO INIZIALE"):
                 continue
 
             azioni = ft.Row([
-                ft.IconButton(icon=ft.Icons.EDIT, tooltip=self.controller.loc.get("edit"), data=t,
+                ft.IconButton(icon=ft.Icons.EDIT, tooltip=loc.get("edit"), data=t,
                               on_click=lambda e: self.controller.transaction_dialog.apri_dialog_modifica_transazione(
                                   e.control.data),
                               icon_color=AppColors.INFO, icon_size=20),
-                ft.IconButton(icon=ft.Icons.DELETE, tooltip=self.controller.loc.get("delete"), data=t,
+                ft.IconButton(icon=ft.Icons.DELETE, tooltip=loc.get("delete"), data=t,
                               on_click=lambda e: self.controller.open_confirm_delete_dialog(
                                   partial(self.elimina_cliccato, e)),
                               icon_color=AppColors.ERROR, icon_size=20)
@@ -106,8 +163,8 @@ class PersonaleTab(ft.Container):
                         AppStyles.caption_text(f"{t['data']} - {t['nome_conto']}"),
                     ], expand=True),
                     ft.Column([
-                        AppStyles.currency_text(t['importo'], self.controller.loc),
-                        AppStyles.caption_text(t.get('nome_sottocategoria') or self.controller.loc.get("no_category"))
+                        AppStyles.currency_text(t['importo'], loc),
+                        AppStyles.caption_text(t.get('nome_sottocategoria') or loc.get("no_category"))
                     ], horizontal_alignment=ft.CrossAxisAlignment.END),
                     azioni
                 ],
@@ -122,29 +179,8 @@ class PersonaleTab(ft.Container):
             self.page.update()
 
     def build_controls(self):
-        """Costruisce e restituisce la lista di controlli per la scheda."""
-        self.dd_mese_filtro.label = self.controller.loc.get("filter_by_month")
-
-        return [
-            ft.Container(
-                content=ft.Column([
-                    self.txt_bentornato,
-                    self.txt_patrimonio,
-                    self.txt_liquidita,
-                ], spacing=5),
-                padding=10
-            ),
-            ft.Container(
-                content=self.dd_mese_filtro,
-                padding=ft.padding.only(left=10, right=10)
-            ),
-            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
-            ft.Container(
-                content=AppStyles.subheader_text(self.controller.loc.get("latest_transactions")),
-                padding=ft.padding.only(left=10, bottom=10)
-            ),
-            self.lista_transazioni
-        ]
+        """Non più usato - i controlli sono costruiti in update_view_data."""
+        return []
 
     def _popola_filtro_mese(self):
         """Popola il dropdown con i mesi disponibili."""

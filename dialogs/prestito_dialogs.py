@@ -181,19 +181,20 @@ class PrestitoDialogs:
     def _popola_dropdowns_prestito(self):
         id_famiglia = self.controller.get_family_id()
         id_utente = self.controller.get_user_id()
+        master_key_b64 = self.controller.page.session.get("master_key")
 
         # Popola dropdown con conti personali E condivisi
         from db.gestione_db import ottieni_conti_condivisi_utente, ottieni_dettagli_conti_utente
         
-        conti_personali = ottieni_dettagli_conti_utente(id_utente)  # Solo conti personali
+        conti_personali = ottieni_dettagli_conti_utente(id_utente, master_key_b64=master_key_b64)
         conti_personali_filtrati = [c for c in conti_personali if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
         
-        conti_condivisi = ottieni_conti_condivisi_utente(id_utente)
+        conti_condivisi = ottieni_conti_condivisi_utente(id_utente, master_key_b64=master_key_b64)
         conti_condivisi_filtrati = [c for c in conti_condivisi if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
         
         opzioni_conti = []
         for c in conti_personali_filtrati:
-            opzioni_conti.append(ft.dropdown.Option(key=f"p_{c['id_conto']}", text=f"{c['nome_conto']} (Personale)"))
+            opzioni_conti.append(ft.dropdown.Option(key=f"p_{c['id_conto']}", text=c['nome_conto']))
         for c in conti_condivisi_filtrati:
             opzioni_conti.append(ft.dropdown.Option(key=f"s_{c['id_conto']}", text=f"{c['nome_conto']} (Condiviso)"))
         
@@ -210,15 +211,21 @@ class PrestitoDialogs:
         self.dd_sottocategoria_default.options = opzioni
 
     def _chiudi_dialog_prestito(self, e):
-        self.dialog_prestito.open = False
-        self.controller.page.update()
-        if self.dialog_prestito in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_prestito)
-        self.controller.page.update()
+        self.controller.show_loading("Attendere...")
+        try:
+            self.dialog_prestito.open = False
+            self.controller.page.update()
+        except Exception as ex:
+            print(f"Errore chiusura dialog prestito: {ex}")
+            traceback.print_exc()
+        finally:
+            self.controller.hide_loading()
 
     def _salva_prestito_cliccato(self, e):
+        self.controller.show_loading("Attendere...")
         try:
             if not self._valida_campi_prestito():
+                self.controller.hide_loading()
                 return
 
             # Raccolta dati
@@ -301,6 +308,8 @@ class PrestitoDialogs:
             print(f"Errore salvataggio prestito: {ex}")
             traceback.print_exc()
             self.controller.show_error_dialog(f"Errore inaspettato: {ex}")
+        finally:
+            self.controller.hide_loading()
 
         self.controller.page.update()
 
@@ -347,11 +356,16 @@ class PrestitoDialogs:
         # Popola dropdown
         id_utente = self.controller.get_user_id()
         id_famiglia = self.controller.get_family_id()
-        conti = ottieni_tutti_i_conti_utente(id_utente)
+        master_key_b64 = self.controller.page.session.get("master_key")
+        conti = ottieni_tutti_i_conti_utente(id_utente, master_key_b64=master_key_b64)
         conti_filtrati = [c for c in conti if
                           c['tipo'] not in ['Investimento', 'Fondo Pensione']]
-        self.dd_conto_pagamento.options = [ft.dropdown.Option(key=c['id_conto'], text=c['nome_conto']) for c in
-                                           conti_filtrati]
+        opzioni_conti = []
+        for c in conti_filtrati:
+            is_condiviso = c.get('is_condiviso') or c.get('condiviso')
+            suffix = " (Condiviso)" if is_condiviso else ""
+            opzioni_conti.append(ft.dropdown.Option(key=c['id_conto'], text=f"{c['nome_conto']}{suffix}"))
+        self.dd_conto_pagamento.options = opzioni_conti
 
         categorie_con_sottocategorie = ottieni_categorie_e_sottocategorie(id_famiglia)
         opzioni = []
@@ -372,13 +386,18 @@ class PrestitoDialogs:
         self.controller.page.update()
 
     def _chiudi_dialog_paga_rata(self, e):
-        self.dialog_paga_rata.open = False
-        self.controller.page.update()
-        if self.dialog_paga_rata in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_paga_rata)
-        self.controller.page.update()
+        self.controller.show_loading("Attendere...")
+        try:
+            self.dialog_paga_rata.open = False
+            self.controller.page.update()
+        except Exception as ex:
+            print(f"Errore chiusura dialog paga rata: {ex}")
+            traceback.print_exc()
+        finally:
+            self.controller.hide_loading()
 
     def _esegui_pagamento_cliccato(self, e):
+        self.controller.show_loading("Attendere...")
         try:
             importo = float(self.txt_importo_pagamento.value.replace(",", "."))
             data = self.txt_data_pagamento.value
@@ -409,6 +428,8 @@ class PrestitoDialogs:
             print(f"Errore pagamento rata: {ex}")
             traceback.print_exc()
             self.controller.show_error_dialog(f"Errore inaspettato: {ex}")
+        finally:
+            self.controller.hide_loading()
 
         self.controller.page.update()
 

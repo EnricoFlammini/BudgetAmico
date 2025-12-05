@@ -68,12 +68,36 @@ class AppStyles:
         return ft.Text(text, size=12, color=AppColors.TEXT_SECONDARY)
     
     @staticmethod
-    def currency_text(value: float, loc_manager, size: int = 16) -> ft.Text:
-        """Restituisce un testo formattato come valuta con colore verde/rosso."""
-        color = AppColors.SUCCESS if value >= 0 else AppColors.ERROR
+    def currency_text(text: str, color: str = None, size: int = 16) -> ft.Text:
+        """Restituisce un testo formattato come valuta con stile bold.
+        
+        Args:
+            text: Il testo già formattato (es. "€ 1.234,56")
+            color: Colore opzionale. Se None, usa SUCCESS (verde)
+            size: Dimensione del font (default 16)
+        """
+        if color is None:
+            color = AppColors.SUCCESS
         return ft.Text(
-            loc_manager.format_currency(value),
+            text,
             size=size,
+            weight=ft.FontWeight.BOLD,
+            color=color
+        )
+    
+    @staticmethod
+    def big_currency_text(text: str, color: str = None) -> ft.Text:
+        """Restituisce un testo grande per patrimonio netto con stile bold.
+        
+        Args:
+            text: Il testo già formattato (es. "€ 1.234,56")
+            color: Colore opzionale. Se None, usa SUCCESS (verde)
+        """
+        if color is None:
+            color = AppColors.SUCCESS
+        return ft.Text(
+            text,
+            size=28,
             weight=ft.FontWeight.BOLD,
             color=color
         )
