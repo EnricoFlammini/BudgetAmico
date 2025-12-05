@@ -100,7 +100,7 @@ class AdminSubTabBudget(ft.Column):
             totale_budget_impostato = 0.0
 
             # Itera sulle categorie
-            for id_cat, cat_data in dati_categorie.items():
+            for cat_data in dati_categorie:
                 nome_cat = cat_data['nome_categoria']
                 sottocategorie = cat_data['sottocategorie']
                 

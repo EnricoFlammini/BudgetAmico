@@ -321,7 +321,9 @@ class AdminTab(ft.Container):
         }
 
         id_famiglia = self.controller.get_family_id()
-        if save_smtp_config(smtp_settings, id_famiglia):
+        master_key_b64 = self.controller.page.session.get("master_key")
+        current_user_id = self.controller.get_user_id()
+        if save_smtp_config(smtp_settings, id_famiglia, master_key_b64, current_user_id):
             self.controller.show_snack_bar("Configurazione email salvata con successo!", success=True)
         else:
             self.controller.show_snack_bar("Errore durante il salvataggio della configurazione.", success=False)
@@ -329,7 +331,9 @@ class AdminTab(ft.Container):
     def update_tab_email(self):
         """Popola i campi email con i dati salvati."""
         id_famiglia = self.controller.get_family_id()
-        smtp_settings = get_smtp_config(id_famiglia)
+        master_key_b64 = self.controller.page.session.get("master_key")
+        current_user_id = self.controller.get_user_id()
+        smtp_settings = get_smtp_config(id_famiglia, master_key_b64, current_user_id)
         if smtp_settings:
             provider = smtp_settings.get('provider', 'custom')
             self.dd_email_provider.value = provider

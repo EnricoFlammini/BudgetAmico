@@ -201,9 +201,9 @@ class PrestitoDialogs:
 
         categorie_con_sottocategorie = ottieni_categorie_e_sottocategorie(id_famiglia)
         opzioni = []
-        for cat_id, cat_data in categorie_con_sottocategorie.items():
+        for cat_data in categorie_con_sottocategorie:
             if cat_data['sottocategorie']:
-                opzioni.append(ft.dropdown.Option(key=f"cat_{cat_id}", text=cat_data['nome_categoria'], disabled=True))
+                opzioni.append(ft.dropdown.Option(key=f"cat_{cat_data['id_categoria']}", text=cat_data['nome_categoria'], disabled=True))
                 for sub in cat_data['sottocategorie']:
                     opzioni.append(
                         ft.dropdown.Option(key=sub['id_sottocategoria'], text=f"  - {sub['nome_sottocategoria']}"))
@@ -257,6 +257,9 @@ class PrestitoDialogs:
                 if importo_residuo is None:
                     importo_residuo = self.prestito_in_modifica['importo_residuo']
                 
+                master_key_b64 = self.controller.page.session.get("master_key")
+                id_utente = self.controller.get_user_id()
+                
                 success = modifica_prestito(
                     id_prestito=self.prestito_in_modifica['id_prestito'],
                     nome=nome, tipo=tipo, descrizione=descrizione, data_inizio=data_inizio,
@@ -265,12 +268,16 @@ class PrestitoDialogs:
                     giorno_scadenza_rata=giorno_scadenza, id_conto_default=id_conto_default,
                     id_conto_condiviso_default=id_conto_condiviso_default,
                     id_sottocategoria_default=id_sottocategoria_default,
-                    importo_residuo=importo_residuo, addebito_automatico=addebito_automatico
+                    importo_residuo=importo_residuo, addebito_automatico=addebito_automatico,
+                    master_key_b64=master_key_b64, id_utente=id_utente
                 )
             else:
                 # Se nuovo prestito e rate residue non specificate, residuo = finanziato + interessi
                 if importo_residuo is None:
                     importo_residuo = importo_finanziato + importo_interessi
+
+                master_key_b64 = self.controller.page.session.get("master_key")
+                id_utente = self.controller.get_user_id()
 
                 success = aggiungi_prestito(
                     id_famiglia=id_famiglia, nome=nome, tipo=tipo, descrizione=descrizione,
@@ -279,7 +286,8 @@ class PrestitoDialogs:
                     importo_rata=importo_rata, giorno_scadenza_rata=giorno_scadenza,
                     id_conto_default=id_conto_default, id_conto_condiviso_default=id_conto_condiviso_default,
                     id_sottocategoria_default=id_sottocategoria_default,
-                    importo_residuo=importo_residuo, addebito_automatico=addebito_automatico
+                    importo_residuo=importo_residuo, addebito_automatico=addebito_automatico,
+                    master_key_b64=master_key_b64, id_utente=id_utente
                 )
 
             if success:
@@ -347,9 +355,9 @@ class PrestitoDialogs:
 
         categorie_con_sottocategorie = ottieni_categorie_e_sottocategorie(id_famiglia)
         opzioni = []
-        for cat_id, cat_data in categorie_con_sottocategorie.items():
+        for cat_data in categorie_con_sottocategorie:
             if cat_data['sottocategorie']:
-                opzioni.append(ft.dropdown.Option(key=f"cat_{cat_id}", text=cat_data['nome_categoria'], disabled=True))
+                opzioni.append(ft.dropdown.Option(key=f"cat_{cat_data['id_categoria']}", text=cat_data['nome_categoria'], disabled=True))
                 for sub in cat_data['sottocategorie']:
                     opzioni.append(
                         ft.dropdown.Option(key=sub['id_sottocategoria'], text=f"  - {sub['nome_sottocategoria']}"))

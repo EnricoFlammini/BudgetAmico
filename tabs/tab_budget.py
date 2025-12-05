@@ -34,7 +34,7 @@ class BudgetTab(ft.Container):
         self._popola_filtro_mese()
         self._popola_budget()
         
-        return [
+        self.content.controls = [
             AppStyles.header_text(loc.get("budget_management")),
             AppStyles.body_text(loc.get("budget_description")),
             ft.Container(
@@ -44,6 +44,7 @@ class BudgetTab(ft.Container):
             ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
             self.lv_budget
         ]
+        # self.update() # Rimosso per evitare crash se il controllo non è montato
 
     def _popola_filtro_mese(self):
         """Popola il dropdown con i mesi disponibili."""

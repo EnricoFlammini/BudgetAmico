@@ -109,7 +109,7 @@ class TransactionDialog(ft.AlertDialog):
         self.dd_sottocategoria_dialog.options = [ft.dropdown.Option(key=None, text=self.loc.get("no_category"))]
         if famiglia_id:
             categorie = ottieni_categorie_e_sottocategorie(famiglia_id)
-            for cat_id, cat_data in categorie.items():
+            for cat_data in categorie:
                 for sub_cat in cat_data['sottocategorie']:
                     self.dd_sottocategoria_dialog.options.append(
                         ft.dropdown.Option(key=sub_cat['id_sottocategoria'], text=f"{cat_data['nome_categoria']} - {sub_cat['nome_sottocategoria']}")

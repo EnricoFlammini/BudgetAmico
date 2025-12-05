@@ -25,7 +25,9 @@ class ImmobiliTab(ft.Container):
         if not id_famiglia:
             return
 
-        immobili = ottieni_immobili_famiglia(id_famiglia)
+        master_key_b64 = self.controller.page.session.get("master_key")
+        id_utente = self.controller.get_user_id()
+        immobili = ottieni_immobili_famiglia(id_famiglia, master_key_b64, id_utente)
         self.lv_immobili.controls.clear()
 
         if not immobili:

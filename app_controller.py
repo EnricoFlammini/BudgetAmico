@@ -27,7 +27,7 @@ from db.gestione_db import (
     check_e_processa_spese_fisse, get_user_count, crea_famiglia_e_admin,
     aggiungi_categorie_iniziali, cerca_utente_per_username, aggiungi_utente_a_famiglia,
     ottieni_versione_db, crea_invito, ottieni_invito_per_token,
-    ottieni_utenti_senza_famiglia
+    ottieni_utenti_senza_famiglia, ensure_family_key
 )
 
 URL_BASE = os.environ.get("FLET_APP_URL", "http://localhost:8550")
@@ -362,6 +362,10 @@ class AppController:
             return
 
         if id_famiglia:
+            # Ensure encryption key for family exists
+            if utente.get("master_key"):
+                ensure_family_key(id_utente, id_famiglia, utente["master_key"])
+
             self.page.session.set("id_famiglia", id_famiglia)
             self.page.session.set("ruolo_utente", ottieni_ruolo_utente(id_utente, id_famiglia))
             self.page.go("/dashboard")

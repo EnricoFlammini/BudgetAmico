@@ -61,7 +61,7 @@ class CryptoManager:
         # Fernet.encrypt returns bytes that are already base64 encoded
         return f.encrypt(data.encode()).decode()
 
-    def decrypt_data(self, encrypted_data: str, master_key: bytes) -> str:
+    def decrypt_data(self, encrypted_data: str, master_key: bytes, silent: bool = False) -> str:
         """Decrypts a base64 string (Fernet token) using the Master Key."""
         if not encrypted_data:
             return ""
@@ -78,18 +78,21 @@ class CryptoManager:
             try:
                 f = Fernet(master_key)
             except Exception as e:
-                print(f"[CRYPTO ERROR] Invalid Master Key in decrypt_data: {master_key}")
+                if not silent:
+                    print(f"[CRYPTO ERROR] Invalid Master Key in decrypt_data: {master_key}")
                 raise e
                 
             # Fernet.decrypt expects bytes (the token)
             return f.decrypt(encrypted_data.encode()).decode()
         except Exception as e:
-            print(f"[CRYPTO ERROR] Decryption failed. Type: {type(e)}")
-            print(f"[CRYPTO ERROR] Key (repr): {repr(master_key)}")
-            print(f"[CRYPTO ERROR] Data (repr): {repr(encrypted_data)}")
+            if not silent:
+                print(f"[CRYPTO ERROR] Decryption failed. Type: {type(e)}")
+                print(f"[CRYPTO ERROR] Key (repr): {repr(master_key)}")
+                print(f"[CRYPTO ERROR] Data (repr): {repr(encrypted_data)}")
             return "[ENCRYPTED]"
         except Exception as e:
-            print(f"[CRYPTO ERROR] Decryption failed: {e}")
+            if not silent:
+                print(f"[CRYPTO ERROR] Decryption failed: {e}")
             return "[ENCRYPTED]"
 
     def generate_recovery_key(self) -> str:

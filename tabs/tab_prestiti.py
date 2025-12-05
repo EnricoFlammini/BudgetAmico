@@ -25,7 +25,9 @@ class PrestitiTab(ft.Container):
         if not id_famiglia:
             return
 
-        prestiti = ottieni_prestiti_famiglia(id_famiglia)
+        master_key_b64 = self.controller.page.session.get("master_key")
+        id_utente = self.controller.get_user_id()
+        prestiti = ottieni_prestiti_famiglia(id_famiglia, master_key_b64, id_utente)
         self.lv_prestiti.controls.clear()
 
         if not prestiti:

@@ -102,7 +102,8 @@ class FamigliaTab(ft.Container):
                 AppStyles.header_text(self.controller.loc.get("wealth_by_member")),
                 ft.Divider(color=ft.Colors.OUTLINE_VARIANT)
             ])
-            totali = ottieni_totali_famiglia(famiglia_id)
+            master_key_b64 = self.controller.page.session.get("master_key")
+            totali = ottieni_totali_famiglia(famiglia_id, master_key_b64=master_key_b64)
             for m in totali:
                 self.main_content.controls.append(
                     AppStyles.card_container(
@@ -119,7 +120,8 @@ class FamigliaTab(ft.Container):
 
         if ruolo in ['admin', 'livello1']:
             anno, mese = self._get_anno_mese_selezionato()
-            riepilogo = ottieni_riepilogo_patrimonio_famiglia_aggregato(famiglia_id, anno, mese)
+            master_key_b64 = self.controller.page.session.get("master_key")
+            riepilogo = ottieni_riepilogo_patrimonio_famiglia_aggregato(famiglia_id, anno, mese, master_key_b64=master_key_b64)
             
             val_patrimonio = riepilogo.get('patrimonio_netto', 0)
             self.txt_patrimonio_totale_famiglia.value = self.controller.loc.format_currency(val_patrimonio)

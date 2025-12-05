@@ -47,7 +47,7 @@ def _encrypt_if_key(data, master_key, crypto=None):
         crypto = CryptoManager()
     return crypto.encrypt_data(data, master_key)
 
-def _decrypt_if_key(encrypted_data, master_key, crypto=None):
+def _decrypt_if_key(encrypted_data, master_key, crypto=None, silent=False):
     if not master_key or not encrypted_data:
         return encrypted_data
     if not crypto:
@@ -55,11 +55,15 @@ def _decrypt_if_key(encrypted_data, master_key, crypto=None):
     
     # print(f"[DEBUG] _decrypt_if_key called. Key len: {len(master_key)}, Data len: {len(encrypted_data)}")
     
+    # Handle non-string inputs (e.g. numbers before migration)
+    if not isinstance(encrypted_data, str):
+        return encrypted_data
+
     # Check if data looks like a Fernet token (starts with gAAAAA)
     if not encrypted_data.startswith("gAAAAA"):
         return encrypted_data
 
-    decrypted = crypto.decrypt_data(encrypted_data, master_key)
+    decrypted = crypto.decrypt_data(encrypted_data, master_key, silent=silent)
     
     # Fallback for unencrypted numbers (during migration)
     if decrypted == "[ENCRYPTED]":
@@ -165,23 +169,63 @@ def set_configurazione(chiave, valore, id_famiglia=None):
         print(f"[ERRORE] Errore salvataggio configurazione {chiave}: {e}")
         return False
 
-def get_smtp_config(id_famiglia=None):
+def get_smtp_config(id_famiglia=None, master_key_b64=None, id_utente=None):
     """Recupera la configurazione SMTP completa."""
+    password = get_configurazione('smtp_password', id_famiglia)
+    
+    # Decrypt password if keys available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    family_key = None
+    if master_key and id_utente and id_famiglia:
+        try:
+            with get_db_connection() as con:
+                cur = con.cursor()
+                cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
+                row = cur.fetchone()
+                if row and row['chiave_famiglia_criptata']:
+                    family_key_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+                    family_key = base64.b64decode(family_key_b64)
+        except Exception:
+            pass
+
+    if family_key and password:
+        password = _decrypt_if_key(password, family_key, crypto)
+
     return {
         'server': get_configurazione('smtp_server', id_famiglia),
         'port': get_configurazione('smtp_port', id_famiglia),
         'user': get_configurazione('smtp_user', id_famiglia),
-        'password': get_configurazione('smtp_password', id_famiglia),
+        'password': password,
         'provider': get_configurazione('smtp_provider', id_famiglia)
     }
 
-def save_smtp_config(settings, id_famiglia=None):
+def save_smtp_config(settings, id_famiglia=None, master_key_b64=None, id_utente=None):
     """Salva la configurazione SMTP."""
     try:
+        password = settings.get('password')
+        
+        # Encrypt password if keys available
+        crypto, master_key = _get_crypto_and_key(master_key_b64)
+        family_key = None
+        if master_key and id_utente and id_famiglia:
+            try:
+                with get_db_connection() as con:
+                    cur = con.cursor()
+                    cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
+                    row = cur.fetchone()
+                    if row and row['chiave_famiglia_criptata']:
+                        family_key_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+                        family_key = base64.b64decode(family_key_b64)
+            except Exception:
+                pass
+
+        if family_key and password:
+            password = _encrypt_if_key(password, family_key, crypto)
+
         set_configurazione('smtp_server', settings.get('server'), id_famiglia)
         set_configurazione('smtp_port', settings.get('port'), id_famiglia)
         set_configurazione('smtp_user', settings.get('user'), id_famiglia)
-        set_configurazione('smtp_password', settings.get('password'), id_famiglia)
+        set_configurazione('smtp_password', password, id_famiglia)
         set_configurazione('smtp_provider', settings.get('provider'), id_famiglia)
         return True
     except Exception as e:
@@ -231,9 +275,20 @@ def verifica_login(login_identifier, password):
                         # Decrypt nome and cognome for display
                         nome = crypto.decrypt_data(risultato['nome'], master_key)
                         cognome = crypto.decrypt_data(risultato['cognome'], master_key)
+
+                        return {
+                            'id': risultato['id_utente'],
+                            'nome': nome,
+                            'cognome': cognome,
+                            'username': risultato['username'],
+                            'email': risultato['email'],
+                            'master_key': master_key.decode() if master_key else None,
+                            'forza_cambio_password': risultato['forza_cambio_password']
+                        }
                     except Exception as e:
                         print(f"[ERRORE] Errore decryption: {e}")
                         return None
+            
             print("[DEBUG] Login fallito o password errata.")
             return None
     except Exception as e:
@@ -292,7 +347,7 @@ def registra_utente(nome, cognome, username, password, email, data_nascita, codi
         crypto = CryptoManager()
         salt = os.urandom(16)
         kek = crypto.derive_key(password, salt)
-        master_key = crypto.generate_key()
+        master_key = crypto.generate_master_key()
         encrypted_mk = crypto.encrypt_master_key(master_key, kek)
         
         # Generate Recovery Key
@@ -300,13 +355,19 @@ def registra_utente(nome, cognome, username, password, email, data_nascita, codi
         recovery_key_hash = hashlib.sha256(recovery_key.encode()).hexdigest()
         encrypted_mk_recovery = crypto.encrypt_master_key(master_key, crypto.derive_key(recovery_key, salt))
 
+        # Encrypt personal data
+        enc_nome = crypto.encrypt_data(nome, master_key)
+        enc_cognome = crypto.encrypt_data(cognome, master_key)
+        enc_indirizzo = crypto.encrypt_data(indirizzo, master_key) if indirizzo else None
+        enc_cf = crypto.encrypt_data(codice_fiscale, master_key) if codice_fiscale else None
+
         with get_db_connection() as con:
             cur = con.cursor()
             cur.execute("""
                 INSERT INTO Utenti (nome, cognome, username, password_hash, email, data_nascita, codice_fiscale, indirizzo, salt, encrypted_master_key, recovery_key_hash, encrypted_master_key_recovery)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id_utente
-            """, (nome, cognome, username, password_hash, email, data_nascita, codice_fiscale, indirizzo, 
+            """, (enc_nome, enc_cognome, username, password_hash, email, data_nascita, enc_cf, enc_indirizzo, 
                   base64.urlsafe_b64encode(salt).decode(), 
                   base64.urlsafe_b64encode(encrypted_mk).decode(),
                   recovery_key_hash,
@@ -425,12 +486,74 @@ def ottieni_ruolo_utente(id_utente, id_famiglia):
         print(f"[ERRORE] Errore recupero ruolo utente: {e}")
         return None
 
+def ensure_family_key(id_utente, id_famiglia, master_key_b64):
+    """
+    Assicura che l'utente abbia accesso alla chiave di crittografia della famiglia.
+    Se nessuno ha la chiave (nuova famiglia o migrazione), ne genera una nuova.
+    Se qualcun altro ha la chiave, prova a recuperarla (TODO: richiederebbe asimmetrica o condivisione segreta, 
+    per ora assumiamo che se è null, la generiamo se siamo admin o se nessuno ce l'ha).
+    
+    In questo scenario semplificato:
+    1. Controlla se l'utente ha già la chiave.
+    2. Se no, controlla se qualcun altro nella famiglia ha una chiave.
+    3. Se NESSUNO ha una chiave, ne genera una nuova e la salva per l'utente corrente.
+    """
+    if not master_key_b64:
+        return False
+
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    if not master_key:
+        return False
+
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # 1. Controlla se l'utente ha già la chiave
+            cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
+            row = cur.fetchone()
+            if row and row['chiave_famiglia_criptata']:
+                return True # L'utente ha già la chiave
+
+            # 2. Controlla se qualcun altro ha la chiave
+            cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_famiglia = %s AND chiave_famiglia_criptata IS NOT NULL LIMIT 1", (id_famiglia,))
+            existing_key_row = cur.fetchone()
+            
+            if existing_key_row:
+                # Qualcun altro ha la chiave. 
+                # In un sistema reale, bisognerebbe farsi inviare la chiave da un admin o usare crittografia asimmetrica.
+                # Per ora, non possiamo fare nulla se non abbiamo la chiave.
+                print(f"[WARN] La famiglia {id_famiglia} ha già una chiave, ma l'utente {id_utente} non ce l'ha.")
+                return False
+            
+            # 3. Nessuno ha la chiave: Generane una nuova
+            print(f"[INFO] Generazione nuova chiave famiglia per famiglia {id_famiglia}...")
+            new_family_key = secrets.token_bytes(32) # 32 bytes per AES-256
+            
+            # Cripta la chiave della famiglia con la master key dell'utente
+            encrypted_family_key = crypto.encrypt_data(base64.b64encode(new_family_key).decode('utf-8'), master_key)
+            
+            cur.execute("""
+                UPDATE Appartenenza_Famiglia 
+                SET chiave_famiglia_criptata = %s 
+                WHERE id_utente = %s AND id_famiglia = %s
+            """, (encrypted_family_key, id_utente, id_famiglia))
+            
+            con.commit()
+            print(f"[INFO] Chiave famiglia generata e salvata per utente {id_utente}.")
+            return True
+
+    except Exception as e:
+        print(f"[ERRORE] Errore in ensure_family_key: {e}")
+        return False
+
+
 # --- Funzioni Conti ---
 def ottieni_conti(id_utente, master_key_b64=None):
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("SELECT id_conto, nome_conto, tipo, saldo_iniziale, data_saldo_iniziale FROM Conti WHERE id_utente = %s", (id_utente,))
+            cur.execute("SELECT id_conto, nome_conto, tipo, iban, valore_manuale, rettifica_saldo FROM Conti WHERE id_utente = %s", (id_utente,))
             conti = [dict(row) for row in cur.fetchall()]
             
             # Decrypt if key available
@@ -438,6 +561,20 @@ def ottieni_conti(id_utente, master_key_b64=None):
             if master_key:
                 for conto in conti:
                     conto['nome_conto'] = _decrypt_if_key(conto['nome_conto'], master_key, crypto)
+                    conto['tipo'] = _decrypt_if_key(conto['tipo'], master_key, crypto)
+                    if 'iban' in conto:
+                        conto['iban'] = _decrypt_if_key(conto['iban'], master_key, crypto)
+                    
+                    # Handle numeric fields that might be encrypted
+                    for field in ['valore_manuale', 'rettifica_saldo']:
+                        if field in conto and conto[field] is not None:
+                            decrypted = _decrypt_if_key(conto[field], master_key, crypto)
+                            try:
+                                conto[field] = float(decrypted)
+                            except (ValueError, TypeError):
+                                conto[field] = decrypted # Keep as is if not a number
+            
+            return conti
             
             return conti
     except Exception as e:
@@ -448,6 +585,8 @@ def aggiungi_conto(id_utente, nome_conto, tipo, saldo_iniziale=0.0, data_saldo_i
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
     encrypted_nome = _encrypt_if_key(nome_conto, master_key, crypto)
+    encrypted_tipo = _encrypt_if_key(tipo, master_key, crypto)
+    encrypted_saldo = _encrypt_if_key(str(saldo_iniziale), master_key, crypto)
     
     if not data_saldo_iniziale:
         data_saldo_iniziale = datetime.date.today().strftime('%Y-%m-%d')
@@ -456,8 +595,8 @@ def aggiungi_conto(id_utente, nome_conto, tipo, saldo_iniziale=0.0, data_saldo_i
         with get_db_connection() as con:
             cur = con.cursor()
             cur.execute(
-                "INSERT INTO Conti (id_utente, nome_conto, tipo, saldo_iniziale, data_saldo_iniziale) VALUES (%s, %s, %s, %s, %s) RETURNING id_conto",
-                (id_utente, encrypted_nome, tipo, saldo_iniziale, data_saldo_iniziale))
+                "INSERT INTO Conti (id_utente, nome_conto, tipo) VALUES (%s, %s, %s) RETURNING id_conto",
+                (id_utente, encrypted_nome, encrypted_tipo))
             id_conto = cur.fetchone()['id_conto']
             
             # Add initial balance transaction
@@ -477,13 +616,15 @@ def modifica_conto(id_conto, nome_conto, tipo, saldo_iniziale, data_saldo_inizia
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
     encrypted_nome = _encrypt_if_key(nome_conto, master_key, crypto)
+    encrypted_tipo = _encrypt_if_key(tipo, master_key, crypto)
+    encrypted_saldo = _encrypt_if_key(str(saldo_iniziale), master_key, crypto)
 
     try:
         with get_db_connection() as con:
             cur = con.cursor()
             cur.execute(
-                "UPDATE Conti SET nome_conto = %s, tipo = %s, saldo_iniziale = %s, data_saldo_iniziale = %s WHERE id_conto = %s",
-                (encrypted_nome, tipo, saldo_iniziale, data_saldo_iniziale, id_conto))
+                "UPDATE Conti SET nome_conto = %s, tipo = %s WHERE id_conto = %s",
+                (encrypted_nome, encrypted_tipo, id_conto))
             
             # Update initial balance transaction
             # Find existing "Saldo Iniziale" transaction
@@ -1018,12 +1159,24 @@ def crea_invito(id_famiglia, email, ruolo):
     token = generate_token()
     if ruolo not in ['admin', 'livello1', 'livello2', 'livello3']:
         return None
+        
+    # Encrypt email using token as key
+    # Derive a 32-byte key from the token
+    key = hashlib.sha256(token.encode()).digest()
+    key_b64 = base64.b64encode(key) # CryptoManager expects bytes, but let's see _encrypt_if_key
+    
+    # _encrypt_if_key expects key as bytes. 
+    # But wait, CryptoManager.encrypt_data expects key as bytes.
+    # Let's use CryptoManager directly to be safe and avoid dependency on master_key logic
+    crypto = CryptoManager()
+    encrypted_email = crypto.encrypt_data(email.lower(), key)
+    
     try:
         with get_db_connection() as con:
             cur = con.cursor()
             # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
             cur.execute("INSERT INTO Inviti (id_famiglia, email_invitato, token, ruolo_assegnato) VALUES (%s, %s, %s, %s)",
-                        (id_famiglia, email.lower(), token, ruolo))
+                        (id_famiglia, encrypted_email, token, ruolo))
             return token
     except Exception as e:
         print(f"[ERRORE] Errore durante la creazione dell'invito: {e}")
@@ -1039,9 +1192,21 @@ def ottieni_invito_per_token(token):
             cur.execute("SELECT id_famiglia, email_invitato, ruolo_assegnato FROM Inviti WHERE token = %s", (token,))
             invito = cur.fetchone()
             if invito:
+                # Decrypt email
+                encrypted_email = invito['email_invitato']
+                key = hashlib.sha256(token.encode()).digest()
+                crypto = CryptoManager()
+                try:
+                    decrypted_email = crypto.decrypt_data(encrypted_email, key)
+                except Exception:
+                    decrypted_email = encrypted_email # Fallback if not encrypted or error
+                
+                result = dict(invito)
+                result['email_invitato'] = decrypted_email
+                
                 cur.execute("DELETE FROM Inviti WHERE token = %s", (token,))
                 con.commit()
-                return dict(invito)
+                return result
             else:
                 con.rollback()
                 return None
@@ -1108,13 +1273,13 @@ def ottieni_dettagli_conti_utente(id_utente, master_key_b64=None):
                                C.iban,
                                C.borsa_default,
                                CASE
-                                   WHEN C.tipo = 'Fondo Pensione' THEN COALESCE(C.valore_manuale, 0.0)
+                                   WHEN C.tipo = 'Fondo Pensione' THEN COALESCE(C.valore_manuale, '0.0')
                                    WHEN C.tipo = 'Investimento'
-                                       THEN (SELECT COALESCE(SUM(A.quantita * A.prezzo_attuale_manuale), 0.0)
+                                       THEN CAST((SELECT COALESCE(SUM(A.quantita * A.prezzo_attuale_manuale), 0.0)
                                              FROM Asset A
-                                             WHERE A.id_conto = C.id_conto)
-                                   ELSE (SELECT COALESCE(SUM(T.importo), 0.0) FROM Transazioni T WHERE T.id_conto = C.id_conto) +
-                                        COALESCE(C.rettifica_saldo, 0.0)
+                                             WHERE A.id_conto = C.id_conto) AS TEXT)
+                                   ELSE CAST((SELECT COALESCE(SUM(T.importo), 0.0) FROM Transazioni T WHERE T.id_conto = C.id_conto) +
+                                        COALESCE(CAST(NULLIF(CAST(C.rettifica_saldo AS TEXT), '') AS NUMERIC), 0.0) AS TEXT)
                                    END AS saldo_calcolato
                         FROM Conti C
                         WHERE C.id_utente = %s
@@ -1124,10 +1289,23 @@ def ottieni_dettagli_conti_utente(id_utente, master_key_b64=None):
             
             # Decrypt if key available
             crypto, master_key = _get_crypto_and_key(master_key_b64)
-            if master_key:
-                for row in results:
+            
+            for row in results:
+                # Decrypt text fields
+                if master_key:
                     row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
                     row['iban'] = _decrypt_if_key(row['iban'], master_key, crypto)
+                
+                # Handle saldo_calcolato
+                saldo_str = row['saldo_calcolato']
+                if row['tipo'] == 'Fondo Pensione':
+                    if master_key:
+                        saldo_str = _decrypt_if_key(saldo_str, master_key, crypto)
+                
+                try:
+                    row['saldo_calcolato'] = float(saldo_str) if saldo_str else 0.0
+                except (ValueError, TypeError):
+                    row['saldo_calcolato'] = 0.0
             
             return results
     except Exception as e:
@@ -1455,7 +1633,7 @@ def ottieni_conti_condivisi_utente(id_utente, master_key_b64=None):
                                CC.tipo,
                                CC.tipo_condivisione,
                                1                             AS is_condiviso,
-                               COALESCE(SUM(T.importo), 0.0) + COALESCE(CC.rettifica_saldo, 0.0) AS saldo_calcolato
+                               COALESCE(SUM(T.importo), 0.0) + COALESCE(CAST(NULLIF(CAST(CC.rettifica_saldo AS TEXT), '') AS NUMERIC), 0.0) AS saldo_calcolato
                         FROM ContiCondivisi CC
                                  LEFT JOIN PartecipazioneContoCondiviso PCC
                                            ON CC.id_conto_condiviso = PCC.id_conto_condiviso
@@ -1496,7 +1674,10 @@ def ottieni_conti_condivisi_utente(id_utente, master_key_b64=None):
                     for row in results:
                         fam_id = row.get('id_famiglia')
                         if fam_id and fam_id in family_keys:
-                            row['nome_conto'] = _decrypt_if_key(row['nome_conto'], family_keys[fam_id], crypto)
+                            row['nome_conto'] = _decrypt_if_key(row['nome_conto'], family_keys[fam_id], crypto, silent=True)
+                            # Fallback to master_key if family_key decryption fails
+                            if row['nome_conto'] == "[ENCRYPTED]" and isinstance(row['nome_conto'], str) and row['nome_conto'].startswith("gAAAAA"):
+                                row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
                 except Exception as e:
                     print(f"[ERRORE] Decryption error in ottieni_conti_condivisi_utente: {e}")
             
@@ -1517,7 +1698,7 @@ def ottieni_dettagli_conto_condiviso(id_conto_condiviso):
                                CC.nome_conto,
                                CC.tipo,
                                CC.tipo_condivisione,
-                               COALESCE(SUM(T.importo), 0.0) + COALESCE(CC.rettifica_saldo, 0.0) AS saldo_calcolato
+                               COALESCE(SUM(T.importo), 0.0) + COALESCE(CAST(NULLIF(CAST(CC.rettifica_saldo AS TEXT), '') AS NUMERIC), 0.0) AS saldo_calcolato
                         FROM ContiCondivisi CC
                                  LEFT JOIN TransazioniCondivise T ON CC.id_conto_condiviso = T.id_conto_condiviso
                         WHERE CC.id_conto_condiviso = %s
@@ -1580,18 +1761,19 @@ def ottieni_tutti_i_conti_utente(id_utente, master_key_b64=None):
     return risultato_unificato
 
 
-def ottieni_tutti_i_conti_famiglia(id_famiglia, master_key_b64=None):
+def ottieni_tutti_i_conti_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
     """
     Restituisce una lista unificata di TUTTI i conti (personali e condivisi)
     di una data famiglia, escludendo quelli di investimento.
     """
     try:
+        with get_db_connection() as con:
             # con.row_factory = sqlite3.Row # Removed for Supabase
             cur = con.cursor()
 
             # Conti Personali di tutti i membri della famiglia
             cur.execute("""
-                        SELECT C.id_conto, C.nome_conto, C.tipo, 0 as is_condiviso, U.nome as proprietario
+                        SELECT C.id_conto, C.nome_conto, C.tipo, 0 as is_condiviso, U.nome as proprietario, C.id_utente
                         FROM Conti C
                                  JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
                                  JOIN Utenti U ON C.id_utente = U.id_utente
@@ -1615,10 +1797,28 @@ def ottieni_tutti_i_conti_famiglia(id_famiglia, master_key_b64=None):
             
             # Decrypt if key available
             crypto, master_key = _get_crypto_and_key(master_key_b64)
+            
+            family_key = None
+            if master_key and id_utente:
+                family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+
             if master_key:
                 for row in results:
-                    row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
-
+                    if row.get('is_condiviso'):
+                        # Shared Account: Try Family Key, then Master Key
+                        if family_key:
+                            row['nome_conto'] = _decrypt_if_key(row['nome_conto'], family_key, crypto, silent=True)
+                            if row['nome_conto'] == "[ENCRYPTED]" and isinstance(row['nome_conto'], str) and row['nome_conto'].startswith("gAAAAA"):
+                                row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
+                        else:
+                             # No family key, try master key (legacy/fallback)
+                             row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
+                    else:
+                        # Personal Account: Decrypt ONLY if it belongs to the current user
+                        if id_utente and row.get('id_utente') == id_utente:
+                            row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
+                        # Else: Leave encrypted (or show placeholder if desired, but for now leave as is)
+            
             return results
 
     except Exception as e:
@@ -1698,6 +1898,136 @@ def elimina_transazione(id_transazione):
     except Exception as e:
         print(f"[ERRORE] Errore generico durante l'eliminazione: {e}")
         return None
+
+
+def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese, master_key_b64=None):
+    try:
+        data_limite = datetime.date(anno, mese, 1) + relativedelta(months=1) - relativedelta(days=1)
+        data_limite_str = data_limite.strftime('%Y-%m-%d')
+        
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # 1. Liquidità
+            cur.execute("""
+                SELECT COALESCE(SUM(T.importo), 0.0) as val
+                FROM Transazioni T
+                JOIN Conti C ON T.id_conto = C.id_conto
+                WHERE C.id_utente = %s
+                  AND C.tipo NOT IN ('Investimento', 'Fondo Pensione')
+                  AND T.data <= %s
+            """, (id_utente, data_limite_str))
+            liquidita_personale = cur.fetchone()['val'] or 0.0
+
+            # 1.1 Liquidità Condivisa
+            cur.execute("""
+                SELECT COALESCE(SUM(TC.importo), 0.0) as val
+                FROM TransazioniCondivise TC
+                JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
+                LEFT JOIN PartecipazioneContoCondiviso PCC ON CC.id_conto_condiviso = PCC.id_conto_condiviso
+                WHERE ((PCC.id_utente = %s AND CC.tipo_condivisione = 'utenti')
+                   OR (CC.id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s) AND CC.tipo_condivisione = 'famiglia'))
+                  AND TC.data <= %s
+            """, (id_utente, id_utente, data_limite_str))
+            liquidita_condivisa = cur.fetchone()['val'] or 0.0
+
+            liquidita = liquidita_personale + liquidita_condivisa
+            
+            # 2. Investimenti
+            cur.execute("""
+                SELECT COALESCE(SUM(A.quantita * A.prezzo_attuale_manuale), 0.0) as val
+                FROM Asset A
+                JOIN Conti C ON A.id_conto = C.id_conto
+                WHERE C.id_utente = %s
+                  AND C.tipo = 'Investimento'
+            """, (id_utente,))
+            investimenti = cur.fetchone()['val'] or 0.0
+            
+            # 3. Fondi Pensione
+            fondi_pensione = 0.0
+            if master_key_b64:
+                crypto, master_key = _get_crypto_and_key(master_key_b64)
+                cur.execute("""
+                    SELECT valore_manuale
+                    FROM Conti
+                    WHERE id_utente = %s AND tipo = 'Fondo Pensione'
+                """, (id_utente,))
+                for row in cur.fetchall():
+                    val = _decrypt_if_key(row['valore_manuale'], master_key, crypto)
+                    try:
+                        fondi_pensione += float(val) if val else 0.0
+                    except (ValueError, TypeError):
+                        pass
+            
+            patrimonio_netto = liquidita + investimenti + fondi_pensione
+            
+            return {
+                'patrimonio_netto': patrimonio_netto,
+                'liquidita': liquidita
+            }
+    except Exception as e:
+        print(f"[ERRORE] Errore in ottieni_riepilogo_patrimonio_utente: {e}")
+        return {'patrimonio_netto': 0.0, 'liquidita': 0.0}
+
+
+def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese, master_key_b64=None):
+    try:
+        data_limite = datetime.date(anno, mese, 1) + relativedelta(months=1) - relativedelta(days=1)
+        data_limite_str = data_limite.strftime('%Y-%m-%d')
+        
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # 1. Liquidità (Tutti i membri)
+            cur.execute("""
+                SELECT COALESCE(SUM(T.importo), 0.0) as val
+                FROM Transazioni T
+                JOIN Conti C ON T.id_conto = C.id_conto
+                JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
+                WHERE AF.id_famiglia = %s
+                  AND C.tipo NOT IN ('Investimento', 'Fondo Pensione')
+                  AND T.data <= %s
+            """, (id_famiglia, data_limite_str))
+            liquidita = cur.fetchone()['val'] or 0.0
+            
+            # 2. Investimenti (Tutti i membri)
+            cur.execute("""
+                SELECT COALESCE(SUM(A.quantita * A.prezzo_attuale_manuale), 0.0) as val
+                FROM Asset A
+                JOIN Conti C ON A.id_conto = C.id_conto
+                JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
+                WHERE AF.id_famiglia = %s
+                  AND C.tipo = 'Investimento'
+            """, (id_famiglia,))
+            investimenti = cur.fetchone()['val'] or 0.0
+            
+            # 3. Fondi Pensione (Tutti i membri)
+            fondi_pensione = 0.0
+            if master_key_b64:
+                crypto, master_key = _get_crypto_and_key(master_key_b64)
+                cur.execute("""
+                    SELECT C.valore_manuale
+                    FROM Conti C
+                    JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
+                    WHERE AF.id_famiglia = %s AND C.tipo = 'Fondo Pensione'
+                """, (id_famiglia,))
+                for row in cur.fetchall():
+                    val = _decrypt_if_key(row['valore_manuale'], master_key, crypto)
+                    try:
+                        fondi_pensione += float(val) if val else 0.0
+                    except (ValueError, TypeError):
+                        pass
+            
+            patrimonio_netto = liquidita + investimenti + fondi_pensione
+            
+            return {
+                'patrimonio_netto': patrimonio_netto,
+                'liquidita': liquidita,
+                'investimenti': investimenti
+            }
+    except Exception as e:
+        print(f"[ERRORE] Errore in ottieni_riepilogo_patrimonio_famiglia_aggregato: {e}")
+        return {'patrimonio_netto': 0.0, 'liquidita': 0.0, 'investimenti': 0.0}
 
 
 def ottieni_transazioni_utente(id_utente, anno, mese, master_key_b64=None):
@@ -1804,25 +2134,13 @@ def ottieni_transazioni_utente(id_utente, anno, mese, master_key_b64=None):
                     row['nome_categoria'] = cat_name
                     row['nome_sottocategoria'] = sub_name
 
-                    # Format nome_sottocategoria for display
-                    if cat_name and sub_name:
-                        row['nome_sottocategoria'] = f"{cat_name} - {sub_name}"
-                    elif cat_name:
-                        row['nome_sottocategoria'] = cat_name
-                    elif sub_name:
-                        row['nome_sottocategoria'] = sub_name
-                    else:
-                        row['nome_sottocategoria'] = ""
-            
             return results
     except Exception as e:
-        print(f"[ERRORE] Errore generico durante il recupero transazioni: {e}")
+        print(f"[ERRORE] Errore generico durante il recupero transazioni utente: {e}")
         return []
 
 
-# --- Funzioni Transazioni Condivise ---
-def aggiungi_transazione_condivisa(id_utente_autore, id_conto_condiviso, data, descrizione, importo, id_sottocategoria=None,
-                                   cursor=None, master_key_b64=None):
+def aggiungi_transazione_condivisa(id_utente_autore, id_conto_condiviso, data, descrizione, importo, id_sottocategoria=None, cursor=None, master_key_b64=None):
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
     
@@ -2039,226 +2357,76 @@ def ottieni_ruolo_utente(id_utente, id_famiglia):
         return None
 
 
-def ottieni_totali_famiglia(id_famiglia):
+def ottieni_totali_famiglia(id_famiglia, master_key_b64=None, id_utente_richiedente=None):
     try:
+        crypto, master_key = _get_crypto_and_key(master_key_b64)
+        
         with get_db_connection() as con:
-            # con.row_factory = sqlite3.Row # Removed for Supabase
             cur = con.cursor()
-            # Query semplificata e più robusta per calcolare il patrimonio totale per membro.
-            # Unisce i saldi dei conti personali, il valore degli investimenti e dei fondi pensione.
-            # Il calcolo della quota dei conti condivisi è stato rimosso da qui per semplificare
-            # e può essere gestito in una funzione separata se necessario per questa vista.
+            
+            # 1. Fetch users in family
             cur.execute("""
                         SELECT U.id_utente,
-                                COALESCE(U.nome || ' ' || U.cognome, U.username) AS nome_visualizzato,
-                                (
-                                    -- Somma della liquidità (conti correnti/risparmio)
-                                    COALESCE((SELECT SUM(T.importo)
-                                              FROM Transazioni T
-                                                       JOIN Conti C ON T.id_conto = C.id_conto
-                                              WHERE C.id_utente = U.id_utente
-                                                AND C.tipo NOT IN ('Investimento', 'Fondo Pensione')), 0.0)
-                                        +
-                                        -- Somma del valore degli investimenti
-                                    COALESCE((SELECT SUM(A.quantita * A.prezzo_attuale_manuale)
-                                              FROM Asset A
-                                                       JOIN Conti C ON A.id_conto = C.id_conto
-                                              WHERE C.id_utente = U.id_utente
-                                                AND C.tipo = 'Investimento'), 0.0)
-                                        +
-                                        -- Somma del valore dei fondi pensione
-                                    COALESCE((SELECT SUM(C.valore_manuale)
-                                              FROM Conti C
-                                              WHERE C.id_utente = U.id_utente AND C.tipo = 'Fondo Pensione'), 0.0)
-                                    )                                            as saldo_totale
+                               COALESCE(U.nome || ' ' || U.cognome, U.username) AS nome_visualizzato
                         FROM Utenti U
                                  JOIN Appartenenza_Famiglia AF ON U.id_utente = AF.id_utente
                         WHERE AF.id_famiglia = %s
-                        GROUP BY U.id_utente, nome_visualizzato
                         ORDER BY nome_visualizzato;
                         """, (id_famiglia,))
-            return [dict(row) for row in cur.fetchall()]
+            users = [dict(row) for row in cur.fetchall()]
+            
+            results = []
+            for user in users:
+                uid = user['id_utente']
+                
+                # 1. Liquidità (conti non investimento) - Sum in SQL (not encrypted)
+                cur.execute("""
+                            SELECT COALESCE(SUM(T.importo), 0.0) as val
+                            FROM Transazioni T
+                                     JOIN Conti C ON T.id_conto = C.id_conto
+                            WHERE C.id_utente = %s
+                              AND C.tipo NOT IN ('Investimento', 'Fondo Pensione')
+                            """, (uid,))
+                liquidita = cur.fetchone()['val'] or 0.0
+                
+                # 2. Investimenti (Asset) - Sum in SQL (Asset.prezzo_attuale_manuale is REAL)
+                cur.execute("""
+                            SELECT COALESCE(SUM(A.quantita * A.prezzo_attuale_manuale), 0.0) as val
+                            FROM Asset A
+                                     JOIN Conti C ON A.id_conto = C.id_conto
+                            WHERE C.id_utente = %s
+                              AND C.tipo = 'Investimento'
+                            """, (uid,))
+                investimenti = cur.fetchone()['val'] or 0.0
+                
+                # 3. Fondi Pensione (Conti.valore_manuale) - Encrypted TEXT
+                cur.execute("""
+                            SELECT valore_manuale
+                            FROM Conti
+                            WHERE id_utente = %s AND tipo = 'Fondo Pensione'
+                            """, (uid,))
+                
+                fondi_pensione = 0.0
+                for row in cur.fetchall():
+                    if uid == id_utente_richiedente:
+                        val = _decrypt_if_key(row['valore_manuale'], master_key, crypto)
+                        try:
+                            fondi_pensione += float(val) if val else 0.0
+                        except (ValueError, TypeError):
+                            pass
+                
+                saldo_totale = liquidita + investimenti + fondi_pensione
+                
+                results.append({
+                    'id_utente': uid,
+                    'nome_visualizzato': user['nome_visualizzato'],
+                    'saldo_totale': saldo_totale
+                })
+                
+            return results
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero totali famiglia: {e}")
         return []
-
-
-def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese):
-    """
-    Calcola la liquidità totale, gli investimenti totali e il patrimonio netto per un'intera famiglia.
-    """
-    data_fine = (datetime.date(anno, mese, 1) + relativedelta(months=1) - relativedelta(days=1)).strftime('%Y-%m-%d')
-
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            print(
-                f"DEBUG (ottieni_riepilogo_patrimonio_famiglia_aggregato): Calcolo patrimonio per famiglia {id_famiglia}")
-
-            # 1. Liquidità totale (Conti personali + Conti condivisi + Rettifiche personali)
-            cur.execute("""
-                        SELECT (SELECT COALESCE(SUM(T.importo), 0.0)
-                                FROM Transazioni T
-                                         JOIN Conti C ON T.id_conto = C.id_conto
-                                         JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
-                                WHERE AF.id_famiglia = %s
-                                  AND C.tipo NOT IN ('Investimento', 'Fondo Pensione')
-                                  AND T.data <= %s)
-                                   +
-                               (SELECT COALESCE(SUM(TC.importo), 0.0)
-                                FROM TransazioniCondivise TC
-                                         JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
-                                WHERE CC.id_famiglia = %s
-                                  AND TC.data <= %s)
-                                   +
-                               (SELECT COALESCE(SUM(C.rettifica_saldo), 0.0)
-                                FROM Conti C
-                                         JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
-                                WHERE AF.id_famiglia = %s
-                                  AND C.tipo NOT IN ('Investimento', 'Fondo Pensione')) AS liquidita_totale
-                        """, (id_famiglia, data_fine, id_famiglia, data_fine, id_famiglia))
-            liquidita_totale = cur.fetchone()['liquidita_totale'] or 0.0
-            print(f"DEBUG (ottieni_riepilogo_patrimonio_famiglia_aggregato): Liquidità totale: {liquidita_totale}")
-
-            # 2. Investimenti totali (Asset + Fondi Pensione di tutti gli utenti della famiglia)
-            cur.execute("""
-                        SELECT (SELECT COALESCE(SUM(A.quantita * A.prezzo_attuale_manuale), 0.0)
-                                FROM Asset A
-                                         JOIN Conti C ON A.id_conto = C.id_conto
-                                         JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
-                                WHERE AF.id_famiglia = %s
-                                  AND C.tipo = 'Investimento')
-                                   +
-                               (SELECT COALESCE(SUM(C.valore_manuale), 0.0)
-                                FROM Conti C
-                                         JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
-                                WHERE AF.id_famiglia = %s
-                                  AND C.tipo = 'Fondo Pensione') AS investimenti_totali
-                        """, (id_famiglia, id_famiglia))
-            investimenti_totali = cur.fetchone()['investimenti_totali'] or 0.0
-            print(
-                f"DEBUG (ottieni_riepilogo_patrimonio_famiglia_aggregato): Investimenti totali: {investimenti_totali}")
-
-            patrimonio_netto = liquidita_totale + investimenti_totali
-            print(f"DEBUG (ottieni_riepilogo_patrimonio_famiglia_aggregato): Patrimonio netto: {patrimonio_netto}")
-
-            return {'liquidita': liquidita_totale, 'investimenti': investimenti_totali,
-                    'patrimonio_netto': patrimonio_netto}
-    except Exception as e:
-        print(f"[ERRORE] Errore durante il calcolo del riepilogo patrimonio famiglia aggregato: {e}")
-        return {'liquidita': 0, 'investimenti': 0, 'patrimonio_netto': 0}
-
-
-def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese):
-    """
-    Calcola la liquidità, gli investimenti e il patrimonio netto per un singolo utente,
-    includendo la sua quota dei conti condivisi.
-    """
-    data_fine = (datetime.date(anno, mese, 1) + relativedelta(months=1) - relativedelta(days=1)).strftime('%Y-%m-%d')
-
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            print(f"DEBUG (ottieni_riepilogo_patrimonio_utente): Calcolo patrimonio per utente {id_utente}")
-
-            # 1. Liquidità personale (conti non di investimento)
-            cur.execute("""
-                        SELECT COALESCE(SUM(T.importo), 0.0) as liquidita_transazioni
-                        FROM Transazioni T
-                                 JOIN Conti C ON T.id_conto = C.id_conto
-                        WHERE C.id_utente = %s
-                          AND C.tipo NOT IN ('Investimento', 'Fondo Pensione')
-                          AND T.data <= %s
-                        """, (id_utente, data_fine))
-            liquidita_transazioni = cur.fetchone()['liquidita_transazioni'] or 0.0
-
-            cur.execute("""
-                        SELECT COALESCE(SUM(rettifica_saldo), 0.0) as rettifiche_personali
-                        FROM Conti
-                        WHERE id_utente = %s
-                          AND tipo NOT IN ('Investimento', 'Fondo Pensione')
-                        """, (id_utente,))
-            rettifiche_personali = cur.fetchone()['rettifiche_personali'] or 0.0
-            liquidita_personale = liquidita_transazioni + rettifiche_personali
-            print(
-                f"DEBUG (ottieni_riepilogo_patrimonio_utente): Liquidità personale (solo conti privati): {liquidita_personale}")
-
-            # 2. Investimenti personali (Asset + Fondi Pensione)
-            cur.execute("""
-                        SELECT (SELECT COALESCE(SUM(A.quantita * A.prezzo_attuale_manuale), 0.0)
-                                FROM Asset A
-                                         JOIN Conti C ON A.id_conto = C.id_conto
-                                WHERE C.id_utente = %s
-                                  AND C.tipo = 'Investimento')
-                                   +
-                               (SELECT COALESCE(SUM(C.valore_manuale), 0.0)
-                                FROM Conti C
-                                WHERE C.id_utente = %s
-                                  AND C.tipo = 'Fondo Pensione') as investimenti_personali
-                        """, (id_utente, id_utente))
-            investimenti_personali = cur.fetchone()['investimenti_personali'] or 0.0
-            print(
-                f"DEBUG (ottieni_riepilogo_patrimonio_utente): Investimenti personali (solo conti privati): {investimenti_personali}")
-
-            # 3. Quota parte dei conti condivisi (Logica rivista per maggiore robustezza)
-            quota_condivisa = 0.0
-
-            # Ottiene tutti i conti condivisi a cui l'utente partecipa e il numero di partecipanti per ciascuno
-            cur.execute("""
-                        SELECT CC.id_conto_condiviso,
-                               (SELECT COALESCE(SUM(importo), 0.0)
-                                FROM TransazioniCondivise
-                                WHERE id_conto_condiviso = CC.id_conto_condiviso
-                                  AND data <= %s) as saldo_conto,
-                               CASE
-                                   WHEN CC.tipo_condivisione = 'famiglia' THEN (SELECT COUNT(*)
-                                                                                FROM Appartenenza_Famiglia
-                                                                                WHERE id_famiglia = CC.id_famiglia)
-                                   ELSE (SELECT COUNT(*)
-                                         FROM PartecipazioneContoCondiviso
-                                         WHERE id_conto_condiviso = CC.id_conto_condiviso)
-                                   END           as num_partecipanti
-                        FROM ContiCondivisi CC
-                        WHERE CC.id_conto_condiviso IN (
-                            -- Conti a cui partecipo direttamente
-                            SELECT id_conto_condiviso
-                            FROM PartecipazioneContoCondiviso
-                            WHERE id_utente = %s
-                            UNION
-                            -- Conti della mia famiglia
-                            SELECT id_conto_condiviso
-                            FROM ContiCondivisi
-                            WHERE tipo_condivisione = 'famiglia'
-                              AND id_famiglia = (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s))
-                        """, (data_fine, id_utente, id_utente))
-
-            conti_condivisi_da_calcolare = cur.fetchall()
-            print(
-                f"DEBUG (ottieni_riepilogo_patrimonio_utente): Conti condivisi da calcolare: {conti_condivisi_da_calcolare}")
-
-            for row in conti_condivisi_da_calcolare:
-                id_conto_cond = row['id_conto_condiviso']
-                saldo_conto = float(row['saldo_conto']) if row['saldo_conto'] is not None else 0.0
-                num_partecipanti = int(row['num_partecipanti']) if row['num_partecipanti'] is not None else 0
-                
-                if num_partecipanti > 0:
-                    quota_condivisa += (saldo_conto / num_partecipanti)
-                    print(
-                        f"DEBUG (ottieni_riepilogo_patrimonio_utente):   Conto ID {id_conto_cond}, Saldo: {saldo_conto}, Partecipanti: {num_partecipanti}, Quota: {saldo_conto / num_partecipanti}")
-                else:
-                    print(
-                        f"DEBUG (ottieni_riepilogo_patrimonio_utente):   Conto ID {id_conto_cond} saltato (0 partecipanti).")
-
-            print(f"DEBUG (ottieni_riepilogo_patrimonio_utente): Quota condivisa totale: {quota_condivisa}")
-
-            liquidita_totale = liquidita_personale + quota_condivisa
-            patrimonio_netto = liquidita_totale + investimenti_personali
-
-            return {'liquidita': liquidita_totale, 'investimenti': investimenti_personali,
-                    'patrimonio_netto': patrimonio_netto}
-    except Exception as e:
-        print(f"[ERRORE] Errore durante il calcolo del riepilogo patrimonio utente: {e}")
-        return {'liquidita': 0, 'investimenti': 0, 'patrimonio_netto': 0}
 
 
 def ottieni_dettagli_famiglia(id_famiglia, anno, mese):
@@ -2454,9 +2622,12 @@ def ottieni_budget_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
                 family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
             
             for row in rows:
-                # Decrypt budget limit (ALWAYS Family Key)
+                # Decrypt budget limit (Try Family Key, then Master Key)
                 if family_key:
-                    decrypted = _decrypt_if_key(row['importo_limite'], family_key, crypto)
+                    decrypted = _decrypt_if_key(row['importo_limite'], family_key, crypto, silent=True)
+                    # If decryption failed (returns [ENCRYPTED]) and it looks encrypted, try master_key
+                    if decrypted == "[ENCRYPTED]" and isinstance(row['importo_limite'], str) and row['importo_limite'].startswith("gAAAAA"):
+                         decrypted = _decrypt_if_key(row['importo_limite'], master_key, crypto)
                 else:
                     decrypted = row['importo_limite'] # Cannot decrypt without family key
                 try:
@@ -2553,9 +2724,12 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64=Non
                 
                 spesa = abs(row['spesa_totale'])
                 
-                # Decrypt importo_limite (ALWAYS Family Key)
+                # Decrypt importo_limite (Try Family Key, then Master Key)
                 if family_key:
-                    decrypted_limite = _decrypt_if_key(row['importo_limite'], family_key, crypto)
+                    decrypted_limite = _decrypt_if_key(row['importo_limite'], family_key, crypto, silent=True)
+                    # If decryption failed (returns [ENCRYPTED]) and it looks encrypted, try master_key
+                    if decrypted_limite == "[ENCRYPTED]" and isinstance(row['importo_limite'], str) and row['importo_limite'].startswith("gAAAAA"):
+                         decrypted_limite = _decrypt_if_key(row['importo_limite'], master_key, crypto)
                 else:
                     decrypted_limite = row['importo_limite'] # Cannot decrypt without family key
                 try:
@@ -2767,7 +2941,27 @@ def ottieni_storico_budget_per_export(id_famiglia, lista_periodi):
 # --- Funzioni Prestiti ---
 def aggiungi_prestito(id_famiglia, nome, tipo, descrizione, data_inizio, numero_mesi_totali, importo_finanziato,
                       importo_interessi, importo_residuo, importo_rata, giorno_scadenza_rata, id_conto_default=None,
-                      id_conto_condiviso_default=None, id_sottocategoria_default=None, addebito_automatico=False):
+                      id_conto_condiviso_default=None, id_sottocategoria_default=None, addebito_automatico=False,
+                      master_key_b64=None, id_utente=None):
+    
+    # Encrypt sensitive data if keys available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    family_key = None
+    if master_key and id_utente:
+        try:
+            with get_db_connection() as con:
+                cur = con.cursor()
+                cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
+                row = cur.fetchone()
+                if row and row['chiave_famiglia_criptata']:
+                    family_key_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+                    family_key = base64.b64decode(family_key_b64)
+        except Exception:
+            pass
+
+    encrypted_nome = _encrypt_if_key(nome, family_key, crypto)
+    encrypted_descrizione = _encrypt_if_key(descrizione, family_key, crypto)
+
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -2779,9 +2973,9 @@ def aggiungi_prestito(id_famiglia, nome, tipo, descrizione, data_inizio, numero_
                                               id_conto_condiviso_pagamento_default, id_sottocategoria_pagamento_default,
                                               addebito_automatico)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id_prestito
-                        """, (id_famiglia, nome, tipo, descrizione, data_inizio, numero_mesi_totali, importo_finanziato,
+                        """, (id_famiglia, encrypted_nome, tipo, encrypted_descrizione, data_inizio, numero_mesi_totali, importo_finanziato,
                               importo_interessi, importo_residuo, importo_rata, giorno_scadenza_rata, id_conto_default,
-                              id_conto_condiviso_default, id_sottocategoria_default, addebito_automatico))
+                              id_conto_condiviso_default, id_sottocategoria_default, bool(addebito_automatico)))
             return cur.fetchone()['id_prestito']
     except Exception as e:
         print(f"[ERRORE] Errore generico durante l'aggiunta del prestito: {e}")
@@ -2790,7 +2984,32 @@ def aggiungi_prestito(id_famiglia, nome, tipo, descrizione, data_inizio, numero_
 
 def modifica_prestito(id_prestito, nome, tipo, descrizione, data_inizio, numero_mesi_totali, importo_finanziato,
                       importo_interessi, importo_residuo, importo_rata, giorno_scadenza_rata, id_conto_default=None,
-                      id_conto_condiviso_default=None, id_sottocategoria_default=None, addebito_automatico=False):
+                      id_conto_condiviso_default=None, id_sottocategoria_default=None, addebito_automatico=False,
+                      master_key_b64=None, id_utente=None):
+    
+    # Encrypt sensitive data if keys available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    family_key = None
+    if master_key and id_utente:
+        try:
+            with get_db_connection() as con:
+                cur = con.cursor()
+                # Need id_famiglia to get key
+                cur.execute("SELECT id_famiglia FROM Prestiti WHERE id_prestito = %s", (id_prestito,))
+                p_row = cur.fetchone()
+                if p_row:
+                    id_famiglia = p_row['id_famiglia']
+                    cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
+                    row = cur.fetchone()
+                    if row and row['chiave_famiglia_criptata']:
+                        family_key_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+                        family_key = base64.b64decode(family_key_b64)
+        except Exception:
+            pass
+
+    encrypted_nome = _encrypt_if_key(nome, family_key, crypto)
+    encrypted_descrizione = _encrypt_if_key(descrizione, family_key, crypto)
+
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -2812,9 +3031,9 @@ def modifica_prestito(id_prestito, nome, tipo, descrizione, data_inizio, numero_
                             id_sottocategoria_pagamento_default = %s,
                             addebito_automatico            = %s
                         WHERE id_prestito = %s
-                        """, (nome, tipo, descrizione, data_inizio, numero_mesi_totali, importo_finanziato,
+                        """, (encrypted_nome, tipo, encrypted_descrizione, data_inizio, numero_mesi_totali, importo_finanziato,
                               importo_interessi, importo_residuo, importo_rata, giorno_scadenza_rata, id_conto_default,
-                              id_conto_condiviso_default, id_sottocategoria_default, addebito_automatico, id_prestito))
+                              id_conto_condiviso_default, id_sottocategoria_default, bool(addebito_automatico), id_prestito))
             return True
     except Exception as e:
         print(f"[ERRORE] Errore generico durante la modifica del prestito: {e}")
@@ -2833,7 +3052,7 @@ def elimina_prestito(id_prestito):
         return None
 
 
-def ottieni_prestiti_famiglia(id_famiglia):
+def ottieni_prestiti_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
     try:
         with get_db_connection() as con:
             # con.row_factory = sqlite3.Row # Removed for Supabase
@@ -2851,7 +3070,27 @@ def ottieni_prestiti_famiglia(id_famiglia):
                         WHERE P.id_famiglia = %s
                         ORDER BY P.data_inizio DESC
                         """, (id_famiglia,))
-            return [dict(row) for row in cur.fetchall()]
+            results = [dict(row) for row in cur.fetchall()]
+
+            # Decrypt sensitive data if keys available
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            family_key = None
+            if master_key and id_utente:
+                try:
+                    cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
+                    row = cur.fetchone()
+                    if row and row['chiave_famiglia_criptata']:
+                        family_key_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+                        family_key = base64.b64decode(family_key_b64)
+                except Exception:
+                    pass
+
+            if family_key:
+                for row in results:
+                    row['nome'] = _decrypt_if_key(row['nome'], family_key, crypto)
+                    row['descrizione'] = _decrypt_if_key(row['descrizione'], family_key, crypto)
+            
+            return results
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero prestiti: {e}")
         return []
@@ -2907,7 +3146,7 @@ def effettua_pagamento_rata(id_prestito, id_conto_pagamento, importo_pagato, dat
 
 # --- Funzioni Immobili ---
 def aggiungi_immobile(id_famiglia, nome, via, citta, valore_acquisto, valore_attuale, nuda_proprieta,
-                      id_prestito_collegato=None):
+                      id_prestito_collegato=None, master_key_b64=None, id_utente=None):
     # Converti il valore del dropdown in int se necessario
     db_id_prestito = None
     if id_prestito_collegato is not None and id_prestito_collegato != "None":
@@ -2915,6 +3154,26 @@ def aggiungi_immobile(id_famiglia, nome, via, citta, valore_acquisto, valore_att
             db_id_prestito = int(id_prestito_collegato)
         except (ValueError, TypeError):
             db_id_prestito = None
+            
+    # Encrypt sensitive data if keys available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    family_key = None
+    if master_key and id_utente:
+        try:
+            with get_db_connection() as con:
+                cur = con.cursor()
+                cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
+                row = cur.fetchone()
+                if row and row['chiave_famiglia_criptata']:
+                    family_key_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+                    family_key = base64.b64decode(family_key_b64)
+        except Exception:
+            pass
+
+    encrypted_nome = _encrypt_if_key(nome, family_key, crypto)
+    encrypted_via = _encrypt_if_key(via, family_key, crypto)
+    encrypted_citta = _encrypt_if_key(citta, family_key, crypto)
+
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -2924,7 +3183,7 @@ def aggiungi_immobile(id_famiglia, nome, via, citta, valore_acquisto, valore_att
                                               nuda_proprieta, id_prestito_collegato)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id_immobile
                         """,
-                        (id_famiglia, nome, via, citta, valore_acquisto, valore_attuale, 1 if nuda_proprieta else 0,
+                        (id_famiglia, encrypted_nome, encrypted_via, encrypted_citta, valore_acquisto, valore_attuale, bool(nuda_proprieta),
                          db_id_prestito))
             return cur.fetchone()['id_immobile']
     except Exception as e:
@@ -2933,7 +3192,7 @@ def aggiungi_immobile(id_famiglia, nome, via, citta, valore_acquisto, valore_att
 
 
 def modifica_immobile(id_immobile, nome, via, citta, valore_acquisto, valore_attuale, nuda_proprieta,
-                      id_prestito_collegato=None):
+                      id_prestito_collegato=None, master_key_b64=None, id_utente=None):
     # Converti il valore del dropdown in int se necessario
     db_id_prestito = None
     if id_prestito_collegato is not None and id_prestito_collegato != "None":
@@ -2941,6 +3200,31 @@ def modifica_immobile(id_immobile, nome, via, citta, valore_acquisto, valore_att
             db_id_prestito = int(id_prestito_collegato)
         except (ValueError, TypeError):
             db_id_prestito = None
+            
+    # Encrypt sensitive data if keys available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    family_key = None
+    if master_key and id_utente:
+        try:
+            with get_db_connection() as con:
+                cur = con.cursor()
+                # Need id_famiglia to get key
+                cur.execute("SELECT id_famiglia FROM Immobili WHERE id_immobile = %s", (id_immobile,))
+                i_row = cur.fetchone()
+                if i_row:
+                    id_famiglia = i_row['id_famiglia']
+                    cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
+                    row = cur.fetchone()
+                    if row and row['chiave_famiglia_criptata']:
+                        family_key_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+                        family_key = base64.b64decode(family_key_b64)
+        except Exception:
+            pass
+
+    encrypted_nome = _encrypt_if_key(nome, family_key, crypto)
+    encrypted_via = _encrypt_if_key(via, family_key, crypto)
+    encrypted_citta = _encrypt_if_key(citta, family_key, crypto)
+
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -2956,7 +3240,7 @@ def modifica_immobile(id_immobile, nome, via, citta, valore_acquisto, valore_att
                             id_prestito_collegato = %s
                         WHERE id_immobile = %s
                         """,
-                        (nome, via, citta, valore_acquisto, valore_attuale, 1 if nuda_proprieta else 0, db_id_prestito,
+                        (encrypted_nome, encrypted_via, encrypted_citta, valore_acquisto, valore_attuale, bool(nuda_proprieta), db_id_prestito,
                          id_immobile))
             return True
     except Exception as e:
@@ -2976,7 +3260,7 @@ def elimina_immobile(id_immobile):
         return None
 
 
-def ottieni_immobili_famiglia(id_famiglia):
+def ottieni_immobili_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
     try:
         with get_db_connection() as con:
             # con.row_factory = sqlite3.Row # Removed for Supabase
@@ -2988,7 +3272,31 @@ def ottieni_immobili_famiglia(id_famiglia):
                         WHERE I.id_famiglia = %s
                         ORDER BY I.nome
                         """, (id_famiglia,))
-            return [dict(row) for row in cur.fetchall()]
+            results = [dict(row) for row in cur.fetchall()]
+
+            # Decrypt sensitive data if keys available
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            family_key = None
+            if master_key and id_utente:
+                try:
+                    cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
+                    row = cur.fetchone()
+                    if row and row['chiave_famiglia_criptata']:
+                        family_key_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+                        family_key = base64.b64decode(family_key_b64)
+                except Exception:
+                    pass
+
+            if family_key:
+                for row in results:
+                    row['nome'] = _decrypt_if_key(row['nome'], family_key, crypto)
+                    row['via'] = _decrypt_if_key(row['via'], family_key, crypto)
+                    row['citta'] = _decrypt_if_key(row['citta'], family_key, crypto)
+                    # Also decrypt linked loan name if present
+                    if row.get('nome_mutuo'):
+                        row['nome_mutuo'] = _decrypt_if_key(row['nome_mutuo'], family_key, crypto)
+            
+            return results
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero immobili: {e}")
         return []
@@ -3281,102 +3589,7 @@ def aggiorna_prezzo_asset(id_asset, nuovo_prezzo):
 
 
 # --- Funzioni Prestiti ---
-def aggiungi_prestito(id_conto, nome_debitore, importo_totale, data_inizio, data_scadenza, tasso_interesse, descrizione, master_key_b64=None):
-    # Encrypt if key available
-    crypto, master_key = _get_crypto_and_key(master_key_b64)
-    encrypted_nome = _encrypt_if_key(nome_debitore, master_key, crypto)
-    encrypted_desc = _encrypt_if_key(descrizione, master_key, crypto)
 
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            cur.execute(
-                "INSERT INTO Prestiti (id_conto, nome_debitore, importo_totale, data_inizio, data_scadenza, tasso_interesse, descrizione) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id_prestito",
-                (id_conto, encrypted_nome, importo_totale, data_inizio, data_scadenza, tasso_interesse, encrypted_desc))
-            return cur.fetchone()['id_prestito']
-    except Exception as e:
-        print(f"[ERRORE] Errore aggiunta prestito: {e}")
-        return None
-
-def modifica_prestito(id_prestito, nome_debitore, importo_totale, data_inizio, data_scadenza, tasso_interesse, descrizione, master_key_b64=None):
-    # Encrypt if key available
-    crypto, master_key = _get_crypto_and_key(master_key_b64)
-    encrypted_nome = _encrypt_if_key(nome_debitore, master_key, crypto)
-    encrypted_desc = _encrypt_if_key(descrizione, master_key, crypto)
-
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            cur.execute(
-                "UPDATE Prestiti SET nome_debitore = %s, importo_totale = %s, data_inizio = %s, data_scadenza = %s, tasso_interesse = %s, descrizione = %s WHERE id_prestito = %s",
-                (encrypted_nome, importo_totale, data_inizio, data_scadenza, tasso_interesse, encrypted_desc, id_prestito))
-            return cur.rowcount > 0
-    except Exception as e:
-        print(f"[ERRORE] Errore modifica prestito: {e}")
-        return False
-
-def elimina_prestito(id_prestito):
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            cur.execute("DELETE FROM Prestiti WHERE id_prestito = %s", (id_prestito,))
-            return cur.rowcount > 0
-    except Exception as e:
-        print(f"[ERRORE] Errore eliminazione prestito: {e}")
-        return False
-
-def ottieni_prestiti(id_conto, master_key_b64=None):
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            cur.execute("SELECT * FROM Prestiti WHERE id_conto = %s", (id_conto,))
-            prestiti = [dict(row) for row in cur.fetchall()]
-            
-            # Decrypt if key available
-            crypto, master_key = _get_crypto_and_key(master_key_b64)
-            if master_key:
-                for p in prestiti:
-                    p['nome_debitore'] = _decrypt_if_key(p['nome_debitore'], master_key, crypto)
-                    p['descrizione'] = _decrypt_if_key(p['descrizione'], master_key, crypto)
-            
-            return prestiti
-    except Exception as e:
-        print(f"[ERRORE] Errore recupero prestiti: {e}")
-        return []
-
-def aggiungi_rata_prestito(id_prestito, data_pagamento, importo_rata, note, master_key_b64=None):
-    # Encrypt if key available
-    crypto, master_key = _get_crypto_and_key(master_key_b64)
-    encrypted_note = _encrypt_if_key(note, master_key, crypto)
-
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            cur.execute(
-                "INSERT INTO RatePrestiti (id_prestito, data_pagamento, importo_rata, note) VALUES (%s, %s, %s, %s) RETURNING id_rata",
-                (id_prestito, data_pagamento, importo_rata, encrypted_note))
-            return cur.fetchone()['id_rata']
-    except Exception as e:
-        print(f"[ERRORE] Errore aggiunta rata prestito: {e}")
-        return None
-
-def ottieni_rate_prestito(id_prestito, master_key_b64=None):
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            cur.execute("SELECT * FROM RatePrestiti WHERE id_prestito = %s ORDER BY data_pagamento", (id_prestito,))
-            rate = [dict(row) for row in cur.fetchall()]
-            
-            # Decrypt if key available
-            crypto, master_key = _get_crypto_and_key(master_key_b64)
-            if master_key:
-                for r in rate:
-                    r['note'] = _decrypt_if_key(r['note'], master_key, crypto)
-            
-            return rate
-    except Exception as e:
-        print(f"[ERRORE] Errore recupero rate prestito: {e}")
-        return []
 
 
 # --- Funzioni Giroconti ---
@@ -3514,7 +3727,25 @@ def ottieni_prima_famiglia_utente(id_utente):
 
 # --- NUOVE FUNZIONI PER SPESE FISSE ---
 def aggiungi_spesa_fissa(id_famiglia, nome, importo, id_conto_personale, id_conto_condiviso, id_sottocategoria,
-                        giorno_addebito, attiva, addebito_automatico=False):
+                        giorno_addebito, attiva, addebito_automatico=False, master_key_b64=None, id_utente=None):
+    
+    # Encrypt nome if keys available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    family_key = None
+    if master_key and id_utente:
+        try:
+            with get_db_connection() as con:
+                cur = con.cursor()
+                cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
+                row = cur.fetchone()
+                if row and row['chiave_famiglia_criptata']:
+                    family_key_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+                    family_key = base64.b64decode(family_key_b64)
+        except Exception:
+            pass
+
+    encrypted_nome = _encrypt_if_key(nome, family_key, crypto)
+
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -3526,8 +3757,8 @@ def aggiungi_spesa_fissa(id_famiglia, nome, importo, id_conto_personale, id_cont
             cur.execute("""
                 INSERT INTO SpeseFisse (id_famiglia, nome, importo, id_conto_personale_addebito, id_conto_condiviso_addebito, id_categoria, id_sottocategoria, giorno_addebito, attiva, addebito_automatico)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id_spesa_fissa
-            """, (id_famiglia, nome, importo, id_conto_personale, id_conto_condiviso, id_categoria, id_sottocategoria, giorno_addebito,
-                  1 if attiva else 0, 1 if addebito_automatico else 0))
+            """, (id_famiglia, encrypted_nome, importo, id_conto_personale, id_conto_condiviso, id_categoria, id_sottocategoria, giorno_addebito,
+                  bool(attiva), bool(addebito_automatico)))
             return cur.fetchone()['id_spesa_fissa']
     except Exception as e:
         print(f"[ERRORE] Errore durante l'aggiunta della spesa fissa: {e}")
@@ -3535,7 +3766,30 @@ def aggiungi_spesa_fissa(id_famiglia, nome, importo, id_conto_personale, id_cont
 
 
 def modifica_spesa_fissa(id_spesa_fissa, nome, importo, id_conto_personale, id_conto_condiviso, id_sottocategoria,
-                        giorno_addebito, attiva, addebito_automatico=False):
+                        giorno_addebito, attiva, addebito_automatico=False, master_key_b64=None, id_utente=None):
+    
+    # Encrypt nome if keys available
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    family_key = None
+    if master_key and id_utente:
+        try:
+            with get_db_connection() as con:
+                cur = con.cursor()
+                # Need id_famiglia to get key
+                cur.execute("SELECT id_famiglia FROM SpeseFisse WHERE id_spesa_fissa = %s", (id_spesa_fissa,))
+                sf_row = cur.fetchone()
+                if sf_row:
+                    id_famiglia = sf_row['id_famiglia']
+                    cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
+                    row = cur.fetchone()
+                    if row and row['chiave_famiglia_criptata']:
+                        family_key_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+                        family_key = base64.b64decode(family_key_b64)
+        except Exception:
+            pass
+
+    encrypted_nome = _encrypt_if_key(nome, family_key, crypto)
+
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -3548,8 +3802,8 @@ def modifica_spesa_fissa(id_spesa_fissa, nome, importo, id_conto_personale, id_c
                 UPDATE SpeseFisse
                 SET nome = %s, importo = %s, id_conto_personale_addebito = %s, id_conto_condiviso_addebito = %s, id_categoria = %s, id_sottocategoria = %s, giorno_addebito = %s, attiva = %s, addebito_automatico = %s
                 WHERE id_spesa_fissa = %s
-            """, (nome, importo, id_conto_personale, id_conto_condiviso, id_categoria, id_sottocategoria, giorno_addebito,
-                  1 if attiva else 0, 1 if addebito_automatico else 0, id_spesa_fissa))
+            """, (encrypted_nome, importo, id_conto_personale, id_conto_condiviso, id_categoria, id_sottocategoria, giorno_addebito,
+                  bool(attiva), bool(addebito_automatico), id_spesa_fissa))
             return cur.rowcount > 0
     except Exception as e:
         print(f"[ERRORE] Errore durante la modifica della spesa fissa: {e}")
@@ -3579,7 +3833,7 @@ def elimina_spesa_fissa(id_spesa_fissa):
         return False
 
 
-def ottieni_spese_fisse_famiglia(id_famiglia):
+def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
     try:
         with get_db_connection() as con:
             # con.row_factory = sqlite3.Row # Removed for Supabase
@@ -3602,7 +3856,26 @@ def ottieni_spese_fisse_famiglia(id_famiglia):
                 WHERE SF.id_famiglia = %s
                 ORDER BY SF.nome
             """, (id_famiglia,))
-            return [dict(row) for row in cur.fetchall()]
+            spese = [dict(row) for row in cur.fetchall()]
+
+            # Decrypt nome if keys available
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            family_key = None
+            if master_key and id_utente:
+                try:
+                    cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
+                    row = cur.fetchone()
+                    if row and row['chiave_famiglia_criptata']:
+                        family_key_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+                        family_key = base64.b64decode(family_key_b64)
+                except Exception:
+                    pass
+
+            if family_key:
+                for spesa in spese:
+                    spesa['nome'] = _decrypt_if_key(spesa['nome'], family_key, crypto)
+
+            return spese
     except Exception as e:
         print(f"[ERRORE] Errore durante il recupero delle spese fisse: {e}")
         return []

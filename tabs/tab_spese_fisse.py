@@ -52,7 +52,9 @@ class SpeseFisseTab(ft.Container):
         id_famiglia = self.controller.get_family_id()
         if not id_famiglia: return
 
-        spese_fisse = ottieni_spese_fisse_famiglia(id_famiglia)
+        master_key_b64 = self.controller.page.session.get("master_key")
+        current_user_id = self.controller.get_user_id()
+        spese_fisse = ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64, current_user_id)
         self.dt_spese_fisse.rows.clear()
 
         if not spese_fisse:
@@ -149,23 +151,27 @@ class SpeseFisseTab(ft.Container):
             success = False
             if spesa['id_conto_personale_addebito']:
                 # Transazione su conto personale
+                master_key_b64 = self.controller.page.session.get("master_key")
                 success = aggiungi_transazione(
                     id_conto=spesa['id_conto_personale_addebito'],
                     data=data_oggi,
                     descrizione=descrizione,
                     importo=importo,
-                    id_sottocategoria=id_sottocategoria
+                    id_sottocategoria=id_sottocategoria,
+                    master_key_b64=master_key_b64
                 )
             elif spesa['id_conto_condiviso_addebito']:
                 # Transazione su conto condiviso
                 id_utente = self.controller.get_user_id()
+                master_key_b64 = self.controller.page.session.get("master_key")
                 success = aggiungi_transazione_condivisa(
                     id_utente_autore=id_utente,
                     id_conto_condiviso=spesa['id_conto_condiviso_addebito'],
                     data=data_oggi,
                     descrizione=descrizione,
                     importo=importo,
-                    id_sottocategoria=id_sottocategoria
+                    id_sottocategoria=id_sottocategoria,
+                    master_key_b64=master_key_b64
                 )
             
             if success:

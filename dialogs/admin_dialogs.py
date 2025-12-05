@@ -323,9 +323,9 @@ class AdminDialogs:
         # Popola il dropdown con le sottocategorie
         categorie_con_sottocategorie = ottieni_categorie_e_sottocategorie(id_famiglia)
         opzioni = []
-        for cat_id, cat_data in categorie_con_sottocategorie.items():
+        for cat_data in categorie_con_sottocategorie:
             if cat_data['sottocategorie']:
-                opzioni.append(ft.dropdown.Option(key=f"cat_{cat_id}", text=cat_data['nome_categoria'], disabled=True))
+                opzioni.append(ft.dropdown.Option(key=f"cat_{cat_data['id_categoria']}", text=cat_data['nome_categoria'], disabled=True))
                 for sub in cat_data['sottocategorie']:
                     opzioni.append(ft.dropdown.Option(key=sub['id_sottocategoria'], text=f"  - {sub['nome_sottocategoria']}"))
 
