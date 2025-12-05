@@ -18,11 +18,11 @@ class GirocontoDialog(ft.AlertDialog):
         self.modal = True
         self.title = ft.Text()
 
-        self.dd_conto_sorgente = ft.Dropdown()
-        self.dd_conto_destinazione = ft.Dropdown()
-        self.txt_importo = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
-        self.txt_descrizione = ft.TextField()
-        self.txt_data = ft.TextField(read_only=True)
+        self.dd_conto_sorgente = ft.Dropdown(expand=True)
+        self.dd_conto_destinazione = ft.Dropdown(expand=True)
+        self.txt_importo = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER, expand=True)
+        self.txt_descrizione = ft.TextField(expand=True)
+        self.txt_data_selezionata = ft.Text(size=16)
 
         self.content = ft.Column(
             [
@@ -30,7 +30,11 @@ class GirocontoDialog(ft.AlertDialog):
                 self.dd_conto_destinazione,
                 self.txt_importo,
                 self.txt_descrizione,
-                self.txt_data,
+                ft.Row([
+                    ft.Text(),  # Etichetta "Data:"
+                    self.txt_data_selezionata,
+                    ft.IconButton(icon=ft.Icons.CALENDAR_MONTH, on_click=self.apri_date_picker),
+                ], alignment=ft.MainAxisAlignment.START),
             ],
             tight=True,
             spacing=10,
@@ -52,9 +56,18 @@ class GirocontoDialog(ft.AlertDialog):
         self.txt_importo.label = self.loc.get("amount")
         self.txt_importo.prefix_text = self.loc.currencies[self.loc.currency]['symbol']
         self.txt_descrizione.label = self.loc.get("transfer_description_placeholder")
-        self.txt_data.label = self.loc.get("date")
+        self.content.controls[4].controls[0].value = self.loc.get("date") + ":"
         self.actions[0].text = self.loc.get("cancel")
         self.actions[1].text = self.loc.get("execute_transfer")
+
+    def apri_date_picker(self, e):
+        self.controller.date_picker.on_change = self.on_date_picker_change
+        self.controller.page.open(self.controller.date_picker)
+
+    def on_date_picker_change(self, e):
+        if self.controller.date_picker.value:
+            self.txt_data_selezionata.value = self.controller.date_picker.value.strftime('%Y-%m-%d')
+            if self.controller.page: self.controller.page.update()
 
     def chiudi_dialog(self, e):
         print(f"DEBUG: chiudi_dialog chiamato per {self}")
@@ -83,7 +96,7 @@ class GirocontoDialog(ft.AlertDialog):
         self.dd_conto_destinazione.value = None
         self.txt_importo.value = ""
         self.txt_descrizione.value = ""
-        self.txt_data.value = datetime.date.today().strftime('%Y-%m-%d')
+        self.txt_data_selezionata.value = datetime.date.today().strftime('%Y-%m-%d')
 
     def _popola_dropdowns(self):
         id_utente = self.controller.get_user_id()
@@ -99,7 +112,8 @@ class GirocontoDialog(ft.AlertDialog):
         opzioni_sorgente = []
         for c in conti_sorgente_filtrati:
             prefix = "C" if c['is_condiviso'] else "P"
-            opzioni_sorgente.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}"))
+            suffix = " (Condiviso)" if c['is_condiviso'] else ""
+            opzioni_sorgente.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}{suffix}"))
         self.dd_conto_sorgente.options = opzioni_sorgente
 
         # Popola conti DESTINAZIONE (tutti i conti della famiglia)
@@ -108,8 +122,8 @@ class GirocontoDialog(ft.AlertDialog):
         opzioni_destinazione = []
         for c in conti_destinazione_filtrati:
             prefix = "C" if c['is_condiviso'] else "P"
-            owner = f" ({c['proprietario']})" if not c['is_condiviso'] else ""
-            opzioni_destinazione.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}{owner}"))
+            suffix = " (Condiviso)" if c['is_condiviso'] else ""
+            opzioni_destinazione.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}{suffix}"))
         self.dd_conto_destinazione.options = opzioni_destinazione
 
     def _salva_giroconto(self, e):
@@ -159,7 +173,7 @@ class GirocontoDialog(ft.AlertDialog):
                 id_conto_sorgente, tipo_sorgente,
                 id_conto_destinazione, tipo_destinazione,
                 importo, self.txt_descrizione.value,
-                self.txt_data.value,
+                self.txt_data_selezionata.value,
                 master_key_b64=master_key_b64
             )
 

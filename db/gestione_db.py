@@ -1773,7 +1773,7 @@ def ottieni_tutti_i_conti_famiglia(id_famiglia, master_key_b64=None, id_utente=N
 
             # Conti Personali di tutti i membri della famiglia
             cur.execute("""
-                        SELECT C.id_conto, C.nome_conto, C.tipo, 0 as is_condiviso, U.nome as proprietario, C.id_utente
+                        SELECT C.id_conto, C.nome_conto, C.tipo, 0 as is_condiviso, U.username as proprietario, C.id_utente
                         FROM Conti C
                                  JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
                                  JOIN Utenti U ON C.id_utente = U.id_utente
@@ -1978,7 +1978,7 @@ def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese, mas
         with get_db_connection() as con:
             cur = con.cursor()
             
-            # 1. Liquidità (Tutti i membri)
+            # 1. Liquidità Personale (Tutti i membri)
             cur.execute("""
                 SELECT COALESCE(SUM(T.importo), 0.0) as val
                 FROM Transazioni T
@@ -1988,7 +1988,29 @@ def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese, mas
                   AND C.tipo NOT IN ('Investimento', 'Fondo Pensione')
                   AND T.data <= %s
             """, (id_famiglia, data_limite_str))
-            liquidita = cur.fetchone()['val'] or 0.0
+            liquidita_personale = cur.fetchone()['val'] or 0.0
+            
+            # 1b. Liquidità Conti Condivisi
+            cur.execute("""
+                SELECT COALESCE(SUM(TC.importo), 0.0) as val
+                FROM TransazioniCondivise TC
+                JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
+                WHERE CC.id_famiglia = %s
+                  AND CC.tipo NOT IN ('Investimento')
+                  AND TC.data <= %s
+            """, (id_famiglia, data_limite_str))
+            liquidita_condivisa = cur.fetchone()['val'] or 0.0
+            
+            # Include rettifica_saldo for shared accounts
+            cur.execute("""
+                SELECT COALESCE(SUM(CAST(NULLIF(CAST(CC.rettifica_saldo AS TEXT), '') AS NUMERIC)), 0.0) as val
+                FROM ContiCondivisi CC
+                WHERE CC.id_famiglia = %s
+                  AND CC.tipo NOT IN ('Investimento')
+            """, (id_famiglia,))
+            rettifica_condivisi = cur.fetchone()['val'] or 0.0
+            
+            liquidita = liquidita_personale + liquidita_condivisa + rettifica_condivisi
             
             # 2. Investimenti (Tutti i membri)
             cur.execute("""
@@ -2429,7 +2451,7 @@ def ottieni_totali_famiglia(id_famiglia, master_key_b64=None, id_utente_richiede
         return []
 
 
-def ottieni_dettagli_famiglia(id_famiglia, anno, mese):
+def ottieni_dettagli_famiglia(id_famiglia, anno, mese, master_key_b64=None, id_utente=None):
     data_inizio = f"{anno}-{mese:02d}-01"
     ultimo_giorno = (datetime.date(anno, mese, 1) + relativedelta(months=1) - relativedelta(days=1)).day
     data_fine = f"{anno}-{mese:02d}-{ultimo_giorno}"
@@ -2440,12 +2462,16 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese):
             cur = con.cursor()
             cur.execute("""
                         -- Transazioni Personali
-                        SELECT COALESCE(U.nome || ' ' || U.cognome, U.username) AS utente_nome,
+                        SELECT U.username AS utente_username,
+                               U.nome AS utente_nome_raw,
+                               U.cognome AS utente_cognome_raw,
                                T.data,
                                T.descrizione,
-                               COALESCE(Cat.nome_categoria || ' - ' || SCat.nome_sottocategoria, Cat.nome_categoria, SCat.nome_sottocategoria) AS nome_sottocategoria,
+                               SCat.nome_sottocategoria,
+                               Cat.nome_categoria,
                                C.nome_conto                                     AS conto_nome,
-                               T.importo
+                               T.importo,
+                               C.id_utente as owner_id_utente
                         FROM Transazioni T
                                  JOIN Conti C ON T.id_conto = C.id_conto
                                  JOIN Utenti U ON C.id_utente = U.id_utente
@@ -2456,12 +2482,16 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese):
                           AND C.tipo != 'Fondo Pensione' AND T.data BETWEEN %s AND %s AND UPPER(T.descrizione) NOT LIKE '%%SALDO INIZIALE%%'
                         UNION ALL
                         -- Transazioni Condivise
-                        SELECT COALESCE(U.nome || ' ' || U.cognome, U.username) AS utente_nome,
+                        SELECT U.username AS utente_username,
+                               U.nome AS utente_nome_raw,
+                               U.cognome AS utente_cognome_raw,
                                TC.data,
                                TC.descrizione,
-                               COALESCE(Cat.nome_categoria || ' - ' || SCat.nome_sottocategoria, Cat.nome_categoria, SCat.nome_sottocategoria) AS nome_sottocategoria,
+                               SCat.nome_sottocategoria,
+                               Cat.nome_categoria,
                                CC.nome_conto                                    AS conto_nome,
-                               TC.importo
+                               TC.importo,
+                               NULL as owner_id_utente
                         FROM TransazioniCondivise TC
                                  JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
                                  LEFT JOIN Utenti U
@@ -2471,9 +2501,80 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese):
                         WHERE CC.id_famiglia = %s
                           AND TC.data BETWEEN %s AND %s
                           AND UPPER(TC.descrizione) NOT LIKE '%%SALDO INIZIALE%%' -- Include tutti i conti condivisi della famiglia
-                        ORDER BY data DESC, utente_nome, conto_nome
+                        ORDER BY data DESC, utente_username, conto_nome
                         """, (id_famiglia, data_inizio, data_fine, id_famiglia, data_inizio, data_fine))
-            return [dict(row) for row in cur.fetchall()]
+            results = [dict(row) for row in cur.fetchall()]
+            
+            # Decrypt if key available
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            family_key = None
+            if master_key and id_utente:
+                family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+            
+            for row in results:
+                owner_id = row.get('owner_id_utente')
+                
+                # Build display name: decrypt nome/cognome with master_key and combine
+                nome_raw = row.pop('utente_nome_raw', '') or ''
+                cognome_raw = row.pop('utente_cognome_raw', '') or ''
+                username = row.pop('utente_username', '') or 'Condiviso'
+                
+                # Decrypt nome/cognome if they look encrypted
+                if master_key:
+                    if isinstance(nome_raw, str) and nome_raw.startswith('gAAAAA'):
+                        nome_raw = _decrypt_if_key(nome_raw, master_key, crypto, silent=True)
+                        if nome_raw == "[ENCRYPTED]":
+                            nome_raw = ''
+                    if isinstance(cognome_raw, str) and cognome_raw.startswith('gAAAAA'):
+                        cognome_raw = _decrypt_if_key(cognome_raw, master_key, crypto, silent=True)
+                        if cognome_raw == "[ENCRYPTED]":
+                            cognome_raw = ''
+                
+                # Build display name: prefer nome+cognome, fallback to username
+                if nome_raw or cognome_raw:
+                    row['utente_nome'] = f"{nome_raw} {cognome_raw}".strip()
+                else:
+                    row['utente_nome'] = username
+                
+                # Decrypt transaction data
+                descrizione_orig = row['descrizione']
+                conto_nome_orig = row['conto_nome']
+                
+                if owner_id is None:
+                    # Shared transaction: use family_key, fallback to master_key
+                    if family_key:
+                        row['descrizione'] = _decrypt_if_key(descrizione_orig, family_key, crypto, silent=True)
+                        if row['descrizione'] == "[ENCRYPTED]":
+                            # Retry with master_key using ORIGINAL data
+                            row['descrizione'] = _decrypt_if_key(descrizione_orig, master_key, crypto)
+                        row['conto_nome'] = _decrypt_if_key(conto_nome_orig, family_key, crypto, silent=True)
+                        if row['conto_nome'] == "[ENCRYPTED]":
+                            row['conto_nome'] = _decrypt_if_key(conto_nome_orig, master_key, crypto)
+                    elif master_key:
+                        row['descrizione'] = _decrypt_if_key(descrizione_orig, master_key, crypto)
+                        row['conto_nome'] = _decrypt_if_key(conto_nome_orig, master_key, crypto)
+                else:
+                    # Personal transaction: use master_key ONLY if it belongs to current user
+                    if id_utente and owner_id == id_utente and master_key:
+                        row['descrizione'] = _decrypt_if_key(row['descrizione'], master_key, crypto)
+                        row['conto_nome'] = _decrypt_if_key(row['conto_nome'], master_key, crypto)
+                    # Else: Cannot decrypt other user's data, leave as is
+                
+                # Category and subcategory names are encrypted with family_key
+                if family_key:
+                    row['nome_categoria'] = _decrypt_if_key(row['nome_categoria'], family_key, crypto) if row.get('nome_categoria') else None
+                    row['nome_sottocategoria'] = _decrypt_if_key(row['nome_sottocategoria'], family_key, crypto) if row.get('nome_sottocategoria') else None
+                
+                # Combine category and subcategory for display
+                cat = row.get('nome_categoria') or ''
+                subcat = row.get('nome_sottocategoria') or ''
+                if cat and subcat:
+                    row['nome_sottocategoria'] = f"{cat} - {subcat}"
+                elif cat:
+                    row['nome_sottocategoria'] = cat
+                # else: subcat only, or empty
+            
+            return results
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero dettagli famiglia: {e}")
         return []
@@ -3881,11 +3982,11 @@ def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=Non
         return []
 
 
-def check_e_processa_spese_fisse(id_famiglia):
+def check_e_processa_spese_fisse(id_famiglia, master_key_b64=None, id_utente=None):
     oggi = datetime.date.today()
     spese_eseguite = 0
     try:
-        spese_da_processare = ottieni_spese_fisse_famiglia(id_famiglia)
+        spese_da_processare = ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
         with get_db_connection() as con:
             cur = con.cursor()
             for spesa in spese_da_processare:

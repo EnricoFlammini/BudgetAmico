@@ -29,8 +29,8 @@ class TransactionDialog(ft.AlertDialog):
         self.radio_tipo_transazione = ft.RadioGroup(content=ft.Row())
         self.txt_descrizione_dialog = ft.TextField()
         self.txt_importo_dialog = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
-        self.dd_conto_dialog = ft.Dropdown()
-        self.dd_sottocategoria_dialog = ft.Dropdown()
+        self.dd_conto_dialog = ft.Dropdown(expand=True)
+        self.dd_sottocategoria_dialog = ft.Dropdown(expand=True)
         
         self.content = ft.Column(
             [
@@ -101,9 +101,9 @@ class TransactionDialog(ft.AlertDialog):
 
         opzioni_conto = []
         for c in conti_filtrati:
-            suffix = self.loc.get("shared_suffix") if c['is_condiviso'] else self.loc.get("personal_suffix")
+            suffix = " " + self.loc.get("shared_suffix") if c['is_condiviso'] else ""
             prefix = "C" if c['is_condiviso'] else "P"
-            opzioni_conto.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']} {suffix}"))
+            opzioni_conto.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}{suffix}"))
         self.dd_conto_dialog.options = opzioni_conto
 
         self.dd_sottocategoria_dialog.options = [ft.dropdown.Option(key=None, text=self.loc.get("no_category"))]

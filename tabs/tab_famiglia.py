@@ -131,7 +131,7 @@ class FamigliaTab(ft.Container):
             self.txt_investimenti_totali_famiglia.value = self.controller.loc.format_currency(riepilogo.get('investimenti', 0))
             self.txt_investimenti_totali_famiglia.visible = riepilogo.get('investimenti', 0) > 0
 
-            transazioni = ottieni_dettagli_famiglia(famiglia_id, anno, mese)
+            transazioni = ottieni_dettagli_famiglia(famiglia_id, anno, mese, master_key_b64=master_key_b64, id_utente=self.controller.get_user_id())
             self.dt_transazioni_famiglia.rows.clear()
             if not transazioni:
                 self.dt_transazioni_famiglia.visible = False

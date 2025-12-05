@@ -199,7 +199,9 @@ class AppController:
         id_famiglia = self.get_family_id()
         if id_famiglia:
             pagamenti_fatti = check_e_paga_rate_scadute(id_famiglia)
-            spese_fisse_eseguite = check_e_processa_spese_fisse(id_famiglia)
+            master_key_b64 = self.page.session.get("master_key")
+            id_utente = self.get_user_id()
+            spese_fisse_eseguite = check_e_processa_spese_fisse(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
             if pagamenti_fatti > 0: self.show_snack_bar(f"{pagamenti_fatti} pagamenti rata automatici eseguiti.", success=True)
             if spese_fisse_eseguite > 0: self.show_snack_bar(f"{spese_fisse_eseguite} spese fisse automatiche eseguite.", success=True)
 
