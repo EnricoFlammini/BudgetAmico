@@ -121,11 +121,12 @@ def valida_iban_semplice(iban):
 
 
 # --- Funzioni Configurazioni ---
-def get_configurazione(chiave, id_famiglia=None):
+def get_configurazione(chiave, id_famiglia=None, master_key_b64=None, id_utente=None):
     """
     Recupera il valore di una configurazione.
     Se id_famiglia è None, cerca una configurazione globale.
     Se id_famiglia è specificato, cerca una configurazione per quella famiglia.
+    I valori SMTP vengono decriptati con family_key.
     """
     try:
         with get_db_connection() as con:
@@ -136,17 +137,44 @@ def get_configurazione(chiave, id_famiglia=None):
                 cur.execute("SELECT valore FROM Configurazioni WHERE chiave = %s AND id_famiglia = %s", (chiave, id_famiglia))
             
             res = cur.fetchone()
-            return res['valore'] if res else None
+            if not res:
+                return None
+            
+            valore = res['valore']
+            
+            # Decrypt sensitive config values
+            sensitive_keys = ['smtp_server', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_from_email']
+            
+            if chiave in sensitive_keys and id_famiglia and master_key_b64 and id_utente:
+                crypto, master_key = _get_crypto_and_key(master_key_b64)
+                if master_key:
+                    family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+                    if family_key:
+                        valore = _decrypt_if_key(valore, family_key, crypto)
+            
+            return valore
     except Exception as e:
         print(f"[ERRORE] Errore recupero configurazione {chiave}: {e}")
         return None
 
-def set_configurazione(chiave, valore, id_famiglia=None):
+def set_configurazione(chiave, valore, id_famiglia=None, master_key_b64=None, id_utente=None):
     """
     Imposta o aggiorna una configurazione.
     Se id_famiglia è None, imposta una configurazione globale.
+    I valori SMTP vengono criptati con family_key.
     """
     try:
+        # Encrypt sensitive config values
+        encrypted_valore = valore
+        sensitive_keys = ['smtp_server', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_from_email']
+        
+        if chiave in sensitive_keys and id_famiglia and master_key_b64 and id_utente:
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            if master_key:
+                family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+                if family_key:
+                    encrypted_valore = _encrypt_if_key(valore, family_key, crypto)
+        
         with get_db_connection() as con:
             cur = con.cursor()
             if id_famiglia is None:
@@ -155,14 +183,14 @@ def set_configurazione(chiave, valore, id_famiglia=None):
                     VALUES (%s, %s, NULL)
                     ON CONFLICT (chiave, id_famiglia) WHERE id_famiglia IS NULL
                     DO UPDATE SET valore = EXCLUDED.valore
-                """, (chiave, valore))
+                """, (chiave, encrypted_valore))
             else:
                 cur.execute("""
                     INSERT INTO Configurazioni (chiave, valore, id_famiglia) 
                     VALUES (%s, %s, %s)
                     ON CONFLICT (chiave, id_famiglia) 
                     DO UPDATE SET valore = EXCLUDED.valore
-                """, (chiave, valore, id_famiglia))
+                """, (chiave, encrypted_valore, id_famiglia))
             con.commit()
             return True
     except Exception as e:
@@ -170,63 +198,23 @@ def set_configurazione(chiave, valore, id_famiglia=None):
         return False
 
 def get_smtp_config(id_famiglia=None, master_key_b64=None, id_utente=None):
-    """Recupera la configurazione SMTP completa."""
-    password = get_configurazione('smtp_password', id_famiglia)
-    
-    # Decrypt password if keys available
-    crypto, master_key = _get_crypto_and_key(master_key_b64)
-    family_key = None
-    if master_key and id_utente and id_famiglia:
-        try:
-            with get_db_connection() as con:
-                cur = con.cursor()
-                cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
-                row = cur.fetchone()
-                if row and row['chiave_famiglia_criptata']:
-                    family_key_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
-                    family_key = base64.b64decode(family_key_b64)
-        except Exception:
-            pass
-
-    if family_key and password:
-        password = _decrypt_if_key(password, family_key, crypto)
-
+    """Recupera la configurazione SMTP completa. Tutti i valori vengono decriptati automaticamente."""
     return {
-        'server': get_configurazione('smtp_server', id_famiglia),
-        'port': get_configurazione('smtp_port', id_famiglia),
-        'user': get_configurazione('smtp_user', id_famiglia),
-        'password': password,
-        'provider': get_configurazione('smtp_provider', id_famiglia)
+        'server': get_configurazione('smtp_server', id_famiglia, master_key_b64, id_utente),
+        'port': get_configurazione('smtp_port', id_famiglia, master_key_b64, id_utente),
+        'user': get_configurazione('smtp_user', id_famiglia, master_key_b64, id_utente),
+        'password': get_configurazione('smtp_password', id_famiglia, master_key_b64, id_utente),
+        'provider': get_configurazione('smtp_provider', id_famiglia)  # provider is not sensitive
     }
 
 def save_smtp_config(settings, id_famiglia=None, master_key_b64=None, id_utente=None):
-    """Salva la configurazione SMTP."""
+    """Salva la configurazione SMTP. Tutti i valori sensibili vengono criptati automaticamente."""
     try:
-        password = settings.get('password')
-        
-        # Encrypt password if keys available
-        crypto, master_key = _get_crypto_and_key(master_key_b64)
-        family_key = None
-        if master_key and id_utente and id_famiglia:
-            try:
-                with get_db_connection() as con:
-                    cur = con.cursor()
-                    cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
-                    row = cur.fetchone()
-                    if row and row['chiave_famiglia_criptata']:
-                        family_key_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
-                        family_key = base64.b64decode(family_key_b64)
-            except Exception:
-                pass
-
-        if family_key and password:
-            password = _encrypt_if_key(password, family_key, crypto)
-
-        set_configurazione('smtp_server', settings.get('server'), id_famiglia)
-        set_configurazione('smtp_port', settings.get('port'), id_famiglia)
-        set_configurazione('smtp_user', settings.get('user'), id_famiglia)
-        set_configurazione('smtp_password', password, id_famiglia)
-        set_configurazione('smtp_provider', settings.get('provider'), id_famiglia)
+        set_configurazione('smtp_server', settings.get('server'), id_famiglia, master_key_b64, id_utente)
+        set_configurazione('smtp_port', settings.get('port'), id_famiglia, master_key_b64, id_utente)
+        set_configurazione('smtp_user', settings.get('user'), id_famiglia, master_key_b64, id_utente)
+        set_configurazione('smtp_password', settings.get('password'), id_famiglia, master_key_b64, id_utente)
+        set_configurazione('smtp_provider', settings.get('provider'), id_famiglia)  # provider is not sensitive
         return True
     except Exception as e:
         print(f"[ERRORE] Errore salvataggio SMTP config: {e}")
@@ -964,6 +952,7 @@ def crea_famiglia_e_admin(nome_famiglia, id_admin, master_key_b64=None):
         
         # Encrypt family key with admin's master key
         chiave_famiglia_criptata = None
+        crypto = None
         if master_key_b64:
             try:
                 crypto, master_key = _get_crypto_and_key(master_key_b64)
@@ -972,10 +961,15 @@ def crea_famiglia_e_admin(nome_famiglia, id_admin, master_key_b64=None):
             except Exception as e:
                 print(f"[WARNING] Could not encrypt family key: {e}")
         
+        # Encrypt nome_famiglia with family_key
+        encrypted_nome_famiglia = nome_famiglia
+        if crypto and family_key_bytes:
+            encrypted_nome_famiglia = _encrypt_if_key(nome_famiglia, family_key_bytes, crypto)
+        
         with get_db_connection() as con:
             cur = con.cursor()
             # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
-            cur.execute("INSERT INTO Famiglie (nome_famiglia) VALUES (%s) RETURNING id_famiglia", (nome_famiglia,))
+            cur.execute("INSERT INTO Famiglie (nome_famiglia) VALUES (%s) RETURNING id_famiglia", (encrypted_nome_famiglia,))
             id_famiglia = cur.fetchone()['id_famiglia']
             cur.execute("INSERT INTO Appartenenza_Famiglia (id_utente, id_famiglia, ruolo, chiave_famiglia_criptata) VALUES (%s, %s, %s, %s)",
                         (id_admin, id_famiglia, 'admin', chiave_famiglia_criptata))
