@@ -219,6 +219,72 @@ def save_smtp_config(settings, id_famiglia=None, master_key_b64=None, id_utente=
     except Exception as e:
         print(f"[ERRORE] Errore salvataggio SMTP config: {e}")
         return False
+
+def esporta_dati_famiglia(id_famiglia, id_utente, master_key_b64):
+    """
+    Esporta family_key e configurazioni base per backup.
+    Solo admin può esportare questi dati.
+    Ritorna un dizionario con tutti i dati oppure None in caso di errore.
+    """
+    try:
+        crypto, master_key = _get_crypto_and_key(master_key_b64)
+        if not master_key:
+            return None, "Chiave master non disponibile"
+        
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # Verifica che l'utente sia admin
+            cur.execute("""
+                SELECT ruolo, chiave_famiglia_criptata 
+                FROM Appartenenza_Famiglia 
+                WHERE id_utente = %s AND id_famiglia = %s
+            """, (id_utente, id_famiglia))
+            row = cur.fetchone()
+            
+            if not row:
+                return None, "Utente non appartiene a questa famiglia"
+            
+            if row['ruolo'] != 'admin':
+                return None, "Solo gli admin possono esportare i dati"
+            
+            # Decripta family_key
+            family_key_b64 = None
+            if row['chiave_famiglia_criptata']:
+                try:
+                    family_key_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+                except Exception as e:
+                    return None, f"Impossibile decriptare family_key: {e}"
+            
+            # Recupera nome famiglia
+            cur.execute("SELECT nome_famiglia FROM Famiglie WHERE id_famiglia = %s", (id_famiglia,))
+            fam_row = cur.fetchone()
+            nome_famiglia = fam_row['nome_famiglia'] if fam_row else "Sconosciuto"
+            
+            # Decripta nome famiglia se necessario
+            if family_key_b64:
+                family_key = base64.b64decode(family_key_b64)
+                nome_famiglia = _decrypt_if_key(nome_famiglia, family_key, crypto)
+            
+            # Recupera configurazioni SMTP
+            smtp_config = get_smtp_config(id_famiglia, master_key_b64, id_utente)
+            
+            export_data = {
+                'versione_export': '1.0',
+                'data_export': datetime.datetime.now().isoformat(),
+                'id_famiglia': id_famiglia,
+                'nome_famiglia': nome_famiglia,
+                'family_key_b64': family_key_b64,
+                'configurazioni': {
+                    'smtp': smtp_config
+                }
+            }
+            
+            return export_data, None
+            
+    except Exception as e:
+        print(f"[ERRORE] Errore durante l'esportazione: {e}")
+        return None, str(e)
 # --- Funzioni Utenti & Login ---
 
 

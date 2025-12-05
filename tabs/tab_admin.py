@@ -1,8 +1,9 @@
 import flet as ft
+import json
 # Google Auth rimosso - ora usiamo Supabase PostgreSQL
 from functools import partial
 from utils.styles import AppColors, AppStyles
-from db.gestione_db import ottieni_categorie_e_sottocategorie, ottieni_membri_famiglia, rimuovi_utente_da_famiglia, ottieni_budget_famiglia, get_smtp_config, save_smtp_config
+from db.gestione_db import ottieni_categorie_e_sottocategorie, ottieni_membri_famiglia, rimuovi_utente_da_famiglia, ottieni_budget_famiglia, get_smtp_config, save_smtp_config, esporta_dati_famiglia
 from utils.email_sender import send_email
 
 class AdminTab(ft.Container):
@@ -110,6 +111,38 @@ class AdminTab(ft.Container):
                     ft.Row([self.txt_smtp_server, self.txt_smtp_port], spacing=10),
                     ft.Row([self.txt_smtp_user, self.txt_smtp_password], spacing=10),
                     ft.Row([self.btn_test_email, self.btn_salva_email], spacing=10),
+                ], scroll=ft.ScrollMode.AUTO)
+            ),
+            ft.Tab(
+                text="Backup / Export",
+                icon=ft.Icons.BACKUP,
+                content=ft.Column([
+                    AppStyles.header_text("Esportazione Dati Famiglia"),
+                    AppStyles.body_text("Esporta la chiave famiglia e le configurazioni per backup o migrazione."),
+                    ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+                    ft.Container(
+                        content=ft.ElevatedButton(
+                            "Esporta Family Key e Configurazioni",
+                            icon=ft.Icons.DOWNLOAD,
+                            on_click=self._esporta_dati_cliccato,
+                            bgcolor=AppColors.PRIMARY,
+                            color=AppColors.ON_PRIMARY
+                        ),
+                        padding=20
+                    ),
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Icon(ft.Icons.WARNING_AMBER, color=AppColors.WARNING, size=32),
+                            AppStyles.body_text(
+                                "⚠️ ATTENZIONE: Il file esportato contiene la chiave di crittografia della famiglia. "
+                                "Conservalo in un luogo sicuro e non condividerlo con persone non autorizzate.",
+                                color=AppColors.WARNING
+                            ),
+                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                        padding=20,
+                        border=ft.border.all(1, AppColors.WARNING),
+                        border_radius=10
+                    )
                 ], scroll=ft.ScrollMode.AUTO)
             )
         ]
@@ -327,6 +360,46 @@ class AdminTab(ft.Container):
             self.controller.show_snack_bar("Configurazione email salvata con successo!", success=True)
         else:
             self.controller.show_snack_bar("Errore durante il salvataggio della configurazione.", success=False)
+
+    def _esporta_dati_cliccato(self, e):
+        """Esporta la family_key e le configurazioni in un file JSON."""
+        id_famiglia = self.controller.get_family_id()
+        id_utente = self.controller.get_user_id()
+        master_key_b64 = self.controller.page.session.get("master_key")
+        
+        if not all([id_famiglia, id_utente, master_key_b64]):
+            self.controller.show_snack_bar("Sessione non valida. Effettua nuovamente il login.", success=False)
+            return
+        
+        export_data, errore = esporta_dati_famiglia(id_famiglia, id_utente, master_key_b64)
+        
+        if errore:
+            self.controller.show_snack_bar(f"Errore: {errore}", success=False)
+            return
+        
+        # Usa FilePicker per salvare il file
+        def save_file_result(result: ft.FilePickerResultEvent):
+            if result.path:
+                try:
+                    with open(result.path, 'w', encoding='utf-8') as f:
+                        json.dump(export_data, f, indent=2, ensure_ascii=False)
+                    self.controller.show_snack_bar(f"File esportato: {result.path}", success=True)
+                except Exception as ex:
+                    self.controller.show_snack_bar(f"Errore salvataggio: {ex}", success=False)
+        
+        file_picker = ft.FilePicker(on_result=save_file_result)
+        self.page.overlay.append(file_picker)
+        self.page.update()
+        
+        # Genera nome file con data
+        from datetime import datetime
+        nome_file = f"backup_famiglia_{export_data.get('nome_famiglia', 'export')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        file_picker.save_file(
+            dialog_title="Salva Backup Famiglia",
+            file_name=nome_file,
+            file_type=ft.FilePickerFileType.CUSTOM,
+            allowed_extensions=["json"]
+        )
 
     def update_tab_email(self):
         """Popola i campi email con i dati salvati."""
