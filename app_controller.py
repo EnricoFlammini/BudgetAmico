@@ -22,21 +22,17 @@ from dialogs.giroconto_dialog import GirocontoDialog
 from dialogs.conto_condiviso_dialog import ContoCondivisoDialog
 from dialogs.spesa_fissa_dialog import SpesaFissaDialog
 from utils.localization import LocalizationManager
-from db.migration_manager import migra_database
-from db.crea_database import setup_database
-import google_auth_manager
-import google_drive_manager
-
+from utils.styles import LoadingOverlay
 from db.gestione_db import (
     ottieni_prima_famiglia_utente, ottieni_ruolo_utente, check_e_paga_rate_scadute,
     check_e_processa_spese_fisse, get_user_count, crea_famiglia_e_admin,
     aggiungi_categorie_iniziali, cerca_utente_per_username, aggiungi_utente_a_famiglia,
-    ottieni_versione_db, crea_invito, ottieni_invito_per_token, DB_FILE,
-    ottieni_utenti_senza_famiglia
+    ottieni_versione_db, crea_invito, ottieni_invito_per_token,
+    ottieni_utenti_senza_famiglia, ensure_family_key
 )
 
 URL_BASE = os.environ.get("FLET_APP_URL", "http://localhost:8550")
-VERSION = "0.11.0"
+VERSION = "0.12.0"
 
 
 class AppController:
@@ -47,6 +43,9 @@ class AppController:
         # Controlli UI
         self.txt_nome_famiglia = ft.TextField(label="Nome della tua Famiglia", autofocus=True)
         self.txt_errore_setup = ft.Text(value="", visible=False)
+        
+        # Overlay di caricamento globale
+        self.loading_overlay = LoadingOverlay()
         
         # Inizializza tutti i dialoghi e le viste
         self._init_dialogs_and_views()
@@ -116,13 +115,14 @@ class AppController:
             self.transaction_dialog, self.conto_dialog, self.conto_dialog.dialog_rettifica_saldo,
             self.admin_dialogs.dialog_modifica_cat, self.admin_dialogs.dialog_sottocategoria,
             self.admin_dialogs.dialog_modifica_ruolo, self.admin_dialogs.dialog_invito_membri,
-            self.admin_dialogs.dialog_imposta_budget, self.portafoglio_dialogs.dialog_portafoglio,
+            self.portafoglio_dialogs.dialog_portafoglio,
             self.portafoglio_dialogs.dialog_operazione_asset, self.portafoglio_dialogs.dialog_aggiorna_prezzo,
             self.portafoglio_dialogs.dialog_modifica_asset, self.date_picker, self.file_picker_salva_excel,
             self.prestito_dialogs.dialog_prestito, self.prestito_dialogs.dialog_paga_rata,
             self.immobile_dialog, self.fondo_pensione_dialog, self.giroconto_dialog,
             self.conto_condiviso_dialog, self.spesa_fissa_dialog, self.confirm_delete_dialog,
-            self.file_picker_salva_backup, self.file_picker_apri_backup, self.error_dialog, self.info_dialog
+            self.file_picker_salva_backup, self.file_picker_apri_backup, self.error_dialog, self.info_dialog,
+            self.loading_overlay
         ])
 
     def on_file_picker_result(self, e: ft.FilePickerResultEvent):
@@ -138,42 +138,48 @@ class AppController:
             self.show_error_dialog(f"Errore durante il salvataggio: {ex}")
 
     def route_change(self, route):
-        self.page.views.clear()
-        parsed_url = urlparse(route.route)
-        route_path = parsed_url.path
-        query_params = {k: v[0] for k, v in parse_qs(parsed_url.query).items()}
+        try:
+            self.page.views.clear()
+            # self.page.overlay.clear()  # Removed because it deletes global dialogs!
+            
+            parsed_url = urlparse(route.route)
+            route_path = parsed_url.path
+            query_params = {k: v[0] for k, v in parse_qs(parsed_url.query).items()}
 
-        if query_params.get("token") and route_path == "/registrazione":
-            self._handle_registration_token(query_params["token"])
-        elif route_path == "/":
-            self.page.views.append(self.auth_view.get_login_view())
-        elif route_path == "/registrazione":
-            self.page.views.append(self.auth_view.get_registration_view())
-        elif route_path == "/setup-admin":
-            self.page.views.append(self.build_setup_view())
-        elif route_path == "/in-attesa":
-            self.page.views.append(self.build_attesa_view())
-        elif route_path == "/dashboard":
-            if not self.get_user_id() or not self.get_family_id():
+            if query_params.get("token") and route_path == "/registrazione":
+                self._handle_registration_token(query_params["token"])
+            elif route_path == "/":
+                self.page.views.append(self.auth_view.get_login_view())
+            elif route_path == "/registrazione":
+                self.page.views.append(self.auth_view.get_registration_view())
+            elif route_path == "/setup-admin":
+                self.page.views.append(self.build_setup_view())
+            elif route_path == "/in-attesa":
+                self.page.views.append(self.build_attesa_view())
+            elif route_path == "/dashboard":
+                if not self.get_user_id() or not self.get_family_id():
+                    self.page.go("/")
+                    return
+                self._carica_dashboard()
+            elif route_path == "/export":
+                if not self.get_user_id() or not self.get_family_id():
+                    self.page.go("/")
+                    return
+                self.export_view.update_view_data()
+                self.page.views.append(self.export_view.build_view())
+            elif route_path == "/password-recovery":
+                self.page.views.append(self.auth_view.get_password_recovery_view())
+            elif route_path == "/force-change-password":
+                if not self.get_user_id():
+                    self.page.go("/")
+                    return
+                self.page.views.append(self.auth_view.get_force_change_password_view())
+            else:
                 self.page.go("/")
-                return
-            self._carica_dashboard()
-        elif route_path == "/export":
-            if not self.get_user_id() or not self.get_family_id():
-                self.page.go("/")
-                return
-            self.export_view.update_view_data()
-            self.page.views.append(self.export_view.build_view())
-        elif route_path == "/password-recovery":
-            self.page.views.append(self.auth_view.get_password_recovery_view())
-        elif route_path == "/force-change-password":
-            if not self.get_user_id():
-                self.page.go("/")
-                return
-            self.page.views.append(self.auth_view.get_force_change_password_view())
-        else:
-            self.page.go("/")
-        self.page.update()
+            self.page.update()
+        except Exception as e:
+            print(f"[ERRORE CRITICO] Errore in route_change: {e}")
+            traceback.print_exc()
 
     def _handle_registration_token(self, token):
         invito_data = ottieni_invito_per_token(token)
@@ -186,35 +192,44 @@ class AppController:
             self.page.go("/")
 
     def _carica_dashboard(self):
-        self.page.views.clear()
-        self.page.views.append(self.dashboard_view.build_view())
-        self.dashboard_view.update_sidebar()
+        # Mostra spinner durante il caricamento della dashboard
+        self.show_loading("Caricamento dati...")
+        
+        try:
+            self.page.views.clear()
+            self.page.views.append(self.dashboard_view.build_view())
+            self.dashboard_view.update_sidebar()
 
-        saved_lang = self.page.client_storage.get("settings.language")
-        if saved_lang: self.loc.set_language(saved_lang)
-        saved_currency = self.page.client_storage.get("settings.currency")
-        if saved_currency: self.loc.set_currency(saved_currency)
+            saved_lang = self.page.client_storage.get("settings.language")
+            if saved_lang: self.loc.set_language(saved_lang)
+            saved_currency = self.page.client_storage.get("settings.currency")
+            if saved_currency: self.loc.set_currency(saved_currency)
 
-        id_famiglia = self.get_family_id()
-        if id_famiglia:
-            pagamenti_fatti = check_e_paga_rate_scadute(id_famiglia)
-            spese_fisse_eseguite = check_e_processa_spese_fisse(id_famiglia)
-            if pagamenti_fatti > 0: self.show_snack_bar(f"{pagamenti_fatti} pagamenti rata automatici eseguiti.", success=True)
-            if spese_fisse_eseguite > 0: self.show_snack_bar(f"{spese_fisse_eseguite} spese fisse automatiche eseguite.", success=True)
+            id_famiglia = self.get_family_id()
+            if id_famiglia:
+                pagamenti_fatti = check_e_paga_rate_scadute(id_famiglia)
+                master_key_b64 = self.page.session.get("master_key")
+                id_utente = self.get_user_id()
+                spese_fisse_eseguite = check_e_processa_spese_fisse(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
+                if pagamenti_fatti > 0: self.show_snack_bar(f"{pagamenti_fatti} pagamenti rata automatici eseguiti.", success=True)
+                if spese_fisse_eseguite > 0: self.show_snack_bar(f"{spese_fisse_eseguite} spese fisse automatiche eseguite.", success=True)
 
-        self.update_all_views(is_initial_load=True)
-        self.page.update()
+            self.update_all_views(is_initial_load=True)
+            self.page.update()
+        finally:
+            self.hide_loading()
 
     def _download_confirmato(self, e): pass
     def _download_rifiutato(self, e): pass
 
     def backup_dati_clicked(self):
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.file_picker_salva_backup.save_file(
-            dialog_title="Salva Backup Database",
-            file_name=f"budget_backup_{timestamp}.db",
-            allowed_extensions=["db"]
-        )
+        self.show_snack_bar("Funzionalità di backup non disponibile con PostgreSQL.", success=False)
+        # timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        # self.file_picker_salva_backup.save_file(
+        #     dialog_title="Salva Backup Database",
+        #     file_name=f"budget_backup_{timestamp}.db",
+        #     allowed_extensions=["db"]
+        # )
 
     def _on_backup_dati_result(self, e: ft.FilePickerResultEvent):
         if not e.path:
@@ -227,18 +242,21 @@ class AppController:
             self.show_error_dialog(f"Errore durante la creazione del backup: {ex}")
 
     def ripristina_dati_clicked(self):
-        self.file_picker_apri_backup.pick_files(
-            dialog_title="Seleziona un file di Backup (.db)",
-            allow_multiple=False,
-            allowed_extensions=["db"]
-        )
+        self.show_snack_bar("Funzionalità di ripristino non disponibile con PostgreSQL.", success=False)
+        # self.file_picker_apri_backup.pick_files(
+        #     dialog_title="Seleziona un file di Backup (.db)",
+        #     allow_multiple=False,
+        #     allowed_extensions=["db"]
+        # )
 
     def _on_ripristina_dati_result(self, e: ft.FilePickerResultEvent):
         if not e.files:
             self.show_snack_bar("Nessun file di backup selezionato.", success=False)
             return
         self.backup_path_da_ripristinare = e.files[0].path
-        self.page.dialog = self.confirm_restore_dialog
+        self.backup_path_da_ripristinare = e.files[0].path
+        if self.confirm_restore_dialog not in self.page.overlay:
+            self.page.overlay.append(self.confirm_restore_dialog)
         self.confirm_restore_dialog.open = True
         self.page.update()
 
@@ -246,10 +264,16 @@ class AppController:
         self.confirm_restore_dialog.open = False
         self.backup_path_da_ripristinare = None
         self.page.update()
+        if self.confirm_restore_dialog in self.page.overlay:
+            self.page.overlay.remove(self.confirm_restore_dialog)
+        self.page.update()
 
     def _ripristino_confermato(self, e):
         backup_path = self.backup_path_da_ripristinare
         self.confirm_restore_dialog.open = False
+        self.page.update()
+        if self.confirm_restore_dialog in self.page.overlay:
+            self.page.overlay.remove(self.confirm_restore_dialog)
         self.page.update()
         if not backup_path: return
 
@@ -281,21 +305,30 @@ class AppController:
     def open_info_dialog(self, e):
         db_version = ottieni_versione_db()
         self.info_dialog.content.value = f"Versione App: {VERSION}\nVersione Database: {db_version}\n\nSviluppato da Iscavar79."
-        self.page.dialog = self.info_dialog
+        self.info_dialog.content.value = f"Versione App: {VERSION}\nVersione Database: {db_version}\n\nSviluppato da Iscavar79."
+        if self.info_dialog not in self.page.overlay:
+            self.page.overlay.append(self.info_dialog)
         self.info_dialog.open = True
         self.page.update()
 
     def _chiudi_info_dialog(self, e):
         self.info_dialog.open = False
         self.page.update()
+        if self.info_dialog in self.page.overlay:
+            self.page.overlay.remove(self.info_dialog)
+        self.page.update()
 
     def _close_error_dialog(self, e):
         self.error_dialog.open = False
         self.page.update()
+        if self.error_dialog in self.page.overlay:
+            self.page.overlay.remove(self.error_dialog)
+        self.page.update()
 
     def show_error_dialog(self, message):
         self.error_dialog.content.value = str(message)
-        self.page.dialog = self.error_dialog
+        if self.error_dialog not in self.page.overlay:
+            self.page.overlay.append(self.error_dialog)
         self.error_dialog.open = True
         self.page.update()
 
@@ -303,7 +336,8 @@ class AppController:
         theme = self._get_current_theme_scheme() or ft.ColorScheme()
         self.confirm_delete_dialog.actions[0].style = ft.ButtonStyle(color=theme.error)
         self.page.session.set("delete_callback", delete_callback)
-        self.page.dialog = self.confirm_delete_dialog
+        if self.confirm_delete_dialog not in self.page.overlay:
+            self.page.overlay.append(self.confirm_delete_dialog)
         self.confirm_delete_dialog.open = True
         self.page.update()
 
@@ -312,28 +346,44 @@ class AppController:
         self.page.update()
 
     def _esegui_eliminazione_confermata(self, e):
-        delete_callback = self.page.session.get("delete_callback")
-        if callable(delete_callback): delete_callback()
+        # Prima chiudo il dialog
         self.confirm_delete_dialog.open = False
         self.page.update()
+        # Poi mostro lo spinner per l'operazione
+        self.show_loading("Attendere...")
+        try:
+            delete_callback = self.page.session.get("delete_callback")
+            if callable(delete_callback): delete_callback()
+        finally:
+            self.hide_loading()
 
     def post_login_setup(self, utente):
         id_utente = utente['id']
         id_famiglia = ottieni_prima_famiglia_utente(id_utente)
         self.page.session.set("utente_loggato", utente)
+        
+        # Save master_key to session for encryption/decryption
+        if utente.get("master_key"):
+            print(f"[DEBUG] Salvataggio Master Key in sessione. Valore: {utente['master_key'][:10]}...")
+            self.page.session.set("master_key", utente["master_key"])
+        else:
+            print("[DEBUG] ATTENZIONE: Nessuna Master Key trovata nell'oggetto utente!")
 
         if utente.get("forza_cambio_password"):
             self.page.go("/force-change-password")
             return
 
         if id_famiglia:
+            # Ensure encryption key for family exists
+            if utente.get("master_key"):
+                ensure_family_key(id_utente, id_famiglia, utente["master_key"])
+
             self.page.session.set("id_famiglia", id_famiglia)
             self.page.session.set("ruolo_utente", ottieni_ruolo_utente(id_utente, id_famiglia))
             self.page.go("/dashboard")
-        elif get_user_count() == 1:
-            self.page.go("/setup-admin")
         else:
-            self.page.go("/in-attesa")
+            # Se l'utente non ha una famiglia, lo reindirizziamo alla creazione
+            self.page.go("/setup-admin")
 
     def build_setup_view(self) -> ft.View:
         self.txt_nome_famiglia.value = ""
@@ -344,7 +394,7 @@ class AppController:
         return ft.View("/setup-admin", [
             ft.Column([
                 ft.Text("Benvenuto!", size=30, weight=ft.FontWeight.BOLD),
-                ft.Text("Sei il primo utente. Configura la tua famiglia per iniziare."),
+                ft.Text("Crea la tua Famiglia per iniziare."),
                 ft.Container(height=20),
                 self.txt_nome_famiglia,
                 self.txt_errore_setup,
@@ -367,7 +417,8 @@ class AppController:
             return
 
         try:
-            new_family_id = crea_famiglia_e_admin(nome_famiglia, utente['id'])
+            master_key_b64 = self.page.session.get("master_key")
+            new_family_id = crea_famiglia_e_admin(nome_famiglia, utente['id'], master_key_b64=master_key_b64)
             if not new_family_id: raise Exception("Creazione famiglia fallita. Nome duplicato?")
             
             aggiungi_categorie_iniziali(new_family_id)
@@ -400,16 +451,6 @@ class AppController:
         self.page.session.clear()
         self.page.go("/")
 
-    def logout_google(self, e):
-        """Esegue il logout da Google, revocando il token."""
-        success = google_auth_manager.logout()
-        if success:
-            self.show_snack_bar("Account Google disconnesso con successo.", success=True)
-        else:
-            self.show_error_dialog("Errore durante la disconnessione dell'account Google.")
-        # Aggiorna l'interfaccia per riflettere il nuovo stato
-        self.update_all_views()
-
     def update_all_views(self, is_initial_load=False):
         if self.dashboard_view:
             self.dashboard_view.update_all_tabs_data(is_initial_load)
@@ -417,16 +458,12 @@ class AppController:
             self.page.update()
 
     def db_write_operation(self):
-        self.update_all_views()
-        self.trigger_auto_sync()
-
-    def trigger_auto_sync(self):
-        if self.page.session.get("google_auth_token_present"):
-            if self.dashboard_view.sync_status_icon:
-                self.dashboard_view.sync_status_icon.icon = ft.Icons.SYNC
-                self.dashboard_view.sync_status_icon.rotate = ft.Rotate(angle=0, alignment=ft.alignment.center)
-                self.page.update()
-            threading.Thread(target=google_drive_manager.upload_db, args=(self,)).start()
+        """Chiamato dopo operazioni di scrittura sul database."""
+        self.show_loading("Attendere...")
+        try:
+            self.update_all_views()
+        finally:
+            self.hide_loading()
 
     def show_snack_bar(self, messaggio, success=True):
         theme = self._get_current_theme_scheme() or ft.ColorScheme()
@@ -435,6 +472,16 @@ class AppController:
             bgcolor=theme.primary_container if success else theme.error_container
         )
         self.page.snack_bar.open = True
+        self.page.update()
+
+    def show_loading(self, messaggio: str = "Attendere..."):
+        """Mostra l'overlay di caricamento che blocca l'interfaccia."""
+        self.loading_overlay.show(messaggio)
+        self.page.update()
+
+    def hide_loading(self):
+        """Nasconde l'overlay di caricamento."""
+        self.loading_overlay.hide()
         self.page.update()
 
     def get_user_id(self):
@@ -470,7 +517,9 @@ class AppController:
         
         # 2. Se non è un utente esistente, prova a creare un invito via email
         if "@" in input_val and "." in input_val:
-            token = crea_invito(id_famiglia, input_val, ruolo)
+            utente = self.page.session.get("utente_loggato")
+            master_key_b64 = self.page.session.get("master_key")
+            token = crea_invito(id_famiglia, input_val, ruolo, id_admin=utente['id'] if utente else None, master_key_b64=master_key_b64)
             if token:
                 link_invito = f"{URL_BASE}/registrazione?token={token}"
                 self.page.set_clipboard(link_invito)

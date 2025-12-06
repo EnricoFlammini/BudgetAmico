@@ -18,11 +18,11 @@ class GirocontoDialog(ft.AlertDialog):
         self.modal = True
         self.title = ft.Text()
 
-        self.dd_conto_sorgente = ft.Dropdown()
-        self.dd_conto_destinazione = ft.Dropdown()
-        self.txt_importo = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
-        self.txt_descrizione = ft.TextField()
-        self.txt_data = ft.TextField(read_only=True)
+        self.dd_conto_sorgente = ft.Dropdown(expand=True)
+        self.dd_conto_destinazione = ft.Dropdown(expand=True)
+        self.txt_importo = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER, expand=True)
+        self.txt_descrizione = ft.TextField(expand=True)
+        self.txt_data_selezionata = ft.Text(size=16)
 
         self.content = ft.Column(
             [
@@ -30,7 +30,11 @@ class GirocontoDialog(ft.AlertDialog):
                 self.dd_conto_destinazione,
                 self.txt_importo,
                 self.txt_descrizione,
-                self.txt_data,
+                ft.Row([
+                    ft.Text(),  # Etichetta "Data:"
+                    self.txt_data_selezionata,
+                    ft.IconButton(icon=ft.Icons.CALENDAR_MONTH, on_click=self.apri_date_picker),
+                ], alignment=ft.MainAxisAlignment.START),
             ],
             tight=True,
             spacing=10,
@@ -39,7 +43,7 @@ class GirocontoDialog(ft.AlertDialog):
         )
 
         self.actions = [
-            ft.TextButton(on_click=self._chiudi_dialog),
+            ft.TextButton(on_click=self.chiudi_dialog),
             ft.TextButton(on_click=self._salva_giroconto),
         ]
         self.actions_alignment = ft.MainAxisAlignment.END
@@ -52,21 +56,38 @@ class GirocontoDialog(ft.AlertDialog):
         self.txt_importo.label = self.loc.get("amount")
         self.txt_importo.prefix_text = self.loc.currencies[self.loc.currency]['symbol']
         self.txt_descrizione.label = self.loc.get("transfer_description_placeholder")
-        self.txt_data.label = self.loc.get("date")
+        self.content.controls[4].controls[0].value = self.loc.get("date") + ":"
         self.actions[0].text = self.loc.get("cancel")
         self.actions[1].text = self.loc.get("execute_transfer")
 
-    def _chiudi_dialog(self, e):
-        self.open = False
-        self.page.update()
+    def apri_date_picker(self, e):
+        self.controller.date_picker.on_change = self.on_date_picker_change
+        self.controller.page.open(self.controller.date_picker)
+
+    def on_date_picker_change(self, e):
+        if self.controller.date_picker.value:
+            self.txt_data_selezionata.value = self.controller.date_picker.value.strftime('%Y-%m-%d')
+            if self.controller.page: self.controller.page.update()
+
+    def chiudi_dialog(self, e):
+        self.controller.show_loading("Attendere...")
+        try:
+            self.open = False
+            self.controller.page.update()
+        except Exception as ex:
+            print(f"Errore chiusura dialog: {ex}")
+            traceback.print_exc()
+        finally:
+            self.controller.hide_loading()
 
     def apri_dialog(self):
         self._update_texts()
         self._reset_campi()
         self._popola_dropdowns()
-        self.page.dialog = self
+        if self not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self)
         self.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _reset_campi(self):
         self.dd_conto_sorgente.error_text = None
@@ -76,7 +97,7 @@ class GirocontoDialog(ft.AlertDialog):
         self.dd_conto_destinazione.value = None
         self.txt_importo.value = ""
         self.txt_descrizione.value = ""
-        self.txt_data.value = datetime.date.today().strftime('%Y-%m-%d')
+        self.txt_data_selezionata.value = datetime.date.today().strftime('%Y-%m-%d')
 
     def _popola_dropdowns(self):
         id_utente = self.controller.get_user_id()
@@ -84,26 +105,30 @@ class GirocontoDialog(ft.AlertDialog):
         if not id_famiglia or not id_utente:
             return
 
+        master_key_b64 = self.controller.page.session.get("master_key")
+
         # Popola conti SORGENTE (solo i miei conti personali e condivisi)
-        conti_utente = ottieni_tutti_i_conti_utente(id_utente)
+        conti_utente = ottieni_tutti_i_conti_utente(id_utente, master_key_b64=master_key_b64)
         conti_sorgente_filtrati = [c for c in conti_utente if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
         opzioni_sorgente = []
         for c in conti_sorgente_filtrati:
             prefix = "C" if c['is_condiviso'] else "P"
-            opzioni_sorgente.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}"))
+            suffix = " (Condiviso)" if c['is_condiviso'] else ""
+            opzioni_sorgente.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}{suffix}"))
         self.dd_conto_sorgente.options = opzioni_sorgente
 
         # Popola conti DESTINAZIONE (tutti i conti della famiglia)
-        conti_famiglia = ottieni_tutti_i_conti_famiglia(id_famiglia)
+        conti_famiglia = ottieni_tutti_i_conti_famiglia(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
         conti_destinazione_filtrati = [c for c in conti_famiglia if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
         opzioni_destinazione = []
         for c in conti_destinazione_filtrati:
             prefix = "C" if c['is_condiviso'] else "P"
-            owner = f" ({c['proprietario']})" if not c['is_condiviso'] else ""
-            opzioni_destinazione.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}{owner}"))
+            suffix = " (Condiviso)" if c['is_condiviso'] else ""
+            opzioni_destinazione.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}{suffix}"))
         self.dd_conto_destinazione.options = opzioni_destinazione
 
     def _salva_giroconto(self, e):
+        self.controller.show_loading("Attendere...")
         try:
             is_valid = True
             # Reset errori
@@ -135,41 +160,41 @@ class GirocontoDialog(ft.AlertDialog):
                 is_valid = False
 
             if not is_valid:
-                self.page.update()
+                self.controller.page.update()
+                self.controller.hide_loading()
                 return
 
-            # Estrai i dati
-            tipo_sorgente = sorgente_key[0]
-            id_sorgente = int(sorgente_key[1:])
-            tipo_destinazione = destinazione_key[0]
-            id_destinazione = int(destinazione_key[1:])
-            descrizione = self.txt_descrizione.value
-            data = self.txt_data.value
-            id_utente_autore = self.controller.get_user_id()
-
-            # Esegui l'operazione sul DB
+            # Esegui giroconto
+            id_conto_sorgente = int(sorgente_key[1:])
+            tipo_sorgente = "personale" if sorgente_key.startswith("P") else "condiviso"
+            id_conto_destinazione = int(destinazione_key[1:])
+            tipo_destinazione = "personale" if destinazione_key.startswith("P") else "condiviso"
+            
+            master_key_b64 = self.controller.page.session.get("master_key")
+            id_utente = self.controller.get_user_id()
+            id_famiglia = self.controller.get_family_id()
+            
             success = esegui_giroconto(
-                id_sorgente=id_sorgente,
-                tipo_sorgente=tipo_sorgente,
-                id_destinazione=id_destinazione,
+                id_conto_sorgente, id_conto_destinazione,
+                importo, self.txt_data_selezionata.value,
+                self.txt_descrizione.value,
+                master_key_b64=master_key_b64,
+                tipo_origine=tipo_sorgente,
                 tipo_destinazione=tipo_destinazione,
-                importo=importo,
-                data=data,
-                descrizione=descrizione,
-                id_utente_autore=id_utente_autore
+                id_utente_autore=id_utente,
+                id_famiglia=id_famiglia
             )
 
             if success:
                 self.controller.show_snack_bar("Giroconto eseguito con successo!", success=True)
-                self.open = False
+                self.chiudi_dialog(None)
                 self.controller.db_write_operation()
             else:
-                self.controller.show_snack_bar("❌ Errore durante l'esecuzione del giroconto.", success=False)
-
-            self.page.update()
+                self.controller.show_snack_bar("Errore durante l'esecuzione del giroconto", success=False)
 
         except Exception as ex:
             print(f"Errore salvataggio giroconto: {ex}")
             traceback.print_exc()
             self.controller.show_snack_bar(f"Errore inaspettato: {ex}", success=False)
-            self.page.update()
+        finally:
+            self.controller.hide_loading()

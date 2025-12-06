@@ -149,12 +149,14 @@ class ContoDialog(ft.AlertDialog):
         riga_asset.controls[0].controls[2].data = riga_asset
 
         self.lv_asset_iniziali.controls.append(riga_asset)
-        if self.open:
+        self.lv_asset_iniziali.controls.append(riga_asset)
+        if self.open and self.content.page:
             self.content.update()
 
     def _rimuovi_riga_asset_iniziale(self, riga_control):
         self.lv_asset_iniziali.controls.remove(riga_control)
-        if self.open:
+        self.lv_asset_iniziali.controls.remove(riga_control)
+        if self.open and self.content.page:
             self.content.update()
 
     def _cambia_tipo_conto_in_dialog(self, e):
@@ -176,8 +178,12 @@ class ContoDialog(ft.AlertDialog):
             self.content.update()
 
     def _chiudi_dialog_conto(self, e):
-        self.open = False
-        self.page.update()
+        self.controller.show_loading("Attendere...")
+        try:
+            self.open = False
+            self.page.update()
+        finally:
+            self.controller.hide_loading()
 
     def apri_dialog_conto(self, e, conto_data=None, escludi_investimento=False):
         self._update_texts()
@@ -228,12 +234,18 @@ class ContoDialog(ft.AlertDialog):
             self.chk_conto_default.value = False
             self._aggiungi_riga_asset_iniziale()  # Aggiungi una riga vuota per gli asset
 
-        self.page.dialog = self
+        # self.controller.page.dialog = self # Deprecated/Conflict with overlay
+        if self not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self)
         self.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _salva_conto(self, e):
+        self.controller.show_loading("Attendere...")
         try:
+            # Get master_key from session for encryption
+            master_key_b64 = self.controller.page.session.get("master_key")
+            
             is_valid = True
             self.txt_conto_nome.error_text = None
             self.txt_conto_iban.error_text = None
@@ -308,6 +320,7 @@ class ContoDialog(ft.AlertDialog):
 
             if not is_valid:
                 self.content.update()
+                self.controller.hide_loading()
                 return
 
             utente_id = self.controller.get_user_id()
@@ -319,7 +332,7 @@ class ContoDialog(ft.AlertDialog):
                 # Passa il saldo_iniziale come valore_manuale solo se il tipo è 'Fondo Pensione'
                 valore_manuale_modifica = saldo_iniziale if tipo == 'Fondo Pensione' else None
                 
-                success, msg = modifica_conto(self.conto_id_in_modifica, utente_id, nome, tipo, iban, valore_manuale=valore_manuale_modifica)
+                success, msg = modifica_conto(self.conto_id_in_modifica, utente_id, nome, tipo, iban, valore_manuale=valore_manuale_modifica, master_key_b64=master_key_b64)
                 messaggio = "modificato" if success else "errore modifica"
                 new_conto_id = self.conto_id_in_modifica
                 
@@ -330,7 +343,7 @@ class ContoDialog(ft.AlertDialog):
             else:
                 # Passa il saldo_iniziale come valore_manuale solo se il tipo è 'Fondo Pensione'
                 valore_manuale_iniziale = saldo_iniziale if tipo == 'Fondo Pensione' else 0.0
-                res = aggiungi_conto(utente_id, nome, tipo, iban, valore_manuale=valore_manuale_iniziale)
+                res = aggiungi_conto(utente_id, nome, tipo, iban, valore_manuale=valore_manuale_iniziale, master_key_b64=master_key_b64)
                 if isinstance(res, tuple):
                     new_conto_id, msg = res
                 else:
@@ -342,7 +355,7 @@ class ContoDialog(ft.AlertDialog):
                     # Crea la transazione di saldo iniziale solo per i conti che non sono Fondi Pensione
                     if saldo_iniziale != 0 and tipo != 'Fondo Pensione':
                         aggiungi_transazione(new_conto_id, datetime.date.today().strftime('%Y-%m-%d'),
-                                             "Saldo Iniziale", saldo_iniziale)
+                                             "Saldo Iniziale", saldo_iniziale, master_key_b64=master_key_b64)
                     for asset in lista_asset_iniziali:
                         compra_asset(
                             id_conto_investimento=new_conto_id,
@@ -367,7 +380,10 @@ class ContoDialog(ft.AlertDialog):
 
                 self.controller.show_snack_bar(f"Conto {messaggio} con successo!", success=True)
                 self.open = False
-                self.controller.db_write_operation()  # Aggiorna tutte le viste e sincronizza
+                self.controller.page.update()
+                if self in self.controller.page.overlay:
+                    self.controller.page.overlay.remove(self)
+                self.controller.update_all_views()  # Aggiorna tutte le viste e sincronizza
             else:
                 if not self.conto_id_in_modifica and not new_conto_id:
                     self.txt_conto_iban.error_text = self.loc.get("iban_in_use_or_invalid")
@@ -381,6 +397,7 @@ class ContoDialog(ft.AlertDialog):
             traceback.print_exc()
             self.controller.show_error_dialog(f"Errore inaspettato: {ex}")
         finally:
+            self.controller.hide_loading()
             if self.page: self.page.update()
 
     # --- Logica per Rettifica Saldo (Admin) ---
@@ -393,15 +410,21 @@ class ContoDialog(ft.AlertDialog):
         self.txt_nuovo_saldo.value = f"{conto_data['saldo_calcolato']:.2f}"
         self.txt_nuovo_saldo.error_text = None
 
-        self.page.dialog = self.dialog_rettifica_saldo
+        if self.dialog_rettifica_saldo not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_rettifica_saldo)
         self.dialog_rettifica_saldo.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _chiudi_dialog_rettifica(self, e):
-        self.dialog_rettifica_saldo.open = False
-        self.page.update()
+        self.controller.show_loading("Attendere...")
+        try:
+            self.dialog_rettifica_saldo.open = False
+            self.controller.page.update()
+        finally:
+            self.controller.hide_loading()
 
     def _salva_rettifica_saldo(self, e):
+        self.controller.show_loading("Attendere...")
         try:
             nuovo_saldo = float(self.txt_nuovo_saldo.value.replace(",", "."))
             id_conto = self.conto_id_in_modifica
@@ -417,6 +440,8 @@ class ContoDialog(ft.AlertDialog):
                 self._chiudi_dialog_rettifica(e)
             else:
                 self.controller.show_snack_bar("Errore durante la rettifica del saldo.", success=False)
+                self.controller.hide_loading()
         except (ValueError, TypeError):
             self.txt_nuovo_saldo.error_text = "Inserire un importo numerico valido."
             self.dialog_rettifica_saldo.update()
+            self.controller.hide_loading()

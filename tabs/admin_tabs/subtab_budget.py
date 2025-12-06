@@ -86,7 +86,10 @@ class AdminSubTabBudget(ft.Column):
         try:
             # Recupera struttura completa categorie/sottocategorie
             dati_categorie = ottieni_categorie_e_sottocategorie(famiglia_id)
-            budget_impostati = ottieni_budget_famiglia(famiglia_id)
+            
+            # Pass master_key_b64
+            master_key_b64 = self.controller.page.session.get("master_key")
+            budget_impostati = ottieni_budget_famiglia(famiglia_id, master_key_b64)
 
             # Mappa i budget per un accesso rapido usando id_sottocategoria
             mappa_budget = {b['id_sottocategoria']: b['importo_limite'] for b in budget_impostati}
@@ -97,7 +100,7 @@ class AdminSubTabBudget(ft.Column):
             totale_budget_impostato = 0.0
 
             # Itera sulle categorie
-            for id_cat, cat_data in dati_categorie.items():
+            for cat_data in dati_categorie:
                 nome_cat = cat_data['nome_categoria']
                 sottocategorie = cat_data['sottocategorie']
                 
@@ -183,11 +186,17 @@ class AdminSubTabBudget(ft.Column):
                     raise ValueError("Limite negativo")
 
                 famiglia_id = self.controller.get_family_id()
-                success = imposta_budget(famiglia_id, id_sottocategoria, importo_limite)
+                
+                # Pass master_key_b64
+                master_key_b64 = self.controller.page.session.get("master_key")
+                print(f"[DEBUG] subtab_budget - master_key in session: {bool(master_key_b64)}")
+                if master_key_b64:
+                    print(f"[DEBUG] subtab_budget - master_key content (partial): {master_key_b64[:10]}...")
+                success = imposta_budget(famiglia_id, id_sottocategoria, importo_limite, master_key_b64)
 
                 if success:
                     self.controller.show_snack_bar(f"Budget per {nome_sottocategoria} salvato!", success=True)
-                    dialog.open = False
+                    self.page.close(dialog)
                     self.page.update()
                     self.controller.update_all_views()
                 else:
@@ -200,7 +209,7 @@ class AdminSubTabBudget(ft.Column):
                 txt_nuovo_limite.update()
 
         def chiudi_dialog(e_dialog):
-            dialog.open = False
+            self.page.close(dialog)
             self.page.update()
 
         dialog = ft.AlertDialog(
@@ -213,8 +222,7 @@ class AdminSubTabBudget(ft.Column):
             actions_alignment=ft.MainAxisAlignment.END
         )
 
-        self.page.overlay.append(dialog)
-        dialog.open = True
+        self.page.open(dialog)
         self.page.update()
 
     def _clicca_salva_storico_selezionato(self, e):
@@ -226,7 +234,9 @@ class AdminSubTabBudget(ft.Column):
             anno_selezionato = int(self.dd_admin_budget_anno.value)
             mese_selezionato = int(self.dd_admin_budget_mese.value)
 
-            success = salva_budget_mese_corrente(famiglia_id, anno_selezionato, mese_selezionato)
+            # Pass master_key_b64
+            master_key_b64 = self.controller.page.session.get("master_key")
+            success = salva_budget_mese_corrente(famiglia_id, anno_selezionato, mese_selezionato, master_key_b64)
 
             if success:
                 self.controller.show_snack_bar(

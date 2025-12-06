@@ -210,13 +210,34 @@ BudgetAmico/
 
 -   **Framework GUI**: [Flet](https://flet.dev/) - Framework Python per creare app multi-piattaforma
 -   **Linguaggio**: Python 3.10+
--   **Database**: SQLite con gestione migrazioni automatiche
--   **API**: Google Drive API, Gmail API, Yahoo Finance API
+-   **Database**: PostgreSQL (Supabase) con crittografia end-to-end
+-   **API**: Yahoo Finance API per prezzi asset
 -   **Librerie**:
     - `pandas` e `openpyxl` - Esportazione dati
-    - `google-auth` - Autenticazione OAuth2
+    - `psycopg2` - Connessione PostgreSQL
+    - `cryptography` - Crittografia dati sensibili (Fernet)
     - `requests` - Chiamate HTTP per recupero prezzi asset
     - `pyinstaller` - Build eseguibili
+
+---
+
+## 📊 Novità Versione 0.12
+
+### Migrazione a PostgreSQL/Supabase
+-   **Database Cloud**: Migrazione completa da SQLite a PostgreSQL su Supabase
+-   **Crittografia End-to-End**: Tutti i dati sensibili (nomi conti, importi, transazioni) sono crittografati con chiave per famiglia
+-   **Multi-dispositivo**: Accesso sicuro ai dati da qualsiasi dispositivo
+
+### Miglioramenti UI/UX
+-   **Stili Centralizzati**: Layout uniformato su tutte le pagine con `AppStyles.section_header()` e `PageConstants`
+-   **Spinner di Caricamento**: Feedback visivo durante il cambio pagina e operazioni lunghe
+-   **Nome Utente nella Sidebar**: La prima voce mostra il nome dell'utente invece di "I Miei Dati"
+-   **Vista Transazioni Espandibile**: Mostra 4 transazioni nel riepilogo, con pulsante per vedere tutte
+
+### Gestione Famiglia
+-   **Sistema Inviti via Email**: Invita nuovi membri con credenziali temporanee
+-   **Configurazione SMTP**: Impostazioni email configurabili dal pannello admin
+-   **Export Dati Famiglia**: Backup della chiave famiglia e configurazioni
 
 ---
 

@@ -1,12 +1,12 @@
 import flet as ft
 from db.gestione_db import ottieni_riepilogo_budget_mensile, ottieni_anni_mesi_storicizzati
 import datetime
-from utils.styles import AppStyles, AppColors
+from utils.styles import AppStyles, AppColors, PageConstants
 
 
 class BudgetTab(ft.Container):
     def __init__(self, controller):
-        super().__init__(padding=ft.padding.only(left=10, top=10, right=10, bottom=80), expand=True)
+        super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
         self.page = controller.page
 
@@ -27,46 +27,23 @@ class BudgetTab(ft.Container):
 
 
     def update_view_data(self, is_initial_load=False):
-        theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
-        self.content.controls = self.build_controls()
-
-        # Popola il filtro sempre per aggiornare i mesi disponibili
-        self._popola_filtro_mese()
-
-        id_famiglia = self.controller.get_family_id()
-        if not id_famiglia:
-            return
-
-        # Usa il mese selezionato dal dropdown
-        anno, mese = self._get_anno_mese_selezionato()
-        riepilogo = ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese)
-        self.lv_budget.controls.clear()
-
-        if not riepilogo:
-            self.lv_budget.controls.append(ft.Text(self.controller.loc.get("no_budget_set")))
-        else:
-            # Correzione: Itera sui valori del dizionario, non sulle chiavi
-            for cat_data in riepilogo.values():
-                self.lv_budget.controls.append(self._crea_widget_categoria(cat_data, theme))
-
-        if self.page:
-            self.page.update()
-
-    def build_controls(self):
         """Costruisce e restituisce la lista di controlli per la scheda."""
         loc = self.controller.loc
         self.dd_mese_filtro.label = loc.get("filter_by_month")
         
-        return [
-            AppStyles.header_text(loc.get("budget_management")),
-            AppStyles.body_text(loc.get("budget_description")),
+        self._popola_filtro_mese()
+        self._popola_budget()
+        
+        self.content.controls = [
+            AppStyles.section_header(loc.get("budget_management")),
             ft.Container(
                 content=self.dd_mese_filtro,
-                padding=ft.padding.only(top=10, bottom=10)
+                padding=ft.padding.only(top=5, bottom=10)
             ),
-            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+            AppStyles.page_divider(),
             self.lv_budget
         ]
+        # self.update() # Rimosso per evitare crash se il controllo non è montato
 
     def _popola_filtro_mese(self):
         """Popola il dropdown con i mesi disponibili."""
@@ -103,8 +80,37 @@ class BudgetTab(ft.Container):
         return oggi.year, oggi.month
 
     def _filtro_mese_cambiato(self, e):
-        self.update_view_data()
+        self._popola_budget()
         self.page.update()
+
+    def _popola_budget(self):
+        self.lv_budget.controls.clear()
+        
+        id_famiglia = self.controller.get_family_id()
+        if not id_famiglia:
+            return
+
+        anno, mese = self._get_anno_mese_selezionato()
+        
+        # Passa id_utente per la decriptazione corretta
+        id_utente = self.controller.get_user_id()
+        master_key_b64 = self.controller.page.session.get("master_key")
+        
+        budget_data = ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64, id_utente)
+        
+        if not budget_data:
+            self.lv_budget.controls.append(
+                ft.Text(self.controller.loc.get("no_budget_data"), italic=True, color=AppColors.TEXT_SECONDARY)
+            )
+            return
+
+        theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
+        
+        # Ordina per nome categoria
+        sorted_cats = sorted(budget_data.items(), key=lambda x: x[1]['nome_categoria'].lower())
+        
+        for cat_id, cat_data in sorted_cats:
+            self.lv_budget.controls.append(self._crea_widget_categoria(cat_data, theme))
 
     def _crea_widget_categoria(self, cat_data, theme):
         loc = self.controller.loc

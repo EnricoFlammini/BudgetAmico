@@ -224,6 +224,15 @@ TABLES = {
             attiva BOOLEAN DEFAULT 1,
             addebito_automatico BOOLEAN DEFAULT 0
         );
+    """,
+    "Configurazioni": """
+        CREATE TABLE Configurazioni (
+            id_configurazione SERIAL PRIMARY KEY,
+            id_famiglia INTEGER REFERENCES Famiglie(id_famiglia) ON DELETE CASCADE,
+            chiave TEXT NOT NULL,
+            valore TEXT,
+            UNIQUE(id_famiglia, chiave)
+        );
     """
 }
 

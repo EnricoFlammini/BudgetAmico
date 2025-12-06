@@ -6,7 +6,7 @@ from db.gestione_db import (
     aggiorna_prezzo_manuale_asset,
     elimina_conto
 )
-from utils.styles import AppStyles, AppColors
+from utils.styles import AppStyles, AppColors, PageConstants
 from utils.yfinance_manager import ottieni_prezzo_asset, ottieni_prezzi_multipli
 from dialogs.investimento_dialog import InvestimentoDialog
 import datetime
@@ -14,7 +14,7 @@ import datetime
 
 class InvestimentiTab(ft.Container):
     def __init__(self, controller):
-        super().__init__(padding=ft.padding.only(left=10, top=10, right=10, bottom=80), expand=True)
+        super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
         self.page = controller.page
 
@@ -36,7 +36,8 @@ class InvestimentiTab(ft.Container):
             return
 
         # Ottieni tutti i conti di investimento dell'utente
-        conti_utente = ottieni_dettagli_conti_utente(utente_id)
+        master_key_b64 = self.controller.page.session.get("master_key")
+        conti_utente = ottieni_dettagli_conti_utente(utente_id, master_key_b64=master_key_b64)
         conti_investimento = [c for c in conti_utente if c['tipo'] == 'Investimento']
 
         # Calcola valori totali
@@ -51,7 +52,7 @@ class InvestimentiTab(ft.Container):
             )
         else:
             for conto in conti_investimento:
-                portafoglio = ottieni_portafoglio(conto['id_conto'])
+                portafoglio = ottieni_portafoglio(conto['id_conto'], master_key_b64=master_key_b64)
                 
                 # Calcola valore e gain/loss per questo portafoglio
                 valore_portafoglio = 0
@@ -108,18 +109,13 @@ class InvestimentiTab(ft.Container):
                         icon_color=theme.primary,
                         on_click=self._aggiungi_conto_investimento
                     ),
+
                     ft.IconButton(
                         icon=ft.Icons.REFRESH,
                         tooltip=loc.get("sync_prices"),
                         icon_color=theme.primary,
                         on_click=self._sincronizza_tutti_prezzi,
                         disabled=self.sincronizzazione_in_corso
-                    ),
-                    ft.IconButton(
-                        icon=ft.Icons.ADD,
-                        tooltip=loc.get("add_operation"),
-                        icon_color=theme.primary,
-                        on_click=self._apri_menu_aggiungi_operazione
                     )
                 ])
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
@@ -290,13 +286,14 @@ class InvestimentiTab(ft.Container):
             return
 
         # Ottieni tutti i conti di investimento
-        conti_utente = ottieni_dettagli_conti_utente(utente_id)
+        master_key_b64 = self.controller.page.session.get("master_key")
+        conti_utente = ottieni_dettagli_conti_utente(utente_id, master_key_b64=master_key_b64)
         conti_investimento = [c for c in conti_utente if c['tipo'] == 'Investimento']
         
         # Raccogli tutti i ticker unici
         tutti_asset = []
         for conto in conti_investimento:
-            portafoglio = ottieni_portafoglio(conto['id_conto'])
+            portafoglio = ottieni_portafoglio(conto['id_conto'], master_key_b64=master_key_b64)
             tutti_asset.extend(portafoglio)
         
         if not tutti_asset:
@@ -333,57 +330,7 @@ class InvestimentiTab(ft.Container):
                 success=False
             )
 
-    def _apri_menu_aggiungi_operazione(self, e):
-        """Apre un menu per selezionare il conto su cui aggiungere un'operazione."""
-        utente_id = self.controller.get_user_id()
-        if not utente_id:
-            return
 
-        conti_utente = ottieni_dettagli_conti_utente(utente_id)
-        conti_investimento = [c for c in conti_utente if c['tipo'] == 'Investimento']
-        
-        if not conti_investimento:
-            self.controller.show_snack_bar(
-                self.controller.loc.get("no_investment_accounts"),
-                success=False
-            )
-            return
-        
-        # Se c'è un solo conto, apri direttamente il dialogo
-        if len(conti_investimento) == 1:
-            self.controller.portafoglio_dialogs.apri_dialog_portafoglio(e, conti_investimento[0])
-            return
-        
-        # Altrimenti mostra un menu di selezione
-        def close_bs(e):
-            bs.open = False
-            bs.update()
-        
-        def apri_portafoglio(conto):
-            close_bs(None)
-            self.controller.portafoglio_dialogs.apri_dialog_portafoglio(None, conto)
-        
-        bs = ft.BottomSheet(
-            ft.Container(
-                ft.Column([
-                    ft.Text(self.controller.loc.get("select_investment_account"), 
-                           size=16, weight=ft.FontWeight.BOLD),
-                    ft.Divider(),
-                    *[
-                        ft.ListTile(
-                            title=ft.Text(conto['nome_conto']),
-                            subtitle=ft.Text(f"{self.controller.loc.get('value')}: {self.controller.loc.format_currency(conto['saldo_calcolato'])}"),
-                            on_click=lambda _, c=conto: apri_portafoglio(c)
-                        ) for conto in conti_investimento
-                    ]
-                ], tight=True, spacing=5),
-                padding=20
-            ),
-            open=True
-        )
-        
-        self.page.overlay.append(bs)
-        self.page.update()
 
     def _aggiungi_conto_investimento(self, e):
         """Apre il dialogo per creare un nuovo conto di investimento."""
@@ -394,12 +341,13 @@ class InvestimentiTab(ft.Container):
                 
             dialog = InvestimentoDialog(self.page, on_save)
             
-            if hasattr(self.page, "open"):
-                self.page.open(dialog)
+            if hasattr(self.controller.page, "open"):
+                self.controller.page.open(dialog)
             else:
-                self.page.dialog = dialog
+                if dialog not in self.controller.page.overlay:
+                    self.controller.page.overlay.append(dialog)
                 dialog.open = True
-                self.page.update()
+                self.controller.page.update()
             print("Dialogo aperto con successo.")
         except Exception as ex:
             print(f"Errore nell'apertura del dialogo: {ex}")
@@ -418,12 +366,13 @@ class InvestimentiTab(ft.Container):
                 
             dialog = InvestimentoDialog(self.page, on_save, conto_da_modificare=conto_data)
             
-            if hasattr(self.page, "open"):
-                self.page.open(dialog)
+            if hasattr(self.controller.page, "open"):
+                self.controller.page.open(dialog)
             else:
-                self.page.dialog = dialog
+                if dialog not in self.controller.page.overlay:
+                    self.controller.page.overlay.append(dialog)
                 dialog.open = True
-                self.page.update()
+                self.controller.page.update()
             print("Dialogo modifica aperto con successo.")
         except Exception as ex:
             print(f"Errore nell'apertura del dialogo modifica: {ex}")

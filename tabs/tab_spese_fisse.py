@@ -7,13 +7,13 @@ from db.gestione_db import (
     aggiungi_transazione,
     aggiungi_transazione_condivisa
 )
-from utils.styles import AppStyles, AppColors
+from utils.styles import AppStyles, AppColors, PageConstants
 from datetime import datetime
 
 
 class SpeseFisseTab(ft.Container):
     def __init__(self, controller):
-        super().__init__(padding=ft.padding.only(left=10, top=10, right=10, bottom=80), expand=True)
+        super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
         self.page = controller.page
 
@@ -52,7 +52,9 @@ class SpeseFisseTab(ft.Container):
         id_famiglia = self.controller.get_family_id()
         if not id_famiglia: return
 
-        spese_fisse = ottieni_spese_fisse_famiglia(id_famiglia)
+        master_key_b64 = self.controller.page.session.get("master_key")
+        current_user_id = self.controller.get_user_id()
+        spese_fisse = ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64, current_user_id)
         self.dt_spese_fisse.rows.clear()
 
         if not spese_fisse:
@@ -70,6 +72,12 @@ class SpeseFisseTab(ft.Container):
                         ft.DataCell(ft.Text(str(spesa['giorno_addebito']))),
                         ft.DataCell(ft.Switch(value=bool(spesa['attiva']), data=spesa['id_spesa_fissa'], on_change=self._cambia_stato_attiva)),
                         ft.DataCell(ft.Row([
+                            # Icona addebito automatico
+                            ft.Icon(
+                                name=ft.Icons.AUTO_MODE if spesa.get('addebito_automatico') else ft.Icons.BLOCK,
+                                color=AppColors.SUCCESS if spesa.get('addebito_automatico') else ft.Colors.GREY_400,
+                                size=20
+                            ),
                             ft.IconButton(icon=ft.Icons.PAYMENT, tooltip="Paga", data=spesa,
                                           icon_color=AppColors.SUCCESS,
                                           on_click=self._paga_spesa_fissa),
@@ -102,17 +110,16 @@ class SpeseFisseTab(ft.Container):
         ]
 
         return [
-            ft.Row([
-                AppStyles.header_text(loc.get("fixed_expenses_management")),
+            AppStyles.section_header(
+                loc.get("fixed_expenses_management"),
                 ft.IconButton(
                     icon=ft.Icons.ADD,
                     tooltip=loc.get("add_fixed_expense"),
                     icon_color=AppColors.PRIMARY,
                     on_click=lambda e: self.controller.spesa_fissa_dialog.apri_dialog()
                 )
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            AppStyles.body_text(loc.get("fixed_expenses_description")),
-            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+            ),
+            AppStyles.page_divider(),
             self.data_stack
         ]
 
@@ -149,23 +156,27 @@ class SpeseFisseTab(ft.Container):
             success = False
             if spesa['id_conto_personale_addebito']:
                 # Transazione su conto personale
+                master_key_b64 = self.controller.page.session.get("master_key")
                 success = aggiungi_transazione(
                     id_conto=spesa['id_conto_personale_addebito'],
                     data=data_oggi,
                     descrizione=descrizione,
                     importo=importo,
-                    id_sottocategoria=id_sottocategoria
+                    id_sottocategoria=id_sottocategoria,
+                    master_key_b64=master_key_b64
                 )
             elif spesa['id_conto_condiviso_addebito']:
                 # Transazione su conto condiviso
                 id_utente = self.controller.get_user_id()
+                master_key_b64 = self.controller.page.session.get("master_key")
                 success = aggiungi_transazione_condivisa(
                     id_utente_autore=id_utente,
                     id_conto_condiviso=spesa['id_conto_condiviso_addebito'],
                     data=data_oggi,
                     descrizione=descrizione,
                     importo=importo,
-                    id_sottocategoria=id_sottocategoria
+                    id_sottocategoria=id_sottocategoria,
+                    master_key_b64=master_key_b64
                 )
             
             if success:

@@ -8,9 +8,7 @@ build_exe_options = {
         "flet_desktop",
         "flet_core",
         "flet_runtime",
-        "google.auth",
-        "google.oauth2",
-        "googleapiclient",
+        # Google packages rimossi - ora usiamo Supabase PostgreSQL
         "pandas",
         "openpyxl",
         "numpy",
@@ -21,15 +19,15 @@ build_exe_options = {
         "pytz",
         "asyncio",
         "threading",
+        "psycopg2",  # Aggiunto per Supabase
     ],
     "includes": [
         "app_controller",
-        "google_auth_manager",
-        "google_drive_manager",
+        # google_auth_manager e google_drive_manager rimossi
     ],
     "include_files": [
         ("assets", "assets"),
-        ("credentials.json", "credentials.json"),
+        # credentials.json rimosso - ora usiamo .env per Supabase
     ],
     "excludes": ["tkinter", "unittest", "test"],
 }

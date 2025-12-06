@@ -1,5 +1,5 @@
 import flet as ft
-from utils.styles import AppColors, AppStyles
+from utils.styles import AppColors, AppStyles, PageConstants
 from db.gestione_db import (
     imposta_conto_default_utente, aggiorna_profilo_utente, cambia_password, hash_password,
     ottieni_tutti_i_conti_utente, ottieni_conto_default_utente, ottieni_dettagli_utente
@@ -7,7 +7,7 @@ from db.gestione_db import (
 
 class ImpostazioniTab(ft.Container):
     def __init__(self, controller):
-        super().__init__(expand=True)
+        super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
         self.page = controller.page
         self.loc = controller.loc
@@ -23,14 +23,14 @@ class ImpostazioniTab(ft.Container):
         """Callback per il cambio lingua."""
         lang_code = e.control.value
         self.controller.loc.set_language(lang_code)
-        self.page.client_storage.set("settings.language", lang_code)
+        self.controller.page.client_storage.set("settings.language", lang_code)
         self.controller.update_all_views(is_initial_load=True)
 
     def _valuta_cambiata(self, e):
         """Callback per il cambio valuta."""
         currency_code = e.control.value
         self.controller.loc.set_currency(currency_code)
-        self.page.client_storage.set("settings.currency", currency_code)
+        self.controller.page.client_storage.set("settings.currency", currency_code)
         self.controller.update_all_views()
 
     def _salva_conto_default_cliccato(self, e):
@@ -65,7 +65,10 @@ class ImpostazioniTab(ft.Container):
             "codice_fiscale": self.txt_codice_fiscale.value,
             "indirizzo": self.txt_indirizzo.value,
         }
-        successo_profilo = aggiorna_profilo_utente(id_utente, dati_profilo)
+        
+        master_key_b64 = self.controller.page.session.get("master_key")
+        
+        successo_profilo = aggiorna_profilo_utente(id_utente, dati_profilo, master_key_b64)
 
         # Aggiorna password se inserita
         nuova_password = self.txt_nuova_password.value
@@ -121,7 +124,7 @@ class ImpostazioniTab(ft.Container):
         self.txt_username = ft.TextField(label=loc.get("username"), border_color=ft.Colors.OUTLINE)
         self.txt_email = ft.TextField(label=loc.get("email"), border_color=ft.Colors.OUTLINE)
         self.txt_nome = ft.TextField(label=loc.get("name"), border_color=ft.Colors.OUTLINE)
-        self.txt_cognome = ft.TextField(label="Cognome", border_color=ft.Colors.OUTLINE)
+        self.txt_cognome = ft.TextField(label=loc.get("surname"), border_color=ft.Colors.OUTLINE)
         self.txt_data_nascita = ft.TextField(label=loc.get("date_of_birth"), border_color=ft.Colors.OUTLINE)
         self.txt_codice_fiscale = ft.TextField(label=loc.get("tax_code"), border_color=ft.Colors.OUTLINE)
         self.txt_indirizzo = ft.TextField(label=loc.get("address"), border_color=ft.Colors.OUTLINE)
@@ -137,9 +140,9 @@ class ImpostazioniTab(ft.Container):
         )
 
         return [
-            AppStyles.header_text(loc.get("general_settings")),
-            AppStyles.body_text(loc.get("general_settings_desc")),
-            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+            # Sezione Lingua e Valuta
+            AppStyles.section_header(loc.get("language_and_currency")),
+            AppStyles.page_divider(),
             ft.Row([
                 self.dd_lingua,
                 self.dd_valuta,
@@ -147,9 +150,9 @@ class ImpostazioniTab(ft.Container):
 
             ft.Divider(height=30, color=ft.Colors.TRANSPARENT),
 
-            AppStyles.header_text(loc.get("default_account")),
-            AppStyles.body_text(loc.get("default_account_desc")),
-            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+            # Sezione Conto Predefinito
+            AppStyles.section_header(loc.get("default_account")),
+            AppStyles.page_divider(),
             ft.Row([
                 self.dd_conto_default,
                 self.btn_salva_conto_default
@@ -157,9 +160,9 @@ class ImpostazioniTab(ft.Container):
 
             ft.Divider(height=30, color=ft.Colors.TRANSPARENT),
 
-            AppStyles.header_text(loc.get("user_profile")),
-            AppStyles.body_text(loc.get("user_profile_desc")),
-            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+            # Sezione Profilo Utente
+            AppStyles.section_header(loc.get("user_profile")),
+            AppStyles.page_divider(),
             ft.Row([self.txt_username, self.txt_email], spacing=10),
             ft.Row([self.txt_nome, self.txt_cognome], spacing=10),
             ft.Row([self.txt_data_nascita, self.txt_codice_fiscale], spacing=10),
@@ -172,8 +175,9 @@ class ImpostazioniTab(ft.Container):
             
             ft.Divider(height=30, color=ft.Colors.TRANSPARENT),
             
-            AppStyles.header_text(loc.get("backup_restore")),
-            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+            # Sezione Backup
+            AppStyles.section_header(loc.get("backup_and_restore")),
+            AppStyles.page_divider(),
             ft.Row(
                 [
                     ft.ElevatedButton(
@@ -185,7 +189,9 @@ class ImpostazioniTab(ft.Container):
                     ft.ElevatedButton(loc.get("restore_from_backup"), icon=ft.Icons.RESTORE,
                                       on_click=lambda e: self.controller.ripristina_dati_clicked()),
                 ]
-            )
+            ),
+            # Padding in fondo
+            ft.Container(height=80)
         ]
 
     def update_view_data(self, is_initial_load=False):
@@ -194,7 +200,9 @@ class ImpostazioniTab(ft.Container):
         # Popola e imposta il conto di default
         utente_id = self.controller.get_user_id()
         if utente_id:
-            tutti_i_conti = ottieni_tutti_i_conti_utente(utente_id)
+            # Passa master_key per decriptare i nomi dei conti
+            master_key_b64 = self.controller.page.session.get("master_key")
+            tutti_i_conti = ottieni_tutti_i_conti_utente(utente_id, master_key_b64=master_key_b64)
             conti_filtrati = [c for c in tutti_i_conti if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
 
             opzioni_conto = []
@@ -208,7 +216,8 @@ class ImpostazioniTab(ft.Container):
                 self.dd_conto_default.value = f"{conto_default_info['tipo'][0].upper()}{conto_default_info['id']}"
 
             # Popola i campi del profilo utente
-            dati_utente = ottieni_dettagli_utente(utente_id)
+            dati_utente = ottieni_dettagli_utente(utente_id, master_key_b64)
+            
             if dati_utente:
                 self.txt_username.value = dati_utente.get("username", "")
                 self.txt_email.value = dati_utente.get("email", "")
@@ -218,5 +227,5 @@ class ImpostazioniTab(ft.Container):
                 self.txt_codice_fiscale.value = dati_utente.get("codice_fiscale", "")
                 self.txt_indirizzo.value = dati_utente.get("indirizzo", "")
         
-        if self.page:
-            self.page.update()
+        if self.controller.page:
+            self.controller.page.update()

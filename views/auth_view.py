@@ -1,11 +1,10 @@
 import flet as ft
 from db.gestione_db import (
     registra_utente, verifica_login, aggiungi_utente_a_famiglia, trova_utente_per_email,
-    imposta_password_temporanea, cambia_password, hash_password
+    imposta_password_temporanea, cambia_password, hash_password, cambia_password_e_username
 )
 from utils.email_sender import send_email
 import os
-import google_auth_manager
 
 
 class AuthView:
@@ -28,21 +27,20 @@ class AuthView:
         self.txt_reg_cognome = ft.TextField()
         self.txt_reg_password = ft.TextField(password=True, can_reveal_password=True)
         self.txt_reg_conferma_password = ft.TextField(password=True, can_reveal_password=True)
+        self.txt_reg_data_nascita = ft.TextField(label="Data di Nascita (YYYY-MM-DD)")
+        self.txt_reg_codice_fiscale = ft.TextField(label="Codice Fiscale")
+        self.txt_reg_indirizzo = ft.TextField(label="Indirizzo")
 
         # Controlli per il Recupero Password
         self.txt_recovery_email = ft.TextField(autofocus=True)
         self.recovery_status_text = ft.Text(visible=False)
 
         # Controlli per il Reset Password
+        self.txt_reset_username = ft.TextField(label="Nuovo Username")
         self.txt_reset_new_password = ft.TextField(password=True, can_reveal_password=True)
         self.txt_reset_confirm_password = ft.TextField(password=True, can_reveal_password=True)
         self.reset_status_text = ft.Text(visible=False)
-        # self.reset_token = None # Non più necessario
 
-    def login_google(self, e):
-        """Avvia il flusso di autenticazione Google."""
-        # Chiama la funzione authenticate dal modulo google_auth_manager
-        google_auth_manager.authenticate(self.controller)
 
     def get_login_view(self) -> ft.View:
         """Costruisce e restituisce la vista di Login."""
@@ -107,8 +105,8 @@ class AuthView:
 
         # Reset dei campi
         for field in [self.txt_reg_username, self.txt_reg_email, self.txt_reg_nome, self.txt_reg_cognome,
-                      self.txt_reg_password,
-                      self.txt_reg_conferma_password]:
+                      self.txt_reg_password, self.txt_reg_conferma_password,
+                      self.txt_reg_data_nascita, self.txt_reg_codice_fiscale, self.txt_reg_indirizzo]:
             field.value = ""
             field.error_text = None
 
@@ -124,6 +122,9 @@ class AuthView:
                         self.txt_reg_cognome,
                         self.txt_reg_password,
                         self.txt_reg_conferma_password,
+                        self.txt_reg_data_nascita,
+                        self.txt_reg_codice_fiscale,
+                        self.txt_reg_indirizzo,
                         ft.Container(height=10),
                         ft.ElevatedButton(
                             loc.get("register_now"),
@@ -153,32 +154,46 @@ class AuthView:
             self.page.update()
             return
 
-        utente = verifica_login(username, password)
-        if utente:
-            self.txt_errore_login.visible = False
-            self.controller.post_login_setup(utente)
-        else:
-            self.txt_errore_login.value = "Username o password non validi."
-            self.txt_errore_login.visible = True
-            self.page.update()
+        # Mostra spinner durante il login
+        self.controller.show_loading("Accesso in corso...")
+        
+        try:
+            utente = verifica_login(username, password)
+            if utente:
+                self.txt_errore_login.visible = False
+                self.controller.post_login_setup(utente)
+            else:
+                self.txt_errore_login.value = "Username o password non validi."
+                self.txt_errore_login.visible = True
+                self.page.update()
+        finally:
+            self.controller.hide_loading()
 
     def _registra_cliccato(self, e):
+        # Disable button to prevent double submission
+        btn_registra = e.control
+        btn_registra.disabled = True
+        btn_registra.update()
+
         username = self.txt_reg_username.value.strip()
         email = self.txt_reg_email.value.lower().strip()
         nome = self.txt_reg_nome.value.strip()
         cognome = self.txt_reg_cognome.value.strip()
         password = self.txt_reg_password.value
         conferma_password = self.txt_reg_conferma_password.value
+        data_nascita = self.txt_reg_data_nascita.value.strip()
+        codice_fiscale = self.txt_reg_codice_fiscale.value.strip()
+        indirizzo = self.txt_reg_indirizzo.value.strip()
 
         # Reset errori
         for field in [self.txt_reg_username, self.txt_reg_email, self.txt_reg_nome, self.txt_reg_cognome,
-                      self.txt_reg_password,
-                      self.txt_reg_conferma_password]:
+                      self.txt_reg_password, self.txt_reg_conferma_password,
+                      self.txt_reg_data_nascita, self.txt_reg_codice_fiscale, self.txt_reg_indirizzo]:
             field.error_text = None
 
         # Validazione
         is_valid = True
-        if not all([username, email, nome, cognome, password, conferma_password]):
+        if not all([username, email, nome, cognome, password, conferma_password, data_nascita, codice_fiscale, indirizzo]):
             self.controller.show_snack_bar("Tutti i campi sono obbligatori.", success=False)
             is_valid = False
         if password != conferma_password:
@@ -186,22 +201,79 @@ class AuthView:
             is_valid = False
 
         if not is_valid:
+            btn_registra.disabled = False
+            btn_registra.update()
             self.page.update()
             return
 
-        id_nuovo_utente = registra_utente(username, email, password, nome, cognome)
+        print("[DEBUG] Chiamata a registra_utente...")
+        
+        # Mostra spinner durante la registrazione
+        self.controller.show_loading("Registrazione in corso...")
+        
+        try:
+            result = registra_utente(nome, cognome, username, password, email, data_nascita, codice_fiscale, indirizzo)
+        finally:
+            self.controller.hide_loading()
 
-        if id_nuovo_utente:
+        if result:
+            print(f"[DEBUG] Registrazione OK. Result keys: {result.keys()}")
+            id_nuovo_utente = result.get("id_utente")
+            recovery_key = result.get("recovery_key")
+            
             invito_attivo = self.page.session.get("invito_attivo")
             if invito_attivo:
-                aggiungi_utente_a_famiglia(invito_attivo['id_famiglia'], id_nuovo_utente,
-                                           invito_attivo['ruolo_assegnato'])
+                from db.gestione_db import accetta_invito
+                master_key = result.get("master_key")
+                accetta_invito(id_nuovo_utente, invito_attivo['token'], master_key)
                 self.page.session.remove("invito_attivo")
 
-            self.controller.show_snack_bar("Registrazione completata! Effettua il login.", success=True)
-            self.page.go("/")
+            # Show recovery key dialog
+            def close_dialog(e):
+                print("[DEBUG] Dialog chiuso. Redirect a login.")
+                dialog.open = False
+                if dialog in self.page.overlay:
+                    self.page.overlay.remove(dialog)
+                self.page.update()
+                self.controller.show_snack_bar("Registrazione completata! Effettua il login.", success=True)
+                self.page.go("/")
+            
+            print("[DEBUG] Apertura dialog recovery key...")
+            dialog = ft.AlertDialog(
+                modal=True,
+                title=ft.Text("⚠️ SALVA LA TUA CHIAVE DI RECUPERO", weight=ft.FontWeight.BOLD, size=18),
+                content=ft.Column([
+                    ft.Text("Questa è la tua chiave di recupero. SALVALA IN UN POSTO SICURO!", 
+                           size=14, weight=ft.FontWeight.BOLD),
+                    ft.Text("Se perdi la password, questa chiave è l'UNICO modo per recuperare i tuoi dati.", 
+                           size=12, color=ft.Colors.RED_400),
+                    ft.Container(height=10),
+                    ft.TextField(
+                        value=recovery_key,
+                        read_only=True,
+                        multiline=True,
+                        text_size=12,
+                        border_color=ft.Colors.BLUE_400,
+                        text_style=ft.TextStyle(font_family="Courier New")
+                    ),
+                    ft.Container(height=10),
+                    ft.Text("⚠️ Senza questa chiave, i dati criptati saranno PERSI per sempre!", 
+                           size=11, italic=True, color=ft.Colors.ORANGE_400, weight=ft.FontWeight.BOLD)
+                ], tight=True, scroll=ft.ScrollMode.AUTO, width=500),
+                actions=[
+                    ft.TextButton("✅ Ho salvato la chiave", on_click=close_dialog, 
+                                 style=ft.ButtonStyle(color=ft.Colors.GREEN_400))
+                ],
+                actions_alignment=ft.MainAxisAlignment.END
+            )
+            
+            self.page.overlay.append(dialog)
+            dialog.open = True
+            self.page.update()
         else:
             self.txt_reg_username.error_text = "Username o Email già in uso."
+            btn_registra.disabled = False
+            btn_registra.update()
             self.page.update()
 
     # --- VISTA E LOGICA RECUPERO PASSWORD ---
@@ -279,6 +351,7 @@ class AuthView:
     def get_force_change_password_view(self) -> ft.View:
         """Costruisce la vista per impostare la nuova password."""
         loc = self.loc
+        self.txt_reset_username.value = ""
         self.txt_reset_new_password.label = loc.get("new_password")
         self.txt_reset_confirm_password.label = loc.get("confirm_new_password")
         self.txt_reset_new_password.value = ""
@@ -291,6 +364,8 @@ class AuthView:
                 ft.Column(
                     [
                         ft.Text(loc.get("set_new_password_title"), size=30, weight=ft.FontWeight.BOLD),
+                        ft.Text("Completa il tuo profilo", size=16),
+                        self.txt_reset_username,
                         self.txt_reset_new_password,
                         self.txt_reset_confirm_password,
                         self.reset_status_text,
@@ -306,11 +381,12 @@ class AuthView:
         )
 
     def _salva_nuova_password(self, e):
+        nuovo_username = self.txt_reset_username.value.strip()
         nuova_pass = self.txt_reset_new_password.value
         conferma_pass = self.txt_reset_confirm_password.value
 
-        if not nuova_pass or nuova_pass != conferma_pass:
-            self.reset_status_text.value = self.loc.get("passwords_do_not_match")
+        if not nuovo_username or not nuova_pass or nuova_pass != conferma_pass:
+            self.reset_status_text.value = "Compila tutti i campi e verifica che le password coincidano."
             self.reset_status_text.color = ft.Colors.RED
             self.reset_status_text.visible = True
             self.page.update()
@@ -321,14 +397,20 @@ class AuthView:
             self.page.go("/")
             return
 
-        success = cambia_password(id_utente, hash_password(nuova_pass))
+        success = cambia_password_e_username(id_utente, hash_password(nuova_pass), nuovo_username)
 
         if success:
-            self.controller.show_snack_bar(self.loc.get("password_updated_success"), success=True)
+            # Update session username
+            utente = self.page.session.get("utente_loggato")
+            if utente:
+                utente['username'] = nuovo_username
+                self.page.session.set("utente_loggato", utente)
+                
+            self.controller.show_snack_bar("Profilo aggiornato con successo!", success=True)
             # Ricarica la dashboard con la sessione valida
             self.page.go("/dashboard")
         else:
-            self.reset_status_text.value = "Errore durante l'aggiornamento della password."
+            self.reset_status_text.value = "Errore durante l'aggiornamento. Username forse già in uso."
             self.reset_status_text.color = ft.Colors.RED
             self.reset_status_text.visible = True
             self.page.update()
