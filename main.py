@@ -3,13 +3,27 @@ from app_controller import AppController
 from db.gestione_db import ottieni_versione_db
 from db.supabase_manager import SupabaseManager
 import os
+import sys
 
-# Carica le variabili d'ambiente dal file .env (opzionale)
+# Determina il percorso base (diverso per EXE vs script)
+if getattr(sys, 'frozen', False):
+    # Eseguibile PyInstaller
+    base_path = sys._MEIPASS
+else:
+    # Script Python normale
+    base_path = os.path.dirname(os.path.abspath(__file__))
+
+# Carica le variabili d'ambiente dal file .env
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    env_path = os.path.join(base_path, '.env')
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        print(f"[INFO] File .env caricato da: {env_path}")
+    else:
+        print(f"[WARNING] File .env non trovato in: {env_path}")
 except ImportError:
-    # dotenv non disponibile (es. in eseguibile), ignora
+    print("[INFO] python-dotenv non disponibile, uso variabili d'ambiente di sistema")
     pass
 
 def main(page: ft.Page):
@@ -30,7 +44,7 @@ def main(page: ft.Page):
     # --- Logica di Connessione Database (PostgreSQL/Supabase) ---
     print("Verifica connessione al database...")
     if not SupabaseManager.test_connection():
-        page.add(ft.Text("Errore critico: Impossibile connettersi al database.", color=ft.colors.RED))
+        page.add(ft.Text("Errore critico: Impossibile connettersi al database.", color=ft.Colors.RED))
         return
 
     try:
@@ -38,7 +52,7 @@ def main(page: ft.Page):
         print(f"Versione DB: {versione_corrente_db}")
     except Exception as e:
         print(f"Errore verifica versione DB: {e}")
-        page.add(ft.Text(f"Errore verifica versione DB: {e}", color=ft.colors.RED))
+        page.add(ft.Text(f"Errore verifica versione DB: {e}", color=ft.Colors.RED))
         return
     # --- Fine Logica ---
 
