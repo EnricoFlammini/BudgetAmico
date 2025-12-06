@@ -232,6 +232,7 @@ class AuthView:
             def close_dialog(e):
                 print("[DEBUG] Dialog chiuso. Redirect a login.")
                 dialog.open = False
+                self.controller.hide_loading()  # Safety: nasconde loading se visibile
                 if dialog in self.page.overlay:
                     self.page.overlay.remove(dialog)
                 self.page.update()
