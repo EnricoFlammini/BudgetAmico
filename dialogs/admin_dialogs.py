@@ -287,6 +287,7 @@ class AdminDialogs:
 
     def _chiudi_dialog_modifica_ruolo(self, e):
         self.dialog_modifica_ruolo.open = False
+        self.controller.hide_loading()  # Safety: nasconde loading se visibile
         self.controller.page.update()
         if self.dialog_modifica_ruolo in self.controller.page.overlay:
             self.controller.page.overlay.remove(self.dialog_modifica_ruolo)
@@ -306,13 +307,14 @@ class AdminDialogs:
 
         success = modifica_ruolo_utente(id_utente, id_famiglia, nuovo_ruolo)
 
+        # Prima chiudi il dialog, poi aggiorna i dati
+        self._chiudi_dialog_modifica_ruolo(e)
+
         if success:
             self.controller.show_snack_bar("Ruolo aggiornato!", success=True)
             self.controller.db_write_operation()
         else:
             self.controller.show_snack_bar("Errore durante l'aggiornamento del ruolo.", success=False)
-
-        self._chiudi_dialog_modifica_ruolo(e)
 
     # --- NUOVI METODI PER GESTIONE BUDGET ---
     def apri_dialog_imposta_budget(self):
