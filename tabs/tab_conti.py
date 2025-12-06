@@ -6,12 +6,12 @@ from db.gestione_db import (
     ottieni_riepilogo_patrimonio_utente
 )
 import datetime
-from utils.styles import AppStyles, AppColors
+from utils.styles import AppStyles, AppColors, PageConstants
 
 
 class ContiTab(ft.Container):
     def __init__(self, controller):
-        super().__init__(padding=ft.padding.only(left=10, top=10, right=10, bottom=80), expand=True)
+        super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
         self.page = controller.page
 
@@ -42,16 +42,16 @@ class ContiTab(ft.Container):
         loc = self.controller.loc
         
         self.content.controls = [
-            ft.Row([
-                AppStyles.subheader_text(loc.get("my_personal_accounts")),
+            AppStyles.section_header(
+                loc.get("my_personal_accounts"),
                 ft.IconButton(
                     icon=ft.Icons.ADD_CARD,
                     tooltip=loc.get("add_personal_account"),
                     on_click=lambda e: self.controller.conto_dialog.apri_dialog_conto(e, escludi_investimento=True),
                     icon_color=theme.primary
                 )
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+            ),
+            AppStyles.page_divider(),
             ft.Container(content=self.lv_conti_personali, expand=True),
         ]
 
@@ -74,18 +74,18 @@ class ContiTab(ft.Container):
         return [
             AppStyles.card_container(
                 content=ft.Text("Caricamento..."),
-                padding=15
+                padding=PageConstants.CARD_PADDING
             ),
-            ft.Row([
-                AppStyles.subheader_text(self.controller.loc.get("my_personal_accounts")),
+            AppStyles.section_header(
+                self.controller.loc.get("my_personal_accounts"),
                 ft.IconButton(
                     icon=ft.Icons.ADD_CARD,
                     tooltip=self.controller.loc.get("add_personal_account"),
                     on_click=lambda e: self.controller.conto_dialog.apri_dialog_conto(e, escludi_investimento=True),
                     icon_color=theme.primary
                 )
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+            ),
+            AppStyles.page_divider(),
             ft.Container(content=self.lv_conti_personali, expand=True),
         ]
 

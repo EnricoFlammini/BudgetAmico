@@ -1,12 +1,12 @@
 import flet as ft
 from db.gestione_db import ottieni_riepilogo_budget_mensile, ottieni_anni_mesi_storicizzati
 import datetime
-from utils.styles import AppStyles, AppColors
+from utils.styles import AppStyles, AppColors, PageConstants
 
 
 class BudgetTab(ft.Container):
     def __init__(self, controller):
-        super().__init__(padding=ft.padding.only(left=10, top=10, right=10, bottom=80), expand=True)
+        super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
         self.page = controller.page
 
@@ -35,13 +35,12 @@ class BudgetTab(ft.Container):
         self._popola_budget()
         
         self.content.controls = [
-            AppStyles.header_text(loc.get("budget_management")),
-            AppStyles.body_text(loc.get("budget_description")),
+            AppStyles.section_header(loc.get("budget_management")),
             ft.Container(
                 content=self.dd_mese_filtro,
-                padding=ft.padding.only(top=10, bottom=10)
+                padding=ft.padding.only(top=5, bottom=10)
             ),
-            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+            AppStyles.page_divider(),
             self.lv_budget
         ]
         # self.update() # Rimosso per evitare crash se il controllo non è montato

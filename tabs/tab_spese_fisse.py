@@ -7,13 +7,13 @@ from db.gestione_db import (
     aggiungi_transazione,
     aggiungi_transazione_condivisa
 )
-from utils.styles import AppStyles, AppColors
+from utils.styles import AppStyles, AppColors, PageConstants
 from datetime import datetime
 
 
 class SpeseFisseTab(ft.Container):
     def __init__(self, controller):
-        super().__init__(padding=ft.padding.only(left=10, top=10, right=10, bottom=80), expand=True)
+        super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
         self.page = controller.page
 
@@ -110,17 +110,16 @@ class SpeseFisseTab(ft.Container):
         ]
 
         return [
-            ft.Row([
-                AppStyles.header_text(loc.get("fixed_expenses_management")),
+            AppStyles.section_header(
+                loc.get("fixed_expenses_management"),
                 ft.IconButton(
                     icon=ft.Icons.ADD,
                     tooltip=loc.get("add_fixed_expense"),
                     icon_color=AppColors.PRIMARY,
                     on_click=lambda e: self.controller.spesa_fissa_dialog.apri_dialog()
                 )
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            AppStyles.body_text(loc.get("fixed_expenses_description")),
-            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+            ),
+            AppStyles.page_divider(),
             self.data_stack
         ]
 

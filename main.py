@@ -15,9 +15,12 @@ except ImportError:
 def main(page: ft.Page):
     # Impostazioni iniziali della pagina
     page.title = "Budget Amico"
-    page.window_width = 600
-    page.window_height = 700
-    page.window_max_width = 600
+    
+    # Impostazioni finestra (nuova sintassi Flet 0.21+)
+    page.window.width = 1500
+    page.window.height = 1000
+    page.window.min_width = 700
+    page.window.min_height = 600
 
     # Imposta il tema
     page.theme_mode = ft.ThemeMode.SYSTEM

@@ -184,6 +184,7 @@ class AdminDialogs:
 
     def _chiudi_dialog_sottocategoria(self, e):
         self.dialog_sottocategoria.open = False
+        self.controller.hide_loading()  # Safety: nasconde loading se visibile
         self.controller.page.update()
         if self.dialog_sottocategoria in self.controller.page.overlay:
             self.controller.page.overlay.remove(self.dialog_sottocategoria)

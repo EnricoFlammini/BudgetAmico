@@ -4,12 +4,12 @@ from db.gestione_db import (
     ottieni_conti_condivisi_utente,
     elimina_conto_condiviso
 )
-from utils.styles import AppStyles, AppColors
+from utils.styles import AppStyles, AppColors, PageConstants
 
 
 class ContiCondivisiTab(ft.Container):
     def __init__(self, controller):
-        super().__init__(padding=ft.padding.only(left=10, top=10, right=10, bottom=80), expand=True)
+        super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
         self.page = controller.page
 
@@ -34,16 +34,16 @@ class ContiCondivisiTab(ft.Container):
         loc = self.controller.loc
         
         self.content.controls = [
-            ft.Row([
-                AppStyles.header_text(loc.get("shared_accounts")),
+            AppStyles.section_header(
+                loc.get("shared_accounts"),
                 ft.IconButton(
                     icon=ft.Icons.GROUP_ADD,
                     tooltip=loc.get("manage_shared_account"),
                     icon_color=AppColors.PRIMARY,
                     on_click=lambda e: self.controller.conto_condiviso_dialog.apri_dialog()
                 )
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+            ),
+            AppStyles.page_divider(),
             self.lv_conti_condivisi
         ]
         
@@ -97,19 +97,16 @@ class ContiCondivisiTab(ft.Container):
     def build_controls(self):
         """Costruisce e restituisce la lista di controlli per la scheda."""
         return [
-            ft.Row(
-                [
-                    AppStyles.header_text(self.controller.loc.get("shared_accounts")),
-                    ft.IconButton(
-                        icon=ft.Icons.GROUP_ADD,
-                        tooltip=self.controller.loc.get("manage_shared_account"),
-                        icon_color=AppColors.PRIMARY,
-                        on_click=lambda e: self.controller.conto_condiviso_dialog.apri_dialog()
-                    )
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+            AppStyles.section_header(
+                self.controller.loc.get("shared_accounts"),
+                ft.IconButton(
+                    icon=ft.Icons.GROUP_ADD,
+                    tooltip=self.controller.loc.get("manage_shared_account"),
+                    icon_color=AppColors.PRIMARY,
+                    on_click=lambda e: self.controller.conto_condiviso_dialog.apri_dialog()
+                )
             ),
-            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+            AppStyles.page_divider(),
             self.lv_conti_condivisi
         ]
 

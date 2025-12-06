@@ -2,13 +2,13 @@ import flet as ft
 import json
 # Google Auth rimosso - ora usiamo Supabase PostgreSQL
 from functools import partial
-from utils.styles import AppColors, AppStyles
+from utils.styles import AppColors, AppStyles, PageConstants
 from db.gestione_db import ottieni_categorie_e_sottocategorie, ottieni_membri_famiglia, rimuovi_utente_da_famiglia, ottieni_budget_famiglia, get_smtp_config, save_smtp_config, esporta_dati_famiglia
 from utils.email_sender import send_email
 
 class AdminTab(ft.Container):
     def __init__(self, controller):
-        super().__init__(expand=True)
+        super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
         self.page = controller.page
         
@@ -62,7 +62,7 @@ class AdminTab(ft.Container):
                 icon=ft.Icons.CATEGORY,
                 content=ft.Column(expand=True, controls=[
                     ft.Row([
-                        AppStyles.header_text(loc.get("categories_management")),
+                        ft.Container(),  # Spacer
                         ft.Row([
                             ft.IconButton(
                                 icon=ft.Icons.MONETIZATION_ON,
@@ -77,8 +77,8 @@ class AdminTab(ft.Container):
                                 on_click=lambda e: self.controller.admin_dialogs.apri_dialog_categoria()
                             )
                         ])
-                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                    ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+                    ], alignment=ft.MainAxisAlignment.END),
+                    AppStyles.page_divider(),
                     self.lv_categorie
                 ])
             ),
@@ -87,15 +87,15 @@ class AdminTab(ft.Container):
                 icon=ft.Icons.PEOPLE,
                 content=ft.Column([
                     ft.Row([
-                        AppStyles.header_text(loc.get("members_management")),
+                        ft.Container(),  # Spacer
                         ft.IconButton(
                             icon=ft.Icons.PERSON_ADD,
                             tooltip=loc.get("invite_member"),
                             icon_color=AppColors.PRIMARY,
                             on_click=lambda e: self.controller.admin_dialogs.apri_dialog_invito()
                         )
-                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                    ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+                    ], alignment=ft.MainAxisAlignment.END),
+                    AppStyles.page_divider(),
                     self.lv_membri
                 ])
             ),
@@ -103,9 +103,7 @@ class AdminTab(ft.Container):
                 text="Email / SMTP",
                 icon=ft.Icons.EMAIL,
                 content=ft.Column([
-                    AppStyles.header_text("Configurazione Email (SMTP)"),
-                    AppStyles.body_text("Configura i parametri SMTP per l'invio delle email (inviti, recupero password)."),
-                    ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+                    AppStyles.page_divider(),
                     self.dd_email_provider,
                     self.txt_gmail_hint,
                     ft.Row([self.txt_smtp_server, self.txt_smtp_port], spacing=10),
@@ -117,9 +115,7 @@ class AdminTab(ft.Container):
                 text="Backup / Export",
                 icon=ft.Icons.BACKUP,
                 content=ft.Column([
-                    AppStyles.header_text("Esportazione Dati Famiglia"),
-                    AppStyles.body_text("Esporta la chiave famiglia e le configurazioni per backup o migrazione."),
-                    ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+                    AppStyles.page_divider(),
                     ft.Container(
                         content=ft.ElevatedButton(
                             "Esporta Family Key e Configurazioni",

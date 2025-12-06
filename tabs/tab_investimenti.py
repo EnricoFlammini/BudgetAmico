@@ -6,7 +6,7 @@ from db.gestione_db import (
     aggiorna_prezzo_manuale_asset,
     elimina_conto
 )
-from utils.styles import AppStyles, AppColors
+from utils.styles import AppStyles, AppColors, PageConstants
 from utils.yfinance_manager import ottieni_prezzo_asset, ottieni_prezzi_multipli
 from dialogs.investimento_dialog import InvestimentoDialog
 import datetime
@@ -14,7 +14,7 @@ import datetime
 
 class InvestimentiTab(ft.Container):
     def __init__(self, controller):
-        super().__init__(padding=ft.padding.only(left=10, top=10, right=10, bottom=80), expand=True)
+        super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
         self.page = controller.page
 

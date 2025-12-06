@@ -8,15 +8,24 @@ from db.gestione_db import (
     ottieni_anni_mesi_storicizzati  # Per popolare il filtro
 )
 import datetime
-from utils.styles import AppStyles, AppColors
+from utils.styles import AppStyles, AppColors, PageConstants
 
 
 class PersonaleTab(ft.Container):
+    # Numero di transazioni da mostrare nella vista compatta
+    MAX_TRANSAZIONI_COMPATTE = 4
+    
     def __init__(self, controller):
-        super().__init__(padding=ft.padding.only(left=10, top=10, right=10, bottom=80), expand=True)
+        super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
 
         self.controller = controller
         self.page = controller.page
+        
+        # Stato: True = vista compatta (riepilogo + 4 transazioni), False = vista espansa (tutte le transazioni)
+        self.vista_compatta = True
+        
+        # Cache delle transazioni per evitare query multiple
+        self.transazioni_correnti = []
 
         self.txt_bentornato = AppStyles.subheader_text("")
         self.txt_patrimonio = AppStyles.header_text("")
@@ -67,6 +76,30 @@ class PersonaleTab(ft.Container):
         
         loc = self.controller.loc
         
+        # Carica le transazioni e cachele
+        self.transazioni_correnti = ottieni_transazioni_utente(utente_id, anno, mese, master_key_b64=master_key_b64)
+        # Filtra le transazioni di saldo iniziale
+        self.transazioni_correnti = [
+            t for t in self.transazioni_correnti 
+            if not t.get('descrizione', '').upper().startswith("SALDO INIZIALE")
+        ]
+
+        if self.vista_compatta:
+            self._costruisci_vista_compatta(utente, riepilogo, loc)
+        else:
+            self._costruisci_vista_espansa(utente, loc)
+
+        if self.page:
+            self.page.update()
+
+    def _costruisci_vista_compatta(self, utente, riepilogo, loc):
+        """Costruisce la vista compatta con riepilogo e solo 4 transazioni."""
+        val_patrimonio = riepilogo.get('patrimonio_netto', 0)
+        val_liquidita = riepilogo.get('liquidita', 0)
+        val_investimenti = riepilogo.get('investimenti', 0)
+        val_fondi_pensione = riepilogo.get('fondi_pensione', 0)
+        val_risparmio = riepilogo.get('risparmio', 0)
+        
         # Costruisci il riepilogo schematico
         righe_dettaglio = []
         
@@ -97,7 +130,9 @@ class PersonaleTab(ft.Container):
                 AppStyles.currency_text(loc.format_currency(val_fondi_pensione))
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
         
-        self.txt_bentornato.value = loc.get("welcome_back", utente['nome'])
+        # Usa il nome utente come titolo
+        nome_utente = utente.get('nome', 'Utente')
+        self.txt_bentornato.value = nome_utente
         
         # Costruisci la card del riepilogo
         card_riepilogo = AppStyles.card_container(
@@ -117,33 +152,74 @@ class PersonaleTab(ft.Container):
         # Ricostruisce l'interfaccia
         self.dd_mese_filtro.label = loc.get("filter_by_month")
         
+        # Pulsante per vedere tutte le transazioni
+        btn_tutte_transazioni = ft.TextButton(
+            loc.get("all_transactions"),
+            icon=ft.Icons.LIST,
+            on_click=self._mostra_tutte_transazioni
+        )
+        
+        # Header delle transazioni con pulsante
+        header_transazioni = ft.Row([
+            AppStyles.subheader_text(loc.get("latest_transactions")),
+            btn_tutte_transazioni
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+        
         self.content.controls = [
-            ft.Container(
-                content=self.txt_bentornato,
-                padding=ft.padding.only(left=10, top=10, bottom=5)
-            ),
+            AppStyles.section_header(nome_utente),
             card_riepilogo,
             ft.Container(
                 content=self.dd_mese_filtro,
                 padding=ft.padding.only(left=10, right=10, top=10)
             ),
-            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+            AppStyles.page_divider(),
             ft.Container(
-                content=AppStyles.subheader_text(loc.get("latest_transactions")),
-                padding=ft.padding.only(left=10, bottom=10)
+                content=header_transazioni,
+                padding=ft.padding.only(left=10, right=10, bottom=10)
             ),
             self.lista_transazioni
         ]
 
-        # --- Aggiorna la lista delle transazioni ---
-        transazioni = ottieni_transazioni_utente(utente_id, anno, mese, master_key_b64=master_key_b64)
+        # Costruisci le card delle transazioni (solo le prime 4)
+        self._popola_lista_transazioni(limite=self.MAX_TRANSAZIONI_COMPATTE)
 
+    def _costruisci_vista_espansa(self, utente, loc):
+        """Costruisce la vista espansa con tutte le transazioni a pagina intera."""
+        nome_utente = utente.get('nome', 'Utente')
+        
+        # Pulsante per tornare alla vista compatta
+        btn_torna_indietro = ft.TextButton(
+            loc.get("back"),
+            icon=ft.Icons.ARROW_BACK,
+            on_click=self._mostra_vista_compatta
+        )
+        
+        # Header con pulsante indietro e filtro mese
+        header = ft.Row([
+            btn_torna_indietro,
+            AppStyles.subheader_text(loc.get("all_transactions")),
+            ft.Container(content=self.dd_mese_filtro, width=200)
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+        
+        self.content.controls = [
+            header,
+            AppStyles.page_divider(),
+            self.lista_transazioni
+        ]
+
+        # Costruisci le card di tutte le transazioni
+        self._popola_lista_transazioni(limite=None)
+
+    def _popola_lista_transazioni(self, limite=None):
+        """Popola la lista transazioni con un limite opzionale."""
+        loc = self.controller.loc
         self.lista_transazioni.controls.clear()
-        for t in transazioni:
-            descrizione_transazione = t.get('descrizione', '').upper()
-            if descrizione_transazione.startswith("SALDO INIZIALE"):
-                continue
-
+        
+        transazioni_da_mostrare = self.transazioni_correnti
+        if limite:
+            transazioni_da_mostrare = self.transazioni_correnti[:limite]
+        
+        for t in transazioni_da_mostrare:
             azioni = ft.Row([
                 ft.IconButton(icon=ft.Icons.EDIT, tooltip=loc.get("edit"), data=t,
                               on_click=lambda e: self.controller.transaction_dialog.apri_dialog_modifica_transazione(
@@ -155,7 +231,14 @@ class PersonaleTab(ft.Container):
                               icon_color=AppColors.ERROR, icon_size=20)
             ], spacing=0)
 
-            # Usa AppStyles.card_container per creare la card della transazione
+            # Formatta l'importo
+            importo = t.get('importo', 0)
+            if isinstance(importo, str):
+                try:
+                    importo = float(importo.replace(',', '.'))
+                except:
+                    importo = 0
+            
             card_content = ft.Row(
                 [
                     ft.Column([
@@ -163,7 +246,10 @@ class PersonaleTab(ft.Container):
                         AppStyles.caption_text(f"{t['data']} - {t['nome_conto']}"),
                     ], expand=True),
                     ft.Column([
-                        AppStyles.currency_text(t['importo'], loc),
+                        AppStyles.currency_text(
+                            loc.format_currency(importo),
+                            color=AppColors.SUCCESS if importo >= 0 else AppColors.ERROR
+                        ),
                         AppStyles.caption_text(t.get('nome_sottocategoria') or loc.get("no_category"))
                     ], horizontal_alignment=ft.CrossAxisAlignment.END),
                     azioni
@@ -175,8 +261,15 @@ class PersonaleTab(ft.Container):
                 AppStyles.card_container(card_content, padding=10)
             )
 
-        if self.page:
-            self.page.update()
+    def _mostra_tutte_transazioni(self, e):
+        """Passa alla vista espansa con tutte le transazioni."""
+        self.vista_compatta = False
+        self.update_view_data()
+
+    def _mostra_vista_compatta(self, e):
+        """Torna alla vista compatta."""
+        self.vista_compatta = True
+        self.update_view_data()
 
     def build_controls(self):
         """Non più usato - i controlli sono costruiti in update_view_data."""

@@ -6,12 +6,12 @@ from db.gestione_db import (
     ottieni_anni_mesi_storicizzati
 )
 import datetime
-from utils.styles import AppStyles, AppColors
+from utils.styles import AppStyles, AppColors, PageConstants
 
 
 class FamigliaTab(ft.Container):
     def __init__(self, controller):
-        super().__init__(padding=ft.padding.only(left=10, top=10, right=10, bottom=80), expand=True)
+        super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
         self.page = controller.page
 
@@ -125,10 +125,9 @@ class FamigliaTab(ft.Container):
             
             # Aggiorna i controlli del main_content senza riepilogo patrimonio
             self.main_content.controls = [
-                ft.Container(content=self.dd_mese_filtro, padding=ft.padding.symmetric(horizontal=10)),
-                ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
-                AppStyles.header_text(loc.get("all_family_transactions")),
-                ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+                AppStyles.section_header(loc.get("family_transactions")),
+                ft.Container(content=self.dd_mese_filtro, padding=ft.padding.only(top=5, bottom=10)),
+                AppStyles.page_divider(),
                 self.data_stack
             ]
 

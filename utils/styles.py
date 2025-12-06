@@ -25,6 +25,18 @@ class AppColors:
     SECONDARY = "secondary"
     ON_SECONDARY = "onSecondary"
 
+
+class PageConstants:
+    """Costanti per layout standard delle pagine."""
+    # Padding standard per tutti i tab
+    PAGE_PADDING = ft.padding.only(left=10, top=10, right=10, bottom=80)
+    # Spaziatura tra sezioni
+    SECTION_SPACING = 10
+    # Padding per le card
+    CARD_PADDING = 15
+    # Border radius per le card
+    CARD_BORDER_RADIUS = 12
+
 class AppStyles:
     """Stili riutilizzabili per componenti UI."""
 
@@ -100,6 +112,72 @@ class AppStyles:
             size=28,
             weight=ft.FontWeight.BOLD,
             color=color
+        )
+
+    @staticmethod
+    def section_header(title: str, action_button: ft.Control = None, title_color: str = None) -> ft.Row:
+        """Crea header di sezione con titolo e pulsante azione opzionale.
+        
+        Args:
+            title: Testo del titolo della sezione
+            action_button: Pulsante opzionale (es. IconButton per aggiungere)
+            title_color: Colore opzionale per il titolo
+        """
+        controls = [AppStyles.subheader_text(title, color=title_color)]
+        if action_button:
+            controls.append(action_button)
+        return ft.Row(controls, alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+
+    @staticmethod
+    def page_divider() -> ft.Divider:
+        """Separatore standard tra sezioni."""
+        return ft.Divider(color=ft.Colors.OUTLINE_VARIANT)
+
+    @staticmethod
+    def month_filter_dropdown(on_change, label: str = "Filtra per mese") -> ft.Dropdown:
+        """Dropdown standard per filtro mese.
+        
+        Args:
+            on_change: Callback per il cambio selezione
+            label: Etichetta del dropdown
+        """
+        return ft.Dropdown(
+            label=label,
+            on_change=on_change,
+            border_color=ft.Colors.OUTLINE,
+            text_size=14,
+            content_padding=10
+        )
+
+    @staticmethod
+    def empty_state(icon: str, message: str) -> ft.Column:
+        """Stato vuoto con icona e messaggio centrato.
+        
+        Args:
+            icon: Icona da mostrare (es. ft.Icons.INFO_OUTLINE)
+            message: Messaggio da visualizzare
+        """
+        return ft.Column(
+            [
+                ft.Icon(icon, size=50, color=AppColors.TEXT_SECONDARY),
+                AppStyles.subheader_text(message)
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.CENTER,
+            expand=True
+        )
+
+    @staticmethod
+    def scrollable_list(spacing: int = 10) -> ft.Column:
+        """Crea una colonna scrollabile per liste di elementi.
+        
+        Args:
+            spacing: Spaziatura tra elementi
+        """
+        return ft.Column(
+            expand=True,
+            scroll=ft.ScrollMode.ADAPTIVE,
+            spacing=spacing
         )
 
 
