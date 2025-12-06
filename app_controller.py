@@ -313,6 +313,7 @@ class AppController:
 
     def _chiudi_info_dialog(self, e):
         self.info_dialog.open = False
+        self.hide_loading()  # Safety: nasconde loading se visibile
         self.page.update()
         if self.info_dialog in self.page.overlay:
             self.page.overlay.remove(self.info_dialog)
