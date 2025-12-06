@@ -222,21 +222,24 @@ class LoadingOverlay(ft.Container):
                 blur_radius=20,
                 color=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
             ),
+            visible=False,  # Inizialmente nascosto
         )
         
         super().__init__(
             content=self.spinner_box,
             alignment=ft.alignment.center,
             expand=True,
+            visible=False,  # Container principale nascosto
         )
-        self.visible = False
     
     def show(self, messaggio: str = None):
         """Mostra l'overlay con un messaggio opzionale."""
         if messaggio:
             self.messaggio_text.value = messaggio
+        self.spinner_box.visible = True
         self.visible = True
     
     def hide(self):
         """Nasconde l'overlay."""
+        self.spinner_box.visible = False
         self.visible = False

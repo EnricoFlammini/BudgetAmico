@@ -80,7 +80,6 @@ class TransactionDialog(ft.AlertDialog):
             if self.controller.page: self.controller.page.update()
 
     def chiudi_dialog(self, e=None):
-        self.controller.show_loading("Attendere...")
         try:
             self.open = False
             self.controller.page.session.set("transazione_in_modifica", None)
@@ -89,8 +88,6 @@ class TransactionDialog(ft.AlertDialog):
         except Exception as ex:
             print(f"Errore chiusura dialog transazione: {ex}")
             traceback.print_exc()
-        finally:
-            self.controller.hide_loading()
 
     def _popola_dropdowns(self):
         utente_id = self.controller.get_user_id()
