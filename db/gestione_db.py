@@ -1968,7 +1968,7 @@ def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese, master_key_b64=No
         with get_db_connection() as con:
             cur = con.cursor()
             
-            # 1. Liquidità
+            # 1. Liquidità Personale (somma transazioni + rettifica)
             cur.execute("""
                 SELECT COALESCE(SUM(T.importo), 0.0) as val
                 FROM Transazioni T
@@ -1977,9 +1977,20 @@ def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese, master_key_b64=No
                   AND C.tipo NOT IN ('Investimento', 'Fondo Pensione')
                   AND T.data <= %s
             """, (id_utente, data_limite_str))
-            liquidita_personale = cur.fetchone()['val'] or 0.0
+            transazioni_personali = float(cur.fetchone()['val'] or 0.0)
+            
+            # 1.1 Rettifiche Conti Personali
+            cur.execute("""
+                SELECT COALESCE(SUM(CAST(NULLIF(CAST(C.rettifica_saldo AS TEXT), '') AS NUMERIC)), 0.0) as val
+                FROM Conti C
+                WHERE C.id_utente = %s
+                  AND C.tipo NOT IN ('Investimento', 'Fondo Pensione')
+            """, (id_utente,))
+            rettifica_personali = float(cur.fetchone()['val'] or 0.0)
+            
+            liquidita_personale = transazioni_personali + rettifica_personali
 
-            # 1.1 Liquidità Condivisa
+            # 1.2 Liquidità Condivisa (somma transazioni)
             cur.execute("""
                 SELECT COALESCE(SUM(TC.importo), 0.0) as val
                 FROM TransazioniCondivise TC
@@ -1989,7 +2000,19 @@ def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese, master_key_b64=No
                    OR (CC.id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s) AND CC.tipo_condivisione = 'famiglia'))
                   AND TC.data <= %s
             """, (id_utente, id_utente, data_limite_str))
-            liquidita_condivisa = cur.fetchone()['val'] or 0.0
+            transazioni_condivise = float(cur.fetchone()['val'] or 0.0)
+            
+            # 1.3 Rettifiche Conti Condivisi
+            cur.execute("""
+                SELECT COALESCE(SUM(CAST(NULLIF(CAST(CC.rettifica_saldo AS TEXT), '') AS NUMERIC)), 0.0) as val
+                FROM ContiCondivisi CC
+                LEFT JOIN PartecipazioneContoCondiviso PCC ON CC.id_conto_condiviso = PCC.id_conto_condiviso
+                WHERE (PCC.id_utente = %s AND CC.tipo_condivisione = 'utenti')
+                   OR (CC.id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s) AND CC.tipo_condivisione = 'famiglia')
+            """, (id_utente, id_utente))
+            rettifica_condivisi = float(cur.fetchone()['val'] or 0.0)
+            
+            liquidita_condivisa = transazioni_condivise + rettifica_condivisi
 
             liquidita = liquidita_personale + liquidita_condivisa
             
