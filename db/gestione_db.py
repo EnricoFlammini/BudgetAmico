@@ -220,6 +220,163 @@ def save_smtp_config(settings, id_famiglia=None, master_key_b64=None, id_utente=
         print(f"[ERRORE] Errore salvataggio SMTP config: {e}")
         return False
 
+
+# --- Funzioni Gestione Budget Famiglia ---
+
+def get_impostazioni_budget_famiglia(id_famiglia):
+    """
+    Recupera le impostazioni del budget famiglia:
+    - entrate_mensili: valore inserito manualmente
+    - risparmio_tipo: 'percentuale' o 'importo'
+    - risparmio_valore: valore del risparmio
+    """
+    return {
+        'entrate_mensili': float(get_configurazione('budget_entrate_mensili', id_famiglia) or 0),
+        'risparmio_tipo': get_configurazione('budget_risparmio_tipo', id_famiglia) or 'percentuale',
+        'risparmio_valore': float(get_configurazione('budget_risparmio_valore', id_famiglia) or 0)
+    }
+
+def set_impostazioni_budget_famiglia(id_famiglia, entrate_mensili, risparmio_tipo, risparmio_valore):
+    """
+    Salva le impostazioni del budget famiglia.
+    - entrate_mensili: valore delle entrate mensili
+    - risparmio_tipo: 'percentuale' o 'importo'
+    - risparmio_valore: valore del risparmio
+    """
+    try:
+        set_configurazione('budget_entrate_mensili', str(entrate_mensili), id_famiglia)
+        set_configurazione('budget_risparmio_tipo', risparmio_tipo, id_famiglia)
+        set_configurazione('budget_risparmio_valore', str(risparmio_valore), id_famiglia)
+        return True
+    except Exception as e:
+        print(f"[ERRORE] Errore salvataggio impostazioni budget: {e}")
+        return False
+
+def calcola_entrate_mensili_famiglia(id_famiglia, anno, mese, master_key_b64=None, id_utente=None):
+    """
+    Calcola la somma delle transazioni categorizzate come "Entrate" 
+    per tutti i membri della famiglia nel mese specificato.
+    Cerca la categoria con nome contenente "Entrat" (case insensitive).
+    """
+    data_inizio = f"{anno}-{mese:02d}-01"
+    ultimo_giorno = (datetime.date(anno, mese, 1) + relativedelta(months=1) - relativedelta(days=1)).day
+    data_fine = f"{anno}-{mese:02d}-{ultimo_giorno}"
+    
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # Prima troviamo le categorie "Entrate" della famiglia
+            # Le categorie potrebbero essere criptate, quindi le recuperiamo tutte
+            cur.execute("""
+                SELECT id_categoria, nome_categoria 
+                FROM Categorie 
+                WHERE id_famiglia = %s
+            """, (id_famiglia,))
+            categorie = cur.fetchall()
+            
+            # Decrypt e cerca "Entrat" nel nome
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            family_key = None
+            if master_key and id_utente:
+                family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+            
+            id_categorie_entrate = []
+            for cat in categorie:
+                nome = cat['nome_categoria']
+                if family_key:
+                    nome = _decrypt_if_key(nome, family_key, crypto)
+                if nome and 'entrat' in nome.lower():
+                    id_categorie_entrate.append(cat['id_categoria'])
+            
+            if not id_categorie_entrate:
+                return 0.0
+            
+            # Ottieni le sottocategorie di queste categorie
+            placeholders = ','.join(['%s'] * len(id_categorie_entrate))
+            cur.execute(f"""
+                SELECT id_sottocategoria 
+                FROM Sottocategorie 
+                WHERE id_categoria IN ({placeholders})
+            """, tuple(id_categorie_entrate))
+            id_sottocategorie = [row['id_sottocategoria'] for row in cur.fetchall()]
+            
+            if not id_sottocategorie:
+                return 0.0
+            
+            # Somma le transazioni personali con queste sottocategorie
+            placeholders_sub = ','.join(['%s'] * len(id_sottocategorie))
+            cur.execute(f"""
+                SELECT COALESCE(SUM(T.importo), 0.0) as totale
+                FROM Transazioni T
+                JOIN Conti C ON T.id_conto = C.id_conto
+                JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
+                WHERE AF.id_famiglia = %s
+                  AND T.id_sottocategoria IN ({placeholders_sub})
+                  AND T.data BETWEEN %s AND %s
+            """, (id_famiglia, *id_sottocategorie, data_inizio, data_fine))
+            totale_personali = cur.fetchone()['totale'] or 0.0
+            
+            # Somma le transazioni condivise con queste sottocategorie
+            cur.execute(f"""
+                SELECT COALESCE(SUM(TC.importo), 0.0) as totale
+                FROM TransazioniCondivise TC
+                JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
+                WHERE CC.id_famiglia = %s
+                  AND TC.id_sottocategoria IN ({placeholders_sub})
+                  AND TC.data BETWEEN %s AND %s
+            """, (id_famiglia, *id_sottocategorie, data_inizio, data_fine))
+            totale_condivise = cur.fetchone()['totale'] or 0.0
+            
+            return totale_personali + totale_condivise
+            
+    except Exception as e:
+        print(f"[ERRORE] Errore calcolo entrate mensili: {e}")
+        return 0.0
+
+def ottieni_totale_budget_allocato(id_famiglia, master_key_b64=None, id_utente=None):
+    """
+    Ritorna il totale dei budget assegnati alle sottocategorie.
+    """
+    try:
+        budget_list = ottieni_budget_famiglia(id_famiglia, master_key_b64, id_utente)
+        return sum(b.get('importo_limite', 0) for b in budget_list)
+    except Exception as e:
+        print(f"[ERRORE] Errore calcolo totale budget allocato: {e}")
+        return 0.0
+
+def salva_impostazioni_budget_storico(id_famiglia, anno, mese, entrate_mensili, risparmio_tipo, risparmio_valore):
+    """
+    Salva le impostazioni budget nello storico per un mese specifico.
+    Usa la tabella Configurazioni con chiavi contenenti anno e mese.
+    """
+    try:
+        chiave_base = f"budget_storico_{anno}_{mese:02d}"
+        set_configurazione(f"{chiave_base}_entrate", str(entrate_mensili), id_famiglia)
+        set_configurazione(f"{chiave_base}_risparmio_tipo", risparmio_tipo, id_famiglia)
+        set_configurazione(f"{chiave_base}_risparmio_valore", str(risparmio_valore), id_famiglia)
+        return True
+    except Exception as e:
+        print(f"[ERRORE] Errore salvataggio storico impostazioni budget: {e}")
+        return False
+
+def ottieni_impostazioni_budget_storico(id_famiglia, anno, mese):
+    """
+    Recupera le impostazioni budget dallo storico per un mese specifico.
+    Se non esistono, ritorna None.
+    """
+    chiave_base = f"budget_storico_{anno}_{mese:02d}"
+    entrate = get_configurazione(f"{chiave_base}_entrate", id_famiglia)
+    
+    if entrate is None:
+        return None  # Non esiste storico per questo mese
+    
+    return {
+        'entrate_mensili': float(entrate or 0),
+        'risparmio_tipo': get_configurazione(f"{chiave_base}_risparmio_tipo", id_famiglia) or 'percentuale',
+        'risparmio_valore': float(get_configurazione(f"{chiave_base}_risparmio_valore", id_famiglia) or 0)
+    }
+
 def esporta_dati_famiglia(id_famiglia, id_utente, master_key_b64):
     """
     Esporta family_key e configurazioni base per backup.
