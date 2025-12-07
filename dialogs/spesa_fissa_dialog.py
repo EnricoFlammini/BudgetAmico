@@ -123,12 +123,17 @@ class SpesaFissaDialog(ft.AlertDialog):
         self.dd_sottocategoria.error_text = None
 
     def _popola_dropdowns(self):
-        # Popola conti
+        # Popola conti - escludiamo Risparmio, Investimento e Fondo Pensione
         master_key = self.controller.page.session.get("master_key")
         user_id = self.controller.get_user_id()
         conti = ottieni_tutti_i_conti_famiglia(self.controller.get_family_id(), master_key_b64=master_key, id_utente=user_id)
+        
+        # Filtra i tipi di conto che non fanno parte della liquidità
+        tipi_esclusi = ['Investimento', 'Fondo Pensione', 'Risparmio']
+        conti_filtrati = [c for c in conti if c.get('tipo') not in tipi_esclusi]
+        
         options_conti = []
-        for conto in conti:
+        for conto in conti_filtrati:
             is_condiviso = conto.get('is_condiviso') or conto.get('condiviso')
             tipo_prefix = "C" if is_condiviso else "P"
             key = f"{tipo_prefix}{conto['id_conto']}"
@@ -145,6 +150,7 @@ class SpesaFissaDialog(ft.AlertDialog):
             for sub in cat['sottocategorie']:
                 options_subcats.append(ft.dropdown.Option(sub['id_sottocategoria'], f"{cat['nome_categoria']} - {sub['nome_sottocategoria']}"))
         self.dd_sottocategoria.options = options_subcats
+
 
     def _salva_cliccato(self, e):
         self.controller.show_loading("Attendere...")

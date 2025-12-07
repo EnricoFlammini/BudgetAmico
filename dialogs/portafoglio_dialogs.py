@@ -264,8 +264,10 @@ class PortafoglioDialogs:
         self.txt_ticker.read_only = False
         self.txt_nome_asset.read_only = False
 
+        master_key_b64 = self.page.session.get("master_key")
+
         # Popola il dropdown degli asset esistenti
-        portafoglio_attuale = ottieni_portafoglio(self.conto_selezionato['id_conto'])
+        portafoglio_attuale = ottieni_portafoglio(self.conto_selezionato['id_conto'], master_key_b64=master_key_b64)
         self.dd_asset_esistenti.options = [
             ft.dropdown.Option(
                 key=str(asset['id_asset']),
@@ -277,7 +279,7 @@ class PortafoglioDialogs:
 
         # Popola il dropdown dei conti (personali e condivisi, esclusi investimenti)
         id_utente = self.controller.get_user_id()
-        tutti_conti = ottieni_tutti_i_conti_utente(id_utente)
+        tutti_conti = ottieni_tutti_i_conti_utente(id_utente, master_key_b64=master_key_b64)
         
         # Filtra solo conti non di investimento
         conti_disponibili = [c for c in tutti_conti if c['tipo'] not in ['Investimento', 'Fondo Pensione']]

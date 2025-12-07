@@ -424,11 +424,16 @@ class ContoDialog(ft.AlertDialog):
             self.controller.hide_loading()
 
     def _salva_rettifica_saldo(self, e):
-        self.controller.show_loading("Attendere...")
         try:
             nuovo_saldo = float(self.txt_nuovo_saldo.value.replace(",", "."))
             id_conto = self.conto_id_in_modifica
 
+            # Chiudi il dialog PRIMA di mostrare lo spinner
+            self.dialog_rettifica_saldo.open = False
+            self.controller.page.update()
+            
+            self.controller.show_loading("Attendere...")
+            
             if self.is_condiviso_in_modifica:
                 success = admin_imposta_saldo_conto_condiviso(id_conto, nuovo_saldo)
             else:
@@ -437,11 +442,10 @@ class ContoDialog(ft.AlertDialog):
             if success:
                 self.controller.show_snack_bar("Saldo rettificato con successo!", success=True)
                 self.controller.db_write_operation()
-                self._chiudi_dialog_rettifica(e)
             else:
                 self.controller.show_snack_bar("Errore durante la rettifica del saldo.", success=False)
-                self.controller.hide_loading()
+            
+            self.controller.hide_loading()
         except (ValueError, TypeError):
             self.txt_nuovo_saldo.error_text = "Inserire un importo numerico valido."
             self.dialog_rettifica_saldo.update()
-            self.controller.hide_loading()
