@@ -3,6 +3,7 @@ from db.gestione_db import (
     aggiungi_categoria,
     modifica_categoria,
     elimina_categoria,
+    elimina_sottocategoria,
     modifica_ruolo_utente,
     # ottieni_categorie, # Non più necessario qui
     ottieni_categorie_e_sottocategorie, # Usiamo questo
@@ -217,6 +218,15 @@ class AdminDialogs:
             self.controller.db_write_operation()
         else:
             self.controller.show_snack_bar("Errore durante l'eliminazione della categoria.", success=False)
+
+    def elimina_sottocategoria_cliccato(self, e):
+        id_sottocategoria = e.control.data
+        success = elimina_sottocategoria(id_sottocategoria)
+        if success:
+            self.controller.show_snack_bar("Sottocategoria eliminata.", success=True)
+            self.controller.db_write_operation()
+        else:
+            self.controller.show_snack_bar("Errore durante l'eliminazione della sottocategoria.", success=False)
 
     # --- Metodi Gestione Membri ---
     def apri_dialog_invito(self):
