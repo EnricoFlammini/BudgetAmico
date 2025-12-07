@@ -283,6 +283,8 @@ class PortafoglioDialogs:
         conti_disponibili = [c for c in tutti_conti if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
         
         self.dd_conto_transazione.options = [
+            ft.dropdown.Option(key="CASHBACK", text="🎁 Cashback (no addebito)")
+        ] + [
             ft.dropdown.Option(
                 key=f"{'C' if c.get('is_condiviso') else 'P'}_{c['id_conto']}",
                 text=f"{c['nome_conto']} ({c['tipo']})" + (" - Condiviso" if c.get('is_condiviso') else "")
@@ -347,51 +349,80 @@ class PortafoglioDialogs:
                 self.controller.show_snack_bar(self.loc.get("fill_all_fields"), success=False)
                 return
 
-            # Parse il conto selezionato (formato: "P_123" o "C_456")
-            tipo_conto, id_conto_str = conto_selezionato_key.split("_")
-            id_conto_transazione = int(id_conto_str)
-            is_conto_condiviso = (tipo_conto == "C")
+            # Controlla se è un acquisto Cashback (no addebito)
+            is_cashback = (conto_selezionato_key == "CASHBACK")
+            
+            # Per vendita, non permettere cashback
+            if tipo_op == "VENDI" and is_cashback:
+                self.controller.show_snack_bar("Non puoi vendere con Cashback. Seleziona un conto.", success=False)
+                return
 
             # Calcola l'importo totale della transazione
             importo_totale = quantita * prezzo
             data_oggi = datetime.date.today().strftime('%Y-%m-%d')
+            master_key_b64 = self.page.session.get("master_key")
 
             if tipo_op == "COMPRA":
-                # Acquisto: sottrai denaro dal conto
-                descrizione = f"Acquisto {quantita} {ticker} @ {prezzo}"
-                importo_transazione = -abs(importo_totale)
+                # Acquisto: sottrai denaro dal conto (se non è cashback)
+                descrizione = f"{'Cashback: ' if is_cashback else 'Acquisto '}{quantita} {ticker} @ {prezzo}"
                 
                 # Compra l'asset
                 compra_asset(self.conto_selezionato['id_conto'], ticker, nome_asset, quantita, prezzo, master_key_b64=master_key_b64)
                 
+                # Crea transazione SOLO se non è cashback
+                if not is_cashback:
+                    tipo_conto, id_conto_str = conto_selezionato_key.split("_")
+                    id_conto_transazione = int(id_conto_str)
+                    is_conto_condiviso = (tipo_conto == "C")
+                    importo_transazione = -abs(importo_totale)
+                    
+                    if is_conto_condiviso:
+                        id_utente = self.controller.get_user_id()
+                        aggiungi_transazione_condivisa(
+                            id_utente, 
+                            id_conto_transazione, 
+                            data_oggi, 
+                            descrizione, 
+                            importo_transazione
+                        )
+                    else:
+                        aggiungi_transazione(
+                            id_conto_transazione, 
+                            data_oggi, 
+                            descrizione, 
+                            importo_transazione
+                        )
+                
             elif tipo_op == "VENDI":
                 # Vendita: aggiungi denaro al conto
+                tipo_conto, id_conto_str = conto_selezionato_key.split("_")
+                id_conto_transazione = int(id_conto_str)
+                is_conto_condiviso = (tipo_conto == "C")
                 descrizione = f"Vendita {quantita} {ticker} @ {prezzo}"
                 importo_transazione = abs(importo_totale)
                 
                 # Vendi l'asset
                 vendi_asset(self.conto_selezionato['id_conto'], ticker, quantita, prezzo, master_key_b64=master_key_b64)
+                
+                if is_conto_condiviso:
+                    id_utente = self.controller.get_user_id()
+                    aggiungi_transazione_condivisa(
+                        id_utente, 
+                        id_conto_transazione, 
+                        data_oggi, 
+                        descrizione, 
+                        importo_transazione
+                    )
+                else:
+                    aggiungi_transazione(
+                        id_conto_transazione, 
+                        data_oggi, 
+                        descrizione, 
+                        importo_transazione
+                    )
             else:
                 self.controller.show_snack_bar(self.loc.get("fill_all_fields"), success=False)
                 return
-
-            # Crea la transazione sul conto selezionato
-            if is_conto_condiviso:
-                id_utente = self.controller.get_user_id()
-                aggiungi_transazione_condivisa(
-                    id_utente, 
-                    id_conto_transazione, 
-                    data_oggi, 
-                    descrizione, 
-                    importo_transazione
-                )
-            else:
-                aggiungi_transazione(
-                    id_conto_transazione, 
-                    data_oggi, 
-                    descrizione, 
-                    importo_transazione
-                )
 
             self.controller.db_write_operation()
             self._aggiorna_tabella_portafoglio()

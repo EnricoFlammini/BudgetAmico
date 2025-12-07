@@ -104,7 +104,10 @@ class TransactionDialog(ft.AlertDialog):
             opzioni_conto.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}{suffix}"))
         self.dd_conto_dialog.options = opzioni_conto
 
-        self.dd_sottocategoria_dialog.options = [ft.dropdown.Option(key=None, text=self.loc.get("no_category"))]
+        self.dd_sottocategoria_dialog.options = [
+            ft.dropdown.Option(key=None, text=self.loc.get("no_category")),
+            ft.dropdown.Option(key="INTERESSI", text="💰 Interessi")
+        ]
         if famiglia_id:
             categorie = ottieni_categorie_e_sottocategorie(famiglia_id)
             for cat_data in categorie:
@@ -205,12 +208,25 @@ class TransactionDialog(ft.AlertDialog):
 
             data = self.txt_data_selezionata.value
             descrizione = self.txt_descrizione_dialog.value
-            if self.radio_tipo_transazione.value == "Spesa":
-                importo = -importo
+            
+            # Gestione speciale per "Interessi"
+            id_sottocategoria_raw = self.dd_sottocategoria_dialog.value
+            is_interessi = (id_sottocategoria_raw == "INTERESSI")
+            
+            if is_interessi:
+                # Gli interessi sono sempre entrate (importo positivo)
+                importo = abs(importo)
+                id_sottocategoria = None  # Non associare a nessuna categoria
+                if not descrizione:
+                    descrizione = "Interessi"
+            else:
+                if self.radio_tipo_transazione.value == "Spesa":
+                    importo = -importo
+                id_sottocategoria = id_sottocategoria_raw
 
             return {
                 "data": data, "descrizione": descrizione, "importo": importo,
-                "id_sottocategoria": self.dd_sottocategoria_dialog.value,
+                "id_sottocategoria": id_sottocategoria,
                 "id_conto": int(self.dd_conto_dialog.value[1:]),
                 "is_nuovo_conto_condiviso": self.dd_conto_dialog.value.startswith('C')
             }
