@@ -155,9 +155,10 @@ class PrestitoDialogs:
             if tipo_default:
                 self.dd_tipo.value = tipo_default
 
-        self.page.dialog = self.dialog_prestito
+        if self.dialog_prestito not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_prestito)
         self.dialog_prestito.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _reset_fields_prestito(self):
         self.txt_nome.value = ""
@@ -180,19 +181,20 @@ class PrestitoDialogs:
     def _popola_dropdowns_prestito(self):
         id_famiglia = self.controller.get_family_id()
         id_utente = self.controller.get_user_id()
+        master_key_b64 = self.controller.page.session.get("master_key")
 
         # Popola dropdown con conti personali E condivisi
         from db.gestione_db import ottieni_conti_condivisi_utente, ottieni_dettagli_conti_utente
         
-        conti_personali = ottieni_dettagli_conti_utente(id_utente)  # Solo conti personali
+        conti_personali = ottieni_dettagli_conti_utente(id_utente, master_key_b64=master_key_b64)
         conti_personali_filtrati = [c for c in conti_personali if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
         
-        conti_condivisi = ottieni_conti_condivisi_utente(id_utente)
+        conti_condivisi = ottieni_conti_condivisi_utente(id_utente, master_key_b64=master_key_b64)
         conti_condivisi_filtrati = [c for c in conti_condivisi if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
         
         opzioni_conti = []
         for c in conti_personali_filtrati:
-            opzioni_conti.append(ft.dropdown.Option(key=f"p_{c['id_conto']}", text=f"{c['nome_conto']} (Personale)"))
+            opzioni_conti.append(ft.dropdown.Option(key=f"p_{c['id_conto']}", text=c['nome_conto']))
         for c in conti_condivisi_filtrati:
             opzioni_conti.append(ft.dropdown.Option(key=f"s_{c['id_conto']}", text=f"{c['nome_conto']} (Condiviso)"))
         
@@ -200,21 +202,30 @@ class PrestitoDialogs:
 
         categorie_con_sottocategorie = ottieni_categorie_e_sottocategorie(id_famiglia)
         opzioni = []
-        for cat_id, cat_data in categorie_con_sottocategorie.items():
+        for cat_data in categorie_con_sottocategorie:
             if cat_data['sottocategorie']:
-                opzioni.append(ft.dropdown.Option(key=f"cat_{cat_id}", text=cat_data['nome_categoria'], disabled=True))
+                opzioni.append(ft.dropdown.Option(key=f"cat_{cat_data['id_categoria']}", text=cat_data['nome_categoria'], disabled=True))
                 for sub in cat_data['sottocategorie']:
                     opzioni.append(
                         ft.dropdown.Option(key=sub['id_sottocategoria'], text=f"  - {sub['nome_sottocategoria']}"))
         self.dd_sottocategoria_default.options = opzioni
 
     def _chiudi_dialog_prestito(self, e):
-        self.dialog_prestito.open = False
-        self.page.update()
+        self.controller.show_loading("Attendere...")
+        try:
+            self.dialog_prestito.open = False
+            self.controller.page.update()
+        except Exception as ex:
+            print(f"Errore chiusura dialog prestito: {ex}")
+            traceback.print_exc()
+        finally:
+            self.controller.hide_loading()
 
     def _salva_prestito_cliccato(self, e):
+        self.controller.show_loading("Attendere...")
         try:
             if not self._valida_campi_prestito():
+                self.controller.hide_loading()
                 return
 
             # Raccolta dati
@@ -253,6 +264,9 @@ class PrestitoDialogs:
                 if importo_residuo is None:
                     importo_residuo = self.prestito_in_modifica['importo_residuo']
                 
+                master_key_b64 = self.controller.page.session.get("master_key")
+                id_utente = self.controller.get_user_id()
+                
                 success = modifica_prestito(
                     id_prestito=self.prestito_in_modifica['id_prestito'],
                     nome=nome, tipo=tipo, descrizione=descrizione, data_inizio=data_inizio,
@@ -261,12 +275,16 @@ class PrestitoDialogs:
                     giorno_scadenza_rata=giorno_scadenza, id_conto_default=id_conto_default,
                     id_conto_condiviso_default=id_conto_condiviso_default,
                     id_sottocategoria_default=id_sottocategoria_default,
-                    importo_residuo=importo_residuo, addebito_automatico=addebito_automatico
+                    importo_residuo=importo_residuo, addebito_automatico=addebito_automatico,
+                    master_key_b64=master_key_b64, id_utente=id_utente
                 )
             else:
                 # Se nuovo prestito e rate residue non specificate, residuo = finanziato + interessi
                 if importo_residuo is None:
                     importo_residuo = importo_finanziato + importo_interessi
+
+                master_key_b64 = self.controller.page.session.get("master_key")
+                id_utente = self.controller.get_user_id()
 
                 success = aggiungi_prestito(
                     id_famiglia=id_famiglia, nome=nome, tipo=tipo, descrizione=descrizione,
@@ -275,7 +293,8 @@ class PrestitoDialogs:
                     importo_rata=importo_rata, giorno_scadenza_rata=giorno_scadenza,
                     id_conto_default=id_conto_default, id_conto_condiviso_default=id_conto_condiviso_default,
                     id_sottocategoria_default=id_sottocategoria_default,
-                    importo_residuo=importo_residuo, addebito_automatico=addebito_automatico
+                    importo_residuo=importo_residuo, addebito_automatico=addebito_automatico,
+                    master_key_b64=master_key_b64, id_utente=id_utente
                 )
 
             if success:
@@ -289,8 +308,10 @@ class PrestitoDialogs:
             print(f"Errore salvataggio prestito: {ex}")
             traceback.print_exc()
             self.controller.show_error_dialog(f"Errore inaspettato: {ex}")
+        finally:
+            self.controller.hide_loading()
 
-        self.page.update()
+        self.controller.page.update()
 
     def _valida_campi_prestito(self):
         is_valid = True
@@ -321,7 +342,7 @@ class PrestitoDialogs:
                 self.txt_rate_residue.error_text = self.loc.get("invalid_amount")
                 is_valid = False
 
-        self.page.update()
+        self.controller.page.update()
         return is_valid
 
     def apri_dialog_paga_rata(self, prestito_data):
@@ -335,17 +356,22 @@ class PrestitoDialogs:
         # Popola dropdown
         id_utente = self.controller.get_user_id()
         id_famiglia = self.controller.get_family_id()
-        conti = ottieni_tutti_i_conti_utente(id_utente)
+        master_key_b64 = self.controller.page.session.get("master_key")
+        conti = ottieni_tutti_i_conti_utente(id_utente, master_key_b64=master_key_b64)
         conti_filtrati = [c for c in conti if
                           c['tipo'] not in ['Investimento', 'Fondo Pensione']]
-        self.dd_conto_pagamento.options = [ft.dropdown.Option(key=c['id_conto'], text=c['nome_conto']) for c in
-                                           conti_filtrati]
+        opzioni_conti = []
+        for c in conti_filtrati:
+            is_condiviso = c.get('is_condiviso') or c.get('condiviso')
+            suffix = " (Condiviso)" if is_condiviso else ""
+            opzioni_conti.append(ft.dropdown.Option(key=c['id_conto'], text=f"{c['nome_conto']}{suffix}"))
+        self.dd_conto_pagamento.options = opzioni_conti
 
         categorie_con_sottocategorie = ottieni_categorie_e_sottocategorie(id_famiglia)
         opzioni = []
-        for cat_id, cat_data in categorie_con_sottocategorie.items():
+        for cat_data in categorie_con_sottocategorie:
             if cat_data['sottocategorie']:
-                opzioni.append(ft.dropdown.Option(key=f"cat_{cat_id}", text=cat_data['nome_categoria'], disabled=True))
+                opzioni.append(ft.dropdown.Option(key=f"cat_{cat_data['id_categoria']}", text=cat_data['nome_categoria'], disabled=True))
                 for sub in cat_data['sottocategorie']:
                     opzioni.append(
                         ft.dropdown.Option(key=sub['id_sottocategoria'], text=f"  - {sub['nome_sottocategoria']}"))
@@ -354,15 +380,24 @@ class PrestitoDialogs:
         self.dd_conto_pagamento.value = prestito_data.get('id_conto_pagamento_default')
         self.dd_sottocategoria_pagamento.value = prestito_data.get('id_sottocategoria_pagamento_default')
 
-        self.page.dialog = self.dialog_paga_rata
+        if self.dialog_paga_rata not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_paga_rata)
         self.dialog_paga_rata.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _chiudi_dialog_paga_rata(self, e):
-        self.dialog_paga_rata.open = False
-        self.page.update()
+        self.controller.show_loading("Attendere...")
+        try:
+            self.dialog_paga_rata.open = False
+            self.controller.page.update()
+        except Exception as ex:
+            print(f"Errore chiusura dialog paga rata: {ex}")
+            traceback.print_exc()
+        finally:
+            self.controller.hide_loading()
 
     def _esegui_pagamento_cliccato(self, e):
+        self.controller.show_loading("Attendere...")
         try:
             importo = float(self.txt_importo_pagamento.value.replace(",", "."))
             data = self.txt_data_pagamento.value
@@ -393,20 +428,22 @@ class PrestitoDialogs:
             print(f"Errore pagamento rata: {ex}")
             traceback.print_exc()
             self.controller.show_error_dialog(f"Errore inaspettato: {ex}")
+        finally:
+            self.controller.hide_loading()
 
-        self.page.update()
+        self.controller.page.update()
 
     def _apri_date_picker_inizio(self, e):
         self.controller.date_picker.on_change = lambda ev: self._on_date_picker_change(ev, self.txt_data_inizio)
         self.controller.date_picker.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _apri_date_picker_pagamento(self, e):
         self.controller.date_picker.on_change = lambda ev: self._on_date_picker_change(ev, self.txt_data_pagamento)
         self.controller.date_picker.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _on_date_picker_change(self, e, target_field):
         if self.controller.date_picker.value:
             target_field.value = self.controller.date_picker.value.strftime('%Y-%m-%d')
-            self.page.update()
+            self.controller.page.update()

@@ -12,27 +12,27 @@ import os
 # Aggiungi il percorso della directory Sviluppo al path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from db.gestione_db import storicizza_budget_retroattivo, DB_FILE
-import sqlite3
+from db.gestione_db import storicizza_budget_retroattivo, get_db_connection
+from db.supabase_manager import SupabaseManager
 
 
 def main():
     print("=" * 60)
-    print("STORICIZZAZIONE RETROATTIVA BUDGET")
+    print("STORICIZZAZIONE RETROATTIVA BUDGET (PostgreSQL)")
     print("=" * 60)
     print()
     print("Questo script popolerà Budget_Storico con i limiti correnti")
     print("per tutti i mesi passati che hanno transazioni.")
     print()
     
-    # Verifica che il database esista
-    if not os.path.exists(DB_FILE):
-        print(f"Database non trovato: {DB_FILE}")
+    # Verifica connessione
+    if not SupabaseManager.test_connection():
+        print("Errore: Impossibile connettersi al database.")
         return
     
     # Ottieni tutte le famiglie
     try:
-        with sqlite3.connect(DB_FILE) as con:
+        with get_db_connection() as con:
             cur = con.cursor()
             cur.execute("SELECT id_famiglia, nome_famiglia FROM Famiglie")
             famiglie = cur.fetchall()
@@ -42,7 +42,10 @@ def main():
                 return
             
             print(f"Trovate {len(famiglie)} famiglia/e:")
-            for id_fam, nome_fam in famiglie:
+            for row in famiglie:
+                # Supabase restituisce dizionari (RealDictCursor)
+                id_fam = row['id_famiglia']
+                nome_fam = row['nome_famiglia']
                 print(f"  - {nome_fam} (ID: {id_fam})")
             print()
             
@@ -57,7 +60,9 @@ def main():
             print("-" * 60)
             
             # Storicizza per ogni famiglia
-            for id_fam, nome_fam in famiglie:
+            for row in famiglie:
+                id_fam = row['id_famiglia']
+                nome_fam = row['nome_famiglia']
                 print(f"\nFamiglia: {nome_fam} (ID: {id_fam})")
                 print("-" * 60)
                 storicizza_budget_retroattivo(id_fam)

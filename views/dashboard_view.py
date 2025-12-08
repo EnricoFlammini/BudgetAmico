@@ -84,18 +84,24 @@ class DashboardView:
 
     def _sidebar_item_clicked(self, index, view_instance):
         """Gestisce il click su un elemento della sidebar."""
-        self.selected_index = index
-        self.content_area.content = view_instance
+        # Mostra spinner durante il caricamento
+        self.controller.show_loading("Caricamento...")
         
-        # Aggiorna i dati della vista selezionata
-        if hasattr(view_instance, 'update_view_data'):
-            view_instance.update_view_data()
-        elif hasattr(view_instance, 'update_all_admin_tabs_data'):
-            view_instance.update_all_admin_tabs_data()
-        
-        # Ricostruisci la sidebar per aggiornare la selezione
-        self.update_sidebar()
-        self.page.update()
+        try:
+            self.selected_index = index
+            self.content_area.content = view_instance
+            
+            # Aggiorna i dati della vista selezionata
+            if hasattr(view_instance, 'update_view_data'):
+                view_instance.update_view_data()
+            elif hasattr(view_instance, 'update_all_admin_tabs_data'):
+                view_instance.update_all_admin_tabs_data()
+            
+            # Ricostruisci la sidebar per aggiornare la selezione
+            self.update_sidebar()
+            self.page.update()
+        finally:
+            self.controller.hide_loading()
 
     def build_view(self) -> ft.View:
         """
@@ -193,11 +199,13 @@ class DashboardView:
         self.sidebar_items = []
         index = 0
 
-        # 1. I Miei Dati
+        # 1. Nome utente (prima voce)
+        utente = self.controller.page.session.get("utente_loggato")
+        nome_utente = utente.get('nome', loc.get("my_data")) if utente else loc.get("my_data")
         self.sidebar_items.append({
             'icon': ft.Icons.PERSON_OUTLINE,
             'selected_icon': ft.Icons.PERSON,
-            'label': loc.get("my_data"),
+            'label': nome_utente,
             'view': self.tab_personale,
             'index': index
         })

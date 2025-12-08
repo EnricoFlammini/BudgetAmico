@@ -1,12 +1,12 @@
 import flet as ft
 from functools import partial
 from db.gestione_db import ottieni_prestiti_famiglia, elimina_prestito
-from utils.styles import AppStyles, AppColors
+from utils.styles import AppStyles, AppColors, PageConstants
 
 
 class PrestitiTab(ft.Container):
     def __init__(self, controller):
-        super().__init__(padding=ft.padding.only(left=10, top=10, right=10, bottom=80), expand=True)
+        super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
         self.page = controller.page
 
@@ -25,7 +25,9 @@ class PrestitiTab(ft.Container):
         if not id_famiglia:
             return
 
-        prestiti = ottieni_prestiti_famiglia(id_famiglia)
+        master_key_b64 = self.controller.page.session.get("master_key")
+        id_utente = self.controller.get_user_id()
+        prestiti = ottieni_prestiti_famiglia(id_famiglia, master_key_b64, id_utente)
         self.lv_prestiti.controls.clear()
 
         if not prestiti:
@@ -41,20 +43,16 @@ class PrestitiTab(ft.Container):
         """Costruisce e restituisce la lista di controlli per la scheda."""
         loc = self.controller.loc
         return [
-            ft.Row(
-                [
-                    AppStyles.header_text(loc.get("loans_management")),
-                    ft.IconButton(
-                        icon=ft.Icons.ADD,
-                        tooltip=loc.get("add_loan"),
-                        icon_color=AppColors.PRIMARY,
-                        on_click=lambda e: self.controller.prestito_dialogs.apri_dialog_prestito()
-                    )
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+            AppStyles.section_header(
+                loc.get("loans_management"),
+                ft.IconButton(
+                    icon=ft.Icons.ADD,
+                    tooltip=loc.get("add_loan"),
+                    icon_color=AppColors.PRIMARY,
+                    on_click=lambda e: self.controller.prestito_dialogs.apri_dialog_prestito()
+                )
             ),
-            AppStyles.body_text(loc.get("loans_description")),
-            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+            AppStyles.page_divider(),
             self.lv_prestiti
         ]
 

@@ -29,8 +29,8 @@ class TransactionDialog(ft.AlertDialog):
         self.radio_tipo_transazione = ft.RadioGroup(content=ft.Row())
         self.txt_descrizione_dialog = ft.TextField()
         self.txt_importo_dialog = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
-        self.dd_conto_dialog = ft.Dropdown()
-        self.dd_sottocategoria_dialog = ft.Dropdown()
+        self.dd_conto_dialog = ft.Dropdown(expand=True)
+        self.dd_sottocategoria_dialog = ft.Dropdown(expand=True)
         
         self.content = ft.Column(
             [
@@ -72,36 +72,45 @@ class TransactionDialog(ft.AlertDialog):
 
     def apri_date_picker(self, e):
         self.controller.date_picker.on_change = self.on_date_picker_change
-        self.page.open(self.controller.date_picker)
+        self.controller.page.open(self.controller.date_picker)
 
     def on_date_picker_change(self, e):
         if self.controller.date_picker.value:
             self.txt_data_selezionata.value = self.controller.date_picker.value.strftime('%Y-%m-%d')
-            if self.page: self.page.update()
+            if self.controller.page: self.controller.page.update()
 
     def chiudi_dialog(self, e=None):
-        self.open = False
-        self.page.session.set("transazione_in_modifica", None)
-        if self.page: self.page.update()
+        try:
+            self.open = False
+            self.controller.page.session.set("transazione_in_modifica", None)
+            if self.controller.page:
+                self.controller.page.update()
+        except Exception as ex:
+            print(f"Errore chiusura dialog transazione: {ex}")
+            traceback.print_exc()
 
     def _popola_dropdowns(self):
         utente_id = self.controller.get_user_id()
         famiglia_id = self.controller.get_family_id()
+        master_key_b64 = self.controller.page.session.get("master_key")
 
-        tutti_i_conti = ottieni_tutti_i_conti_utente(utente_id)
+        tutti_i_conti = ottieni_tutti_i_conti_utente(utente_id, master_key_b64=master_key_b64)
         conti_filtrati = [c for c in tutti_i_conti if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
 
         opzioni_conto = []
         for c in conti_filtrati:
-            suffix = self.loc.get("shared_suffix") if c['is_condiviso'] else self.loc.get("personal_suffix")
+            suffix = " " + self.loc.get("shared_suffix") if c['is_condiviso'] else ""
             prefix = "C" if c['is_condiviso'] else "P"
-            opzioni_conto.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']} {suffix}"))
+            opzioni_conto.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}{suffix}"))
         self.dd_conto_dialog.options = opzioni_conto
 
-        self.dd_sottocategoria_dialog.options = [ft.dropdown.Option(key=None, text=self.loc.get("no_category"))]
+        self.dd_sottocategoria_dialog.options = [
+            ft.dropdown.Option(key=None, text=self.loc.get("no_category")),
+            ft.dropdown.Option(key="INTERESSI", text="💰 Interessi")
+        ]
         if famiglia_id:
             categorie = ottieni_categorie_e_sottocategorie(famiglia_id)
-            for cat_id, cat_data in categorie.items():
+            for cat_data in categorie:
                 for sub_cat in cat_data['sottocategorie']:
                     self.dd_sottocategoria_dialog.options.append(
                         ft.dropdown.Option(key=sub_cat['id_sottocategoria'], text=f"{cat_data['nome_categoria']} - {sub_cat['nome_sottocategoria']}")
@@ -121,7 +130,7 @@ class TransactionDialog(ft.AlertDialog):
     def apri_dialog_nuova_transazione(self, e=None):
         try:
             self._update_texts()
-            self.page.session.set("transazione_in_modifica", None)
+            self.controller.page.session.set("transazione_in_modifica", None)
             self._popola_dropdowns()
             self._reset_campi()
 
@@ -130,9 +139,10 @@ class TransactionDialog(ft.AlertDialog):
             if conto_default_info:
                 self.dd_conto_dialog.value = f"{conto_default_info['tipo'][0].upper()}{conto_default_info['id']}"
 
-            self.page.dialog = self
+            if self not in self.controller.page.overlay:
+                self.controller.page.overlay.append(self)
             self.open = True
-            if self.page: self.page.update()
+            if self.controller.page: self.controller.page.update()
         except Exception as ex:
             print(f"Errore apertura dialog nuova transazione: {ex}")
             traceback.print_exc()
@@ -158,10 +168,11 @@ class TransactionDialog(ft.AlertDialog):
 
             self.dd_sottocategoria_dialog.value = transazione_dati.get('id_sottocategoria')
 
-            self.page.session.set("transazione_in_modifica", transazione_dati)
-            self.page.dialog = self
+            self.controller.page.session.set("transazione_in_modifica", transazione_dati)
+            if self not in self.controller.page.overlay:
+                self.controller.page.overlay.append(self)
             self.open = True
-            if self.page: self.page.update()
+            if self.controller.page: self.controller.page.update()
         except Exception as ex:
             print(f"Errore apertura dialog modifica transazione: {ex}")
             traceback.print_exc()
@@ -192,17 +203,30 @@ class TransactionDialog(ft.AlertDialog):
                 is_valid = False
 
             if not is_valid:
-                if self.page: self.page.update()
+                if self.controller.page: self.controller.page.update()
                 return
 
             data = self.txt_data_selezionata.value
             descrizione = self.txt_descrizione_dialog.value
-            if self.radio_tipo_transazione.value == "Spesa":
-                importo = -importo
+            
+            # Gestione speciale per "Interessi"
+            id_sottocategoria_raw = self.dd_sottocategoria_dialog.value
+            is_interessi = (id_sottocategoria_raw == "INTERESSI")
+            
+            if is_interessi:
+                # Gli interessi sono sempre entrate (importo positivo)
+                importo = abs(importo)
+                id_sottocategoria = None  # Non associare a nessuna categoria
+                if not descrizione:
+                    descrizione = "Interessi"
+            else:
+                if self.radio_tipo_transazione.value == "Spesa":
+                    importo = -importo
+                id_sottocategoria = id_sottocategoria_raw
 
             return {
                 "data": data, "descrizione": descrizione, "importo": importo,
-                "id_sottocategoria": self.dd_sottocategoria_dialog.value,
+                "id_sottocategoria": id_sottocategoria,
                 "id_conto": int(self.dd_conto_dialog.value[1:]),
                 "is_nuovo_conto_condiviso": self.dd_conto_dialog.value.startswith('C')
             }
@@ -212,6 +236,9 @@ class TransactionDialog(ft.AlertDialog):
             return None
 
     def _esegui_modifica(self, dati_nuovi, transazione_originale):
+        # Get master_key from session for encryption
+        master_key_b64 = self.controller.page.session.get("master_key")
+        
         is_originale_condivisa = transazione_originale.get('id_transazione_condivisa', 0) > 0
         is_nuova_condivisa = dati_nuovi['is_nuovo_conto_condiviso']
 
@@ -219,10 +246,11 @@ class TransactionDialog(ft.AlertDialog):
         if is_originale_condivisa == is_nuova_condivisa:
             if is_originale_condivisa:
                 id_trans = transazione_originale['id_transazione_condivisa']
-                return modifica_transazione_condivisa(id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], dati_nuovi['id_sottocategoria'])
+                id_utente = self.controller.get_user_id()
+                return modifica_transazione_condivisa(id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], dati_nuovi['id_sottocategoria'], master_key_b64=master_key_b64, id_utente=id_utente)
             else:
                 id_trans = transazione_originale['id_transazione']
-                return modifica_transazione(id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], dati_nuovi['id_sottocategoria'], dati_nuovi['id_conto'])
+                return modifica_transazione(id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], dati_nuovi['id_sottocategoria'], dati_nuovi['id_conto'], master_key_b64=master_key_b64)
         
         # Caso 2: Il tipo di conto è cambiato (es. da Personale a Condiviso)
         # Trattiamo come un'operazione di "elimina e crea"
@@ -237,29 +265,48 @@ class TransactionDialog(ft.AlertDialog):
             return self._esegui_aggiunta(dati_nuovi)
 
     def _esegui_aggiunta(self, dati):
+        # Get master_key from session for encryption
+        master_key_b64 = self.controller.page.session.get("master_key")
+        
         if dati['is_nuovo_conto_condiviso']:
             id_utente_autore = self.controller.get_user_id()
             return aggiungi_transazione_condivisa(
                 id_utente_autore=id_utente_autore, id_conto_condiviso=dati['id_conto'],
                 data=dati['data'], descrizione=dati['descrizione'], importo=dati['importo'],
-                id_sottocategoria=dati['id_sottocategoria']
+                id_sottocategoria=dati['id_sottocategoria'], master_key_b64=master_key_b64
             ) is not None
         else:
             return aggiungi_transazione(
                 id_conto=dati['id_conto'], data=dati['data'], descrizione=dati['descrizione'],
-                importo=dati['importo'], id_sottocategoria=dati['id_sottocategoria']
+                importo=dati['importo'], id_sottocategoria=dati['id_sottocategoria'], master_key_b64=master_key_b64
             ) is not None
 
     def _salva_nuova_transazione(self, e):
-        dati_validati = self._valida_e_raccogli_dati()
-        if not dati_validati:
-            return
-
-        transazione_in_modifica = self.page.session.get("transazione_in_modifica")
-        success = False
-        messaggio = ""
+        # 1. Feedback locale: Disabilita pulsanti e cambia testo
+        save_btn = self.actions[1]
+        cancel_btn = self.actions[0]
+        original_text = save_btn.text
+        
+        save_btn.text = "Salvataggio..."
+        save_btn.disabled = True
+        cancel_btn.disabled = True
+        self.update()
 
         try:
+            dati_validati = self._valida_e_raccogli_dati()
+            if not dati_validati:
+                # Ripristina pulsanti se validazione fallisce
+                save_btn.text = original_text
+                save_btn.disabled = False
+                cancel_btn.disabled = False
+                self.update()
+                return
+
+            transazione_in_modifica = self.controller.page.session.get("transazione_in_modifica")
+            success = False
+            messaggio = ""
+
+            # Esegue l'operazione (sincrona per ora)
             if transazione_in_modifica:
                 success = self._esegui_modifica(dati_validati, transazione_in_modifica)
                 messaggio = "modificata" if success else "errore nella modifica"
@@ -268,15 +315,27 @@ class TransactionDialog(ft.AlertDialog):
                 messaggio = "aggiunta" if success else "errore nell'aggiunta"
 
             if success:
-                self.controller.db_write_operation()
+                # 2. Chiudi il dialog PRIMA di aggiornare la dashboard
                 self.open = False
+                self.controller.page.update()
+                
+                # 3. Ora avvia l'aggiornamento globale (che mostrerà lo spinner correttamente)
+                self.controller.db_write_operation()
                 self.controller.show_snack_bar(f"Transazione {messaggio} con successo!", success=True)
             else:
                 self.controller.show_snack_bar(f"❌ {messaggio.capitalize()}.", success=False)
+                # Ripristina pulsanti in caso di errore logico
+                save_btn.text = original_text
+                save_btn.disabled = False
+                cancel_btn.disabled = False
+                self.update()
 
         except Exception as ex:
             print(f"Errore salvataggio transazione: {ex}")
             traceback.print_exc()
             self.controller.show_error_dialog(f"Errore inaspettato durante il salvataggio: {ex}")
-
-        if self.page: self.page.update()
+            # Ripristina pulsanti
+            save_btn.text = original_text
+            save_btn.disabled = False
+            cancel_btn.disabled = False
+            self.update()

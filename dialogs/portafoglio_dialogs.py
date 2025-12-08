@@ -189,17 +189,22 @@ class PortafoglioDialogs:
         self.conto_selezionato = conto_data
         self.dialog_portafoglio.title.value = f"{self.loc.get('manage_portfolio_dialog')}: {conto_data['nome_conto']}"
         self._aggiorna_tabella_portafoglio()
-        self.page.dialog = self.dialog_portafoglio
-        self.dialog_portafoglio.open = True
-        self.page.update()
+        self.controller.page.open(self.dialog_portafoglio)
+        self.controller.page.update()
 
     def _chiudi_dialog_portafoglio(self, e):
-        self.dialog_portafoglio.open = False
-        self.page.update()
+        try:
+            self.controller.page.close(self.dialog_portafoglio)
+            self.controller.page.update()
+        except Exception as ex:
+            print(f"Errore chiusura dialog portafoglio: {ex}")
+            import traceback
+            traceback.print_exc()
 
     def _aggiorna_tabella_portafoglio(self):
         loc = self.loc
-        portafoglio = ottieni_portafoglio(self.conto_selezionato['id_conto'])
+        master_key_b64 = self.page.session.get("master_key")
+        portafoglio = ottieni_portafoglio(self.conto_selezionato['id_conto'], master_key_b64=master_key_b64)
         self.dt_portafoglio.rows.clear()
         valore_totale = 0
         gain_loss_totale = 0
@@ -259,8 +264,10 @@ class PortafoglioDialogs:
         self.txt_ticker.read_only = False
         self.txt_nome_asset.read_only = False
 
+        master_key_b64 = self.page.session.get("master_key")
+
         # Popola il dropdown degli asset esistenti
-        portafoglio_attuale = ottieni_portafoglio(self.conto_selezionato['id_conto'])
+        portafoglio_attuale = ottieni_portafoglio(self.conto_selezionato['id_conto'], master_key_b64=master_key_b64)
         self.dd_asset_esistenti.options = [
             ft.dropdown.Option(
                 key=str(asset['id_asset']),
@@ -272,12 +279,14 @@ class PortafoglioDialogs:
 
         # Popola il dropdown dei conti (personali e condivisi, esclusi investimenti)
         id_utente = self.controller.get_user_id()
-        tutti_conti = ottieni_tutti_i_conti_utente(id_utente)
+        tutti_conti = ottieni_tutti_i_conti_utente(id_utente, master_key_b64=master_key_b64)
         
         # Filtra solo conti non di investimento
         conti_disponibili = [c for c in tutti_conti if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
         
         self.dd_conto_transazione.options = [
+            ft.dropdown.Option(key="CASHBACK", text="🎁 Cashback (no addebito)")
+        ] + [
             ft.dropdown.Option(
                 key=f"{'C' if c.get('is_condiviso') else 'P'}_{c['id_conto']}",
                 text=f"{c['nome_conto']} ({c['tipo']})" + (" - Condiviso" if c.get('is_condiviso') else "")
@@ -285,14 +294,17 @@ class PortafoglioDialogs:
         ]
         self.dd_conto_transazione.value = None
 
-        self.page.dialog = self.dialog_operazione_asset
-        self.dialog_operazione_asset.open = True
-        self.page.update()
+        self.controller.page.open(self.dialog_operazione_asset)
+        self.controller.page.update()
 
     def _chiudi_dialog_operazione(self, e):
-        self.dialog_operazione_asset.open = False
-        self.page.dialog = self.dialog_portafoglio
-        self.page.update()
+        try:
+            self.controller.page.close(self.dialog_operazione_asset)
+            self.controller.page.update()
+        except Exception as ex:
+            print(f"Errore chiusura dialog operazione: {ex}")
+            import traceback
+            traceback.print_exc()
 
     def _on_asset_selezionato(self, e):
         """Chiamato quando un asset viene selezionato dal dropdown."""
@@ -339,51 +351,80 @@ class PortafoglioDialogs:
                 self.controller.show_snack_bar(self.loc.get("fill_all_fields"), success=False)
                 return
 
-            # Parse il conto selezionato (formato: "P_123" o "C_456")
-            tipo_conto, id_conto_str = conto_selezionato_key.split("_")
-            id_conto_transazione = int(id_conto_str)
-            is_conto_condiviso = (tipo_conto == "C")
+            # Controlla se è un acquisto Cashback (no addebito)
+            is_cashback = (conto_selezionato_key == "CASHBACK")
+            
+            # Per vendita, non permettere cashback
+            if tipo_op == "VENDI" and is_cashback:
+                self.controller.show_snack_bar("Non puoi vendere con Cashback. Seleziona un conto.", success=False)
+                return
 
             # Calcola l'importo totale della transazione
             importo_totale = quantita * prezzo
             data_oggi = datetime.date.today().strftime('%Y-%m-%d')
+            master_key_b64 = self.page.session.get("master_key")
 
             if tipo_op == "COMPRA":
-                # Acquisto: sottrai denaro dal conto
-                descrizione = f"Acquisto {quantita} {ticker} @ {prezzo}"
-                importo_transazione = -abs(importo_totale)
+                # Acquisto: sottrai denaro dal conto (se non è cashback)
+                descrizione = f"{'Cashback: ' if is_cashback else 'Acquisto '}{quantita} {ticker} @ {prezzo}"
                 
                 # Compra l'asset
-                compra_asset(self.conto_selezionato['id_conto'], ticker, nome_asset, quantita, prezzo)
+                compra_asset(self.conto_selezionato['id_conto'], ticker, nome_asset, quantita, prezzo, master_key_b64=master_key_b64)
+                
+                # Crea transazione SOLO se non è cashback
+                if not is_cashback:
+                    tipo_conto, id_conto_str = conto_selezionato_key.split("_")
+                    id_conto_transazione = int(id_conto_str)
+                    is_conto_condiviso = (tipo_conto == "C")
+                    importo_transazione = -abs(importo_totale)
+                    
+                    if is_conto_condiviso:
+                        id_utente = self.controller.get_user_id()
+                        aggiungi_transazione_condivisa(
+                            id_utente, 
+                            id_conto_transazione, 
+                            data_oggi, 
+                            descrizione, 
+                            importo_transazione
+                        )
+                    else:
+                        aggiungi_transazione(
+                            id_conto_transazione, 
+                            data_oggi, 
+                            descrizione, 
+                            importo_transazione
+                        )
                 
             elif tipo_op == "VENDI":
                 # Vendita: aggiungi denaro al conto
+                tipo_conto, id_conto_str = conto_selezionato_key.split("_")
+                id_conto_transazione = int(id_conto_str)
+                is_conto_condiviso = (tipo_conto == "C")
                 descrizione = f"Vendita {quantita} {ticker} @ {prezzo}"
                 importo_transazione = abs(importo_totale)
                 
                 # Vendi l'asset
-                vendi_asset(self.conto_selezionato['id_conto'], ticker, quantita, prezzo)
+                vendi_asset(self.conto_selezionato['id_conto'], ticker, quantita, prezzo, master_key_b64=master_key_b64)
+                
+                if is_conto_condiviso:
+                    id_utente = self.controller.get_user_id()
+                    aggiungi_transazione_condivisa(
+                        id_utente, 
+                        id_conto_transazione, 
+                        data_oggi, 
+                        descrizione, 
+                        importo_transazione
+                    )
+                else:
+                    aggiungi_transazione(
+                        id_conto_transazione, 
+                        data_oggi, 
+                        descrizione, 
+                        importo_transazione
+                    )
             else:
                 self.controller.show_snack_bar(self.loc.get("fill_all_fields"), success=False)
                 return
-
-            # Crea la transazione sul conto selezionato
-            if is_conto_condiviso:
-                id_utente = self.controller.get_user_id()
-                aggiungi_transazione_condivisa(
-                    id_utente, 
-                    id_conto_transazione, 
-                    data_oggi, 
-                    descrizione, 
-                    importo_transazione
-                )
-            else:
-                aggiungi_transazione(
-                    id_conto_transazione, 
-                    data_oggi, 
-                    descrizione, 
-                    importo_transazione
-                )
 
             self.controller.db_write_operation()
             self._aggiorna_tabella_portafoglio()
@@ -398,14 +439,17 @@ class PortafoglioDialogs:
         self.asset_da_aggiornare = e.control.data
         self.txt_nuovo_prezzo.value = str(self.asset_da_aggiornare['prezzo_attuale_manuale'])
         self.dialog_aggiorna_prezzo.title.value = f"{self.loc.get('update_price')}: {self.asset_da_aggiornare['ticker']}"
-        self.page.dialog = self.dialog_aggiorna_prezzo
-        self.dialog_aggiorna_prezzo.open = True
-        self.page.update()
+        self.controller.page.open(self.dialog_aggiorna_prezzo)
+        self.controller.page.update()
 
     def _chiudi_dialog_aggiorna_prezzo(self, e):
-        self.dialog_aggiorna_prezzo.open = False
-        self.page.dialog = self.dialog_portafoglio
-        self.page.update()
+        try:
+            self.controller.page.close(self.dialog_aggiorna_prezzo)
+            self.controller.page.update()
+        except Exception as ex:
+            print(f"Errore chiusura dialog aggiorna prezzo: {ex}")
+            import traceback
+            traceback.print_exc()
 
     def _salva_nuovo_prezzo(self, e):
         try:
@@ -422,20 +466,26 @@ class PortafoglioDialogs:
         self.txt_modifica_ticker.value = self.asset_da_modificare['ticker']
         self.txt_modifica_nome.value = self.asset_da_modificare['nome_asset']
         self.dialog_modifica_asset.title.value = f"{self.loc.get('edit_asset_details')}: {self.asset_da_modificare['ticker']}"
-        self.page.dialog = self.dialog_modifica_asset
-        self.dialog_modifica_asset.open = True
-        self.page.update()
+        self.dialog_modifica_asset.title.value = f"{self.loc.get('edit_asset_details')}: {self.asset_da_modificare['ticker']}"
+        self.controller.page.open(self.dialog_modifica_asset)
+        self.controller.page.update()
 
     def _chiudi_dialog_modifica_asset(self, e):
-        self.dialog_modifica_asset.open = False
-        self.page.dialog = self.dialog_portafoglio
-        self.page.update()
+        try:
+            self.controller.page.close(self.dialog_modifica_asset)
+            self.controller.page.update()
+        except Exception as ex:
+            print(f"Errore chiusura dialog modifica asset: {ex}")
+            import traceback
+            traceback.print_exc()
 
     def _salva_modifica_asset(self, e):
         nuovo_ticker = self.txt_modifica_ticker.value.strip().upper()
         nuovo_nome = self.txt_modifica_nome.value.strip()
+        master_key_b64 = self.page.session.get("master_key")
+        
         if nuovo_ticker and nuovo_nome:
-            modifica_asset_dettagli(self.asset_da_modificare['id_asset'], nuovo_ticker, nuovo_nome)
+            modifica_asset_dettagli(self.asset_da_modificare['id_asset'], nuovo_ticker, nuovo_nome, master_key_b64=master_key_b64)
             self.controller.db_write_operation()
             self._aggiorna_tabella_portafoglio()
             self._chiudi_dialog_modifica_asset(e)
@@ -467,21 +517,19 @@ class PortafoglioDialogs:
             ft.TextButton(self.loc.get("save"), on_click=self._salva_asset_esistente)
         ]
         
-        self.page.dialog = self.dialog_operazione_asset
+        if self.dialog_operazione_asset not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_operazione_asset)
         self.dialog_operazione_asset.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _chiudi_dialog_asset_esistente(self, e):
-        # Chiudiamo il dialogo operazione (che stiamo usando come proxy)
-        self.dialog_operazione_asset.open = False
-        self.page.dialog = self.dialog_portafoglio
-        self.page.update()
-        
-        # IMPORTANTE: Ripristinare il contenuto originale del dialogo operazione?
-        # Non strettamente necessario se _apri_dialog_operazione lo ricostruisce, 
-        # ma controlliamo _apri_dialog_operazione.
-        # _apri_dialog_operazione NON ricostruisce il contenuto, quindi dovremmo farlo qui o lì.
-        # Per ora lasciamo così, verificheremo se rompe l'altro dialogo.
+        try:
+            self.controller.page.close(self.dialog_operazione_asset)
+            self.controller.page.update()
+        except Exception as ex:
+            print(f"Errore chiusura dialog asset esistente: {ex}")
+            import traceback
+            traceback.print_exc()
 
     def _salva_asset_esistente(self, e):
         try:
@@ -500,22 +548,33 @@ class PortafoglioDialogs:
                 suffix = self.conto_selezionato['borsa_default']
                 if "." not in ticker:
                     ticker += suffix
-
-            # Usa compra_asset per aggiungere l'asset con il costo storico e il valore attuale
-            compra_asset(
-                self.conto_selezionato['id_conto'], 
-                ticker, 
-                nome_asset, 
-                quantita, 
-                prezzo_medio, # Questo diventa il costo_iniziale_unitario
-                tipo_mov="APERTURA", # O altro identificativo per saldo iniziale
-                prezzo_attuale_override=valore_attuale # Questo imposta il prezzo attuale manuale
-            )
-
-            self.controller.db_write_operation()
-            self._aggiorna_tabella_portafoglio()
+            
+            # Prima chiudo il dialog
             self._chiudi_dialog_asset_esistente(e)
-            self.controller.show_snack_bar("Asset aggiunto con successo", success=True)
+            
+            # Poi mostro lo spinner
+            self.controller.show_loading("Attendere...")
+            
+            try:
+                master_key_b64 = self.page.session.get("master_key")
+
+                # Usa compra_asset per aggiungere l'asset con il costo storico e il valore attuale
+                compra_asset(
+                    self.conto_selezionato['id_conto'], 
+                    ticker, 
+                    nome_asset, 
+                    quantita, 
+                    prezzo_medio, # Questo diventa il costo_iniziale_unitario
+                    tipo_mov="APERTURA", # O altro identificativo per saldo iniziale
+                    prezzo_attuale_override=valore_attuale, # Questo imposta il prezzo attuale manuale
+                    master_key_b64=master_key_b64
+                )
+
+                self.controller.db_write_operation()
+                self._aggiorna_tabella_portafoglio()
+                self.controller.show_snack_bar("Asset aggiunto con successo", success=True)
+            finally:
+                self.controller.hide_loading()
 
         except (ValueError, TypeError):
             self.controller.show_snack_bar(self.loc.get("invalid_amount"), success=False)

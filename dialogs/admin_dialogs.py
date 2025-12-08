@@ -3,13 +3,18 @@ from db.gestione_db import (
     aggiungi_categoria,
     modifica_categoria,
     elimina_categoria,
+    elimina_sottocategoria,
     modifica_ruolo_utente,
     # ottieni_categorie, # Non più necessario qui
     ottieni_categorie_e_sottocategorie, # Usiamo questo
     imposta_budget,
     aggiungi_sottocategoria,
-    modifica_sottocategoria
+    modifica_sottocategoria,
+    crea_utente_invitato,
+    ottieni_utente_da_email,
+    aggiungi_utente_a_famiglia
 )
+from utils.email_sender import send_email
 
 
 class AdminDialogs:
@@ -48,7 +53,7 @@ class AdminDialogs:
         )
 
         # --- Dialogo Gestione Membri ---
-        self.txt_username_o_email = ft.TextField(label=self.loc.get("username_or_email"))
+        self.txt_username_o_email = ft.TextField(label="Email Utente")
         self.dd_ruolo = ft.Dropdown(
             label=self.loc.get("role"),
             options=[
@@ -58,14 +63,11 @@ class AdminDialogs:
             ],
             value="livello1"
         )
-        self.dd_utenti_suggeriti = ft.Dropdown(
-            label="Suggerimenti (Utenti liberi)",
-            on_change=self._on_utente_suggerito_change
-        )
+        
         self.dialog_invito_membri = ft.AlertDialog(
             modal=True,
             title=ft.Text(self.loc.get("invite_member")),
-            content=ft.Column([self.dd_utenti_suggeriti, self.txt_username_o_email, self.dd_ruolo], tight=True),
+            content=ft.Column([self.txt_username_o_email, self.dd_ruolo], tight=True),
             actions=[
                 ft.TextButton(self.loc.get("cancel"), on_click=self._chiudi_dialog_invito),
                 ft.TextButton(self.loc.get("invite"), on_click=self._invita_membro_cliccato),
@@ -95,6 +97,8 @@ class AdminDialogs:
             actions_alignment=ft.MainAxisAlignment.END,
         )
 
+
+
         # --- NUOVO DIALOGO: IMPOSTA BUDGET ---
         self.dd_budget_sottocategorie = ft.Dropdown(label=self.loc.get("subcategory"))
         self.txt_budget_limite = ft.TextField(label=self.loc.get("limit_amount"),
@@ -123,13 +127,17 @@ class AdminDialogs:
             self.txt_nome_categoria.value = ""
             self.id_categoria_in_modifica = None
 
-        self.page.dialog = self.dialog_modifica_cat
+        if self.dialog_modifica_cat not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_modifica_cat)
         self.dialog_modifica_cat.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _chiudi_dialog_categoria(self, e):
         self.dialog_modifica_cat.open = False
-        self.page.update()
+        self.controller.page.update()
+        if self.dialog_modifica_cat in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_modifica_cat)
+        self.controller.page.update()
 
     def _salva_categoria_cliccato(self, e):
         nome_cat = self.txt_nome_categoria.value
@@ -170,13 +178,18 @@ class AdminDialogs:
         else:
             return # Non fare nulla se non ci sono dati sufficienti
 
-        self.page.dialog = self.dialog_sottocategoria
+        if self.dialog_sottocategoria not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_sottocategoria)
         self.dialog_sottocategoria.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _chiudi_dialog_sottocategoria(self, e):
         self.dialog_sottocategoria.open = False
-        self.page.update()
+        self.controller.hide_loading()  # Safety: nasconde loading se visibile
+        self.controller.page.update()
+        if self.dialog_sottocategoria in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_sottocategoria)
+        self.controller.page.update()
 
     def _salva_sottocategoria_cliccato(self, e):
         nome_sottocat = self.txt_nome_sottocategoria.value
@@ -206,54 +219,89 @@ class AdminDialogs:
         else:
             self.controller.show_snack_bar("Errore durante l'eliminazione della categoria.", success=False)
 
+    def elimina_sottocategoria_cliccato(self, e):
+        id_sottocategoria = e.control.data
+        success = elimina_sottocategoria(id_sottocategoria)
+        if success:
+            self.controller.show_snack_bar("Sottocategoria eliminata.", success=True)
+            self.controller.db_write_operation()
+        else:
+            self.controller.show_snack_bar("Errore durante l'eliminazione della sottocategoria.", success=False)
+
     # --- Metodi Gestione Membri ---
     def apri_dialog_invito(self):
         self.txt_username_o_email.value = ""
         self.txt_username_o_email.error_text = None
         
-        # Popola i suggerimenti
-        utenti_liberi = self.controller.get_users_without_family()
-        self.dd_utenti_suggeriti.options = [ft.dropdown.Option(u) for u in utenti_liberi]
-        self.dd_utenti_suggeriti.value = None
-        
-        self.page.dialog = self.dialog_invito_membri
+        if self.dialog_invito_membri not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_invito_membri)
         self.dialog_invito_membri.open = True
-        self.page.update()
-
-    def _on_utente_suggerito_change(self, e):
-        if self.dd_utenti_suggeriti.value:
-            self.txt_username_o_email.value = self.dd_utenti_suggeriti.value
-            self.dialog_invito_membri.update()
+        self.controller.page.update()
 
     def _chiudi_dialog_invito(self, e):
         self.dialog_invito_membri.open = False
-        self.page.update()
+        self.controller.page.update()
+        if self.dialog_invito_membri in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_invito_membri)
+        self.controller.page.update()
 
     def _invita_membro_cliccato(self, e):
-        input_val = self.txt_username_o_email.value
+        email = self.txt_username_o_email.value
         ruolo = self.dd_ruolo.value
-        if not input_val:
+        if not email:
             self.txt_username_o_email.error_text = self.loc.get("fill_all_fields")
             self.dialog_invito_membri.update()
             return
 
-        messaggio, success = self.controller.gestisci_invito_o_sblocco(input_val, ruolo)
-        self.controller.show_snack_bar(messaggio, success=success)
-        if success:
-            self.dialog_invito_membri.open = False
-            self.controller.db_write_operation()
+        id_famiglia = self.controller.get_family_id()
+        
+        # 1. Check if user exists
+        existing_user = ottieni_utente_da_email(email)
+        
+        if existing_user:
+            # Add to family
+            success = aggiungi_utente_a_famiglia(id_famiglia, existing_user['id_utente'], ruolo)
+            if success:
+                self.controller.show_snack_bar(f"Utente {email} aggiunto alla famiglia!", success=True)
+            else:
+                self.controller.show_snack_bar("Errore durante l'aggiunta dell'utente.", success=False)
+        else:
+            # Create new user and invite
+            credenziali = crea_utente_invitato(email, ruolo, id_famiglia)
+            if credenziali:
+                # Send email
+                success, error = send_email(
+                    to_email=email,
+                    subject="Benvenuto in Budget Amico - Credenziali di Accesso",
+                    body=f"Sei stato invitato nella famiglia!\n\nEcco le tue credenziali temporanee:\nEmail: {email}\nUsername: {credenziali['username']}\nPassword: {credenziali['password']}\n\nAccedi e completa il tuo profilo."
+                )
+                
+                if success:
+                    self.controller.show_snack_bar(f"Invito inviato a {email}!", success=True)
+                else:
+                    self.controller.show_snack_bar(f"Utente creato, ma errore invio email: {error}", success=False)
+            else:
+                self.controller.show_snack_bar("Errore durante la creazione dell'utente.", success=False)
+
+        self.dialog_invito_membri.open = False
+        self.controller.db_write_operation()
 
     def apri_dialog_modifica_ruolo(self, membro_data):
         self.membro_in_modifica = membro_data
         self.dialog_modifica_ruolo.title.value = f"{self.loc.get('edit')} {self.loc.get('role')} - {membro_data['nome_visualizzato']}"
         self.dd_modifica_ruolo.value = membro_data['ruolo']
-        self.page.dialog = self.dialog_modifica_ruolo
+        if self.dialog_modifica_ruolo not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_modifica_ruolo)
         self.dialog_modifica_ruolo.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _chiudi_dialog_modifica_ruolo(self, e):
         self.dialog_modifica_ruolo.open = False
-        self.page.update()
+        self.controller.hide_loading()  # Safety: nasconde loading se visibile
+        self.controller.page.update()
+        if self.dialog_modifica_ruolo in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_modifica_ruolo)
+        self.controller.page.update()
 
     def _salva_ruolo_cliccato(self, e):
         if not self.membro_in_modifica:
@@ -269,13 +317,14 @@ class AdminDialogs:
 
         success = modifica_ruolo_utente(id_utente, id_famiglia, nuovo_ruolo)
 
+        # Prima chiudi il dialog, poi aggiorna i dati
+        self._chiudi_dialog_modifica_ruolo(e)
+
         if success:
             self.controller.show_snack_bar("Ruolo aggiornato!", success=True)
             self.controller.db_write_operation()
         else:
             self.controller.show_snack_bar("Errore durante l'aggiornamento del ruolo.", success=False)
-
-        self._chiudi_dialog_modifica_ruolo(e)
 
     # --- NUOVI METODI PER GESTIONE BUDGET ---
     def apri_dialog_imposta_budget(self):
@@ -287,9 +336,9 @@ class AdminDialogs:
         # Popola il dropdown con le sottocategorie
         categorie_con_sottocategorie = ottieni_categorie_e_sottocategorie(id_famiglia)
         opzioni = []
-        for cat_id, cat_data in categorie_con_sottocategorie.items():
+        for cat_data in categorie_con_sottocategorie:
             if cat_data['sottocategorie']:
-                opzioni.append(ft.dropdown.Option(key=f"cat_{cat_id}", text=cat_data['nome_categoria'], disabled=True))
+                opzioni.append(ft.dropdown.Option(key=f"cat_{cat_data['id_categoria']}", text=cat_data['nome_categoria'], disabled=True))
                 for sub in cat_data['sottocategorie']:
                     opzioni.append(ft.dropdown.Option(key=sub['id_sottocategoria'], text=f"  - {sub['nome_sottocategoria']}"))
 
@@ -301,12 +350,13 @@ class AdminDialogs:
         # Aggiorna prefisso valuta se è cambiato
         self.txt_budget_limite.prefix_text = loc.currencies[loc.currency]['symbol']
 
-        self.page.dialog = self.dialog_imposta_budget
-        self.dialog_imposta_budget.open = True
+        # Use page.open instead of overlay manipulation
+        self.page.open(self.dialog_imposta_budget)
         self.page.update()
 
     def _chiudi_dialog_imposta_budget(self, e):
-        self.dialog_imposta_budget.open = False
+        # Use page.close
+        self.page.close(self.dialog_imposta_budget)
         self.page.update()
 
     def _salva_budget_cliccato(self, e):
@@ -318,9 +368,14 @@ class AdminDialogs:
         if id_sottocategoria and limite_str:
             try:
                 limite = float(limite_str.replace(",", "."))
-                imposta_budget(id_famiglia, id_sottocategoria, limite)
+                
+                # Pass master_key_b64
+                master_key_b64 = self.controller.page.session.get("master_key")
+                print(f"[DEBUG] admin_dialogs - master_key in session: {bool(master_key_b64)}")
+                
+                imposta_budget(id_famiglia, id_sottocategoria, limite, master_key_b64)
 
-                self.dialog_imposta_budget.open = False
+                self.page.close(self.dialog_imposta_budget)
                 self.controller.show_snack_bar(loc.get("budget_saved"), success=True)
 
                 # Aggiorna tutte le viste (così la scheda Budget si aggiorna)

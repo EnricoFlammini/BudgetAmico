@@ -60,27 +60,33 @@ class ImmobileDialog(ft.AlertDialog):
         self.actions[1].text = loc.get("save")
 
     def apri_dialog_immobile(self, immobile_data=None):
-        self._update_texts()
-        self._reset_fields()
-        self._popola_dropdown_prestiti()
+        try:
+            self._update_texts()
+            self._reset_fields()
+            self._popola_dropdown_prestiti()
 
-        if immobile_data:
-            self.title.value = self.loc.get("edit_property")
-            self.id_immobile_in_modifica = immobile_data['id_immobile']
-            self.txt_nome.value = immobile_data['nome']
-            self.txt_via.value = immobile_data.get('via', '')
-            self.txt_citta.value = immobile_data.get('citta', '')
-            self.txt_valore_acquisto.value = str(immobile_data['valore_acquisto'])
-            self.txt_valore_attuale.value = str(immobile_data['valore_attuale'])
-            self.chk_nuda_proprieta.value = bool(immobile_data['nuda_proprieta'])
-            self.dd_prestito_collegato.value = immobile_data.get('id_prestito_collegato')
-        else:
-            self.title.value = self.loc.get("add_property")
-            self.id_immobile_in_modifica = None
+            if immobile_data:
+                self.title.value = self.loc.get("edit_property")
+                self.id_immobile_in_modifica = immobile_data['id_immobile']
+                self.txt_nome.value = immobile_data['nome']
+                self.txt_via.value = immobile_data.get('via', '')
+                self.txt_citta.value = immobile_data.get('citta', '')
+                self.txt_valore_acquisto.value = str(immobile_data['valore_acquisto'])
+                self.txt_valore_attuale.value = str(immobile_data['valore_attuale'])
+                self.chk_nuda_proprieta.value = bool(immobile_data['nuda_proprieta'])
+                self.dd_prestito_collegato.value = immobile_data.get('id_prestito_collegato')
+            else:
+                self.title.value = self.loc.get("add_property")
+                self.id_immobile_in_modifica = None
 
-        self.controller.page.dialog = self
-        self.open = True
-        self.controller.page.update()
+            if self not in self.controller.page.overlay:
+                self.controller.page.overlay.append(self)
+            self.open = True
+            self.controller.page.update()
+        except Exception as ex:
+            print(f"Errore salvataggio immobile: {ex}")
+            traceback.print_exc()
+            self.controller.show_snack_bar(f"Errore inaspettato: {ex}", success=False)
 
     def _reset_fields(self):
         for field in [self.txt_nome, self.txt_via, self.txt_citta, self.txt_valore_acquisto, self.txt_valore_attuale]:
@@ -91,7 +97,9 @@ class ImmobileDialog(ft.AlertDialog):
 
     def _popola_dropdown_prestiti(self):
         id_famiglia = self.controller.get_family_id()
-        prestiti = ottieni_prestiti_famiglia(id_famiglia)
+        master_key_b64 = self.controller.page.session.get("master_key")
+        id_utente = self.controller.get_user_id()
+        prestiti = ottieni_prestiti_famiglia(id_famiglia, master_key_b64, id_utente)
         self.dd_prestito_collegato.options = [
             ft.dropdown.Option(key=None, text="Nessuno"),
             ft.dropdown.Option(key="__new__", text=self.loc.get("create_new_mortgage"))
@@ -109,8 +117,15 @@ class ImmobileDialog(ft.AlertDialog):
 
 
     def chiudi_dialog(self, e):
-        self.open = False
-        self.controller.page.update()
+        self.controller.show_loading("Attendere...")
+        try:
+            self.open = False
+            self.controller.page.update()
+        except Exception as ex:
+            print(f"Errore chiusura dialog immobile: {ex}")
+            traceback.print_exc()
+        finally:
+            self.controller.hide_loading()
 
     def salva_immobile(self, e):
         if not self.txt_nome.value or not self.txt_valore_attuale.value:
@@ -126,20 +141,29 @@ class ImmobileDialog(ft.AlertDialog):
 
             success = False
             if self.id_immobile_in_modifica:
+                master_key_b64 = self.controller.page.session.get("master_key")
+                id_utente = self.controller.get_user_id()
                 success = modifica_immobile(
                     self.id_immobile_in_modifica, self.txt_nome.value, self.txt_via.value, self.txt_citta.value,
-                    valore_acquisto, valore_attuale, self.chk_nuda_proprieta.value, self.dd_prestito_collegato.value
+                    valore_acquisto, valore_attuale, self.chk_nuda_proprieta.value, self.dd_prestito_collegato.value,
+                    master_key_b64=master_key_b64, id_utente=id_utente
                 )
             else:
                 id_famiglia = self.controller.get_family_id()
+                master_key_b64 = self.controller.page.session.get("master_key")
+                id_utente = self.controller.get_user_id()
                 success = aggiungi_immobile(
                     id_famiglia, self.txt_nome.value, self.txt_via.value, self.txt_citta.value,
-                    valore_acquisto, valore_attuale, self.chk_nuda_proprieta.value, self.dd_prestito_collegato.value
+                    valore_acquisto, valore_attuale, self.chk_nuda_proprieta.value, self.dd_prestito_collegato.value,
+                    master_key_b64=master_key_b64, id_utente=id_utente
                 )
 
             if success:
                 self.controller.show_snack_bar("Immobile salvato con successo!", success=True)
+                # Prima chiudo il dialog
                 self.open = False
+                self.controller.page.update()
+                # Poi eseguo l'operazione di aggiornamento
                 self.controller.db_write_operation()
             else:
                 self.controller.show_snack_bar("Errore durante il salvataggio dell'immobile.", success=False)

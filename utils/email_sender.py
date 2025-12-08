@@ -3,7 +3,7 @@ import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import logging
-from utils.config_manager import get_smtp_settings
+from db.gestione_db import get_smtp_config
 
 # Configurazione logger
 logger = logging.getLogger(__name__)
@@ -25,15 +25,17 @@ def send_email(to_email, subject, body, smtp_config=None):
         smtp_user = smtp_config.get('user')
         smtp_password = smtp_config.get('password')
     else:
-        # 1. Prova a caricare da config.json
-        settings = get_smtp_settings()
-        if settings:
+        # 1. Prova a caricare dal Database
+        settings = get_smtp_config()
+        # Se settings ha valori validi (non None), usali. 
+        # get_smtp_config ritorna un dict con chiavi, ma i valori possono essere None.
+        if settings and settings.get('server'): 
             smtp_server = settings.get('server')
             smtp_port = settings.get('port')
             smtp_user = settings.get('user')
             smtp_password = settings.get('password')
         else:
-            # 2. Fallback su variabili d'ambiente
+            # 2. Fallback su variabili d'ambiente (opzionale, mantenuto per retrocompatibilità)
             smtp_server = os.getenv("SMTP_SERVER")
             smtp_port = os.getenv("SMTP_PORT")
             smtp_user = os.getenv("SMTP_USER")
