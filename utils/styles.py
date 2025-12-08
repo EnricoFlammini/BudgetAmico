@@ -41,13 +41,15 @@ class AppStyles:
     """Stili riutilizzabili per componenti UI."""
 
     @staticmethod
-    def card_container(content: ft.Control, padding: int = 15, on_click=None, data=None) -> ft.Container:
+    def card_container(content: ft.Control, padding: int = 15, on_click=None, data=None, width: int = None, height: int = None) -> ft.Container:
         """
         Crea un contenitore stile 'Card' standardizzato.
         """
         return ft.Container(
             content=content,
             padding=padding,
+            width=width,
+            height=height,
             border_radius=12,  # Bordi più arrotondati per un look moderno
             border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
             bgcolor=ft.Colors.SURFACE, # Usa il colore surface del tema

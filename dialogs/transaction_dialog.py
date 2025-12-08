@@ -282,17 +282,31 @@ class TransactionDialog(ft.AlertDialog):
             ) is not None
 
     def _salva_nuova_transazione(self, e):
-        self.controller.show_loading("Attendere...")
-        dati_validati = self._valida_e_raccogli_dati()
-        if not dati_validati:
-            self.controller.hide_loading()
-            return
-
-        transazione_in_modifica = self.controller.page.session.get("transazione_in_modifica")
-        success = False
-        messaggio = ""
+        # 1. Feedback locale: Disabilita pulsanti e cambia testo
+        save_btn = self.actions[1]
+        cancel_btn = self.actions[0]
+        original_text = save_btn.text
+        
+        save_btn.text = "Salvataggio..."
+        save_btn.disabled = True
+        cancel_btn.disabled = True
+        self.update()
 
         try:
+            dati_validati = self._valida_e_raccogli_dati()
+            if not dati_validati:
+                # Ripristina pulsanti se validazione fallisce
+                save_btn.text = original_text
+                save_btn.disabled = False
+                cancel_btn.disabled = False
+                self.update()
+                return
+
+            transazione_in_modifica = self.controller.page.session.get("transazione_in_modifica")
+            success = False
+            messaggio = ""
+
+            # Esegue l'operazione (sincrona per ora)
             if transazione_in_modifica:
                 success = self._esegui_modifica(dati_validati, transazione_in_modifica)
                 messaggio = "modificata" if success else "errore nella modifica"
@@ -301,15 +315,27 @@ class TransactionDialog(ft.AlertDialog):
                 messaggio = "aggiunta" if success else "errore nell'aggiunta"
 
             if success:
-                self.controller.db_write_operation()
+                # 2. Chiudi il dialog PRIMA di aggiornare la dashboard
                 self.open = False
+                self.controller.page.update()
+                
+                # 3. Ora avvia l'aggiornamento globale (che mostrerà lo spinner correttamente)
+                self.controller.db_write_operation()
                 self.controller.show_snack_bar(f"Transazione {messaggio} con successo!", success=True)
             else:
                 self.controller.show_snack_bar(f"❌ {messaggio.capitalize()}.", success=False)
+                # Ripristina pulsanti in caso di errore logico
+                save_btn.text = original_text
+                save_btn.disabled = False
+                cancel_btn.disabled = False
+                self.update()
 
         except Exception as ex:
             print(f"Errore salvataggio transazione: {ex}")
             traceback.print_exc()
             self.controller.show_error_dialog(f"Errore inaspettato durante il salvataggio: {ex}")
-
-        if self.controller.page: self.controller.page.update()
+            # Ripristina pulsanti
+            save_btn.text = original_text
+            save_btn.disabled = False
+            cancel_btn.disabled = False
+            self.update()
