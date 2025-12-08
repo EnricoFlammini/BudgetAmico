@@ -44,7 +44,6 @@ Budget Amico è un'applicazione cross-platform costruita con Python e Flet che t
     -   Visualizza le transazioni di tutti i membri della famiglia in un unico posto (per i ruoli autorizzati).
 
 -   **Sincronizzazione e Backup**:
-    -   **Sincronizzazione con Google Drive**: Utilizza il tuo account Google per sincronizzare il database dell'applicazione e usare Budget Amico su più dispositivi.
     -   **Backup e Ripristino Locale**: Crea backup manuali del tuo database e ripristinali in qualsiasi momento.
 
 -   **Automazioni**:
@@ -101,13 +100,11 @@ pip install -r requirements.txt
 
 **Opzione 2 - Installazione manuale:**
 ```bash
-pip install flet flet-desktop google-api-python-client google-auth-httplib2 google-auth-oauthlib openpyxl pandas
+pip install flet flet-desktop openpyxl pandas
 ```
 
 **Dipendenze principali:**
 - `flet` - Framework GUI
-- `google-api-python-client` - API Google Drive e Gmail
-- `google-auth-httplib2` e `google-auth-oauthlib` - Autenticazione Google
 - `openpyxl` e `pandas` - Esportazione Excel
 - `requests` - Chiamate HTTP per recupero prezzi asset (v0.10+)
 - `python-dotenv` - Gestione variabili d'ambiente (opzionale)
@@ -128,19 +125,6 @@ SUPABASE_DB_URL=postgresql://postgres:password@db.supabase.co:5432/postgres
 ```
 
 L'applicazione gestirà automaticamente la creazione delle tabelle al primo avvio se non esistono.
-
-### 2. Google API (Opzionale)
-
-Se desideri utilizzare la sincronizzazione con Google Drive:
-1. Vai alla [Google Cloud Console](https://console.cloud.google.com/)
-2. Crea un nuovo progetto o selezionane uno esistente
-3. Abilita le API:
-   - Google Drive API
-   - Gmail API
-4. Crea le credenziali OAuth 2.0
-5. Scarica il file `credentials.json` e posizionalo nella directory `Sviluppo/`
-
-**Nota:** Il file `credentials.json` è già incluso nel `.gitignore` per motivi di sicurezza.
 
 ---
 
@@ -167,7 +151,7 @@ Per creare un eseguibile standalone usando PyInstaller:
 
 **Manuale:**
 ```bash
-pyinstaller --name "Budget Amico" --windowed --onedir --clean --noconfirm --add-data "assets;assets" --add-data "credentials.json;." --icon "assets/icon.ico" --hidden-import=yfinance --hidden-import=python_dotenv main.py
+pyinstaller --name "Budget Amico" --windowed --onedir --clean --noconfirm --add-data "assets;assets" --icon "assets/icon.ico" --hidden-import=yfinance --hidden-import=python_dotenv main.py
 ```
 
 L'eseguibile sarà disponibile in `dist\Budget Amico\Budget Amico.exe`.
@@ -280,10 +264,6 @@ Assicurati che:
 1. Il file `.env` esista e contenga `SUPABASE_DB_URL`.
 2. La stringa di connessione sia corretta.
 3. Il firewall non blocchi la porta 5432.
-
-### Problemi con Google Drive
-
-Assicurati di aver configurato correttamente il file `credentials.json` e di aver abilitato le API necessarie nella Google Cloud Console.
 
 ---
 
