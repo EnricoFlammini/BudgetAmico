@@ -32,7 +32,7 @@ from db.gestione_db import (
 )
 
 URL_BASE = os.environ.get("FLET_APP_URL", "http://localhost:8550")
-VERSION = "0.12.0"
+VERSION = "0.13.00"
 
 
 class AppController:
@@ -313,6 +313,7 @@ class AppController:
 
     def _chiudi_info_dialog(self, e):
         self.info_dialog.open = False
+        self.hide_loading()  # Safety: nasconde loading se visibile
         self.page.update()
         if self.info_dialog in self.page.overlay:
             self.page.overlay.remove(self.info_dialog)

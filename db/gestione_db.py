@@ -220,6 +220,453 @@ def save_smtp_config(settings, id_famiglia=None, master_key_b64=None, id_utente=
         print(f"[ERRORE] Errore salvataggio SMTP config: {e}")
         return False
 
+
+# --- Funzioni Gestione Budget Famiglia ---
+
+def get_impostazioni_budget_famiglia(id_famiglia):
+    """
+    Recupera le impostazioni del budget famiglia:
+    - entrate_mensili: valore inserito manualmente
+    - risparmio_tipo: 'percentuale' o 'importo'
+    - risparmio_valore: valore del risparmio
+    """
+    return {
+        'entrate_mensili': float(get_configurazione('budget_entrate_mensili', id_famiglia) or 0),
+        'risparmio_tipo': get_configurazione('budget_risparmio_tipo', id_famiglia) or 'percentuale',
+        'risparmio_valore': float(get_configurazione('budget_risparmio_valore', id_famiglia) or 0)
+    }
+
+def set_impostazioni_budget_famiglia(id_famiglia, entrate_mensili, risparmio_tipo, risparmio_valore):
+    """
+    Salva le impostazioni del budget famiglia.
+    - entrate_mensili: valore delle entrate mensili
+    - risparmio_tipo: 'percentuale' o 'importo'
+    - risparmio_valore: valore del risparmio
+    """
+    try:
+        set_configurazione('budget_entrate_mensili', str(entrate_mensili), id_famiglia)
+        set_configurazione('budget_risparmio_tipo', risparmio_tipo, id_famiglia)
+        set_configurazione('budget_risparmio_valore', str(risparmio_valore), id_famiglia)
+        return True
+    except Exception as e:
+        print(f"[ERRORE] Errore salvataggio impostazioni budget: {e}")
+        return False
+
+def calcola_entrate_mensili_famiglia(id_famiglia, anno, mese, master_key_b64=None, id_utente=None):
+    """
+    Calcola la somma delle transazioni categorizzate come "Entrate" 
+    per tutti i membri della famiglia nel mese specificato.
+    Cerca la categoria con nome contenente "Entrat" (case insensitive).
+    """
+    data_inizio = f"{anno}-{mese:02d}-01"
+    ultimo_giorno = (datetime.date(anno, mese, 1) + relativedelta(months=1) - relativedelta(days=1)).day
+    data_fine = f"{anno}-{mese:02d}-{ultimo_giorno}"
+    
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # Prima troviamo le categorie "Entrate" della famiglia
+            # Le categorie potrebbero essere criptate, quindi le recuperiamo tutte
+            cur.execute("""
+                SELECT id_categoria, nome_categoria 
+                FROM Categorie 
+                WHERE id_famiglia = %s
+            """, (id_famiglia,))
+            categorie = cur.fetchall()
+            
+            # Decrypt e cerca "Entrat" nel nome
+            crypto, master_key = _get_crypto_and_key(master_key_b64)
+            family_key = None
+            if master_key and id_utente:
+                family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+            
+            id_categorie_entrate = []
+            for cat in categorie:
+                nome = cat['nome_categoria']
+                if family_key:
+                    nome = _decrypt_if_key(nome, family_key, crypto)
+                if nome and 'entrat' in nome.lower():
+                    id_categorie_entrate.append(cat['id_categoria'])
+            
+            if not id_categorie_entrate:
+                return 0.0
+            
+            # Ottieni le sottocategorie di queste categorie
+            placeholders = ','.join(['%s'] * len(id_categorie_entrate))
+            cur.execute(f"""
+                SELECT id_sottocategoria 
+                FROM Sottocategorie 
+                WHERE id_categoria IN ({placeholders})
+            """, tuple(id_categorie_entrate))
+            id_sottocategorie = [row['id_sottocategoria'] for row in cur.fetchall()]
+            
+            if not id_sottocategorie:
+                return 0.0
+            
+            # Somma le transazioni personali con queste sottocategorie
+            placeholders_sub = ','.join(['%s'] * len(id_sottocategorie))
+            cur.execute(f"""
+                SELECT COALESCE(SUM(T.importo), 0.0) as totale
+                FROM Transazioni T
+                JOIN Conti C ON T.id_conto = C.id_conto
+                JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
+                WHERE AF.id_famiglia = %s
+                  AND T.id_sottocategoria IN ({placeholders_sub})
+                  AND T.data BETWEEN %s AND %s
+            """, (id_famiglia, *id_sottocategorie, data_inizio, data_fine))
+            totale_personali = cur.fetchone()['totale'] or 0.0
+            
+            # Somma le transazioni condivise con queste sottocategorie
+            cur.execute(f"""
+                SELECT COALESCE(SUM(TC.importo), 0.0) as totale
+                FROM TransazioniCondivise TC
+                JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
+                WHERE CC.id_famiglia = %s
+                  AND TC.id_sottocategoria IN ({placeholders_sub})
+                  AND TC.data BETWEEN %s AND %s
+            """, (id_famiglia, *id_sottocategorie, data_inizio, data_fine))
+            totale_condivise = cur.fetchone()['totale'] or 0.0
+            
+            return totale_personali + totale_condivise
+            
+    except Exception as e:
+        print(f"[ERRORE] Errore calcolo entrate mensili: {e}")
+        return 0.0
+
+def ottieni_totale_budget_allocato(id_famiglia, master_key_b64=None, id_utente=None):
+    """
+    Ritorna il totale dei budget assegnati alle sottocategorie.
+    """
+    try:
+        budget_list = ottieni_budget_famiglia(id_famiglia, master_key_b64, id_utente)
+        return sum(b.get('importo_limite', 0) for b in budget_list)
+    except Exception as e:
+        print(f"[ERRORE] Errore calcolo totale budget allocato: {e}")
+        return 0.0
+
+def salva_impostazioni_budget_storico(id_famiglia, anno, mese, entrate_mensili, risparmio_tipo, risparmio_valore):
+    """
+    Salva le impostazioni budget nello storico per un mese specifico.
+    Usa la tabella Configurazioni con chiavi contenenti anno e mese.
+    """
+    try:
+        chiave_base = f"budget_storico_{anno}_{mese:02d}"
+        set_configurazione(f"{chiave_base}_entrate", str(entrate_mensili), id_famiglia)
+        set_configurazione(f"{chiave_base}_risparmio_tipo", risparmio_tipo, id_famiglia)
+        set_configurazione(f"{chiave_base}_risparmio_valore", str(risparmio_valore), id_famiglia)
+        return True
+    except Exception as e:
+        print(f"[ERRORE] Errore salvataggio storico impostazioni budget: {e}")
+        return False
+
+def ottieni_impostazioni_budget_storico(id_famiglia, anno, mese):
+    """
+    Recupera le impostazioni budget dallo storico per un mese specifico.
+    Se non esistono, ritorna None.
+    """
+    chiave_base = f"budget_storico_{anno}_{mese:02d}"
+    entrate = get_configurazione(f"{chiave_base}_entrate", id_famiglia)
+    
+    if entrate is None:
+        return None  # Non esiste storico per questo mese
+    
+    return {
+        'entrate_mensili': float(entrate or 0),
+        'risparmio_tipo': get_configurazione(f"{chiave_base}_risparmio_tipo", id_famiglia) or 'percentuale',
+        'risparmio_valore': float(get_configurazione(f"{chiave_base}_risparmio_valore", id_famiglia) or 0)
+    }
+
+def ottieni_dati_analisi_mensile(id_famiglia, anno, mese, master_key_b64, id_utente):
+    """
+    Recupera i dati completi per l'analisi mensile del budget.
+    Include entrate, spese totali, budget totale, risparmio, delta e ripartizione categorie.
+    """
+    try:
+        # 1. Recupera Impostazioni (Storiche o Correnti)
+        impostazioni_storico = ottieni_impostazioni_budget_storico(id_famiglia, anno, mese)
+        if impostazioni_storico:
+            entrate = impostazioni_storico['entrate_mensili']
+        else:
+            # Fallback a impostazioni correnti
+            imps = get_impostazioni_budget_famiglia(id_famiglia)
+            entrate = imps['entrate_mensili']
+
+        # 2. Calcola Spese Totali e Spese per Categoria (con decriptazione)
+        data_inizio = f"{anno}-{mese:02d}-01"
+        ultimo_giorno = (datetime.date(anno, mese, 1) + relativedelta(months=1) - relativedelta(days=1)).day
+        data_fine = f"{anno}-{mese:02d}-{ultimo_giorno}"
+        
+        crypto, master_key = _get_crypto_and_key(master_key_b64)
+        family_key = None
+        if master_key and id_utente:
+            family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+
+        spese_per_categoria = []
+        spese_totali = 0.0
+
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # Query UNICA per spese personali raggruppate per sottocategoria
+            cur.execute("""
+                SELECT T.id_sottocategoria, SUM(T.importo) as totale
+                FROM Transazioni T
+                JOIN Conti C ON T.id_conto = C.id_conto
+                JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
+                WHERE AF.id_famiglia = %s
+                  AND T.data BETWEEN %s AND %s
+                  AND T.importo < 0
+                GROUP BY T.id_sottocategoria
+            """, (id_famiglia, data_inizio, data_fine))
+            spese_personali = {row['id_sottocategoria']: abs(row['totale']) for row in cur.fetchall()}
+
+            # Query UNICA per spese condivise raggruppate per sottocategoria
+            cur.execute("""
+                SELECT TC.id_sottocategoria, SUM(TC.importo) as totale
+                FROM TransazioniCondivise TC
+                JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
+                WHERE CC.id_famiglia = %s
+                  AND TC.data BETWEEN %s AND %s
+                  AND TC.importo < 0
+                GROUP BY TC.id_sottocategoria
+            """, (id_famiglia, data_inizio, data_fine))
+            spese_condivise = {row['id_sottocategoria']: abs(row['totale']) for row in cur.fetchall()}
+
+            # Uniamo le spese
+            tutte_spese_map = spese_personali.copy()
+            for id_sub, importo in spese_condivise.items():
+                tutte_spese_map[id_sub] = tutte_spese_map.get(id_sub, 0.0) + importo
+            
+            spese_totali = sum(tutte_spese_map.values())
+
+            # Ora aggreghiamo per Categoria e decriptiamo i nomi
+            cur.execute("SELECT id_categoria, nome_categoria FROM Categorie WHERE id_famiglia = %s", (id_famiglia,))
+            raw_categorie = cur.fetchall()
+            
+            for raw_cat in raw_categorie:
+                cat_id = raw_cat['id_categoria']
+                nome_crip = raw_cat['nome_categoria']
+                nome_chiaro = nome_crip
+                if family_key:
+                    nome_chiaro = _decrypt_if_key(nome_crip, family_key, crypto)
+                
+                # Cerca sottocategorie per questa categoria
+                cur.execute("SELECT id_sottocategoria FROM Sottocategorie WHERE id_categoria = %s", (cat_id,))
+                subs = [row['id_sottocategoria'] for row in cur.fetchall()]
+                
+                tot_cat = sum(tutte_spese_map.get(sub_id, 0.0) for sub_id in subs)
+                if tot_cat > 0:
+                    spese_per_categoria.append({
+                        'nome_categoria': nome_chiaro,
+                        'importo': tot_cat
+                    })
+
+        # Calcola percentuali
+        for item in spese_per_categoria:
+            item['percentuale'] = (item['importo'] / spese_totali * 100) if spese_totali > 0 else 0
+
+        # 3. Budget Totale
+        budget_totale = ottieni_totale_budget_allocato(id_famiglia, master_key_b64, id_utente)
+
+        risparmio = entrate - spese_totali
+        delta = budget_totale - spese_totali
+        
+        # 4. Recupera dati annuali per confronto
+        dati_annuali = ottieni_dati_analisi_annuale(id_famiglia, anno, master_key_b64, id_utente, include_prev_year=False)
+
+        return {
+            'entrate': entrate,
+            'spese_totali': spese_totali,
+            'budget_totale': budget_totale,
+            'risparmio': risparmio,
+            'delta_budget_spese': delta,
+            'spese_per_categoria': sorted(spese_per_categoria, key=lambda x: x['importo'], reverse=True),
+            'dati_confronto': dati_annuali
+        }
+
+    except Exception as e:
+        print(f"[ERRORE] ottieni_dati_analisi_mensile: {e}")
+        return None
+
+
+def ottieni_dati_analisi_annuale(id_famiglia, anno, master_key_b64, id_utente, include_prev_year=True):
+    """
+    Recupera i dati completi per l'analisi annuale.
+    Media spese, media budget, media differenza, spese categorie annuali.
+    """
+    try:
+        # Prepara range date
+        data_inizio_anno = f"{anno}-01-01"
+        data_fine_anno = f"{anno}-12-31"
+
+        # Recupera tutte le spese dell'anno per calcolare totali e medie
+        totale_spese_annuali = 0.0
+        spese_per_categoria_annuali = []
+        
+        crypto, master_key = _get_crypto_and_key(master_key_b64)
+        family_key = None
+        if master_key and id_utente:
+            family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+            
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # --- SPESE ---
+            # Personali
+            cur.execute("""
+                SELECT T.id_sottocategoria, SUM(T.importo) as totale
+                FROM Transazioni T
+                JOIN Conti C ON T.id_conto = C.id_conto
+                JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
+                WHERE AF.id_famiglia = %s
+                  AND T.data BETWEEN %s AND %s
+                  AND T.importo < 0
+                GROUP BY T.id_sottocategoria
+            """, (id_famiglia, data_inizio_anno, data_fine_anno))
+            spese_personali = {row['id_sottocategoria']: abs(row['totale']) for row in cur.fetchall()}
+            
+            # Condivise
+            cur.execute("""
+                SELECT TC.id_sottocategoria, SUM(TC.importo) as totale
+                FROM TransazioniCondivise TC
+                JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
+                WHERE CC.id_famiglia = %s
+                  AND TC.data BETWEEN %s AND %s
+                  AND TC.importo < 0
+                GROUP BY TC.id_sottocategoria
+            """, (id_famiglia, data_inizio_anno, data_fine_anno))
+            spese_condivise = {row['id_sottocategoria']: abs(row['totale']) for row in cur.fetchall()}
+            
+            # Unione
+            tutte_spese_map = spese_personali.copy()
+            for id_sub, importo in spese_condivise.items():
+                tutte_spese_map[id_sub] = tutte_spese_map.get(id_sub, 0.0) + importo
+            
+            totale_spese_annuali = sum(tutte_spese_map.values())
+            
+            # Aggregazione Categorie
+            cur.execute("SELECT id_categoria, nome_categoria FROM Categorie WHERE id_famiglia = %s", (id_famiglia,))
+            raw_categorie = cur.fetchall()
+            
+            for raw_cat in raw_categorie:
+                cat_id = raw_cat['id_categoria']
+                nome_crip = raw_cat['nome_categoria']
+                nome_chiaro = nome_crip
+                if family_key:
+                    nome_chiaro = _decrypt_if_key(nome_crip, family_key, crypto)
+                
+                cur.execute("SELECT id_sottocategoria FROM Sottocategorie WHERE id_categoria = %s", (cat_id,))
+                subs = [row['id_sottocategoria'] for row in cur.fetchall()]
+                
+                tot_cat = sum(tutte_spese_map.get(sub_id, 0.0) for sub_id in subs)
+                if tot_cat > 0:
+                    spese_per_categoria_annuali.append({
+                        'nome_categoria': nome_chiaro,
+                        'importo': tot_cat
+                    })
+
+        # Percentuali
+        for item in spese_per_categoria_annuali:
+            item['percentuale'] = (item['importo'] / totale_spese_annuali * 100) if totale_spese_annuali > 0 else 0
+
+        # --- MEDIE E BUDGET ---
+        # Determina i mesi attivi (quelli con spese registrate)
+        mesi_attivi = set()
+        
+        # Mesi da spese personali
+        cur.execute("""
+            SELECT DISTINCT EXTRACT(MONTH FROM T.data::DATE) as mese
+            FROM Transazioni T
+            JOIN Conti C ON T.id_conto = C.id_conto
+            JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
+            WHERE AF.id_famiglia = %s
+              AND T.data BETWEEN %s AND %s
+              AND T.importo < 0
+        """, (id_famiglia, data_inizio_anno, data_fine_anno))
+        for row in cur.fetchall():
+            mesi_attivi.add(int(row['mese']))
+
+        # Mesi da spese condivise
+        cur.execute("""
+            SELECT DISTINCT EXTRACT(MONTH FROM TC.data::DATE) as mese
+            FROM TransazioniCondivise TC
+            JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
+            WHERE CC.id_famiglia = %s
+              AND TC.data BETWEEN %s AND %s
+              AND TC.importo < 0
+        """, (id_famiglia, data_inizio_anno, data_fine_anno))
+        for row in cur.fetchall():
+            mesi_attivi.add(int(row['mese']))
+            
+        numero_mesi_attivi = len(mesi_attivi)
+        
+        # Se non ci sono mesi attivi, usiamo 12 come standard per evitare divisioni per zero o dati vuoti
+        # Oppure mostriamo tutto a 0? Meglio standard per vedere il budget annuale teorico.
+        # User request: "se ho compilato...". Se 0, non ho compilato.
+        use_active_months = numero_mesi_attivi > 0
+        divisor = numero_mesi_attivi if use_active_months else 12
+
+        budget_mensile_corrente = ottieni_totale_budget_allocato(id_famiglia, master_key_b64, id_utente)
+        
+        entrate_totali_periodo = 0.0
+        budget_totale_periodo = 0.0 
+        
+        imps_correnti = get_impostazioni_budget_famiglia(id_famiglia)
+        entrate_std = imps_correnti['entrate_mensili']
+
+        # Se usiamo i mesi attivi, sommiamo budget ed entrate SOLO per quei mesi.
+        # Altrimenti (fallback), sommiamo per tutto l'anno (1-12)
+        mesi_da_considerare = mesi_attivi if use_active_months else range(1, 13)
+
+        for m in mesi_da_considerare:
+            imp_storico = ottieni_impostazioni_budget_storico(id_famiglia, anno, m)
+            if imp_storico:
+                entrate_totali_periodo += imp_storico['entrate_mensili']
+            else:
+                entrate_totali_periodo += entrate_std
+            
+            budget_totale_periodo += budget_mensile_corrente 
+
+        media_spese_mensili = totale_spese_annuali / divisor
+        media_budget_mensile = budget_totale_periodo / divisor
+        media_entrate_mensili = entrate_totali_periodo / divisor
+        
+        media_risparmio = media_entrate_mensili - media_spese_mensili
+        media_delta = media_budget_mensile - media_spese_mensili
+
+        for item in spese_per_categoria_annuali:
+            # Calcola la media mensile per ogni categoria
+            item['importo_media'] = item['importo'] / divisor
+            item['percentuale'] = (item['importo_media'] / media_spese_mensili * 100) if media_spese_mensili > 0 else 0
+
+        # Ordina per importo medio decrescente
+        spese_per_categoria_annuali = sorted(spese_per_categoria_annuali, key=lambda x: x['importo_media'], reverse=True)
+
+        dati_anno_precedente = None
+        if include_prev_year:
+            dati_anno_precedente = ottieni_dati_analisi_annuale(
+                id_famiglia, anno - 1, master_key_b64, id_utente, include_prev_year=False
+            )
+            # Se l'anno precedente non ha mesi attivi (nessuna spesa), non considerarlo valido per il confronto
+            if dati_anno_precedente and dati_anno_precedente.get('numero_mesi_attivi', 0) == 0:
+                 dati_anno_precedente = None
+
+        return {
+            'media_entrate_mensili': media_entrate_mensili,
+            'media_spese_mensili': media_spese_mensili,
+            'media_budget_mensile': media_budget_mensile,
+            'media_differenza_entrate_spese': media_risparmio,
+            'media_delta_budget_spese': media_delta,
+            'spese_per_categoria_annuali': spese_per_categoria_annuali,
+            'numero_mesi_attivi': numero_mesi_attivi,
+            'dati_confronto': dati_anno_precedente
+        }
+
+    except Exception as e:
+        print(f"[ERRORE] ottieni_dati_analisi_annuale: {e}")
+        return None
+
 def esporta_dati_famiglia(id_famiglia, id_utente, master_key_b64):
     """
     Esporta family_key e configurazioni base per backup.
@@ -1968,7 +2415,7 @@ def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese, master_key_b64=No
         with get_db_connection() as con:
             cur = con.cursor()
             
-            # 1. Liquidità
+            # 1. Liquidità Personale (somma transazioni + rettifica)
             cur.execute("""
                 SELECT COALESCE(SUM(T.importo), 0.0) as val
                 FROM Transazioni T
@@ -1977,9 +2424,20 @@ def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese, master_key_b64=No
                   AND C.tipo NOT IN ('Investimento', 'Fondo Pensione')
                   AND T.data <= %s
             """, (id_utente, data_limite_str))
-            liquidita_personale = cur.fetchone()['val'] or 0.0
+            transazioni_personali = float(cur.fetchone()['val'] or 0.0)
+            
+            # 1.1 Rettifiche Conti Personali
+            cur.execute("""
+                SELECT COALESCE(SUM(CAST(NULLIF(CAST(C.rettifica_saldo AS TEXT), '') AS NUMERIC)), 0.0) as val
+                FROM Conti C
+                WHERE C.id_utente = %s
+                  AND C.tipo NOT IN ('Investimento', 'Fondo Pensione')
+            """, (id_utente,))
+            rettifica_personali = float(cur.fetchone()['val'] or 0.0)
+            
+            liquidita_personale = transazioni_personali + rettifica_personali
 
-            # 1.1 Liquidità Condivisa
+            # 1.2 Liquidità Condivisa (somma transazioni)
             cur.execute("""
                 SELECT COALESCE(SUM(TC.importo), 0.0) as val
                 FROM TransazioniCondivise TC
@@ -1989,7 +2447,19 @@ def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese, master_key_b64=No
                    OR (CC.id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s) AND CC.tipo_condivisione = 'famiglia'))
                   AND TC.data <= %s
             """, (id_utente, id_utente, data_limite_str))
-            liquidita_condivisa = cur.fetchone()['val'] or 0.0
+            transazioni_condivise = float(cur.fetchone()['val'] or 0.0)
+            
+            # 1.3 Rettifiche Conti Condivisi
+            cur.execute("""
+                SELECT COALESCE(SUM(CAST(NULLIF(CAST(CC.rettifica_saldo AS TEXT), '') AS NUMERIC)), 0.0) as val
+                FROM ContiCondivisi CC
+                LEFT JOIN PartecipazioneContoCondiviso PCC ON CC.id_conto_condiviso = PCC.id_conto_condiviso
+                WHERE (PCC.id_utente = %s AND CC.tipo_condivisione = 'utenti')
+                   OR (CC.id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s) AND CC.tipo_condivisione = 'famiglia')
+            """, (id_utente, id_utente))
+            rettifica_condivisi = float(cur.fetchone()['val'] or 0.0)
+            
+            liquidita_condivisa = transazioni_condivise + rettifica_condivisi
 
             liquidita = liquidita_personale + liquidita_condivisa
             

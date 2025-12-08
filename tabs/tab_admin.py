@@ -5,6 +5,7 @@ from functools import partial
 from utils.styles import AppColors, AppStyles, PageConstants
 from db.gestione_db import ottieni_categorie_e_sottocategorie, ottieni_membri_famiglia, rimuovi_utente_da_famiglia, ottieni_budget_famiglia, get_smtp_config, save_smtp_config, esporta_dati_famiglia
 from utils.email_sender import send_email
+from tabs.admin_tabs.subtab_budget_manager import AdminSubTabBudgetManager
 
 class AdminTab(ft.Container):
     def __init__(self, controller):
@@ -48,6 +49,9 @@ class AdminTab(ft.Container):
 
         self.lv_categorie = ft.Column(scroll=ft.ScrollMode.AUTO, expand=True)
         self.lv_membri = ft.Column(scroll=ft.ScrollMode.AUTO)
+        
+        # Nuovo subtab Gestione Budget
+        self.subtab_budget_manager = AdminSubTabBudgetManager(controller)
 
         self.content = ft.Column(
             [self.tabs_admin],
@@ -63,24 +67,21 @@ class AdminTab(ft.Container):
                 content=ft.Column(expand=True, controls=[
                     ft.Row([
                         ft.Container(),  # Spacer
-                        ft.Row([
-                            ft.IconButton(
-                                icon=ft.Icons.MONETIZATION_ON,
-                                tooltip=loc.get("set_budget"),
-                                icon_color=AppColors.PRIMARY,
-                                on_click=lambda e: self.controller.admin_dialogs.apri_dialog_imposta_budget()
-                            ),
-                            ft.IconButton(
-                                icon=ft.Icons.ADD,
-                                tooltip=loc.get("add_category"),
-                                icon_color=AppColors.PRIMARY,
-                                on_click=lambda e: self.controller.admin_dialogs.apri_dialog_categoria()
-                            )
-                        ])
+                        ft.IconButton(
+                            icon=ft.Icons.ADD,
+                            tooltip=loc.get("add_category"),
+                            icon_color=AppColors.PRIMARY,
+                            on_click=lambda e: self.controller.admin_dialogs.apri_dialog_categoria()
+                        )
                     ], alignment=ft.MainAxisAlignment.END),
                     AppStyles.page_divider(),
                     self.lv_categorie
                 ])
+            ),
+            ft.Tab(
+                text="Gestione Budget",
+                icon=ft.Icons.ACCOUNT_BALANCE_WALLET,
+                content=self.subtab_budget_manager
             ),
             ft.Tab(
                 text=loc.get("members_management"),
@@ -151,13 +152,6 @@ class AdminTab(ft.Container):
 
         self.lv_categorie.controls.clear()
         categorie_data = ottieni_categorie_e_sottocategorie(id_famiglia)
-        
-        # Recupera i budget impostati
-        master_key_b64 = self.controller.page.session.get("master_key")
-        current_user_id = self.controller.get_user_id()
-        budget_impostati = ottieni_budget_famiglia(id_famiglia, master_key_b64, current_user_id)
-
-        mappa_budget = {b['id_sottocategoria']: b['importo_limite'] for b in budget_impostati}
 
         if not categorie_data:
             self.lv_categorie.controls.append(AppStyles.body_text(loc.get("no_categories_found")))
@@ -169,7 +163,7 @@ class AdminTab(ft.Container):
                     sottocategorie_list.controls.append(
                         ft.Row([
                             ft.Icon(ft.Icons.SUBDIRECTORY_ARROW_RIGHT, size=16, color=AppColors.TEXT_SECONDARY),
-                            ft.Text(f"{sub['nome_sottocategoria']}: €{mappa_budget.get(sub['id_sottocategoria'], 0.0):.2f}", expand=True),
+                            ft.Text(sub['nome_sottocategoria'], expand=True),
 
                             ft.IconButton(icon=ft.Icons.EDIT, icon_size=16, tooltip=loc.get("edit"), data=sub, icon_color=AppColors.PRIMARY, on_click=lambda e: self.controller.admin_dialogs.apri_dialog_sottocategoria(sub_cat_data=e.control.data)),
                             ft.IconButton(icon=ft.Icons.DELETE, icon_size=16, tooltip=loc.get("delete"), icon_color=AppColors.ERROR, data=sub['id_sottocategoria'], on_click=lambda e: self.controller.open_confirm_delete_dialog(partial(self.controller.admin_dialogs.elimina_sottocategoria_cliccato, e))),
@@ -205,6 +199,7 @@ class AdminTab(ft.Container):
             # Aggiungi spazio in basso per evitare interferenze con il pulsante +
 
             self.lv_categorie.controls.append(ft.Container(height=80))
+
 
     def update_tab_membri(self):
         loc = self.controller.loc
@@ -436,5 +431,6 @@ class AdminTab(ft.Container):
         self.update_tab_membri()
         # update_tab_google rimosso - Google Drive deprecato
         self.update_tab_email()
+        self.subtab_budget_manager.update_view_data(is_initial_load)
         if self.page:
             self.page.update()

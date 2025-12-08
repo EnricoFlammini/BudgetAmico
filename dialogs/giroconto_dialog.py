@@ -70,15 +70,12 @@ class GirocontoDialog(ft.AlertDialog):
             if self.controller.page: self.controller.page.update()
 
     def chiudi_dialog(self, e):
-        self.controller.show_loading("Attendere...")
         try:
             self.open = False
             self.controller.page.update()
         except Exception as ex:
             print(f"Errore chiusura dialog: {ex}")
             traceback.print_exc()
-        finally:
-            self.controller.hide_loading()
 
     def apri_dialog(self):
         self._update_texts()

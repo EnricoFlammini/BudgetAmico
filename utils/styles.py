@@ -41,13 +41,15 @@ class AppStyles:
     """Stili riutilizzabili per componenti UI."""
 
     @staticmethod
-    def card_container(content: ft.Control, padding: int = 15, on_click=None, data=None) -> ft.Container:
+    def card_container(content: ft.Control, padding: int = 15, on_click=None, data=None, width: int = None, height: int = None) -> ft.Container:
         """
         Crea un contenitore stile 'Card' standardizzato.
         """
         return ft.Container(
             content=content,
             padding=padding,
+            width=width,
+            height=height,
             border_radius=12,  # Bordi più arrotondati per un look moderno
             border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
             bgcolor=ft.Colors.SURFACE, # Usa il colore surface del tema
@@ -222,21 +224,24 @@ class LoadingOverlay(ft.Container):
                 blur_radius=20,
                 color=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
             ),
+            visible=False,  # Inizialmente nascosto
         )
         
         super().__init__(
             content=self.spinner_box,
             alignment=ft.alignment.center,
             expand=True,
+            visible=False,  # Container principale nascosto
         )
-        self.visible = False
     
     def show(self, messaggio: str = None):
         """Mostra l'overlay con un messaggio opzionale."""
         if messaggio:
             self.messaggio_text.value = messaggio
+        self.spinner_box.visible = True
         self.visible = True
     
     def hide(self):
         """Nasconde l'overlay."""
+        self.spinner_box.visible = False
         self.visible = False
