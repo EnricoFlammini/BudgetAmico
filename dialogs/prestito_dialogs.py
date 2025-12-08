@@ -6,7 +6,9 @@ from db.gestione_db import (
     modifica_prestito,
     ottieni_tutti_i_conti_utente,
     ottieni_categorie_e_sottocategorie,
-    effettua_pagamento_rata
+    effettua_pagamento_rata,
+    ottieni_membri_famiglia,
+    ottieni_quote_prestito
 )
 
 
@@ -39,6 +41,11 @@ class PrestitoDialogs:
         self.dd_sottocategoria_default = ft.Dropdown()
         self.cb_addebito_automatico = ft.Checkbox()
 
+        # Sezione Quote
+        self.container_quote = ft.Column(spacing=5)
+        self.quote_inputs = {} # Mappa id_utente -> TextField
+
+
         self.dialog_prestito = ft.AlertDialog(
             modal=True,
             title=ft.Text(),
@@ -47,7 +54,10 @@ class PrestitoDialogs:
                     self.txt_nome, self.dd_tipo, self.txt_descrizione, self.txt_data_inizio,
                     self.txt_numero_rate, self.txt_rate_residue, self.txt_importo_finanziato, self.txt_importo_interessi,
                     self.txt_importo_rata, self.dd_giorno_scadenza, self.dd_conto_default,
-                    self.dd_sottocategoria_default, self.cb_addebito_automatico
+                    self.dd_sottocategoria_default, self.cb_addebito_automatico,
+                    ft.Divider(),
+                    ft.Text("Ripartizione Quote di Competenza", weight=ft.FontWeight.BOLD),
+                    self.container_quote
                 ],
                 tight=True, spacing=10, height=600, width=500, scroll=ft.ScrollMode.ADAPTIVE
             ),
@@ -118,6 +128,7 @@ class PrestitoDialogs:
         self._update_texts()
         self._popola_dropdowns_prestito()
         self._reset_fields_prestito()
+        self._update_quote_section()
 
         if prestito_data:
             self.dialog_prestito.title.value = self.loc.get("edit_loan")
@@ -210,6 +221,47 @@ class PrestitoDialogs:
                         ft.dropdown.Option(key=sub['id_sottocategoria'], text=f"  - {sub['nome_sottocategoria']}"))
         self.dd_sottocategoria_default.options = opzioni
 
+    def _update_quote_section(self):
+        self.container_quote.controls.clear()
+        self.quote_inputs = {}
+        
+        id_famiglia = self.controller.get_family_id()
+        membri = ottieni_membri_famiglia(id_famiglia)
+        
+        # Recupera quote esistenti se in modifica
+        quote_esistenti = {} # id_utente -> perc
+        if self.prestito_in_modifica:
+            quote_list = ottieni_quote_prestito(self.prestito_in_modifica['id_prestito'])
+            for q in quote_list:
+                quote_esistenti[q['id_utente']] = q['percentuale']
+        else:
+            # Default: 100% all'utente corrente
+            curr_user = self.controller.get_user_id()
+            quote_esistenti[curr_user] = 100.0
+            
+        for membro in membri:
+            uid = membro['id_utente']
+            perc_val = quote_esistenti.get(uid, 0.0)
+            
+            # Text Field per la percentuale
+            txt_perc = ft.TextField(
+                value=str(perc_val) if perc_val > 0 else "0",
+                suffix_text="%",
+                width=100,
+                keyboard_type=ft.KeyboardType.NUMBER,
+                text_align=ft.TextAlign.RIGHT,
+                dense=True,
+                height=40
+            )
+            self.quote_inputs[uid] = txt_perc
+            
+            row = ft.Row([
+                ft.Text(membro['username'], expand=True),
+                txt_perc
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+            
+            self.container_quote.controls.append(row)
+
     def _chiudi_dialog_prestito(self, e):
         self.controller.show_loading("Attendere...")
         try:
@@ -258,6 +310,23 @@ class PrestitoDialogs:
                 rate_residue = int(self.txt_rate_residue.value)
                 importo_residuo = rate_residue * importo_rata
             
+            # Parse Quote
+            lista_quote = []
+            totale_perc = 0.0
+            for uid, txt_field in self.quote_inputs.items():
+                try:
+                    val = float(txt_field.value.replace(",", "."))
+                    if val > 0:
+                        lista_quote.append({'id_utente': uid, 'percentuale': val})
+                        totale_perc += val
+                except ValueError:
+                    pass
+            
+            if totale_perc > 100.001:
+                self.controller.show_snack_bar(f"Il totale delle quote ({totale_perc}%) supera il 100%!", success=False)
+                self.controller.hide_loading()
+                return
+
             success = False
             if self.prestito_in_modifica:
                 # Se importo_residuo non è stato ricalcolato (campo vuoto), usa quello esistente
@@ -276,7 +345,7 @@ class PrestitoDialogs:
                     id_conto_condiviso_default=id_conto_condiviso_default,
                     id_sottocategoria_default=id_sottocategoria_default,
                     importo_residuo=importo_residuo, addebito_automatico=addebito_automatico,
-                    master_key_b64=master_key_b64, id_utente=id_utente
+                    master_key_b64=master_key_b64, id_utente=id_utente, lista_quote=lista_quote
                 )
             else:
                 # Se nuovo prestito e rate residue non specificate, residuo = finanziato + interessi
@@ -294,7 +363,7 @@ class PrestitoDialogs:
                     id_conto_default=id_conto_default, id_conto_condiviso_default=id_conto_condiviso_default,
                     id_sottocategoria_default=id_sottocategoria_default,
                     importo_residuo=importo_residuo, addebito_automatico=addebito_automatico,
-                    master_key_b64=master_key_b64, id_utente=id_utente
+                    master_key_b64=master_key_b64, id_utente=id_utente, lista_quote=lista_quote
                 )
 
             if success:

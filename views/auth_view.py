@@ -37,6 +37,8 @@ class AuthView:
 
         # Controlli per il Reset Password
         self.txt_reset_username = ft.TextField(label="Nuovo Username")
+        self.txt_reset_nome = ft.TextField(label="Nome")
+        self.txt_reset_cognome = ft.TextField(label="Cognome")
         self.txt_reset_new_password = ft.TextField(password=True, can_reveal_password=True)
         self.txt_reset_confirm_password = ft.TextField(password=True, can_reveal_password=True)
         self.reset_status_text = ft.Text(visible=False)
@@ -161,6 +163,9 @@ class AuthView:
             utente = verifica_login(username, password)
             if utente:
                 self.txt_errore_login.visible = False
+                # Save temp password if user needs to change it (for re-encrypting family key)
+                if utente.get("forza_cambio_password"):
+                    self.page.session.set("_temp_password_for_reencrypt", password)
                 self.controller.post_login_setup(utente)
             else:
                 self.txt_errore_login.value = "Username o password non validi."
@@ -339,7 +344,15 @@ class AuthView:
                         <p>Al prossimo accesso ti verrà chiesto di impostare una nuova password personale.</p>
                     </body></html>
                     """
-                send_email(email, "Password Temporanea - Budget Amico", body)
+                success, error = send_email(email, "Password Temporanea - Budget Amico", body)
+                
+                if not success and "SMTP" in str(error):
+                     # Show configuration error
+                    self.recovery_status_text.value = f"Errore configurazione: {error}"
+                    self.recovery_status_text.color = ft.Colors.RED
+                    self.recovery_status_text.visible = True
+                    self.page.update()
+                    return
 
         # Mostra un messaggio generico per motivi di sicurezza
         self.recovery_status_text.value = self.loc.get("reset_link_sent_confirmation")
@@ -353,6 +366,8 @@ class AuthView:
         """Costruisce la vista per impostare la nuova password."""
         loc = self.loc
         self.txt_reset_username.value = ""
+        self.txt_reset_nome.value = ""
+        self.txt_reset_cognome.value = ""
         self.txt_reset_new_password.label = loc.get("new_password")
         self.txt_reset_confirm_password.label = loc.get("confirm_new_password")
         self.txt_reset_new_password.value = ""
@@ -366,6 +381,8 @@ class AuthView:
                     [
                         ft.Text(loc.get("set_new_password_title"), size=30, weight=ft.FontWeight.BOLD),
                         ft.Text("Completa il tuo profilo", size=16),
+                        self.txt_reset_nome,
+                        self.txt_reset_cognome,
                         self.txt_reset_username,
                         self.txt_reset_new_password,
                         self.txt_reset_confirm_password,
@@ -383,10 +400,12 @@ class AuthView:
 
     def _salva_nuova_password(self, e):
         nuovo_username = self.txt_reset_username.value.strip()
+        nome = self.txt_reset_nome.value.strip()
+        cognome = self.txt_reset_cognome.value.strip()
         nuova_pass = self.txt_reset_new_password.value
         conferma_pass = self.txt_reset_confirm_password.value
 
-        if not nuovo_username or not nuova_pass or nuova_pass != conferma_pass:
+        if not nuovo_username or not nome or not cognome or not nuova_pass or nuova_pass != conferma_pass:
             self.reset_status_text.value = "Compila tutti i campi e verifica che le password coincidano."
             self.reset_status_text.color = ft.Colors.RED
             self.reset_status_text.visible = True
@@ -398,20 +417,68 @@ class AuthView:
             self.page.go("/")
             return
 
-        success = cambia_password_e_username(id_utente, hash_password(nuova_pass), nuovo_username)
+        # Pass RAW password, not hash!
+        # Get old password for re-encrypting family key
+        vecchia_password = self.page.session.get("_temp_password_for_reencrypt")
+        if vecchia_password:
+            self.page.session.remove("_temp_password_for_reencrypt")
+        result = cambia_password_e_username(id_utente, nuova_pass, nuovo_username, nome=nome, cognome=cognome, vecchia_password=vecchia_password)
 
-        if success:
-            # Update session username
+        if result and result.get("success"):
+            # Update session username and keys
             utente = self.page.session.get("utente_loggato")
             if utente:
                 utente['username'] = nuovo_username
+                if result.get("master_key"):
+                     utente['master_key'] = result.get("master_key")
+                     self.page.session.set("master_key", result.get("master_key"))
                 self.page.session.set("utente_loggato", utente)
+            
+            recovery_key = result.get("recovery_key")
+            
+            # Show recovery key dialog identical to registration
+            def close_dialog(e):
+                dialog.open = False
+                if dialog in self.page.overlay:
+                   self.page.overlay.remove(dialog)
+                self.page.update()
                 
-            self.controller.show_snack_bar("Profilo aggiornato con successo!", success=True)
-            # Ricarica la dashboard con la sessione valida
-            self.page.go("/dashboard")
+                self.controller.show_snack_bar("Profilo aggiornato con successo!", success=True)
+                # Ricarica la dashboard con la sessione valida e chiavi
+                self.page.go("/dashboard")
+
+            dialog = ft.AlertDialog(
+                modal=True,
+                title=ft.Text("⚠️ SALVA LA TUA CHIAVE DI RECUPERO", weight=ft.FontWeight.BOLD, size=18),
+                content=ft.Column([
+                    ft.Text("Password aggiornata! Ecco la tua chiave di recupero.", 
+                           size=14, weight=ft.FontWeight.BOLD),
+                    ft.Text("Questa chiave è essenziale per decriptare i tuoi dati se perdi la password.", 
+                           size=12, color=ft.Colors.RED_400),
+                    ft.Container(height=10),
+                    ft.TextField(
+                        value=recovery_key,
+                        read_only=True,
+                        multiline=True,
+                        text_size=12,
+                        border_color=ft.Colors.BLUE_400,
+                        text_style=ft.TextStyle(font_family="Courier New")
+                    ),
+                ], tight=True, scroll=ft.ScrollMode.AUTO, width=500),
+                actions=[
+                    ft.TextButton("✅ Ho salvato e capito", on_click=close_dialog, 
+                                 style=ft.ButtonStyle(color=ft.Colors.GREEN_400))
+                ],
+                actions_alignment=ft.MainAxisAlignment.END
+            )
+            
+            self.page.overlay.append(dialog)
+            dialog.open = True
+            self.page.update()
+
         else:
-            self.reset_status_text.value = "Errore durante l'aggiornamento. Username forse già in uso."
+            error_msg = result.get("error") if result else "Errore sconosciuto"
+            self.reset_status_text.value = f"Errore aggiornamento: {error_msg}"
             self.reset_status_text.color = ft.Colors.RED
             self.reset_status_text.visible = True
             self.page.update()

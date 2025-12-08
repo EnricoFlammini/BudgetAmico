@@ -202,56 +202,63 @@ class AdminTab(ft.Container):
 
 
     def update_tab_membri(self):
-        loc = self.controller.loc
-        theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
-        id_famiglia = self.controller.get_family_id()
-        current_user_id = self.controller.get_user_id()
-        if not id_famiglia: return
+        try:
+            loc = self.controller.loc
+            theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
+            id_famiglia = self.controller.get_family_id()
+            current_user_id = self.controller.get_user_id()
+            master_key_b64 = self.controller.page.session.get("master_key")
+            if not id_famiglia: return
 
-        self.lv_membri.controls.clear()
-        membri = ottieni_membri_famiglia(id_famiglia)
+            self.lv_membri.controls.clear()
+            membri = ottieni_membri_famiglia(id_famiglia, master_key_b64, current_user_id)
 
-        if len(membri) <= 1:
-            self.lv_membri.controls.append(AppStyles.body_text(loc.get("no_members_found")))
-        else:
-            for membro in membri:
-                if membro['id_utente'] == current_user_id:
-                    continue
+            if len(membri) <= 1:
+                self.lv_membri.controls.append(AppStyles.body_text(loc.get("no_members_found")))
+            else:
+                for membro in membri:
+                    if membro['id_utente'] == current_user_id:
+                        continue
 
-                content = ft.Row(
-                    [
-                        ft.Icon(ft.Icons.PERSON, color=AppColors.PRIMARY),
-                        ft.Column(
-                            [
-                                AppStyles.subheader_text(membro['nome_visualizzato']),
-                                ft.Text(membro['ruolo'], color=AppColors.TEXT_SECONDARY)
-                            ],
-                            expand=True
-                        ),
-                        ft.IconButton(
-                            icon=ft.Icons.EDIT,
-                            tooltip=loc.get("edit") + " " + loc.get("role"),
-                            data=membro,
-                            icon_color=AppColors.PRIMARY,
-                            on_click=lambda e: self.controller.admin_dialogs.apri_dialog_modifica_ruolo(
-                                e.control.data)
-                        ),
-                        ft.IconButton(
-                            icon=ft.Icons.DELETE,
-                            tooltip=loc.get("remove_from_family"),
-                            icon_color=AppColors.ERROR,
-                            data=membro,
-                            on_click=lambda e: self.controller.open_confirm_delete_dialog(
-                                partial(self.rimuovi_membro_cliccato, e)
+                    content = ft.Row(
+                        [
+                            ft.Icon(ft.Icons.PERSON, color=AppColors.PRIMARY),
+                            ft.Column(
+                                [
+                                    AppStyles.subheader_text(membro['nome_visualizzato']),
+                                    ft.Text(membro['ruolo'], color=AppColors.TEXT_SECONDARY)
+                                ],
+                                expand=True
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.EDIT,
+                                tooltip=loc.get("edit") + " " + loc.get("role"),
+                                data=membro,
+                                icon_color=AppColors.PRIMARY,
+                                on_click=lambda e: self.controller.admin_dialogs.apri_dialog_modifica_ruolo(
+                                    e.control.data)
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.DELETE,
+                                tooltip=loc.get("remove_from_family"),
+                                icon_color=AppColors.ERROR,
+                                data=membro,
+                                on_click=lambda e: self.controller.open_confirm_delete_dialog(
+                                    partial(self.rimuovi_membro_cliccato, e)
+                                )
                             )
-                        )
-                    ],
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER
-                )
-                
-                self.lv_membri.controls.append(
-                    AppStyles.card_container(content, padding=15)
-                )
+                        ],
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER
+                    )
+                    
+                    self.lv_membri.controls.append(
+                        AppStyles.card_container(content, padding=15)
+                    )
+        except Exception as e:
+            print(f"[ERRORE] update_tab_membri: {e}")
+            import traceback
+            traceback.print_exc()
+
 
     def rimuovi_membro_cliccato(self, e):
         membro_data = e.control.data

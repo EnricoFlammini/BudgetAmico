@@ -1,6 +1,6 @@
 import flet as ft
 import traceback
-from db.gestione_db import aggiungi_immobile, modifica_immobile, ottieni_prestiti_famiglia
+from db.gestione_db import aggiungi_immobile, modifica_immobile, ottieni_prestiti_famiglia, ottieni_membri_famiglia, ottieni_quote_immobile
 
 
 class ImmobileDialog(ft.AlertDialog):
@@ -20,6 +20,11 @@ class ImmobileDialog(ft.AlertDialog):
         self.txt_valore_attuale = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.chk_nuda_proprieta = ft.Checkbox()
         self.dd_prestito_collegato = ft.Dropdown(on_change=self._on_prestito_change)
+        
+        # Sezione Quote
+        self.container_quote = ft.Column(spacing=5)
+        self.quote_inputs = {} # Mappa id_utente -> TextField
+
 
         self.content = ft.Column(
             [
@@ -30,6 +35,9 @@ class ImmobileDialog(ft.AlertDialog):
                 self.txt_valore_attuale,
                 self.chk_nuda_proprieta,
                 self.dd_prestito_collegato,
+                ft.Divider(),
+                ft.Text("Ripartizione Quote di Proprietà", weight=ft.FontWeight.BOLD),
+                self.container_quote,
             ],
             tight=True,
             spacing=10,
@@ -64,6 +72,8 @@ class ImmobileDialog(ft.AlertDialog):
             self._update_texts()
             self._reset_fields()
             self._popola_dropdown_prestiti()
+            self._update_quote_section()
+            self._update_quote_section()
 
             if immobile_data:
                 self.title.value = self.loc.get("edit_property")
@@ -87,6 +97,47 @@ class ImmobileDialog(ft.AlertDialog):
             print(f"Errore salvataggio immobile: {ex}")
             traceback.print_exc()
             self.controller.show_snack_bar(f"Errore inaspettato: {ex}", success=False)
+
+    def _update_quote_section(self):
+        self.container_quote.controls.clear()
+        self.quote_inputs = {}
+        
+        id_famiglia = self.controller.get_family_id()
+        membri = ottieni_membri_famiglia(id_famiglia)
+        
+        # Recupera quote esistenti se in modifica
+        quote_esistenti = {} # id_utente -> perc
+        if self.id_immobile_in_modifica:
+            quote_list = ottieni_quote_immobile(self.id_immobile_in_modifica)
+            for q in quote_list:
+                quote_esistenti[q['id_utente']] = q['percentuale']
+        else:
+            # Default: 100% all'utente corrente
+            curr_user = self.controller.get_user_id()
+            quote_esistenti[curr_user] = 100.0
+            
+        for membro in membri:
+            uid = membro['id_utente']
+            perc_val = quote_esistenti.get(uid, 0.0)
+            
+            # Text Field per la percentuale
+            txt_perc = ft.TextField(
+                value=str(perc_val) if perc_val > 0 else "0",
+                suffix_text="%",
+                width=100,
+                keyboard_type=ft.KeyboardType.NUMBER,
+                text_align=ft.TextAlign.RIGHT,
+                dense=True,
+                height=40
+            )
+            self.quote_inputs[uid] = txt_perc
+            
+            row = ft.Row([
+                ft.Text(membro['username'], expand=True),
+                txt_perc
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+            
+            self.container_quote.controls.append(row)
 
     def _reset_fields(self):
         for field in [self.txt_nome, self.txt_via, self.txt_citta, self.txt_valore_acquisto, self.txt_valore_attuale]:
@@ -139,6 +190,22 @@ class ImmobileDialog(ft.AlertDialog):
             valore_acquisto = float(self.txt_valore_acquisto.value.replace(",", ".")) if self.txt_valore_acquisto.value else 0.0
             valore_attuale = float(self.txt_valore_attuale.value.replace(",", "."))
 
+            # Parse Quote
+            lista_quote = []
+            totale_perc = 0.0
+            for uid, txt_field in self.quote_inputs.items():
+                try:
+                    val = float(txt_field.value.replace(",", "."))
+                    if val > 0:
+                        lista_quote.append({'id_utente': uid, 'percentuale': val})
+                        totale_perc += val
+                except ValueError:
+                    pass # Ignore invalid numbers (treat as 0)
+            
+            if totale_perc > 100.001: # Tolerance
+                self.controller.show_snack_bar(f"Il totale delle quote ({totale_perc}%) supera il 100%!", success=False)
+                return
+
             success = False
             if self.id_immobile_in_modifica:
                 master_key_b64 = self.controller.page.session.get("master_key")
@@ -146,7 +213,7 @@ class ImmobileDialog(ft.AlertDialog):
                 success = modifica_immobile(
                     self.id_immobile_in_modifica, self.txt_nome.value, self.txt_via.value, self.txt_citta.value,
                     valore_acquisto, valore_attuale, self.chk_nuda_proprieta.value, self.dd_prestito_collegato.value,
-                    master_key_b64=master_key_b64, id_utente=id_utente
+                    master_key_b64=master_key_b64, id_utente=id_utente, lista_quote=lista_quote
                 )
             else:
                 id_famiglia = self.controller.get_family_id()
@@ -155,7 +222,7 @@ class ImmobileDialog(ft.AlertDialog):
                 success = aggiungi_immobile(
                     id_famiglia, self.txt_nome.value, self.txt_via.value, self.txt_citta.value,
                     valore_acquisto, valore_attuale, self.chk_nuda_proprieta.value, self.dd_prestito_collegato.value,
-                    master_key_b64=master_key_b64, id_utente=id_utente
+                    master_key_b64=master_key_b64, id_utente=id_utente, lista_quote=lista_quote
                 )
 
             if success:

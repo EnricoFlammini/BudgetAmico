@@ -1,6 +1,6 @@
 import flet as ft
 from functools import partial
-from db.gestione_db import ottieni_immobili_famiglia, elimina_immobile
+from db.gestione_db import ottieni_immobili_famiglia, elimina_immobile, ottieni_membri_famiglia
 from utils.styles import AppStyles, AppColors, PageConstants
 
 
@@ -36,15 +36,39 @@ class ImmobiliTab(ft.Container):
             tot_attuale = 0.0
             tot_mutui = 0.0
             
+            # Recupera membri famiglia per calcolare quote
+            membri = ottieni_membri_famiglia(id_famiglia)
+            family_ids = [m['id_utente'] for m in membri]
+
             for imm in immobili:
                 val_acq = imm.get('valore_acquisto') or 0.0
                 val_att = imm.get('valore_attuale') or 0.0
                 val_mut = imm.get('valore_mutuo_residuo') or 0.0
                 
-                tot_acquisto += val_acq
-                tot_mutui += val_mut
+                # Calcolo Quote
+                q_imm = imm.get('lista_quote', [])
+                perc_imm_fam = 100.0
+                if q_imm:
+                    perc_imm_fam = sum([q['percentuale'] for q in q_imm if q['id_utente'] in family_ids])
+                
+                q_mut = imm.get('lista_quote_prestito', [])
+                perc_mut_fam = 100.0
+                if q_mut:
+                    perc_mut_fam = sum([q['percentuale'] for q in q_mut if q['id_utente'] in family_ids])
+                
+                # Salvo le percentuali calcolate nell'oggetto per il widget
+                imm['perc_famiglia_immobile'] = perc_imm_fam
+                imm['perc_famiglia_mutuo'] = perc_mut_fam
+
+                # Valori pesati
+                val_acq_weighted = val_acq * (perc_imm_fam / 100.0)
+                val_att_weighted = val_att * (perc_imm_fam / 100.0)
+                val_mut_weighted = val_mut * (perc_mut_fam / 100.0)
+
+                tot_acquisto += val_acq_weighted
+                tot_mutui += val_mut_weighted
                 if not imm.get('nuda_proprieta'):
-                    tot_attuale += val_att
+                    tot_attuale += val_att_weighted
             
             tot_netto = tot_attuale - tot_mutui
 
@@ -73,7 +97,7 @@ class ImmobiliTab(ft.Container):
                     ft.Row([
                         self._crea_info_immobile(loc.get("current_value"), loc.format_currency(tot_attuale), theme, colore_valore=AppColors.SUCCESS),
                         self._crea_info_immobile(loc.get("residual_mortgage"), loc.format_currency(tot_mutui), theme, colore_valore=AppColors.ERROR),
-                        self._crea_info_immobile("Valore Netto", loc.format_currency(tot_netto), theme, colore_valore=AppColors.PRIMARY),
+                        self._crea_info_immobile("Patrimonio Netto (Famiglia)", loc.format_currency(tot_netto), theme, colore_valore=AppColors.PRIMARY),
                     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
                 ])
                 header_controls.append(AppStyles.card_container(summary_content, padding=15))
@@ -107,7 +131,13 @@ class ImmobiliTab(ft.Container):
         val_att = immobile.get('valore_attuale') or 0.0
         val_mut = immobile.get('valore_mutuo_residuo') or 0.0
         
-        valore_netto = val_att - val_mut
+        perc_imm = immobile.get('perc_famiglia_immobile', 100.0)
+        perc_mut = immobile.get('perc_famiglia_mutuo', 100.0)
+        
+        val_att_fam = val_att * (perc_imm / 100.0)
+        val_mut_fam = val_mut * (perc_mut / 100.0)
+        
+        valore_netto = val_att_fam - val_mut_fam
         
         colore_valore_attuale = AppColors.SUCCESS
         tooltip_valore = None
@@ -132,18 +162,24 @@ class ImmobiliTab(ft.Container):
                 ft.Text(f"{immobile.get('via', '')}, {immobile.get('citta', '')}", size=12, italic=True,
                         color=AppColors.TEXT_SECONDARY)
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            
+            # Info Quote
+            ft.Row([
+                AppStyles.caption_text(f"Quota Famiglia: {perc_imm:.0f}%" + (f" (Mutuo: {perc_mut:.0f}%)" if val_mut > 0 else "")),
+            ]) if perc_imm < 100 or perc_mut < 100 else ft.Container(),
+
             ft.Divider(height=5, color=ft.Colors.TRANSPARENT),
             ft.Row([
                 self._crea_info_immobile(loc.get("purchase_value"),
                                          loc.format_currency(val_acq), theme),
                 self._crea_info_immobile(loc.get("current_value"),
-                                         loc.format_currency(val_att),
+                                         loc.format_currency(val_att_fam) + (f" (su {loc.format_currency(val_att)})" if perc_imm < 100 else ""),
                                          theme, colore_valore=colore_valore_attuale),
             ]),
             ft.Row([
                 self._crea_info_immobile(loc.get("residual_mortgage"),
-                                         loc.format_currency(val_mut), theme),
-                self._crea_info_immobile("Valore Netto", loc.format_currency(valore_netto), theme, colore_valore=AppColors.PRIMARY),
+                                         loc.format_currency(val_mut_fam) + (f" (su {loc.format_currency(val_mut)})" if perc_mut < 100 else ""), theme),
+                self._crea_info_immobile("Valore Netto (Quota)", loc.format_currency(valore_netto), theme, colore_valore=AppColors.PRIMARY),
             ]),
             ft.Row([
                 ft.IconButton(icon=ft.Icons.EDIT, tooltip=loc.get("edit"), data=immobile,

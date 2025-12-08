@@ -1,6 +1,6 @@
 import flet as ft
 from functools import partial
-from db.gestione_db import ottieni_prestiti_famiglia, elimina_prestito
+from db.gestione_db import ottieni_prestiti_famiglia, elimina_prestito, ottieni_membri_famiglia
 from utils.styles import AppStyles, AppColors, PageConstants
 
 
@@ -33,7 +33,19 @@ class PrestitiTab(ft.Container):
         if not prestiti:
             self.lv_prestiti.controls.append(AppStyles.body_text(self.controller.loc.get("no_loans")))
         else:
+            # Calcolo quote
+            membri = ottieni_membri_famiglia(id_famiglia)
+            family_ids = [m['id_utente'] for m in membri]
+
             for prestito in prestiti:
+                # Calcola quota famiglia
+                q_list = prestito.get('lista_quote', [])
+                perc_fam = 100.0
+                if q_list:
+                    perc_fam = sum([q['percentuale'] for q in q_list if q['id_utente'] in family_ids])
+                
+                prestito['perc_famiglia'] = perc_fam
+                
                 self.lv_prestiti.controls.append(self._crea_widget_prestito(prestito, theme))
 
         if self.page:
@@ -77,15 +89,21 @@ class PrestitiTab(ft.Container):
             ft.Text(prestito['descrizione'] if prestito['descrizione'] else "", size=14),
             ft.Divider(height=5, color=ft.Colors.TRANSPARENT),
             ft.Row([
+                AppStyles.caption_text(f"Quota Famiglia: {prestito['perc_famiglia']:.0f}%"),
+            ]) if prestito['perc_famiglia'] < 100 else ft.Container(),
+
+            ft.Divider(height=5, color=ft.Colors.TRANSPARENT),
+
+            ft.Row([
                 self._crea_info_prestito(loc.get("financed_amount"),
                                          loc.format_currency(prestito['importo_finanziato']), theme),
                 self._crea_info_prestito(loc.get("remaining_amount"),
-                                         loc.format_currency(prestito['importo_residuo']),
+                                         loc.format_currency(prestito['importo_residuo'] * (prestito['perc_famiglia'] / 100.0)),
                                          theme, colore_valore=AppColors.ERROR),
             ]),
             ft.Row([
                 self._crea_info_prestito(loc.get("monthly_installment"),
-                                         loc.format_currency(prestito['importo_rata']), theme),
+                                         loc.format_currency(prestito['importo_rata'] * (prestito['perc_famiglia'] / 100.0)), theme),
                 self._crea_info_prestito(loc.get("total_installments"), mesi_totali, theme),
             ]),
             ft.Column([

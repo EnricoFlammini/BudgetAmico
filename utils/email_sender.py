@@ -19,7 +19,8 @@ def send_email(to_email, subject, body, smtp_config=None):
         smtp_config (dict, optional): Dizionario con le impostazioni SMTP (server, port, user, password).
                                       Se fornito, usa queste impostazioni invece di quelle salvate/env.
     """
-    if smtp_config:
+    if smtp_config and smtp_config.get('server'):
+        print(f"[DEBUG] send_email - Usando config fornita: {smtp_config.get('server')}:{smtp_config.get('port')} (User: {smtp_config.get('user')})")
         smtp_server = smtp_config.get('server')
         smtp_port = smtp_config.get('port')
         smtp_user = smtp_config.get('user')
@@ -30,11 +31,13 @@ def send_email(to_email, subject, body, smtp_config=None):
         # Se settings ha valori validi (non None), usali. 
         # get_smtp_config ritorna un dict con chiavi, ma i valori possono essere None.
         if settings and settings.get('server'): 
+            print("[DEBUG] send_email - Usando config globale DB")
             smtp_server = settings.get('server')
             smtp_port = settings.get('port')
             smtp_user = settings.get('user')
             smtp_password = settings.get('password')
         else:
+            print("[DEBUG] send_email - Usando Env Vars")
             # 2. Fallback su variabili d'ambiente (opzionale, mantenuto per retrocompatibilità)
             smtp_server = os.getenv("SMTP_SERVER")
             smtp_port = os.getenv("SMTP_PORT")
@@ -65,5 +68,7 @@ def send_email(to_email, subject, body, smtp_config=None):
         return True, None
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         logger.error(f"Errore durante l'invio dell'email a {to_email}: {e}")
         return False, str(e)

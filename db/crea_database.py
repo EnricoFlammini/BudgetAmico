@@ -233,6 +233,24 @@ TABLES = {
             valore TEXT,
             UNIQUE(id_famiglia, chiave)
         );
+    """,
+    "QuoteImmobili": """
+        CREATE TABLE QuoteImmobili (
+            id_quota SERIAL PRIMARY KEY,
+            id_immobile INTEGER NOT NULL REFERENCES Immobili(id_immobile) ON DELETE CASCADE,
+            id_utente INTEGER NOT NULL REFERENCES Utenti(id_utente) ON DELETE CASCADE,
+            percentuale REAL NOT NULL CHECK(percentuale > 0 AND percentuale <= 100),
+            UNIQUE(id_immobile, id_utente)
+        );
+    """,
+    "QuotePrestiti": """
+        CREATE TABLE QuotePrestiti (
+            id_quota SERIAL PRIMARY KEY,
+            id_prestito INTEGER NOT NULL REFERENCES Prestiti(id_prestito) ON DELETE CASCADE,
+            id_utente INTEGER NOT NULL REFERENCES Utenti(id_utente) ON DELETE CASCADE,
+            percentuale REAL NOT NULL CHECK(percentuale > 0 AND percentuale <= 100),
+            UNIQUE(id_prestito, id_utente)
+        );
     """
 }
 

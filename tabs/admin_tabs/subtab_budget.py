@@ -187,12 +187,13 @@ class AdminSubTabBudget(ft.Column):
 
                 famiglia_id = self.controller.get_family_id()
                 
-                # Pass master_key_b64
+                # Pass master_key_b64 and id_utente
                 master_key_b64 = self.controller.page.session.get("master_key")
+                id_utente = self.controller.get_user_id()
                 print(f"[DEBUG] subtab_budget - master_key in session: {bool(master_key_b64)}")
                 if master_key_b64:
                     print(f"[DEBUG] subtab_budget - master_key content (partial): {master_key_b64[:10]}...")
-                success = imposta_budget(famiglia_id, id_sottocategoria, importo_limite, master_key_b64)
+                success = imposta_budget(famiglia_id, id_sottocategoria, importo_limite, master_key_b64, id_utente)
 
                 if success:
                     self.controller.show_snack_bar(f"Budget per {nome_sottocategoria} salvato!", success=True)

@@ -5,14 +5,14 @@ from db.gestione_db import (
     elimina_categoria,
     elimina_sottocategoria,
     modifica_ruolo_utente,
-    # ottieni_categorie, # Non più necessario qui
-    ottieni_categorie_e_sottocategorie, # Usiamo questo
+    ottieni_categorie_e_sottocategorie,
     imposta_budget,
     aggiungi_sottocategoria,
     modifica_sottocategoria,
     crea_utente_invitato,
     ottieni_utente_da_email,
-    aggiungi_utente_a_famiglia
+    aggiungi_utente_a_famiglia,
+    get_smtp_config
 )
 from utils.email_sender import send_email
 
@@ -96,8 +96,6 @@ class AdminDialogs:
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )
-
-
 
         # --- NUOVO DIALOGO: IMPOSTA BUDGET ---
         self.dd_budget_sottocategorie = ft.Dropdown(label=self.loc.get("subcategory"))
@@ -266,25 +264,35 @@ class AdminDialogs:
             else:
                 self.controller.show_snack_bar("Errore durante l'aggiunta dell'utente.", success=False)
         else:
-            # Create new user and invite
-            credenziali = crea_utente_invitato(email, ruolo, id_famiglia)
+            # Create new user and invite - pass admin credentials to share family key
+            master_key_b64 = self.controller.page.session.get("master_key")
+            current_user_id = self.controller.get_user_id()
+            credenziali = crea_utente_invitato(email, ruolo, id_famiglia, id_admin=current_user_id, master_key_b64=master_key_b64)
             if credenziali:
+                # Recupera Configurazione SMTP decriptata
+                print(f"[DEBUG] AdminDialogs: Recupero SMTP config per id_famiglia={id_famiglia}, id_utente={current_user_id}")
+                smtp_config = get_smtp_config(id_famiglia, master_key_b64, current_user_id)
+                print(f"[DEBUG] AdminDialogs: SMTP Config recuperata: {smtp_config}")
+                
                 # Send email
+                print(f"[DEBUG] AdminDialogs: Tentativo invio email a {email}...")
                 success, error = send_email(
                     to_email=email,
                     subject="Benvenuto in Budget Amico - Credenziali di Accesso",
-                    body=f"Sei stato invitato nella famiglia!\n\nEcco le tue credenziali temporanee:\nEmail: {email}\nUsername: {credenziali['username']}\nPassword: {credenziali['password']}\n\nAccedi e completa il tuo profilo."
+                    body=f"Sei stato invitato nella famiglia!\n\nEcco le tue credenziali temporanee:\nEmail: {email}\nUsername: {credenziali['username']}\nPassword: {credenziali['password']}\n\nAccedi e completa il tuo profilo.",
+                    smtp_config=smtp_config
                 )
+                print(f"[DEBUG] AdminDialogs: Esito invio email: {success}, Errore: {error}")
                 
+                self.dialog_invito_membri.open = False
+                self.controller.db_write_operation()
+
                 if success:
                     self.controller.show_snack_bar(f"Invito inviato a {email}!", success=True)
                 else:
                     self.controller.show_snack_bar(f"Utente creato, ma errore invio email: {error}", success=False)
             else:
                 self.controller.show_snack_bar("Errore durante la creazione dell'utente.", success=False)
-
-        self.dialog_invito_membri.open = False
-        self.controller.db_write_operation()
 
     def apri_dialog_modifica_ruolo(self, membro_data):
         self.membro_in_modifica = membro_data
@@ -369,11 +377,11 @@ class AdminDialogs:
             try:
                 limite = float(limite_str.replace(",", "."))
                 
-                # Pass master_key_b64
+                # Pass master_key_b64 and id_utente
                 master_key_b64 = self.controller.page.session.get("master_key")
-                print(f"[DEBUG] admin_dialogs - master_key in session: {bool(master_key_b64)}")
+                id_utente = self.controller.get_user_id()
                 
-                imposta_budget(id_famiglia, id_sottocategoria, limite, master_key_b64)
+                imposta_budget(id_famiglia, id_sottocategoria, limite, master_key_b64, id_utente)
 
                 self.page.close(self.dialog_imposta_budget)
                 self.controller.show_snack_bar(loc.get("budget_saved"), success=True)
@@ -386,4 +394,3 @@ class AdminDialogs:
                 self.dialog_imposta_budget.update()
         else:
             self.controller.show_snack_bar(loc.get("fill_all_fields"), success=False)
-    # --- FINE NUOVI METODI ---
