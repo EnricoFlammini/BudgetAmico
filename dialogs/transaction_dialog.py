@@ -69,6 +69,8 @@ class TransactionDialog(ft.AlertDialog):
         self.dd_sottocategoria_dialog.label = self.loc.get("subcategory")
         self.actions[0].text = self.loc.get("cancel")
         self.actions[1].text = self.loc.get("save")
+        self.actions[0].disabled = False
+        self.actions[1].disabled = False
 
     def apri_date_picker(self, e):
         self.controller.date_picker.on_change = self.on_date_picker_change
@@ -317,6 +319,12 @@ class TransactionDialog(ft.AlertDialog):
             if success:
                 # 2. Chiudi il dialog PRIMA di aggiornare la dashboard
                 self.open = False
+                
+                # Reset pulsanti
+                save_btn.text = original_text
+                save_btn.disabled = False
+                cancel_btn.disabled = False
+
                 self.controller.page.update()
                 
                 # 3. Ora avvia l'aggiornamento globale (che mostrerà lo spinner correttamente)
