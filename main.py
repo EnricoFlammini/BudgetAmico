@@ -1,7 +1,3 @@
-import flet as ft
-from app_controller import AppController
-from db.gestione_db import ottieni_versione_db
-from db.supabase_manager import SupabaseManager
 import os
 import sys
 
@@ -13,7 +9,7 @@ else:
     # Script Python normale
     base_path = os.path.dirname(os.path.abspath(__file__))
 
-# Carica le variabili d'ambiente dal file .env
+# Carica le variabili d'ambiente dal file .env PRIMA di importare altri moduli
 try:
     from dotenv import load_dotenv
     env_path = os.path.join(base_path, '.env')
@@ -25,6 +21,11 @@ try:
 except ImportError:
     print("[INFO] python-dotenv non disponibile, uso variabili d'ambiente di sistema")
     pass
+
+import flet as ft
+from app_controller import AppController
+from db.gestione_db import ottieni_versione_db
+from db.supabase_manager import SupabaseManager
 
 def main(page: ft.Page):
     # Impostazioni iniziali della pagina

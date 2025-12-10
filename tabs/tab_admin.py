@@ -321,14 +321,85 @@ class AdminTab(ft.Container):
             self.txt_gmail_hint.visible = (provider == "gmail")
 
     def _provider_email_cambiato(self, e):
-        self.txt_gmail_hint.visible = (self.dd_email_provider.value == "gmail")
+        provider = self.dd_email_provider.value
+        self.txt_gmail_hint.visible = (provider == "gmail")
+        
+        # Autofill Logic
+        if provider == "gmail":
+            self.txt_smtp_server.value = "smtp.gmail.com"
+            self.txt_smtp_port.value = "587"
+        elif provider == "outlook":
+            self.txt_smtp_server.value = "smtp.office365.com"
+            self.txt_smtp_port.value = "587"
+        elif provider == "yahoo":
+            self.txt_smtp_server.value = "smtp.mail.yahoo.com"
+            self.txt_smtp_port.value = "465"
+        elif provider == "icloud":
+            self.txt_smtp_server.value = "smtp.mail.me.com"
+            self.txt_smtp_port.value = "587"
+        elif provider == "custom":
+            # Don't clear, user might have typed something
+            pass
+            
         if self.page:
             self.page.update()
 
     def _test_email_cliccato(self, e):
-        # Placeholder for test email
-        if hasattr(self.controller, 'show_snack_bar'):
-             self.controller.show_snack_bar("Funzionalità Test Email non ancora completata.", ft.Colors.ORANGE)
+        # Collect settings from UI
+        settings = {
+            'provider': self.dd_email_provider.value,
+            'server': self.txt_smtp_server.value,
+            'port': self.txt_smtp_port.value,
+            'user': self.txt_smtp_user.value,
+            'password': self.txt_smtp_password.value,
+        }
+        
+        # Validation
+        if not all([settings['server'], settings['port'], settings['user'], settings['password']]):
+            if hasattr(self.controller, 'show_snack_bar'):
+                self.controller.show_snack_bar("Compila tutti i campi prima di inviare il test.", AppColors.ERROR)
+            return
+
+        # Disable button during test
+        self.btn_test_email.disabled = True
+        self.btn_test_email.text = "Invio in corso..."
+        if self.page: self.page.update()
+
+        def _run_test():
+            try:
+                # Send to self (the user who is configuring it)
+                to_addr = settings['user']
+                subject = "Test Configurazione SMTP - Budget Amico"
+                body = "<h3>Test Riuscito!</h3><p>La configurazione SMTP sembra corretta.</p>"
+                
+                success, error = send_email(to_addr, subject, body, smtp_config=settings)
+                
+                return success, error
+            except Exception as ex:
+                return False, str(ex)
+
+        def _on_test_complete(result):
+            success, error = result
+            self.btn_test_email.disabled = False
+            self.btn_test_email.text = "Test Email"
+            
+            if success:
+                if hasattr(self.controller, 'show_snack_bar'):
+                    self.controller.show_snack_bar(f"Email inviata con successo a {settings['user']}!", AppColors.SUCCESS)
+            else:
+                if hasattr(self.controller, 'show_error_dialog'):
+                    self.controller.show_error_dialog(f"Errore Test Email: {error}")
+            
+            if self.page: self.page.update()
+
+        # Run async to avoid blocking UI
+        task = AsyncTask(
+            target=_run_test,
+            args=(),
+            callback=_on_test_complete,
+            error_callback=lambda e: _on_test_complete((False, str(e)))
+        )
+        task.start()
 
     def _salva_email_cliccato(self, e):
         settings = {
@@ -342,10 +413,13 @@ class AdminTab(ft.Container):
         master_key = self.controller.page.session.get("master_key")
         user_id = self.controller.get_user_id()
         
+        # Save as GLOBAL CONFIG (System-Wide)
+        # This is required for Password Reset to work (since it has no user context/keys)
+        # The backend will encrypt it with the SERVER KEY.
         try:
-            save_smtp_config(settings, famiglia_id, master_key, user_id)
+            save_smtp_config(settings, id_famiglia=None, master_key_b64=None, id_utente=None)
             if hasattr(self.controller, 'show_snack_bar'):
-                self.controller.show_snack_bar("Configurazione SMTP salvata.", AppColors.SUCCESS)
+                self.controller.show_snack_bar("Configurazione SMTP salvata (Globale).", AppColors.SUCCESS)
         except Exception as ex:
              if hasattr(self.controller, 'show_snack_bar'):
                 self.controller.show_snack_bar(f"Errore salvataggio: {ex}", AppColors.ERROR)

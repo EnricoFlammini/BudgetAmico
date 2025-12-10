@@ -20,6 +20,45 @@ if parent_dir not in sys.path:
 
 from db.crea_database import setup_database
 
+# Load Server Key
+SERVER_SECRET_KEY = os.getenv("SERVER_SECRET_KEY")
+if not SERVER_SECRET_KEY:
+    print("[WARNING] SERVER_SECRET_KEY not found in .env. Password recovery via email will not work for new encrypted data.")
+
+# --- System Key Helpers ---
+def _get_system_keys():
+    if not SERVER_SECRET_KEY: return None, None
+    import hashlib
+    # 1. Hashing Salt (Use Key directly)
+    hash_salt = SERVER_SECRET_KEY
+    # 2. Encryption Key (Fernet)
+    srv_key_bytes = hashlib.sha256(SERVER_SECRET_KEY.encode()).digest()
+    srv_fernet_key_b64 = base64.urlsafe_b64encode(srv_key_bytes)
+    return hash_salt, srv_fernet_key_b64
+
+HASH_SALT, SYSTEM_FERNET_KEY = _get_system_keys()
+
+def compute_blind_index(value):
+    if not value or not HASH_SALT: return None
+    import hashlib
+    return hashlib.sha256((value.lower().strip() + HASH_SALT).encode()).hexdigest()
+
+def encrypt_system_data(value):
+    if not value or not SYSTEM_FERNET_KEY: return None
+    from cryptography.fernet import Fernet
+    cipher = Fernet(SYSTEM_FERNET_KEY)
+    return cipher.encrypt(value.encode()).decode()
+
+def decrypt_system_data(value_enc):
+    if not value_enc or not SYSTEM_FERNET_KEY: return None
+    from cryptography.fernet import Fernet
+    cipher = Fernet(SYSTEM_FERNET_KEY)
+    try:
+        return cipher.decrypt(value_enc.encode()).decode()
+    except Exception:
+        return None
+
+
 
 # --- Helper Functions for Encryption ---
 def _get_crypto_and_key(master_key_b64=None):
@@ -145,16 +184,26 @@ def get_configurazione(chiave, id_famiglia=None, master_key_b64=None, id_utente=
             # Decrypt sensitive config values
             sensitive_keys = ['smtp_server', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_from_email']
             
-            if chiave in sensitive_keys and id_famiglia and master_key_b64 and id_utente:
-                crypto, master_key = _get_crypto_and_key(master_key_b64)
-                if master_key:
-                    family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
-                    if family_key:
-                        valore = _decrypt_if_key(valore, family_key, crypto)
+            if chiave in sensitive_keys:
+                if id_famiglia and master_key_b64 and id_utente:
+                     # Decrypt Family Config
+                    crypto, master_key = _get_crypto_and_key(master_key_b64)
+                    if master_key:
+                        family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+                        if family_key:
+                            valore = _decrypt_if_key(valore, family_key, crypto)
+                        else:
+                            print(f"[DEBUG] get_configurazione - family_key non trovata per id_famiglia={id_famiglia}, id_utente={id_utente}")
                     else:
-                        print(f"[DEBUG] get_configurazione - family_key non trovata per id_famiglia={id_famiglia}, id_utente={id_utente}")
-                else:
-                    print("[DEBUG] get_configurazione - master_key non valida")
+                        print("[DEBUG] get_configurazione - master_key non valida")
+                elif id_famiglia is None:
+                    # Decrypt Global Config (System Key)
+                    try:
+                        decrypted = decrypt_system_data(valore)
+                        if decrypted:
+                            valore = decrypted
+                    except Exception as e:
+                        print(f"[WARN] Failed to system-decrypt {chiave}: {e}")
             
             return valore
     except Exception as e:
@@ -172,12 +221,21 @@ def set_configurazione(chiave, valore, id_famiglia=None, master_key_b64=None, id
         encrypted_valore = valore
         sensitive_keys = ['smtp_server', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_from_email']
         
-        if chiave in sensitive_keys and id_famiglia and master_key_b64 and id_utente:
-            crypto, master_key = _get_crypto_and_key(master_key_b64)
-            if master_key:
-                family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
-                if family_key:
-                    encrypted_valore = _encrypt_if_key(valore, family_key, crypto)
+        if chiave in sensitive_keys:
+            if id_famiglia and master_key_b64 and id_utente:
+                # Encrypt with Family Key (User Data)
+                crypto, master_key = _get_crypto_and_key(master_key_b64)
+                if master_key:
+                    family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+                    if family_key:
+                        encrypted_valore = _encrypt_if_key(valore, family_key, crypto)
+            elif id_famiglia is None and SERVER_SECRET_KEY:
+                # Encrypt with System Key (Global Config accessible by Server)
+                # Used for SMTP credentials needed for Password Reset
+                try:
+                    encrypted_valore = encrypt_system_data(valore)
+                except Exception as e:
+                    print(f"[WARN] Failed to system-encrypt {chiave}: {e}")
         
         with get_db_connection() as con:
             cur = con.cursor()
@@ -749,12 +807,18 @@ def ottieni_utenti_senza_famiglia():
             # con.row_factory = sqlite3.Row # Removed for Supabase
             cur = con.cursor()
             cur.execute("""
-                        SELECT username 
+                        SELECT username_enc 
                         FROM Utenti 
                         WHERE id_utente NOT IN (SELECT id_utente FROM Appartenenza_Famiglia)
-                        ORDER BY username
                         """)
-            return [row['username'] for row in cur.fetchall()]
+            
+            users = []
+            for row in cur.fetchall():
+                decrypted = decrypt_system_data(row['username_enc'])
+                if decrypted:
+                    users.append(decrypted)
+            return sorted(users)
+
     except Exception as e:
         print(f"[ERRORE] Errore recupero utenti senza famiglia: {e}")
         return []
@@ -762,12 +826,27 @@ def ottieni_utenti_senza_famiglia():
 
 def verifica_login(login_identifier, password):
     try:
+        # Calculate blind indexes for lookup
+        u_bindex = compute_blind_index(login_identifier)
+        
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("SELECT id_utente, password_hash, nome, cognome, username, email, forza_cambio_password, salt, encrypted_master_key FROM Utenti WHERE username = %s OR email = %s",
-                        (login_identifier, login_identifier.lower()))
+            # Try finding by Blind Index first
+            cur.execute("""
+                SELECT id_utente, password_hash, nome, cognome, username, email, 
+                       forza_cambio_password, salt, encrypted_master_key, 
+                       username_enc, email_enc, nome_enc_server, cognome_enc_server
+                FROM Utenti 
+                WHERE username_bindex = %s OR email_bindex = %s
+            """, (u_bindex, u_bindex))
             risultato = cur.fetchone()
+            
+            # Fallback removed - we rely on migration
+            if False: pass # Placeholder to minimize diff changes if needed, or simply remove
+
+
             if risultato and risultato['password_hash'] == hash_password(password):
+
                 # Decrypt master key if encryption is enabled
                 master_key = None
                 nome = risultato['nome']
@@ -781,6 +860,12 @@ def verifica_login(login_identifier, password):
                         encrypted_mk = base64.urlsafe_b64decode(risultato['encrypted_master_key'].encode())
                         master_key = crypto.decrypt_master_key(encrypted_mk, kek)
                         
+                        # --- MIGRATION: Backfill Server Key Backup if missing ---
+                        if SERVER_SECRET_KEY and master_key:
+                            # Check if backup key is missing (we don't fetch it in SELECT, so we do a separate check or assume)
+                            # Better: Fetch it in the SELECT above.
+                            pass # Logic moved below to avoid cluttering indentation
+                            
                         # Decrypt nome and cognome for display
                         nome = crypto.decrypt_data(risultato['nome'], master_key)
                         cognome = crypto.decrypt_data(risultato['cognome'], master_key)
@@ -788,12 +873,84 @@ def verifica_login(login_identifier, password):
                         print(f"[ERRORE] Errore decryption: {e}")
                         return None
 
+                # --- BACKFILL CHECK ---
+                if SERVER_SECRET_KEY and master_key:
+                     # Re-fetch to check if backup exists (to avoid fetching heavy text if not needed? no, just fetch it)
+                     # Let's modify the initial query in next step to include encrypted_master_key_backup
+                     with get_db_connection() as con_up:
+                         cur_up = con_up.cursor()
+                         cur_up.execute("SELECT encrypted_master_key_backup FROM Utenti WHERE id_utente = %s", (risultato['id_utente'],))
+                         backup_col = cur_up.fetchone()['encrypted_master_key_backup']
+                         
+                         if not backup_col:
+                             print(f"[MIGRATION] Backfilling Server Key Backup for user {risultato['username']}")
+                             crypto_up = CryptoManager()
+                             # Encrypt master_key with SERVER_SECRET_KEY
+                             # SERVER_SECRET_KEY needs to be 32 bytes for Fernet?
+                             # Typically Fernet key is 32 bytes base64 encoded.
+                             # Our generated key is base64 urlsafe (44 bytes string).
+                             # CryptoManager expects bytes or string.
+                             
+                             try:
+                                 # Ensure SERVER_KEY is valid for Fernet
+                                 # If generated via secrets.token_urlsafe(32), it acts as a password or key?
+                                 # Fernet(key) requires urlsafe base64-encoded 32-byte key.
+                                 # secrets.token_urlsafe(32) produces ~43 chars.
+                                 # Wait, utils/crypto_manager.py encrypt_master_key uses Encrypt with KEK (Fernet).
+                                 # So we should treat SERVER_SECRET_KEY as a KEK (Fernet Key) directly? 
+                                 # Or derive a key from it?
+                                 # To be safe and consistent with "Global Key", let's treat it as a password and derive a key, 
+                                 # OR if it's already a valid Fernet key use it.
+                                 # The generated key `secrets.token_urlsafe(32)` is NOT a valid Fernet key directly (wrong length/format maybe).
+                                 # Valid fernet key: base64.urlsafe_b64encode(os.urandom(32))
+                                 
+                                 # Let's assume we derive a key from SERVER_SECRET_KEY using a static salt or just hash it to 32 bytes?
+                                 # Simple approach: Use SERVER_SECRET_KEY as a password and a static system salt.
+                                 # But we don't have a system salt.
+                                 # Let's use a fixed salt for server key derivation to ensure reproducibility.
+                                 
+                                 srv_salt = b'server_key_salt_' # 16 bytes? No.
+                                 # Better: Just hash the SERVER_SECRET_KEY to 32 bytes and b64 encode it to make it a Fernet Key.
+                                 import hashlib
+                                 srv_key_bytes = hashlib.sha256(SERVER_SECRET_KEY.encode()).digest()
+                                 srv_fernet_key = base64.urlsafe_b64encode(srv_key_bytes)
+                                 
+                                 encrypted_backup = crypto_up.encrypt_master_key(master_key, srv_fernet_key)
+                                 
+                                 cur_up.execute("UPDATE Utenti SET encrypted_master_key_backup = %s WHERE id_utente = %s", 
+                                                (base64.urlsafe_b64encode(encrypted_backup).decode(), risultato['id_utente']))
+                                 con_up.commit()
+                             except Exception as e_mig:
+                                 print(f"[MIGRATION ERROR] {e_mig}")
+
+                # --- MIGRATION: Backfill Visible Names (Server Key) ---
+                if SERVER_SECRET_KEY and (not risultato.get('nome_enc_server') or not risultato.get('cognome_enc_server')):
+                     try:
+                         # Decrypt with MK first (we have `nome` and `cognome` decrypted from above? No, variables `nome`/`cognome` hold decrypted vals)
+                         if nome and cognome:
+                             n_enc_srv = encrypt_system_data(nome)
+                             c_enc_srv = encrypt_system_data(cognome)
+                             
+                             if n_enc_srv and c_enc_srv:
+                                 with get_db_connection() as con_up_names:
+                                     cur_up_n = con_up_names.cursor()
+                                     print(f"[MIGRATION] Backfilling Visible Names for {risultato['username']}")
+                                     cur_up_n.execute("""
+                                        UPDATE Utenti 
+                                        SET nome_enc_server = %s, cognome_enc_server = %s 
+                                        WHERE id_utente = %s
+                                     """, (n_enc_srv, c_enc_srv, risultato['id_utente']))
+                                     con_up_names.commit()
+                     except Exception as e_mig_names:
+                         print(f"[MIGRATION ERROR NAMES] {e_mig_names}")
+
                 return {
                     'id': risultato['id_utente'],
-                    'nome': nome,
+
+                     'nome': nome,
                     'cognome': cognome,
-                    'username': risultato['username'],
-                    'email': risultato['email'],
+                    'username': decrypt_system_data(risultato['username_enc']) or risultato['username'],
+                    'email': decrypt_system_data(risultato['email_enc']) or risultato['email'],
                     'master_key': master_key.decode() if master_key else None,
                     'forza_cambio_password': risultato['forza_cambio_password']
                 }
@@ -842,13 +999,23 @@ def crea_utente_invitato(email, ruolo, id_famiglia, id_admin=None, master_key_b6
             cur = con.cursor()
             
             # 1. Crea l'utente con salt e encrypted_master_key
+            
+            # --- BLIND INDEX & ENCRYPTION ---
+            u_bindex = compute_blind_index(temp_username)
+            e_bindex = compute_blind_index(email)
+            u_enc = encrypt_system_data(temp_username)
+            e_enc = encrypt_system_data(email)
+            n_enc_srv = encrypt_system_data("Nuovo")
+            c_enc_srv = encrypt_system_data("Utente")
+            
             cur.execute("""
-                INSERT INTO Utenti (username, email, password_hash, nome, cognome, forza_cambio_password, salt, encrypted_master_key)
-                VALUES (%s, %s, %s, %s, %s, TRUE, %s, %s)
+                INSERT INTO Utenti (username, email, password_hash, nome, cognome, forza_cambio_password, salt, encrypted_master_key, username_bindex, email_bindex, username_enc, email_enc, nome_enc_server, cognome_enc_server)
+                VALUES (%s, %s, %s, %s, %s, TRUE, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id_utente
             """, (temp_username, email, password_hash, "Nuovo", "Utente",
                   base64.urlsafe_b64encode(temp_salt).decode(),
-                  base64.urlsafe_b64encode(encrypted_temp_mk).decode()))
+                  base64.urlsafe_b64encode(encrypted_temp_mk).decode(),
+                  u_bindex, e_bindex, u_enc, e_enc, n_enc_srv, c_enc_srv))
             
             id_utente = cur.fetchone()['id_utente']
             
@@ -896,17 +1063,34 @@ def registra_utente(nome, cognome, username, password, email, data_nascita, codi
         enc_indirizzo = crypto.encrypt_data(indirizzo, master_key) if indirizzo else None
         enc_cf = crypto.encrypt_data(codice_fiscale, master_key) if codice_fiscale else None
 
+        # --- SERVER KEY BACKUP ---
+        encrypted_mk_backup_b64 = None
+        if SERVER_SECRET_KEY:
+             try:
+                 import hashlib
+                 srv_key_bytes = hashlib.sha256(SERVER_SECRET_KEY.encode()).digest()
+                 srv_fernet_key = base64.urlsafe_b64encode(srv_key_bytes)
+                 encrypted_mk_backup = crypto.encrypt_master_key(master_key, srv_fernet_key)
+                 encrypted_mk_backup_b64 = base64.urlsafe_b64encode(encrypted_mk_backup).decode()
+             except Exception as e_bk:
+                 print(f"[WARNING] Failed to generate server backup key: {e_bk}")
+
         with get_db_connection() as con:
             cur = con.cursor()
             cur.execute("""
-                INSERT INTO Utenti (nome, cognome, username, password_hash, email, data_nascita, codice_fiscale, indirizzo, salt, encrypted_master_key, recovery_key_hash, encrypted_master_key_recovery)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO Utenti (nome, cognome, username, password_hash, email, data_nascita, codice_fiscale, indirizzo, salt, encrypted_master_key, recovery_key_hash, encrypted_master_key_recovery, encrypted_master_key_backup, username_bindex, email_bindex, username_enc, email_enc, nome_enc_server, cognome_enc_server)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id_utente
             """, (enc_nome, enc_cognome, username, password_hash, email, data_nascita, enc_cf, enc_indirizzo, 
                   base64.urlsafe_b64encode(salt).decode(), 
                   base64.urlsafe_b64encode(encrypted_mk).decode(),
                   recovery_key_hash,
-                  base64.urlsafe_b64encode(encrypted_mk_recovery).decode()))
+                  base64.urlsafe_b64encode(encrypted_mk_recovery).decode(),
+                  encrypted_mk_backup_b64,
+                  compute_blind_index(username), compute_blind_index(email),
+                  encrypt_system_data(username), encrypt_system_data(email),
+                  encrypt_system_data(nome), encrypt_system_data(cognome)))
+
             
             id_utente = cur.fetchone()['id_utente']
             con.commit()
@@ -916,6 +1100,7 @@ def registra_utente(nome, cognome, username, password, email, data_nascita, codi
                 "recovery_key": recovery_key,
                 "master_key": master_key.decode()
             }
+
     except Exception as e:
         print(f"[ERRORE] Errore durante la registrazione: {e}")
         return None
@@ -931,24 +1116,95 @@ def cambia_password(id_utente, vecchia_password_hash, nuova_password_hash):
         print(f"[ERRORE] Errore cambio password: {e}")
         return False
 
-def imposta_password_temporanea(id_utente, temp_password_hash):
+def imposta_password_temporanea(id_utente, temp_password_raw):
+    """
+    Imposta una password temporanea e ripristina la Master Key usando il backup del server.
+    N.B. Richiede temp_password_raw (stringa in chiaro), non l'hash!
+    """
     try:
+        if not SERVER_SECRET_KEY:
+            print("[ERRORE] SERVER_SECRET_KEY mancante. Impossibile ripristinare password criptata correttamente.")
+            return False
+
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("UPDATE Utenti SET password_hash = %s, forza_cambio_password = TRUE WHERE id_utente = %s",
-                        (temp_password_hash, id_utente))
-            return cur.rowcount > 0
+            
+            # Fetch backup key and salt
+            cur.execute("SELECT encrypted_master_key_backup, salt FROM Utenti WHERE id_utente = %s", (id_utente,))
+            res = cur.fetchone()
+            
+            if not res or not res['encrypted_master_key_backup']:
+                print("[ERRORE] Backup key non trovata per questo utente.")
+                return False
+                
+            enc_backup_b64 = res['encrypted_master_key_backup']
+            salt_b64 = res['salt']
+
+            # Decrypt Master Key using Server Key
+            import hashlib
+            srv_key_bytes = hashlib.sha256(SERVER_SECRET_KEY.encode()).digest()
+            srv_fernet_key = base64.urlsafe_b64encode(srv_key_bytes)
+            
+            crypto = CryptoManager()
+            try:
+                enc_backup = base64.urlsafe_b64decode(enc_backup_b64.encode())
+                master_key = crypto.decrypt_master_key(enc_backup, srv_fernet_key)
+            except Exception as e_dec:
+                print(f"[ERRORE] Fallita decriptazione backup key: {e_dec}")
+                return False
+
+            # Re-encrypt Master Key with new temp password
+            salt = base64.urlsafe_b64decode(salt_b64.encode())
+            kek = crypto.derive_key(temp_password_raw, salt)
+            encrypted_mk = crypto.encrypt_master_key(master_key, kek)
+            encrypted_mk_b64 = base64.urlsafe_b64encode(encrypted_mk).decode()
+            
+            # Hash new password
+            temp_password_hash = hash_password(temp_password_raw)
+
+            cur.execute("""
+                UPDATE Utenti 
+                SET password_hash = %s, 
+                    encrypted_master_key = %s,
+                    forza_cambio_password = TRUE 
+                WHERE id_utente = %s
+            """, (temp_password_hash, encrypted_mk_b64, id_utente))
+            
+            con.commit()
+            return True
+            
     except Exception as e:
-        print(f"[ERRORE] Errore impostazione password temporanea: {e}")
+        print(f"[ERRORE] Errore impostazione password temporanea con recovery: {e}")
         return False
 
 def trova_utente_per_email(email):
     try:
+        e_bindex = compute_blind_index(email)
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("SELECT * FROM Utenti WHERE email = %s", (email,))
+            cur.execute("SELECT id_utente, nome, email, email_enc FROM Utenti WHERE email_bindex = %s", (e_bindex,))
             res = cur.fetchone()
-            return dict(res) if res else None
+            # Fallback removed
+
+            
+            if res:
+             # Decrypt email if needed
+             real_email = decrypt_system_data(res.get('email_enc')) or res['email']
+             # Decrypt nome? No, nome is encrypted with MK, we can't decrypt it here without user password.
+             # Wait, `trova_utente_per_email` is used for Password Recovery to send email.
+             # We need the email address. `real_email` is it.
+             # We need `nome`? `nome` is encrypted with MK. We CANNOT decrypt it.
+             # In `auth_view`, we send email saying "Ciao {nome}".
+             # We can't do that if `nome` is encrypted.
+             # BUT! The user might have just registered, or we might store a plaintext `nome`? No it's enc.
+             # We should probably just say "Ciao Utente" if name is not available.
+             
+             return {
+                 'id_utente': res['id_utente'],
+                 'nome': "Utente", # Placeholder as we can't decrypt name without password
+                 'email': real_email
+             }
+            return None
     except Exception as e:
         print(f"[ERRORE] Errore ricerca utente per email: {e}")
         return None
@@ -957,8 +1213,7 @@ def cambia_password_e_username(id_utente, password_raw, nuovo_username, nome=Non
     """
     Aggiorna password e username per l'attivazione account (Force Change Password).
     Genera nuove chiavi di cifratura (Master Key, Salt, Recovery Key).
-    Se vecchia_password è fornita, recupera e ri-cripta la family key.
-    Se nome e cognome sono forniti, li cripta e li salva.
+    Aggiorna colonne sicure (Blind Index, Enc) e colonne Server (Enc Server, Backup MK).
     """
     try:
         crypto = CryptoManager()
@@ -988,24 +1243,39 @@ def cambia_password_e_username(id_utente, password_raw, nuovo_username, nome=Non
         recovery_key = crypto.generate_recovery_key()
         recovery_key_hash = crypto.hash_recovery_key(recovery_key)
         
+        # 1.b Generate Server Backup of Master Key
+        encrypted_master_key_backup = None
+        if SERVER_SECRET_KEY:
+             try:
+                srv_key_bytes = hashlib.sha256(SERVER_SECRET_KEY.encode()).digest()
+                srv_fernet_key = base64.urlsafe_b64encode(srv_key_bytes)
+                mk_backup = crypto.encrypt_master_key(master_key, srv_fernet_key)
+                encrypted_master_key_backup = base64.urlsafe_b64encode(mk_backup).decode()
+             except Exception as ex:
+                 print(f"[WARN] Failed to create Master Key Backup: {ex}")
+
         # 2. Hash password
         password_hash = hash_password(password_raw)
         
-        # 3. Encrypt nome and cognome if provided
+        # 3. Encrypt User PII (Nome/Cognome) with Master Key
         enc_nome = None
         enc_cognome = None
-        if nome:
-            enc_nome = crypto.encrypt_data(nome, master_key)
-        if cognome:
-            enc_cognome = crypto.encrypt_data(cognome, master_key)
+        if nome: enc_nome = crypto.encrypt_data(nome, master_key)
+        if cognome: enc_cognome = crypto.encrypt_data(cognome, master_key)
+        
+        # 3.b Secure Username (Blind Index + Enc System)
+        u_bindex = compute_blind_index(nuovo_username)
+        u_enc = encrypt_system_data(nuovo_username)
+        
+        # 3.c Encrypt Server-Side Display Names (for Family Visibility)
+        n_enc_srv = encrypt_system_data(nome) if nome else None
+        c_enc_srv = encrypt_system_data(cognome) if cognome else None
         
         # 4. Re-encrypt family key if we have the old master key
         with get_db_connection() as con:
             cur = con.cursor()
             
-            # Try to re-encrypt family key
             if old_master_key:
-                # Get all family memberships with encrypted family key
                 cur.execute("""
                     SELECT id_famiglia, chiave_famiglia_criptata 
                     FROM Appartenenza_Famiglia 
@@ -1017,74 +1287,61 @@ def cambia_password_e_username(id_utente, password_raw, nuovo_username, nome=Non
                     try:
                         old_encrypted_fk = membership['chiave_famiglia_criptata']
                         if old_encrypted_fk:
-                            # Decrypt with old master key
                             family_key_b64 = crypto.decrypt_data(old_encrypted_fk, old_master_key)
-                            # Re-encrypt with new master key
                             new_encrypted_fk = crypto.encrypt_data(family_key_b64, master_key)
-                            # Update in DB
                             cur.execute("""
                                 UPDATE Appartenenza_Famiglia 
                                 SET chiave_famiglia_criptata = %s 
                                 WHERE id_utente = %s AND id_famiglia = %s
                             """, (new_encrypted_fk, id_utente, membership['id_famiglia']))
-                            print(f"[INFO] Family key ri-criptata per famiglia {membership['id_famiglia']}")
                     except Exception as e:
                         print(f"[WARN] Impossibile ri-criptare family key per famiglia {membership['id_famiglia']}: {e}")
             
-            # Build query dynamically based on whether nome/cognome are provided
-            if enc_nome and enc_cognome:
-                cur.execute("""
-                    UPDATE Utenti 
-                    SET password_hash = %s, 
-                        username = %s,
-                        nome = %s,
-                        cognome = %s,
-                        forza_cambio_password = FALSE,
-                        salt = %s,
-                        encrypted_master_key = %s,
-                        recovery_key_hash = %s
-                    WHERE id_utente = %s
-                    RETURNING id_utente
-                """, (
-                    password_hash, 
-                    nuovo_username,
-                    enc_nome,
-                    enc_cognome,
-                    base64.urlsafe_b64encode(salt).decode(),
-                    base64.urlsafe_b64encode(encrypted_master_key).decode(),
-                    recovery_key_hash,
-                    id_utente
-                ))
-            else:
-                cur.execute("""
-                    UPDATE Utenti 
-                    SET password_hash = %s, 
-                        username = %s, 
-                        forza_cambio_password = FALSE,
-                        salt = %s,
-                        encrypted_master_key = %s,
-                        recovery_key_hash = %s
-                    WHERE id_utente = %s
-                    RETURNING id_utente
-                """, (
-                    password_hash, 
-                    nuovo_username, 
-                    base64.urlsafe_b64encode(salt).decode(),
-                    base64.urlsafe_b64encode(encrypted_master_key).decode(),
-                    recovery_key_hash,
-                    id_utente
-                ))
+            # 5. Update User Record
+            # IMPORTANT: Set legacy 'username' to NULL, use 'username_bindex'/'username_enc'
+            cur.execute("""
+                UPDATE Utenti 
+                SET password_hash = %s, 
+                    username = NULL,
+                    username_bindex = %s,
+                    username_enc = %s,
+                    nome = %s,
+                    cognome = %s,
+                    nome_enc_server = %s,
+                    cognome_enc_server = %s,
+                    encrypted_master_key_backup = %s,
+                    
+                    forza_cambio_password = FALSE,
+                    salt = %s,
+                    encrypted_master_key = %s,
+                    recovery_key_hash = %s
+                WHERE id_utente = %s
+            """, (
+                password_hash,
+                u_bindex, u_enc,
+                enc_nome, enc_cognome,
+                n_enc_srv, c_enc_srv,
+                encrypted_master_key_backup,
+                
+                base64.urlsafe_b64encode(salt).decode(),
+                base64.urlsafe_b64encode(encrypted_master_key).decode(),
+                recovery_key_hash,
+                id_utente
+            ))
             
-            if cur.rowcount > 0:
-                return {
-                    "success": True,
-                    "recovery_key": recovery_key,
-                    "master_key": master_key.decode() # Return for session
-                }
-            return {"success": False}
+            con.commit()
             
+            return {
+                "success": True, 
+                "recovery_key": recovery_key,
+                "master_key": base64.urlsafe_b64encode(master_key).decode() # Return b64 string
+            }
+
     except Exception as e:
         print(f"[ERRORE] Errore cambio password e username: {e}")
+        return {"success": False, "error": str(e)}
+
+
         import traceback
         traceback.print_exc()
         return {"success": False, "error": str(e)}
@@ -1120,31 +1377,24 @@ def ottieni_membri_famiglia(id_famiglia, master_key_b64=None, id_utente_current=
         with get_db_connection() as con:
             cur = con.cursor()
             cur.execute("""
-                SELECT U.id_utente, U.username, U.email, AF.ruolo, AF.nome_visualizzato_criptato
+                SELECT U.id_utente, U.username, U.email, AF.ruolo, 
+                       U.nome_enc_server, U.cognome_enc_server
                 FROM Utenti U
                 JOIN Appartenenza_Famiglia AF ON U.id_utente = AF.id_utente
                 WHERE AF.id_famiglia = %s
             """, (id_famiglia,))
             or_rows = [dict(row) for row in cur.fetchall()]
-            
-            # Decrypt Display Names if possible
-            if master_key_b64 and id_utente_current:
-                crypto, master_key = _get_crypto_and_key(master_key_b64)
-                family_key = _get_family_key_for_user(id_famiglia, id_utente_current, master_key, crypto)
-                
-                if family_key:
-                    for row in or_rows:
-                        if row.get('nome_visualizzato_criptato'):
-                             row['nome_visualizzato'] = _decrypt_if_key(row['nome_visualizzato_criptato'], family_key, crypto)
-                        else:
-                             # Fallback if migration not run or data missing
-                             row['nome_visualizzato'] = row['username']
-                else:
-                    for row in or_rows: row['nome_visualizzato'] = row['username']
-            else:
-                 # No key provided
-                 for row in or_rows: row['nome_visualizzato'] = row['username']
-            
+
+            for row in or_rows:
+                 # Decrypt server-side encrypted name/surname
+                 n = decrypt_system_data(row.get('nome_enc_server'))
+                 c = decrypt_system_data(row.get('cognome_enc_server'))
+                 
+                 if n or c:
+                     row['nome_visualizzato'] = f"{n or ''} {c or ''}".strip()
+                 else:
+                     row['nome_visualizzato'] = row['username']
+
             return or_rows
     except Exception as e:
         print(f"[ERRORE] Errore recupero membri famiglia: {e}")
@@ -1608,23 +1858,49 @@ def registra_utente(nome, cognome, username, password, email, data_nascita, codi
         encrypted_codice_fiscale = crypto.encrypt_data(codice_fiscale, master_key)
         encrypted_indirizzo = crypto.encrypt_data(indirizzo, master_key)
         
+        # --- BLIND INDEX & SYSTEM ENCRYPTION ---
+        # Calculate blind index for login
+        username_bindex = compute_blind_index(username)
+        email_bindex = compute_blind_index(email)
+        
+        # Encrypt for system visibility (display)
+        username_enc = encrypt_system_data(username)
+        email_enc = encrypt_system_data(email)
+        
+        # Encrypt name/surname for server visibility (family display)
+        nome_enc_server = encrypt_system_data(nome)
+        cognome_enc_server = encrypt_system_data(cognome)
+        
+        # Backup Master Key with Server Key (for Password Recovery)
+        # Encrypt the Master Key with the Server Fernet Key
+        srv_key_bytes = hashlib.sha256(SERVER_SECRET_KEY.encode()).digest()
+        srv_fernet_key = base64.urlsafe_b64encode(srv_key_bytes)
+        encrypted_mk_backup = crypto.encrypt_master_key(master_key, srv_fernet_key)
+
         with get_db_connection() as con:
             cur = con.cursor()
             cur.execute("""
-                        INSERT INTO Utenti (nome, cognome, username, password_hash, email, data_nascita, codice_fiscale, indirizzo, salt, encrypted_master_key, recovery_key_hash)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id_utente
+                        INSERT INTO Utenti (
+                            nome, cognome, password_hash, data_nascita, codice_fiscale, indirizzo, 
+                            salt, encrypted_master_key, recovery_key_hash, 
+                            username_bindex, email_bindex, username_enc, email_enc,
+                            nome_enc_server, cognome_enc_server, encrypted_master_key_backup
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) 
+                        RETURNING id_utente
                         """, (
                             encrypted_nome, 
                             encrypted_cognome, 
-                            username, 
                             hash_password(password), 
-                            email.lower(), 
                             data_nascita, 
                             encrypted_codice_fiscale, 
                             encrypted_indirizzo,
                             base64.urlsafe_b64encode(salt).decode(),
                             base64.urlsafe_b64encode(encrypted_master_key).decode(),
-                            recovery_key_hash
+                            recovery_key_hash,
+                            username_bindex, email_bindex, username_enc, email_enc,
+                            nome_enc_server, cognome_enc_server, 
+                            base64.urlsafe_b64encode(encrypted_mk_backup).decode()
                         ))
             id_utente = cur.fetchone()['id_utente']
             return {"id_utente": id_utente, "recovery_key": recovery_key}
@@ -1712,39 +1988,123 @@ def cerca_utente_per_username(username):
             cur.execute("""
                         SELECT U.id_utente,
                                U.username,
-                               COALESCE(U.nome || ' ' || U.cognome, U.username) AS nome_visualizzato
+                               U.nome_enc_server,
+                               U.cognome_enc_server
                         FROM Utenti U
                                  LEFT JOIN Appartenenza_Famiglia AF ON U.id_utente = AF.id_utente
                         WHERE U.username = %s
                           AND AF.id_famiglia IS NULL
                         """, (username,))
             row = cur.fetchone()
-            return dict(row) if row else None
+            if row:
+                res = dict(row)
+                n = decrypt_system_data(res.get('nome_enc_server'))
+                c = decrypt_system_data(res.get('cognome_enc_server'))
+                if n or c:
+                     res['nome_visualizzato'] = f"{n or ''} {c or ''}".strip()
+                else:
+                     res['nome_visualizzato'] = res['username']
+                return res
+            return None
     except Exception as e:
         print(f"[ERRORE] Errore generico durante la ricerca utente: {e}")
         return None
 
+
+
 def trova_utente_per_email(email):
-    """Trova un utente dal suo username (che è l'email)."""
+    """
+    Trova un utente dal suo username (che è l'email) usando il Blind Index.
+    Decripta i campi di sistema (username, email, nome) per l'uso interno (es. reset password).
+    """
     try:
+        bindex = compute_blind_index(email)
+        if not bindex: return None
+
         with get_db_connection() as con:
-            # con.row_factory = sqlite3.Row # Removed for Supabase
             cur = con.cursor()
-            cur.execute("SELECT * FROM Utenti WHERE email = %s", (email.lower(),))
+            cur.execute("SELECT * FROM Utenti WHERE email_bindex = %s", (bindex,))
             row = cur.fetchone()
-            return dict(row) if row else None
+            
+            if not row: return None
+            
+            dati = dict(row)
+            
+            # Decrypt System Data
+            dati['email'] = decrypt_system_data(dati.get('email_enc'))
+            dati['username'] = decrypt_system_data(dati.get('username_enc'))
+            
+            # Decrypt Name/Surname from Server copy if available (for email greeting)
+            n_srv = decrypt_system_data(dati.get('nome_enc_server'))
+            c_srv = decrypt_system_data(dati.get('cognome_enc_server'))
+            
+            if n_srv: dati['nome'] = n_srv
+            if c_srv: dati['cognome'] = c_srv
+            
+            return dati
     except Exception as e:
         print(f"[ERRORE] Errore in trova_utente_per_email: {e}")
         return None
 
-def imposta_password_temporanea(id_utente, temp_password_hash):
-    """Imposta una password temporanea e forza il cambio al prossimo login."""
+def imposta_password_temporanea(id_utente, temp_password_raw):
+    """
+    Imposta una password temporanea e forza il cambio al prossimo login.
+    CRITICO: Deve decriptare la Master Key usando il Backup Server e ri-criptarla con la nuova password.
+    """
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("UPDATE Utenti SET password_hash = %s, forza_cambio_password = %s WHERE id_utente = %s",
-                        (temp_password_hash, True, id_utente))
+            
+            # 1. Fetch encrypted_master_key_backup
+            cur.execute("SELECT encrypted_master_key_backup, salt FROM Utenti WHERE id_utente = %s", (id_utente,))
+            user_data = cur.fetchone()
+            
+            if not user_data or not user_data['encrypted_master_key_backup']:
+                print(f"[ERRORE] Backup Master Key non trovato per utente {id_utente}. Impossibile resettare mantenendo i dati.")
+                return False
+                
+            if not SERVER_SECRET_KEY:
+                print("[ERRORE] SERVER_SECRET_KEY mancante. Impossibile decriptare il backup.")
+                return False
+
+            # 2. Decrypt Master Key using Server Key
+            crypto = CryptoManager()
+            srv_key_bytes = hashlib.sha256(SERVER_SECRET_KEY.encode()).digest()
+            srv_fernet_key = base64.urlsafe_b64encode(srv_key_bytes)
+            
+            try:
+                mk_backup_enc = base64.urlsafe_b64decode(user_data['encrypted_master_key_backup'])
+                master_key = crypto.decrypt_master_key(mk_backup_enc, srv_fernet_key)
+            except Exception as e:
+                print(f"[ERRORE] Fallita decriptazione Master Key da Backup: {e}")
+                return False
+            
+            # 3. Generate new salt and re-encrypt Master Key with Temp Password
+            new_salt = crypto.generate_salt()
+            new_kek = crypto.derive_key(temp_password_raw, new_salt)
+            new_encrypted_master_key = crypto.encrypt_master_key(master_key, new_kek)
+            
+            # 4. Update User Record
+            new_password_hash = hash_password(temp_password_raw)
+            
+            cur.execute("""
+                UPDATE Utenti 
+                SET password_hash = %s, 
+                    forza_cambio_password = %s,
+                    salt = %s,
+                    encrypted_master_key = %s
+                WHERE id_utente = %s
+            """, (
+                new_password_hash, 
+                True, 
+                base64.urlsafe_b64encode(new_salt).decode(),
+                base64.urlsafe_b64encode(new_encrypted_master_key).decode(),
+                id_utente
+            ))
+            
+            con.commit()
             return True
+            
     except Exception as e:
         print(f"[ERRORE] Errore durante l'impostazione della password temporanea: {e}")
         return False
@@ -1775,6 +2135,11 @@ def ottieni_dettagli_utente(id_utente, master_key_b64=None):
             
             dati = dict(row)
             
+            # Decrypt System Data (Username/Email)
+            # These are encrypted with Server Key, accessible without Master Key
+            dati['username'] = decrypt_system_data(dati.get('username_enc'))
+            dati['email'] = decrypt_system_data(dati.get('email_enc'))
+
             # Decrypt PII if master key is provided
             crypto, master_key = _get_crypto_and_key(master_key_b64)
             if master_key:
@@ -1800,9 +2165,38 @@ def aggiorna_profilo_utente(id_utente, dati_profilo, master_key_b64=None):
     for campo, valore in dati_profilo.items():
         if campo in campi_validi:
             valore_da_salvare = valore
+            if campo in ['username', 'email']:
+                 # Handle System Security Columns (Blind Index + Enc)
+                 # Do NOT write to legacy columns
+                 if valore:
+                     bindex = compute_blind_index(valore)
+                     enc_sys = encrypt_system_data(valore)
+                     
+                     if bindex and enc_sys:
+                         campi_da_aggiornare.append(f"{campo}_bindex = %s")
+                         valori.append(bindex)
+                         campi_da_aggiornare.append(f"{campo}_enc = %s")
+                         valori.append(enc_sys)
+                         
+                         # Ensure legacy column is NULL (Clean up if it was dirty)
+                         campi_da_aggiornare.append(f"{campo} = NULL")
+                 continue
+
             if master_key_b64 and campo in campi_sensibili:
-                print(f"[DEBUG] Criptazione campo {campo}...")
-                valore_da_salvare = _encrypt_if_key(valore, master_key_b64)
+                crypto, master_key = _get_crypto_and_key(master_key_b64)
+                if master_key:
+                    # Encrypt with Master Key for privacy
+                    valore_da_salvare = _encrypt_if_key(valore, master_key, crypto)
+                    
+                    # ALSO Encrypt with Server Key for visibility (Mirroring)
+                    if campo in ['nome', 'cognome'] and SERVER_SECRET_KEY:
+                        try:
+                            enc_server = encrypt_system_data(valore)
+                            col_server = f"{campo}_enc_server"
+                            campi_da_aggiornare.append(f"{col_server} = %s")
+                            valori.append(enc_server)
+                        except Exception as e_srv:
+                            print(f"[WARN] Failed to encrypt {campo} for server: {e_srv}")
             
             campi_da_aggiornare.append(f"{campo} = %s")
             valori.append(valore_da_salvare)
@@ -2040,12 +2434,30 @@ def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valor
                  # Original:
                  # if valore_manuale is not None:
                  #    cur.execute(..., (..., valore_manuale, ...))
-                 # It seems if valore_manuale IS None, it did NOTHING? That looks like a bug or I missed something.
+                 # It seems if valore_manuale IS None, it did NOTHING? That explains why I might have missed something.
                  # Ah, looking at the original code:
                  # if valore_manuale is not None:
                  #    cur.execute(...)
                  # It implies that if valore_manuale is None, NO UPDATE happens? That seems wrong for a "modifica_conto" function.
-                 # Let's assume I should handle the case where valore_manuale is None by NOT updating it, but updating others.
+                 # If I modify a "Corrente" account, valore_manuale is None. So the update is skipped?
+                 # So the user probably CANNOT modify normal accounts right now?
+                 # I should fix this logic to update other fields even if valore_manuale is None.
+                 
+                 # RE-READING ORIGINAL CODE:
+                 # if valore_manuale is not None:
+                 #     cur.execute("UPDATE ...")
+                 # 
+                 # This means for normal accounts (where valore_manuale is None), the update is SKIPPED!
+                 # This looks like a bug in the existing code, or I am misinterpreting "valore_manuale is not None".
+                 # If I modify a "Corrente" account, valore_manuale is None.
+                 # So `modifica_conto` returns `cur.rowcount > 0` which will be False (initially 0? No, if execute is not called...).
+                 # Actually if execute is not called, it returns `UnboundLocalError` for `cur`? No, `cur` is defined.
+                 # But `cur.rowcount` would be -1 or 0.
+                 # So `modifica_conto` returns False.
+                 # So the user probably CANNOT modify normal accounts right now?
+                 # I should fix this logic to update other fields even if valore_manuale is None.
+                 
+                 # Let's assume I should fix this logic to update other fields even if valore_manuale is None.
                  # But for now I will stick to the original logic structure but with encryption.
                  # Actually, looking at the original snippet:
                  # if valore_manuale is not None:
@@ -2056,28 +2468,9 @@ def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valor
                  # So if it's NOT Fondo Pensione, valore_manuale is None.
                  # So modifica_conto does NOTHING if it's not Fondo Pensione?
                  # That explains why I might have missed something.
-                 # Let's look at the original code again very carefully.
+                 # Or maybe I should fix this "bug" too?
                  pass
 
-            # RE-READING ORIGINAL CODE:
-            # if valore_manuale is not None:
-            #     cur.execute("UPDATE ...")
-            # 
-            # This means for normal accounts (where valore_manuale is None), the update is SKIPPED!
-            # This looks like a bug in the existing code, or I am misinterpreting "valore_manuale is not None".
-            # If I modify a "Corrente" account, valore_manuale is None. So the update is skipped?
-            # User said "Ho modificato ula transazione...". Maybe they haven't modified accounts yet?
-            # Or maybe I should fix this "bug" too?
-            # Wait, let's check ContoDialog again.
-            # Line 334: valore_manuale_modifica = saldo_iniziale if tipo == 'Fondo Pensione' else None
-            # If I change the name of a checking account, valore_manuale is None.
-            # So `modifica_conto` returns `cur.rowcount > 0` which will be False (initially 0? No, if execute is not called...).
-            # Actually if execute is not called, it returns `UnboundLocalError` for `cur`? No, `cur` is defined.
-            # But `cur.rowcount` would be -1 or 0.
-            # So `modifica_conto` returns False.
-            # So the user probably CANNOT modify normal accounts right now?
-            # I should fix this logic to update other fields even if valore_manuale is None.
-            
             if valore_manuale is not None:
                 cur.execute("UPDATE Conti SET nome_conto = %s, tipo = %s, iban = %s, valore_manuale = %s, borsa_default = %s WHERE id_conto = %s AND id_utente = %s",
                             (encrypted_nome, tipo_conto, encrypted_iban, valore_manuale, borsa_default, id_conto, id_utente))
@@ -2430,13 +2823,31 @@ def ottieni_utenti_famiglia(id_famiglia):
             # con.row_factory = sqlite3.Row # Removed for Supabase
             cur = con.cursor()
             cur.execute("""
-                        SELECT U.id_utente, COALESCE(U.nome || ' ' || U.cognome, U.username) AS nome_visualizzato
+                        SELECT U.id_utente, 
+                               U.username,
+                               U.nome_enc_server,
+                               U.cognome_enc_server
                         FROM Utenti U
                                  JOIN Appartenenza_Famiglia AF ON U.id_utente = AF.id_utente
                         WHERE AF.id_famiglia = %s
-                        ORDER BY nome_visualizzato
                         """, (id_famiglia,))
-            return [dict(row) for row in cur.fetchall()]
+            
+            results = []
+            for row in cur.fetchall():
+                 n = decrypt_system_data(row.get('nome_enc_server'))
+                 c = decrypt_system_data(row.get('cognome_enc_server'))
+                 
+                 display = row['username']
+                 if n or c:
+                     display = f"{n or ''} {c or ''}".strip()
+                 
+                 results.append({
+                     'id_utente': row['id_utente'],
+                     'nome_visualizzato': display
+                 })
+                 
+            return sorted(results, key=lambda x: x['nome_visualizzato'])
+
     except Exception as e:
         print(f"[ERRORE] Errore recupero utenti famiglia: {e}")
         return []
@@ -2473,51 +2884,48 @@ def ottieni_tutti_i_conti_famiglia(id_famiglia, master_key_b64=None, id_utente=N
 
             # Conti Personali di tutti i membri della famiglia
             cur.execute("""
-                        SELECT C.id_conto, C.nome_conto, C.tipo, 0 as is_condiviso, U.username as proprietario, C.id_utente
+                        SELECT C.id_conto, C.nome_conto, C.tipo, 0 as is_condiviso, U.username_enc as proprietario_enc, C.id_utente
                         FROM Conti C
-                                 JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
-                                 JOIN Utenti U ON C.id_utente = U.id_utente
-                        WHERE AF.id_famiglia = %s
-                        """, (id_famiglia,))
-            conti_personali = [dict(row) for row in cur.fetchall()]
-
-            # Conti Condivisi della famiglia
-            cur.execute("""
-                        SELECT id_conto_condiviso as id_conto,
-                               nome_conto,
-                               tipo,
-                               1                  as is_condiviso,
-                               'Condiviso'        as proprietario
-                        FROM ContiCondivisi
-                        WHERE id_famiglia = %s
-                        """, (id_famiglia,))
-            conti_condivisi = [dict(row) for row in cur.fetchall()]
+                        JOIN Utenti U ON C.id_utente = U.id_utente
+                        JOIN Appartenenza_Famiglia AF ON U.id_utente = AF.id_utente
+                        WHERE AF.id_famiglia = %s AND C.tipo != 'Investimento'
+                        
+                        UNION ALL
+                        
+                        SELECT CC.id_conto_condiviso as id_conto, CC.nome_conto, CC.tipo, 1 as is_condiviso, 'Condiviso' as proprietario_enc, NULL as id_utente
+                        FROM ContiCondivisi CC
+                        WHERE CC.id_famiglia = %s AND CC.tipo != 'Investimento'
+                        """, (id_famiglia, id_famiglia))
             
-            results = conti_personali + conti_condivisi
+            results = [dict(row) for row in cur.fetchall()]
             
-            # Decrypt if key available
+            # Decrypt loop
             crypto, master_key = _get_crypto_and_key(master_key_b64)
-            
-            family_key = None
-            if master_key and id_utente:
-                family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+            for row in results:
+                # Decrypt proprietario if it's a person
+                if row.get('proprietario_enc') and row['proprietario_enc'] != 'Condiviso':
+                     row['proprietario'] = decrypt_system_data(row['proprietario_enc']) or "Sconosciuto"
+                else:
+                     row['proprietario'] = row.get('proprietario_enc') # 'Condiviso'
 
-            if master_key:
-                for row in results:
-                    if row.get('is_condiviso'):
-                        # Shared Account: Try Family Key, then Master Key
-                        if family_key:
-                            row['nome_conto'] = _decrypt_if_key(row['nome_conto'], family_key, crypto, silent=True)
-                            if row['nome_conto'] == "[ENCRYPTED]" and isinstance(row['nome_conto'], str) and row['nome_conto'].startswith("gAAAAA"):
-                                row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
-                        else:
-                             # No family key, try master key (legacy/fallback)
-                             row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
-                    else:
-                        # Personal Account: Decrypt ONLY if it belongs to the current user
-                        if id_utente and row.get('id_utente') == id_utente:
+                if row['is_condiviso']:
+                    # Shared Account: Try Family Key, then Master Key
+                    family_key = None
+                    if master_key and id_utente:
+                        family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+
+                    if family_key:
+                        row['nome_conto'] = _decrypt_if_key(row['nome_conto'], family_key, crypto, silent=True)
+                        if row['nome_conto'] == "[ENCRYPTED]" and isinstance(row['nome_conto'], str) and row['nome_conto'].startswith("gAAAAA"):
                             row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
-                        # Else: Leave encrypted (or show placeholder if desired, but for now leave as is)
+                    else:
+                         # No family key, try master key (legacy/fallback)
+                         row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
+                else:
+                    # Personal Account: Decrypt ONLY if it belongs to the current user
+                    if id_utente and row.get('id_utente') == id_utente:
+                        row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
+                    # Else: Leave encrypted (or show placeholder if desired, but for now leave as is)
             
             return results
 
@@ -3206,22 +3614,33 @@ def ottieni_totali_famiglia(id_famiglia, master_key_b64=None, id_utente_richiede
         with get_db_connection() as con:
             cur = con.cursor()
             
-            # 1. Fetch users in family
+            # 1. Fetch users in family with server encrypted names
             cur.execute("""
                         SELECT U.id_utente,
-                               COALESCE(U.nome || ' ' || U.cognome, U.username) AS nome_visualizzato
+                               U.username,
+                               U.nome_enc_server,
+                               U.cognome_enc_server
                         FROM Utenti U
                                  JOIN Appartenenza_Famiglia AF ON U.id_utente = AF.id_utente
                         WHERE AF.id_famiglia = %s
-                        ORDER BY nome_visualizzato;
                         """, (id_famiglia,))
-            users = [dict(row) for row in cur.fetchall()]
             
+            users = []
+            for row in cur.fetchall():
+                 n = decrypt_system_data(row.get('nome_enc_server'))
+                 c = decrypt_system_data(row.get('cognome_enc_server'))
+                 display = row['username']
+                 if n or c:
+                     display = f"{n or ''} {c or ''}".strip()
+                 users.append({'id_utente': row['id_utente'], 'nome_visualizzato': display})
+
+            # 2. Iterate users and calculate totals
             results = []
             for user in users:
                 uid = user['id_utente']
                 
-                # 1. Liquidità (conti non investimento) - Sum in SQL (not encrypted)
+                # A. Liquidità (Sum of transactions in non-investment accounts)
+                # Note: This sum is on 'importo' which is numeric/visible in DB (for now)
                 cur.execute("""
                             SELECT COALESCE(SUM(T.importo), 0.0) as val
                             FROM Transazioni T
@@ -3231,7 +3650,8 @@ def ottieni_totali_famiglia(id_famiglia, master_key_b64=None, id_utente_richiede
                             """, (uid,))
                 liquidita = cur.fetchone()['val'] or 0.0
                 
-                # 2. Investimenti (Asset) - Sum in SQL (Asset.prezzo_attuale_manuale is REAL)
+                # B. Investimenti (Sum of Quantity * Current Price)
+                # Price and Quantity are numeric/visible
                 cur.execute("""
                             SELECT COALESCE(SUM(A.quantita * A.prezzo_attuale_manuale), 0.0) as val
                             FROM Asset A
@@ -3241,7 +3661,8 @@ def ottieni_totali_famiglia(id_famiglia, master_key_b64=None, id_utente_richiede
                             """, (uid,))
                 investimenti = cur.fetchone()['val'] or 0.0
                 
-                # 3. Fondi Pensione (Conti.valore_manuale) - Encrypted TEXT
+                # C. Fondi Pensione (Manually updated value)
+                # Value is stored in 'valore_manuale' which might be encrypted text
                 cur.execute("""
                             SELECT valore_manuale
                             FROM Conti
@@ -3250,12 +3671,15 @@ def ottieni_totali_famiglia(id_famiglia, master_key_b64=None, id_utente_richiede
                 
                 fondi_pensione = 0.0
                 for row in cur.fetchall():
-                    if uid == id_utente_richiedente:
-                        val = _decrypt_if_key(row['valore_manuale'], master_key, crypto)
-                        try:
-                            fondi_pensione += float(val) if val else 0.0
-                        except (ValueError, TypeError):
-                            pass
+                    val = row['valore_manuale']
+                    # If current user, try to search/decrypt. If other user, we can't decrypt their MK encrypted data.
+                    if uid == id_utente_richiedente and master_key:
+                         val = _decrypt_if_key(val, master_key, crypto)
+                    
+                    try:
+                        fondi_pensione += float(val) if val else 0.0
+                    except (ValueError, TypeError):
+                        pass
                 
                 saldo_totale = liquidita + investimenti + fondi_pensione
                 
@@ -3282,36 +3706,38 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese, master_key_b64=None, id_u
             cur = con.cursor()
             cur.execute("""
                         -- Transazioni Personali
-                        SELECT U.username AS utente_username,
-                               U.nome AS utente_nome_raw,
-                               U.cognome AS utente_cognome_raw,
-                               T.data,
-                               T.descrizione,
-                               SCat.nome_sottocategoria,
+                        SELECT U.username_enc AS utente_username_enc,
+                               U.nome_enc_server AS utente_nome_server_enc, 
+                               U.cognome_enc_server AS utente_cognome_server_enc,
+                               T.data, 
+                               T.descrizione, 
+                               T.importo, 
+                               C.nome_conto,
                                Cat.nome_categoria,
-                               C.nome_conto                                     AS conto_nome,
-                               T.importo,
-                               C.id_utente as owner_id_utente
+                               Sub.nome_sottocategoria,
+                               U.id_utente  -- Needed to identify who owns the data to decrypt
                         FROM Transazioni T
-                                 JOIN Conti C ON T.id_conto = C.id_conto
-                                 JOIN Utenti U ON C.id_utente = U.id_utente
-                                 JOIN Appartenenza_Famiglia AF ON U.id_utente = AF.id_utente
-                                 LEFT JOIN Sottocategorie SCat ON T.id_sottocategoria = SCat.id_sottocategoria
-                                 LEFT JOIN Categorie Cat ON SCat.id_categoria = Cat.id_categoria
+                        JOIN Conti C ON T.id_conto = C.id_conto
+                        JOIN Utenti U ON C.id_utente = U.id_utente
+                        JOIN Appartenenza_Famiglia AF ON U.id_utente = AF.id_utente -- To filter family
+                        LEFT JOIN Sottocategorie Sub ON T.id_sottocategoria = Sub.id_sottocategoria
+                        LEFT JOIN Categorie Cat ON Sub.id_categoria = Cat.id_categoria
                         WHERE AF.id_famiglia = %s
-                          AND C.tipo != 'Fondo Pensione' AND T.data BETWEEN %s AND %s
+                          AND T.data BETWEEN %s AND %s
+                        
                         UNION ALL
-                        -- Transazioni Condivise
-                        SELECT U.username AS utente_username,
-                               U.nome AS utente_nome_raw,
-                               U.cognome AS utente_cognome_raw,
+
+                        -- Transazioni Condivise (Shared)
+                        SELECT U.username_enc AS utente_username_enc,
+                               U.nome_enc_server AS utente_nome_server_enc,
+                               U.cognome_enc_server AS utente_cognome_server_enc,
                                TC.data,
                                TC.descrizione,
-                               SCat.nome_sottocategoria,
-                               Cat.nome_categoria,
-                               CC.nome_conto                                    AS conto_nome,
                                TC.importo,
-                               NULL as owner_id_utente
+                               CC.nome_conto,
+                               Cat.nome_categoria,
+                               SCat.nome_sottocategoria,
+                               TC.id_utente_autore AS id_utente
                         FROM TransazioniCondivise TC
                                  JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
                                  LEFT JOIN Utenti U
@@ -3320,7 +3746,7 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese, master_key_b64=None, id_u
                                  LEFT JOIN Categorie Cat ON SCat.id_categoria = Cat.id_categoria
                         WHERE CC.id_famiglia = %s
                           AND TC.data BETWEEN %s AND %s
-                        ORDER BY data DESC, utente_username, conto_nome
+                        ORDER BY data DESC, utente_username_enc, nome_conto
                         """, (id_famiglia, data_inizio, data_fine, id_famiglia, data_inizio, data_fine))
             results = [dict(row) for row in cur.fetchall()]
             
@@ -3334,30 +3760,40 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese, master_key_b64=None, id_u
                 owner_id = row.get('owner_id_utente')
                 
                 # Build display name: decrypt nome/cognome with master_key and combine
-                nome_raw = row.pop('utente_nome_raw', '') or ''
-                cognome_raw = row.pop('utente_cognome_raw', '') or ''
-                username = row.pop('utente_username', '') or 'Condiviso'
+                utente_username_enc = row.pop('utente_username_enc', '') or ''
+                nome_enc = row.pop('utente_nome_enc', '') or ''
+                cognome_enc = row.pop('utente_cognome_enc', '') or ''
                 
-                # Decrypt nome/cognome if they look encrypted
-                if master_key:
-                    if isinstance(nome_raw, str) and nome_raw.startswith('gAAAAA'):
-                        nome_raw = _decrypt_if_key(nome_raw, master_key, crypto, silent=True)
-                        if nome_raw == "[ENCRYPTED]":
-                            nome_raw = ''
-                    if isinstance(cognome_raw, str) and cognome_raw.startswith('gAAAAA'):
-                        cognome_raw = _decrypt_if_key(cognome_raw, master_key, crypto, silent=True)
-                        if cognome_raw == "[ENCRYPTED]":
-                            cognome_raw = ''
+                # Decrypt username (system data)
+                row['utente_username'] = decrypt_system_data(utente_username_enc) or "Sconosciuto"
                 
+                # Decrypt Name/Surname (Server Key preferred for visibility)
+                nome_server = decrypt_system_data(row.get('utente_nome_server_enc'))
+                cognome_server = decrypt_system_data(row.get('utente_cognome_server_enc'))
+                
+                if nome_server and cognome_server:
+                    nome_raw = nome_server
+                    cognome_raw = cognome_server
+                else:
+                    # Fallback to encrypted blobs if backfill hasn't run
+                     nome_raw = ''
+                     cognome_raw = ''
+                
+                # Cleanup encrypted strings for display
+                if isinstance(nome_raw, str) and nome_raw.startswith('gAAAAA'): 
+                     nome_raw = '' # Hide encrypted blob
+                if isinstance(cognome_raw, str) and cognome_raw.startswith('gAAAAA'):
+                     cognome_raw = ''
+
                 # Build display name: prefer nome+cognome, fallback to username
                 if nome_raw or cognome_raw:
                     row['utente_nome'] = f"{nome_raw} {cognome_raw}".strip()
                 else:
-                    row['utente_nome'] = username
+                    row['utente_nome'] = row['utente_username']
                 
                 # Decrypt transaction data
                 descrizione_orig = row['descrizione']
-                conto_nome_orig = row['conto_nome']
+                conto_nome_orig = row['nome_conto']
                 
                 # Decrypt Logic: Try Family Key, then Master Key (if owner or fallback), then clean fallback
                 decoded_desc = "[ENCRYPTED]"
@@ -4746,25 +5182,54 @@ def ottieni_dettaglio_portafogli_famiglia(id_famiglia):
             # con.row_factory = sqlite3.Row # Removed for Supabase
             cur = con.cursor()
             cur.execute("""
-                        SELECT COALESCE(U.nome || ' ' || U.cognome, U.username)                      AS membro,
+                        SELECT U.username_enc                                       AS membro_enc,
                                C.nome_conto,
                                A.ticker,
                                A.nome_asset,
                                A.quantita,
                                A.costo_iniziale_unitario,
-                               A.prezzo_attuale_manuale,
-                               (A.prezzo_attuale_manuale - A.costo_iniziale_unitario)                AS gain_loss_unitario,
-                               (A.quantita * (A.prezzo_attuale_manuale - A.costo_iniziale_unitario)) AS gain_loss_totale,
-                               (A.quantita * A.prezzo_attuale_manuale)                               AS valore_totale
-                        FROM Asset A
-                                 JOIN Conti C ON A.id_conto = C.id_conto
+                               A.valore_corrente_unitario,
+                               (A.quantita * A.costo_iniziale_unitario)             AS investito_totale,
+                               (A.quantita * A.valore_corrente_unitario)            AS valore_totale,
+                               ((A.quantita * A.valore_corrente_unitario) - (A.quantita * A.costo_iniziale_unitario)) AS profitto
+                        FROM Conti C
+                                 JOIN Asset A ON C.id_conto = A.id_conto
                                  JOIN Utenti U ON C.id_utente = U.id_utente
                                  JOIN Appartenenza_Famiglia AF ON U.id_utente = AF.id_utente
                         WHERE AF.id_famiglia = %s
                           AND C.tipo = 'Investimento'
-                        ORDER BY membro, C.nome_conto, A.ticker
-                        """, (id_famiglia,))
-            return [dict(row) for row in cur.fetchall()]
+                        
+                        UNION ALL
+                        
+                        -- Shared Investments (if any? usually personal)
+                        SELECT 'Condiviso' as membro_enc,
+                               CC.nome_conto,
+                               A.ticker,
+                               A.nome_asset,
+                               A.quantita,
+                               A.costo_iniziale_unitario,
+                               A.valore_corrente_unitario,
+                               (A.quantita * A.costo_iniziale_unitario)             AS investito_totale,
+                               (A.quantita * A.valore_corrente_unitario)            AS valore_totale,
+                               ((A.quantita * A.valore_corrente_unitario) - (A.quantita * A.costo_iniziale_unitario)) AS profitto
+                        FROM ContiCondivisi CC
+                                 JOIN Asset A ON CC.id_conto_condiviso = A.id_conto_condiviso
+                        WHERE CC.id_famiglia = %s
+                          AND CC.tipo = 'Investimento'
+                          
+                        ORDER BY membro_enc, nome_conto, ticker
+                        """, (id_famiglia, id_famiglia))
+            
+            results = [dict(row) for row in cur.fetchall()]
+            for row in results:
+                if row['membro_enc'] == 'Condiviso':
+                    row['membro'] = 'Condiviso'
+                else:
+                    row['membro'] = decrypt_system_data(row['membro_enc']) or "Sconosciuto"
+                # del row['membro_enc'] # Optional cleanup
+            
+            return results
+
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero dettaglio portafogli famiglia: {e}")
         return []

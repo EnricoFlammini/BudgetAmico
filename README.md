@@ -122,7 +122,10 @@ Questa versione utilizza **PostgreSQL** (testato su Supabase, ma compatibile con
 
 ```env
 SUPABASE_DB_URL=postgresql://postgres:password@db.supabase.co:5432/postgres
+SERVER_SECRET_KEY=la_tua_chiave_segreta_molto_lunga_e_casuale
 ```
+
+**Nota**: `SERVER_SECRET_KEY` è fondamentale per il recupero password e la visibilità dei nomi in famiglia. Generane una sicura (es. 32-64 caratteri casuali).
 
 L'applicazione gestirà automaticamente la creazione delle tabelle al primo avvio se non esistono.
 
@@ -190,6 +193,14 @@ BudgetAmico/
     - `cryptography` - Crittografia dati sensibili (Fernet)
 
 ---
+
+## 📊 Novità Versione 0.15
+
+### Sicurezza e Privacy (Major Update)
+-   **Blind Indexing**: Username ed Email sono ora salvati in modo cifrato (non leggibili in chiaro sul DB) ma ricercabili tramite hash sicuri, garantendo massima privacy anche in caso di accesso non autorizzato al DB.
+-   **Architettura Server Key**: Introdotta una chiave di sistema (`SERVER_SECRET_KEY`) per gestire funzioni privilegiate come il **Recupero Password** e la **Visibilità Nomi Famiglia** senza compromettere la crittografia End-to-End dei dati personali.
+-   **Recupero Password Sicuro**: Il reset della password via email ora ri-cripta correttamente le chiavi di sicurezza, prevenendo la perdita dei dati storici.
+-   **Inviti Sicuri**: Corretto il flusso di invito per garantire che i nuovi membri vengano creati immediatamente con gli standard di sicurezza (Blind Index) attivi.
 
 ## 📊 Novità Versione 0.14
 

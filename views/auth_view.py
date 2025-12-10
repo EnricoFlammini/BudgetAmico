@@ -336,14 +336,15 @@ class AuthView:
             # Genera una password temporanea
             import secrets
             temp_password = secrets.token_urlsafe(8)
-            temp_password_hash = hash_password(temp_password)
+            # temp_password_hash = hash_password(temp_password) # NO! Passiamo la password raw
 
-            if imposta_password_temporanea(utente['id_utente'], temp_password_hash):
+            if imposta_password_temporanea(utente['id_utente'], temp_password):
                 body = f"""
                     <html><body>
                         <p>Ciao {utente['nome']},</p>
                         <p>La tua password temporanea è: <b>{temp_password}</b></p>
                         <p>Al prossimo accesso ti verrà chiesto di impostare una nuova password personale.</p>
+                        <p><i>Nota: I tuoi dati sono stati recuperati con successo grazie al backup server.</i></p>
                     </body></html>
                     """
                 success, error = send_email(email, "Password Temporanea - Budget Amico", body)
@@ -355,6 +356,13 @@ class AuthView:
                     self.recovery_status_text.visible = True
                     self.page.update()
                     return
+            else:
+                 # Fallback error (e.g. no server key or no backup)
+                 self.recovery_status_text.value = "Impossibile recuperare l'account (Chiave di backup non trovata)."
+                 self.recovery_status_text.color = ft.Colors.RED
+                 self.recovery_status_text.visible = True
+                 self.page.update()
+                 return
 
         # Mostra un messaggio generico per motivi di sicurezza
         self.recovery_status_text.value = self.loc.get("reset_link_sent_confirmation")
