@@ -22,3 +22,6 @@ pyinstaller>=6.16.0
 
 # Security
 cryptography>=42.0.0
+
+# Dev Tools
+pre-commit>=3.5.0
