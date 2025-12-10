@@ -3,6 +3,7 @@ import hashlib
 import datetime
 import os
 import sys
+from typing import Optional, List, Dict, Any, Union, Tuple
 from dateutil.relativedelta import relativedelta
 from dateutil.parser import parse as parse_date
 import mimetypes
@@ -160,12 +161,19 @@ def valida_iban_semplice(iban):
 
 
 # --- Funzioni Configurazioni ---
-def get_configurazione(chiave, id_famiglia=None, master_key_b64=None, id_utente=None):
+def get_configurazione(chiave: str, id_famiglia: Optional[str] = None, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> Optional[str]:
     """
     Recupera il valore di una configurazione.
-    Se id_famiglia è None, cerca una configurazione globale.
-    Se id_famiglia è specificato, cerca una configurazione per quella famiglia.
-    I valori SMTP vengono decriptati con family_key.
+    
+    Args:
+        chiave: La chiave della configurazione da recuperare.
+        id_famiglia: L'ID della famiglia (opzionale). Se None, cerca una configurazione globale.
+        master_key_b64: La master key codificata in base64 (opzionale) per decriptare valori sensibili.
+        id_utente: L'ID dell'utente (opzionale) per recuperare la family key.
+
+    Returns:
+        Il valore della configurazione come stringa, oppure None se non trovata.
+        I valori SMTP vengono decriptati con family_key o system key.
     """
     try:
         with get_db_connection() as con:
@@ -210,11 +218,19 @@ def get_configurazione(chiave, id_famiglia=None, master_key_b64=None, id_utente=
         print(f"[ERRORE] Errore recupero configurazione {chiave}: {e}")
         return None
 
-def set_configurazione(chiave, valore, id_famiglia=None, master_key_b64=None, id_utente=None):
+def set_configurazione(chiave: str, valore: str, id_famiglia: Optional[str] = None, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> bool:
     """
     Imposta o aggiorna una configurazione.
-    Se id_famiglia è None, imposta una configurazione globale.
-    I valori SMTP vengono criptati con family_key.
+
+    Args:
+        chiave: La chiave della configurazione.
+        valore: Il valore da impostare.
+        id_famiglia: L'ID della famiglia (opzionale). Se None, imposta una configurazione globale.
+        master_key_b64: La master key codificata in base64 (opzionale) per criptare valori sensibili.
+        id_utente: L'ID dell'utente (opzionale) per recuperare la family key.
+
+    Returns:
+        True se il salvataggio è avvenuto con successo, False altrimenti.
     """
     try:
         # Encrypt sensitive config values
@@ -259,8 +275,13 @@ def set_configurazione(chiave, valore, id_famiglia=None, master_key_b64=None, id
         print(f"[ERRORE] Errore salvataggio configurazione {chiave}: {e}")
         return False
 
-def get_smtp_config(id_famiglia=None, master_key_b64=None, id_utente=None):
-    """Recupera la configurazione SMTP completa. Tutti i valori vengono decriptati automaticamente."""
+def get_smtp_config(id_famiglia: Optional[str] = None, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> Dict[str, Optional[str]]:
+    """
+    Recupera la configurazione SMTP completa. Tutti i valori vengono decriptati automaticamente.
+    
+    Returns:
+        Un dizionario contenente 'server', 'port', 'user', 'password', 'provider'.
+    """
     print(f"[DEBUG] get_smtp_config called with id_famiglia={id_famiglia}, id_utente={id_utente}, master_key_present={bool(master_key_b64)}")
     return {
         'server': get_configurazione('smtp_server', id_famiglia, master_key_b64, id_utente),
@@ -270,8 +291,14 @@ def get_smtp_config(id_famiglia=None, master_key_b64=None, id_utente=None):
         'provider': get_configurazione('smtp_provider', id_famiglia)  # provider is not sensitive
     }
 
-def save_smtp_config(settings, id_famiglia=None, master_key_b64=None, id_utente=None):
-    """Salva la configurazione SMTP. Tutti i valori sensibili vengono criptati automaticamente."""
+def save_smtp_config(settings: Dict[str, Any], id_famiglia: Optional[str] = None, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> bool:
+    """
+    Salva la configurazione SMTP. Tutti i valori sensibili vengono criptati automaticamente.
+    
+    Args:
+        settings: Dizionario con le impostazioni SMTP.
+        id_famiglia, master_key_b64, id_utente: Parametri per la crittografia.
+    """
     try:
         set_configurazione('smtp_server', settings.get('server'), id_famiglia, master_key_b64, id_utente)
         set_configurazione('smtp_port', settings.get('port'), id_famiglia, master_key_b64, id_utente)
@@ -286,7 +313,7 @@ def save_smtp_config(settings, id_famiglia=None, master_key_b64=None, id_utente=
 
 # --- Funzioni Gestione Budget Famiglia ---
 
-def get_impostazioni_budget_famiglia(id_famiglia):
+def get_impostazioni_budget_famiglia(id_famiglia: str) -> Dict[str, Union[float, str]]:
     """
     Recupera le impostazioni del budget famiglia:
     - entrate_mensili: valore inserito manualmente
@@ -299,7 +326,7 @@ def get_impostazioni_budget_famiglia(id_famiglia):
         'risparmio_valore': float(get_configurazione('budget_risparmio_valore', id_famiglia) or 0)
     }
 
-def set_impostazioni_budget_famiglia(id_famiglia, entrate_mensili, risparmio_tipo, risparmio_valore):
+def set_impostazioni_budget_famiglia(id_famiglia: str, entrate_mensili: float, risparmio_tipo: str, risparmio_valore: float) -> bool:
     """
     Salva le impostazioni del budget famiglia.
     - entrate_mensili: valore delle entrate mensili
@@ -315,7 +342,7 @@ def set_impostazioni_budget_famiglia(id_famiglia, entrate_mensili, risparmio_tip
         print(f"[ERRORE] Errore salvataggio impostazioni budget: {e}")
         return False
 
-def calcola_entrate_mensili_famiglia(id_famiglia, anno, mese, master_key_b64=None, id_utente=None):
+def calcola_entrate_mensili_famiglia(id_famiglia: str, anno: int, mese: int, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> float:
     """
     Calcola la somma delle transazioni categorizzate come "Entrate" 
     per tutti i membri della famiglia nel mese specificato.
@@ -397,7 +424,7 @@ def calcola_entrate_mensili_famiglia(id_famiglia, anno, mese, master_key_b64=Non
         print(f"[ERRORE] Errore calcolo entrate mensili: {e}")
         return 0.0
 
-def ottieni_totale_budget_allocato(id_famiglia, master_key_b64=None, id_utente=None):
+def ottieni_totale_budget_allocato(id_famiglia: str, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> float:
     """
     Ritorna il totale dei budget assegnati alle sottocategorie.
     """
@@ -408,7 +435,7 @@ def ottieni_totale_budget_allocato(id_famiglia, master_key_b64=None, id_utente=N
         print(f"[ERRORE] Errore calcolo totale budget allocato: {e}")
         return 0.0
 
-def salva_impostazioni_budget_storico(id_famiglia, anno, mese, entrate_mensili, risparmio_tipo, risparmio_valore):
+def salva_impostazioni_budget_storico(id_famiglia: str, anno: int, mese: int, entrate_mensili: float, risparmio_tipo: str, risparmio_valore: float) -> bool:
     """
     Salva le impostazioni budget nello storico per un mese specifico.
     Usa la tabella Configurazioni con chiavi contenenti anno e mese.
@@ -423,7 +450,7 @@ def salva_impostazioni_budget_storico(id_famiglia, anno, mese, entrate_mensili, 
         print(f"[ERRORE] Errore salvataggio storico impostazioni budget: {e}")
         return False
 
-def ottieni_impostazioni_budget_storico(id_famiglia, anno, mese):
+def ottieni_impostazioni_budget_storico(id_famiglia: str, anno: int, mese: int) -> Optional[Dict[str, Union[float, str]]]:
     """
     Recupera le impostazioni budget dallo storico per un mese specifico.
     Se non esistono, ritorna None.
@@ -440,7 +467,7 @@ def ottieni_impostazioni_budget_storico(id_famiglia, anno, mese):
         'risparmio_valore': float(get_configurazione(f"{chiave_base}_risparmio_valore", id_famiglia) or 0)
     }
 
-def ottieni_dati_analisi_mensile(id_famiglia, anno, mese, master_key_b64, id_utente):
+def ottieni_dati_analisi_mensile(id_famiglia: str, anno: int, mese: int, master_key_b64: str, id_utente: str) -> Optional[Dict[str, Any]]:
     """
     Recupera i dati completi per l'analisi mensile del budget.
     Include entrate, spese totali, budget totale, risparmio, delta e ripartizione categorie.
@@ -553,7 +580,7 @@ def ottieni_dati_analisi_mensile(id_famiglia, anno, mese, master_key_b64, id_ute
         return None
 
 
-def ottieni_dati_analisi_annuale(id_famiglia, anno, master_key_b64, id_utente, include_prev_year=True):
+def ottieni_dati_analisi_annuale(id_famiglia: str, anno: int, master_key_b64: str, id_utente: str, include_prev_year: bool = True) -> Optional[Dict[str, Any]]:
     """
     Recupera i dati completi per l'analisi annuale.
     Media spese, media budget, media differenza, spese categorie annuali.
@@ -730,11 +757,11 @@ def ottieni_dati_analisi_annuale(id_famiglia, anno, master_key_b64, id_utente, i
         print(f"[ERRORE] ottieni_dati_analisi_annuale: {e}")
         return None
 
-def esporta_dati_famiglia(id_famiglia, id_utente, master_key_b64):
+def esporta_dati_famiglia(id_famiglia: str, id_utente: str, master_key_b64: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """
     Esporta family_key e configurazioni base per backup.
     Solo admin può esportare questi dati.
-    Ritorna un dizionario con tutti i dati oppure None in caso di errore.
+    Ritorna un dizionario con tutti i dati oppure None in caso di errore, e un eventuale messaggio di errore.
     """
     try:
         crypto, master_key = _get_crypto_and_key(master_key_b64)
@@ -798,7 +825,7 @@ def esporta_dati_famiglia(id_famiglia, id_utente, master_key_b64):
 # --- Funzioni Utenti & Login ---
 
 
-def ottieni_utenti_senza_famiglia():
+def ottieni_utenti_senza_famiglia() -> List[str]:
     """
     Restituisce una lista di utenti che non appartengono a nessuna famiglia.
     """
@@ -824,7 +851,7 @@ def ottieni_utenti_senza_famiglia():
         return []
 
 
-def verifica_login(login_identifier, password):
+def verifica_login(login_identifier: str, password: str) -> Optional[Dict[str, Any]]:
     try:
         # Calculate blind indexes for lookup
         u_bindex = compute_blind_index(login_identifier)
@@ -963,7 +990,7 @@ def verifica_login(login_identifier, password):
 
 
 
-def crea_utente_invitato(email, ruolo, id_famiglia, id_admin=None, master_key_b64=None):
+def crea_utente_invitato(email: str, ruolo: str, id_famiglia: str, id_admin: Optional[str] = None, master_key_b64: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
     Crea un nuovo utente invitato con credenziali temporanee.
     Se id_admin e master_key_b64 sono forniti, condivide anche la chiave famiglia.
@@ -1041,7 +1068,7 @@ def crea_utente_invitato(email, ruolo, id_famiglia, id_admin=None, master_key_b6
         return None
 
 
-def registra_utente(nome, cognome, username, password, email, data_nascita, codice_fiscale, indirizzo):
+def registra_utente(nome: str, cognome: str, username: str, password: str, email: str, data_nascita: str, codice_fiscale: Optional[str], indirizzo: Optional[str]) -> Optional[Dict[str, Any]]:
     try:
         password_hash = hash_password(password)
         
@@ -1105,7 +1132,7 @@ def registra_utente(nome, cognome, username, password, email, data_nascita, codi
         print(f"[ERRORE] Errore durante la registrazione: {e}")
         return None
 
-def cambia_password(id_utente, vecchia_password_hash, nuova_password_hash):
+def cambia_password(id_utente: str, vecchia_password_hash: str, nuova_password_hash: str) -> bool:
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -1116,7 +1143,7 @@ def cambia_password(id_utente, vecchia_password_hash, nuova_password_hash):
         print(f"[ERRORE] Errore cambio password: {e}")
         return False
 
-def imposta_password_temporanea(id_utente, temp_password_raw):
+def imposta_password_temporanea(id_utente: str, temp_password_raw: str) -> bool:
     """
     Imposta una password temporanea e ripristina la Master Key usando il backup del server.
     N.B. Richiede temp_password_raw (stringa in chiaro), non l'hash!
@@ -1177,7 +1204,7 @@ def imposta_password_temporanea(id_utente, temp_password_raw):
         print(f"[ERRORE] Errore impostazione password temporanea con recovery: {e}")
         return False
 
-def trova_utente_per_email(email):
+def trova_utente_per_email(email: str) -> Optional[Dict[str, str]]:
     try:
         e_bindex = compute_blind_index(email)
         with get_db_connection() as con:
@@ -1209,7 +1236,7 @@ def trova_utente_per_email(email):
         print(f"[ERRORE] Errore ricerca utente per email: {e}")
         return None
 
-def cambia_password_e_username(id_utente, password_raw, nuovo_username, nome=None, cognome=None, vecchia_password=None):
+def cambia_password_e_username(id_utente: str, password_raw: str, nuovo_username: str, nome: Optional[str] = None, cognome: Optional[str] = None, vecchia_password: Optional[str] = None) -> Dict[str, Any]:
     """
     Aggiorna password e username per l'attivazione account (Force Change Password).
     Genera nuove chiavi di cifratura (Master Key, Salt, Recovery Key).
@@ -1350,7 +1377,7 @@ def accetta_invito(id_utente, token, master_key_b64):
     # Placeholder implementation if needed, logic might be in AuthView
     pass
 
-def aggiungi_utente_a_famiglia(id_utente, id_famiglia, ruolo='user'):
+def aggiungi_utente_a_famiglia(id_utente: str, id_famiglia: str, ruolo: str = 'user') -> bool:
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -1361,7 +1388,7 @@ def aggiungi_utente_a_famiglia(id_utente, id_famiglia, ruolo='user'):
         print(f"[ERRORE] Errore aggiunta utente a famiglia: {e}")
         return False
 
-def rimuovi_utente_da_famiglia(id_utente, id_famiglia):
+def rimuovi_utente_da_famiglia(id_utente: str, id_famiglia: str) -> bool:
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -1372,7 +1399,7 @@ def rimuovi_utente_da_famiglia(id_utente, id_famiglia):
         print(f"[ERRORE] Errore rimozione utente da famiglia: {e}")
         return False
 
-def ottieni_membri_famiglia(id_famiglia, master_key_b64=None, id_utente_current=None):
+def ottieni_membri_famiglia(id_famiglia: str, master_key_b64: Optional[str] = None, id_utente_current: Optional[str] = None) -> List[Dict[str, Any]]:
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -1401,7 +1428,7 @@ def ottieni_membri_famiglia(id_famiglia, master_key_b64=None, id_utente_current=
         return []
 
 
-def ottieni_ruolo_utente(id_utente, id_famiglia):
+def ottieni_ruolo_utente(id_utente: str, id_famiglia: str) -> Optional[str]:
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -1413,7 +1440,7 @@ def ottieni_ruolo_utente(id_utente, id_famiglia):
         print(f"[ERRORE] Errore recupero ruolo utente: {e}")
         return None
 
-def ensure_family_key(id_utente, id_famiglia, master_key_b64):
+def ensure_family_key(id_utente: str, id_famiglia: str, master_key_b64: str) -> bool:
     """
     Assicura che l'utente abbia accesso alla chiave di crittografia della famiglia.
     Se nessuno ha la chiave (nuova famiglia o migrazione), ne genera una nuova.
@@ -1476,7 +1503,7 @@ def ensure_family_key(id_utente, id_famiglia, master_key_b64):
 
 
 # --- Funzioni Conti ---
-def ottieni_conti(id_utente, master_key_b64=None):
+def ottieni_conti(id_utente: str, master_key_b64: Optional[str] = None) -> List[Dict[str, Any]]:
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -1508,7 +1535,7 @@ def ottieni_conti(id_utente, master_key_b64=None):
         print(f"[ERRORE] Errore recupero conti: {e}")
         return []
 
-def aggiungi_conto(id_utente, nome_conto, tipo, saldo_iniziale=0.0, data_saldo_iniziale=None, master_key_b64=None):
+def aggiungi_conto(id_utente: str, nome_conto: str, tipo: str, saldo_iniziale: float = 0.0, data_saldo_iniziale: Optional[str] = None, master_key_b64: Optional[str] = None) -> Optional[str]:
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
     encrypted_nome = _encrypt_if_key(nome_conto, master_key, crypto)
@@ -1539,7 +1566,7 @@ def aggiungi_conto(id_utente, nome_conto, tipo, saldo_iniziale=0.0, data_saldo_i
         print(f"[ERRORE] Errore aggiunta conto: {e}")
         return None
 
-def modifica_conto(id_conto, nome_conto, tipo, saldo_iniziale, data_saldo_iniziale, master_key_b64=None):
+def modifica_conto(id_conto: str, nome_conto: str, tipo: str, saldo_iniziale: float, data_saldo_iniziale: str, master_key_b64: Optional[str] = None) -> bool:
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
     encrypted_nome = _encrypt_if_key(nome_conto, master_key, crypto)
@@ -1575,7 +1602,7 @@ def modifica_conto(id_conto, nome_conto, tipo, saldo_iniziale, data_saldo_inizia
         return False
 
 
-def elimina_conto(id_conto):
+def elimina_conto(id_conto: str) -> bool:
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -1586,7 +1613,7 @@ def elimina_conto(id_conto):
         return False
 
 # --- Funzioni Categorie ---
-def ottieni_categorie(id_famiglia, master_key_b64=None, id_utente=None):
+def ottieni_categorie(id_famiglia: str, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> List[Dict[str, Any]]:
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -1840,73 +1867,6 @@ def ottieni_conto_default_utente(id_utente):
         return None
 
 
-def registra_utente(nome, cognome, username, password, email, data_nascita, codice_fiscale, indirizzo):
-    try:
-        crypto = CryptoManager()
-        
-        # Generate encryption keys
-        salt = crypto.generate_salt()
-        kek = crypto.derive_key(password, salt)
-        master_key = crypto.generate_master_key()
-        encrypted_master_key = crypto.encrypt_master_key(master_key, kek)
-        recovery_key = crypto.generate_recovery_key()
-        recovery_key_hash = crypto.hash_recovery_key(recovery_key)
-        
-        # Encrypt PII
-        encrypted_nome = crypto.encrypt_data(nome, master_key)
-        encrypted_cognome = crypto.encrypt_data(cognome, master_key)
-        encrypted_codice_fiscale = crypto.encrypt_data(codice_fiscale, master_key)
-        encrypted_indirizzo = crypto.encrypt_data(indirizzo, master_key)
-        
-        # --- BLIND INDEX & SYSTEM ENCRYPTION ---
-        # Calculate blind index for login
-        username_bindex = compute_blind_index(username)
-        email_bindex = compute_blind_index(email)
-        
-        # Encrypt for system visibility (display)
-        username_enc = encrypt_system_data(username)
-        email_enc = encrypt_system_data(email)
-        
-        # Encrypt name/surname for server visibility (family display)
-        nome_enc_server = encrypt_system_data(nome)
-        cognome_enc_server = encrypt_system_data(cognome)
-        
-        # Backup Master Key with Server Key (for Password Recovery)
-        # Encrypt the Master Key with the Server Fernet Key
-        srv_key_bytes = hashlib.sha256(SERVER_SECRET_KEY.encode()).digest()
-        srv_fernet_key = base64.urlsafe_b64encode(srv_key_bytes)
-        encrypted_mk_backup = crypto.encrypt_master_key(master_key, srv_fernet_key)
-
-        with get_db_connection() as con:
-            cur = con.cursor()
-            cur.execute("""
-                        INSERT INTO Utenti (
-                            nome, cognome, password_hash, data_nascita, codice_fiscale, indirizzo, 
-                            salt, encrypted_master_key, recovery_key_hash, 
-                            username_bindex, email_bindex, username_enc, email_enc,
-                            nome_enc_server, cognome_enc_server, encrypted_master_key_backup
-                        )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) 
-                        RETURNING id_utente
-                        """, (
-                            encrypted_nome, 
-                            encrypted_cognome, 
-                            hash_password(password), 
-                            data_nascita, 
-                            encrypted_codice_fiscale, 
-                            encrypted_indirizzo,
-                            base64.urlsafe_b64encode(salt).decode(),
-                            base64.urlsafe_b64encode(encrypted_master_key).decode(),
-                            recovery_key_hash,
-                            username_bindex, email_bindex, username_enc, email_enc,
-                            nome_enc_server, cognome_enc_server, 
-                            base64.urlsafe_b64encode(encrypted_mk_backup).decode()
-                        ))
-            id_utente = cur.fetchone()['id_utente']
-            return {"id_utente": id_utente, "recovery_key": recovery_key}
-    except Exception as e:
-        print(f"[ERRORE] Errore durante la registrazione: {e}")
-        return None
 
 
 def crea_famiglia_e_admin(nome_famiglia, id_admin, master_key_b64=None):
@@ -1955,10 +1915,11 @@ def aggiungi_saldo_iniziale(id_conto, saldo_iniziale):
 
 def aggiungi_categorie_iniziali(id_famiglia):
     categorie_base = {
-        "SOPRAVVIVENZA": ["MUTUO", "FINANZIAMENTO", "ASSICURAZIONI", "UTENZE", "ALIMENTI","AUTO 1", "AUTO 2","SCUOLA", "CONDOMINIO", "SALUTE"],
-        "SPESE": ["TELEFONI", "INTERNET", "TELEVISIONE", "SERVIZI", "ATTIVITA' BAMBINI", "RISTORAZIONE", "VESTITI", "ACQUISTI VARI", "SPESE PER LA CASA", "REGALI", "VACANZE", "CORSI ESTIVI"],
-        "SVAGO": ["LIBRI", "SPETTACOLI"],
-        "IMPREVISTI": ["IMPREVISTI"]
+        "SOPRAVVIVENZA": ["MUTUO", "FINANZIAMENTO", "ASSICURAZIONI", "UTENZE", "ALIMENTI", "TRASPORTI", "SCUOLA", "CONDOMINIO", "SALUTE"],
+        "SPESE": ["ABBONAMENTI", "UTENZE", "SERVIZI", "ATTIVITA' BAMBINI", "VESTITI", "ACQUISTI VARI", "SPESE PER LA CASA", "REGALI", "CORSI ESTIVI"],
+        "SVAGO": ["LIBRI", "SPETTACOLI", "RISTORAZIONE", "VACANZE"],
+        "IMPREVISTI": ["IMPREVISTI"],
+        "ENTRATE": ["ENTRATE"]
     }
     for nome_cat, sottocategorie in categorie_base.items():
         id_cat = aggiungi_categoria(id_famiglia, nome_cat)
@@ -2012,39 +1973,6 @@ def cerca_utente_per_username(username):
 
 
 
-def trova_utente_per_email(email):
-    """
-    Trova un utente dal suo username (che è l'email) usando il Blind Index.
-    Decripta i campi di sistema (username, email, nome) per l'uso interno (es. reset password).
-    """
-    try:
-        bindex = compute_blind_index(email)
-        if not bindex: return None
-
-        with get_db_connection() as con:
-            cur = con.cursor()
-            cur.execute("SELECT * FROM Utenti WHERE email_bindex = %s", (bindex,))
-            row = cur.fetchone()
-            
-            if not row: return None
-            
-            dati = dict(row)
-            
-            # Decrypt System Data
-            dati['email'] = decrypt_system_data(dati.get('email_enc'))
-            dati['username'] = decrypt_system_data(dati.get('username_enc'))
-            
-            # Decrypt Name/Surname from Server copy if available (for email greeting)
-            n_srv = decrypt_system_data(dati.get('nome_enc_server'))
-            c_srv = decrypt_system_data(dati.get('cognome_enc_server'))
-            
-            if n_srv: dati['nome'] = n_srv
-            if c_srv: dati['cognome'] = c_srv
-            
-            return dati
-    except Exception as e:
-        print(f"[ERRORE] Errore in trova_utente_per_email: {e}")
-        return None
 
 def imposta_password_temporanea(id_utente, temp_password_raw):
     """

@@ -1,5 +1,7 @@
 import os
 import secrets
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from db.supabase_manager import get_db_connection
 from dotenv import load_dotenv
 

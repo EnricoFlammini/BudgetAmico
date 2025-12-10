@@ -10,6 +10,7 @@ from db.gestione_db import (
     aggiungi_transazione,
     aggiungi_transazione_condivisa
 )
+from utils.yfinance_manager import applica_suffisso_borsa
 
 
 class PortafoglioDialogs:
@@ -334,10 +335,11 @@ class PortafoglioDialogs:
             ticker = self.txt_ticker.value.strip().upper()
             
             # Aggiungi suffisso borsa default se presente e se il ticker non ha già un suffisso
-            if self.conto_selezionato and 'borsa_default' in self.conto_selezionato and self.conto_selezionato['borsa_default']:
-                suffix = self.conto_selezionato['borsa_default']
-                if "." not in ticker:
-                    ticker += suffix
+            borsa_default = None
+            if self.conto_selezionato and 'borsa_default' in self.conto_selezionato:
+                borsa_default = self.conto_selezionato['borsa_default']
+            
+            ticker = applica_suffisso_borsa(ticker, borsa_default)
 
             nome_asset = self.txt_nome_asset.value.strip()
             conto_selezionato_key = self.dd_conto_transazione.value
@@ -544,10 +546,11 @@ class PortafoglioDialogs:
                 return
 
             # Aggiungi suffisso borsa default se necessario
-            if self.conto_selezionato and 'borsa_default' in self.conto_selezionato and self.conto_selezionato['borsa_default']:
-                suffix = self.conto_selezionato['borsa_default']
-                if "." not in ticker:
-                    ticker += suffix
+            borsa_default = None
+            if self.conto_selezionato and 'borsa_default' in self.conto_selezionato:
+                borsa_default = self.conto_selezionato['borsa_default']
+            
+            ticker = applica_suffisso_borsa(ticker, borsa_default)
             
             # Prima chiudo il dialog
             self._chiudi_dialog_asset_esistente(e)

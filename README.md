@@ -194,6 +194,14 @@ BudgetAmico/
 
 ---
 
+## 📊 Novità Versione 0.16
+
+### Miglioramenti Tecnici e Qualità del Codice
+-   **Type Hinting Completo**: Estesa la copertura dei type hints a tutte le funzioni critiche del database per una maggiore robustezza e prevenzione bug.
+-   **Refactoring Codebase**: Rimozione di funzioni duplicate e codice legacy (es. vecchie implementazioni di `registra_utente`).
+-   **Documentazione**: Potenziata la documentazione inline per le funzioni di gestione database, sicurezza e budget.
+-   **Verifica Automatica**: Introduzione di script di verifica per garantire la coerenza delle firme delle funzioni.
+
 ## 📊 Novità Versione 0.15
 
 ### Sicurezza e Privacy (Major Update)

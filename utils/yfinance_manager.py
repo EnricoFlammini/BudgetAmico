@@ -139,3 +139,24 @@ def verifica_ticker_valido(ticker: str) -> bool:
         return prezzo is not None and prezzo > 0
     except Exception:
         return False
+
+
+def applica_suffisso_borsa(ticker: str, borsa_default: Optional[str]) -> str:
+    """
+    Applica il suffisso della borsa al ticker se non è già presente.
+    
+    Args:
+        ticker: Il simbolo ticker dell'asset
+        borsa_default: Il suffisso della borsa di default (es. ".MI") o None
+        
+    Returns:
+        Il ticker eventualmente modificato con il suffisso
+    """
+    if not ticker:
+        return ticker
+        
+    if borsa_default:
+        if "." not in ticker:
+            ticker += borsa_default
+            
+    return ticker
