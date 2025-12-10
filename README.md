@@ -35,7 +35,7 @@ Budget Amico è un'applicazione cross-platform costruita con Python e Flet che t
         -   Statistiche aggregate (valore totale e gain/loss)
     -   **Portafogli di Investimento**: Traccia i tuoi investimenti, aggiungendo asset (azioni, ETF) e monitorando guadagni e perdite.
     -   **Prestiti e Mutui**: Gestisci i tuoi finanziamenti, tracciando l'importo residuo e le rate pagate.
-    -   **Immobili**: Aggiungi i tuoi immobili per avere una visione completa del tuo patrimonio.
+    -   **Immobili**: Aggiungi i tuoi immobili per avere una visione completa del tuo patrimonio. Gestione della **Nuda Proprietà** con evidenziazione visiva ed esclusione dai totali patrimoniali disponibili.
     -   **Fondi Pensione**: Monitora il valore dei tuoi fondi pensione.
 
 -   **Gestione Familiare Avanzata**:
@@ -191,7 +191,7 @@ BudgetAmico/
 
 ---
 
-## 📊 Novità Versione 0.13
+## 📊 Novità Versione 0.14
 
 ### Analisi Budget Avanzata
 -   **Nuova Dashboard Analisi**: Pagina completamente ridisegnata con doppia vista (Mensile e Annuale).
@@ -202,6 +202,11 @@ BudgetAmico/
     -   Medie calcolate sui soli "mesi attivi" (periodi con spese registrate) per una stima più realistica.
     -   Confronto automatico con l'anno precedente solo se presenti dati storici.
 -   **Grafici Interattivi**: Nuovi grafici a torta con logica dinamica per visualizzare la ripartizione del budget o delle entrate.
+-   **Prestazioni Ottimizzate**: Caricamento asincrono dei dati per i tab "Admin" e "Impostazioni" per un'esperienza utente fluida e reattiva senza blocchi dell'interfaccia.
+-   **Gestione Nuda Proprietà**: Possibilità di contrassegnare gli immobili come "Nuda proprietà", escludendoli dai calcoli del patrimonio netto disponibile ma mantenendoli nell'inventario.
+-   **Privacy e Sicurezza**:
+    -   Risolti problemi di visibilità dei dati familiari crittografati.
+    -   Migliorata la gestione del pool di connessioni database per prevenire errori sotto carico.
 
 ## 📊 Novità Versione 0.12
 
