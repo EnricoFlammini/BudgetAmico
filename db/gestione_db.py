@@ -2527,26 +2527,39 @@ def ottieni_tutti_i_conti_famiglia(id_famiglia, master_key_b64=None, id_utente=N
 
 # --- Helper Functions for Encryption (Family) ---
 
+# Cache per le chiavi famiglia per evitare continue query al DB
+# {(id_famiglia, id_utente): family_key_bytes}
+_family_key_cache = {}
+
 def _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto):
+    # Check cache first
+    cache_key = (id_famiglia, id_utente)
+    if cache_key in _family_key_cache:
+        # Verify if master_key is the same (unlikely to change in session but safe to check? 
+        # Actually checking master_key is hard as it is bytes/string.
+        # Assuming for same user/family the key is effectively constant per session.)
+        return _family_key_cache[cache_key]
+
     try:
         with get_db_connection() as con:
             cur = con.cursor()
             cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
             row = cur.fetchone()
             if row and row['chiave_famiglia_criptata']:
-                print(f"[DEBUG] _get_family_key_for_user: id_famiglia={id_famiglia}, id_utente={id_utente}")
-                print(f"[DEBUG] master_key: {master_key[:20]}...")
-                print(f"[DEBUG] chiave_famiglia_criptata: {row['chiave_famiglia_criptata'][:50]}...")
+                # print(f"[DEBUG] _get_family_key_for_user: id_famiglia={id_famiglia}, id_utente={id_utente}") 
+                # Reduced logging
                 fk_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
                 family_key = base64.b64decode(fk_b64)
-                print(f"[DEBUG] Family key decrypted successfully: {family_key[:10]}...")
+                
+                # Update cache
+                _family_key_cache[cache_key] = family_key
                 return family_key
             else:
                 print(f"[WARN] _get_family_key_for_user: No chiave_famiglia_criptata for user {id_utente} in famiglia {id_famiglia}")
     except Exception as e:
         print(f"[ERROR] _get_family_key_for_user failed for user {id_utente}, famiglia {id_famiglia}: {e}")
-        import traceback
-        traceback.print_exc()
+        # import traceback
+        # traceback.print_exc()
     return None
 
 # --- Funzioni Transazioni Personali ---
@@ -2945,7 +2958,12 @@ def ottieni_transazioni_utente(id_utente, anno, mese, master_key_b64=None):
                     row['descrizione'] = decrypted_desc
                     
                     # Decrypt other fields
-                    row['nome_conto'] = _decrypt_if_key(row['nome_conto'], current_key, crypto)
+                    if row.get('tipo_transazione') == 'condivisa' and family_key:
+                        key_conto = family_key
+                    else:
+                        key_conto = master_key
+
+                    row['nome_conto'] = _decrypt_if_key(row['nome_conto'], key_conto, crypto)
                     
                     # Categories are always encrypted with Family Key
                     cat_name = row['nome_categoria']
@@ -4008,6 +4026,9 @@ def ottieni_prestiti_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
                         """, (id_famiglia,))
             results = [dict(row) for row in cur.fetchall()]
 
+            if not results:
+                return []
+
             # Decrypt sensitive data if keys available
             crypto, master_key = _get_crypto_and_key(master_key_b64)
             family_key = None
@@ -4026,16 +4047,22 @@ def ottieni_prestiti_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
                     row['nome'] = _decrypt_if_key(row['nome'], family_key, crypto)
                     row['descrizione'] = _decrypt_if_key(row['descrizione'], family_key, crypto)
             
-            if family_key:
-                for row in results:
-                    row['nome'] = _decrypt_if_key(row['nome'], family_key, crypto)
-                    row['descrizione'] = _decrypt_if_key(row['descrizione'], family_key, crypto)
-                    row['lista_quote'] = ottieni_quote_prestito(row['id_prestito'])
+            # --- OTTIMIZZAZIONE INIZIO: Batch Quote Prestiti ---
+            ids_prestiti = [r['id_prestito'] for r in results]
+            quote_map = {}
+            if ids_prestiti:
+                placeholders = ','.join(['%s'] * len(ids_prestiti))
+                query = f"SELECT id_prestito, id_utente, percentuale FROM QuotePrestiti WHERE id_prestito IN ({placeholders})"
+                cur.execute(query, tuple(ids_prestiti))
+                rows = cur.fetchall()
+                for r in rows:
+                    if r['id_prestito'] not in quote_map:
+                        quote_map[r['id_prestito']] = []
+                    quote_map[r['id_prestito']].append({'id_utente': r['id_utente'], 'percentuale': r['percentuale']})
             
-            # Se family_key non c'è, comunque carichiamo le quote
-            if not family_key:
-                 for row in results:
-                    row['lista_quote'] = ottieni_quote_prestito(row['id_prestito'])
+            for row in results:
+                row['lista_quote'] = quote_map.get(row['id_prestito'], [])
+            # --- OTTIMIZZAZIONE FINE ---
 
             return results
     except Exception as e:
@@ -4268,6 +4295,9 @@ def ottieni_immobili_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
                         """, (id_famiglia,))
             results = [dict(row) for row in cur.fetchall()]
 
+            if not results:
+                return []
+
             # Decrypt sensitive data if keys available
             crypto, master_key = _get_crypto_and_key(master_key_b64)
             family_key = None
@@ -4290,16 +4320,43 @@ def ottieni_immobili_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
                     if row.get('nome_mutuo'):
                         row['nome_mutuo'] = _decrypt_if_key(row['nome_mutuo'], family_key, crypto)
             
-                    if row.get('nome_mutuo'):
-                        row['nome_mutuo'] = _decrypt_if_key(row['nome_mutuo'], family_key, crypto)
+            # --- OTTIMIZZAZIONE INIZIO: Batch Fetching delle Quote ---
+            ids_immobili = [r['id_immobile'] for r in results]
+            ids_prestiti = [r['id_prestito_collegato'] for r in results if r.get('id_prestito_collegato')]
             
-            # Recupera quote per ogni immobile
+            # Batch fetch Quote Immobili
+            quote_immobili_map = {} # id_immobile -> list[dict]
+            if ids_immobili:
+                placeholders = ','.join(['%s'] * len(ids_immobili))
+                query_qi = f"SELECT id_immobile, id_utente, percentuale FROM QuoteImmobili WHERE id_immobile IN ({placeholders})"
+                cur.execute(query_qi, tuple(ids_immobili))
+                rows_qi = cur.fetchall()
+                for r in rows_qi:
+                    if r['id_immobile'] not in quote_immobili_map:
+                        quote_immobili_map[r['id_immobile']] = []
+                    quote_immobili_map[r['id_immobile']].append({'id_utente': r['id_utente'], 'percentuale': r['percentuale']})
+            
+            # Batch fetch Quote Prestiti
+            quote_prestiti_map = {} # id_prestito -> list[dict]
+            if ids_prestiti:
+                ids_prestiti_unique = list(set(ids_prestiti))
+                placeholders_p = ','.join(['%s'] * len(ids_prestiti_unique))
+                query_qp = f"SELECT id_prestito, id_utente, percentuale FROM QuotePrestiti WHERE id_prestito IN ({placeholders_p})"
+                cur.execute(query_qp, tuple(ids_prestiti_unique))
+                rows_qp = cur.fetchall()
+                for r in rows_qp:
+                    if r['id_prestito'] not in quote_prestiti_map:
+                        quote_prestiti_map[r['id_prestito']] = []
+                    quote_prestiti_map[r['id_prestito']].append({'id_utente': r['id_utente'], 'percentuale': r['percentuale']})
+
+            # Assegna i risultati in memoria
             for row in results:
-                row['lista_quote'] = ottieni_quote_immobile(row['id_immobile'])
+                row['lista_quote'] = quote_immobili_map.get(row['id_immobile'], [])
                 if row.get('id_prestito_collegato'):
-                    row['lista_quote_prestito'] = ottieni_quote_prestito(row['id_prestito_collegato'])
+                    row['lista_quote_prestito'] = quote_prestiti_map.get(row.get('id_prestito_collegato'), [])
                 else:
                     row['lista_quote_prestito'] = []
+            # --- OTTIMIZZAZIONE FINE ---
 
             return results
     except Exception as e:

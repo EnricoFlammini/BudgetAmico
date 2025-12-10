@@ -15,7 +15,18 @@ class FamigliaTab(ft.Container):
         self.controller = controller
         self.page = controller.page
 
-        # Controlli UI
+        # Loading Indicator
+        self.loading_view = ft.Container(
+            content=ft.Column([
+                ft.ProgressRing(color=AppColors.PRIMARY),
+                ft.Text(self.controller.loc.get("loading"), color=AppColors.TEXT_SECONDARY)
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            alignment=ft.alignment.center,
+            expand=True,
+            visible=False
+        )
+
+        # Controlli UI e Main Content
         self.txt_patrimonio_totale_famiglia = AppStyles.header_text("")
         self.txt_liquidita_totale_famiglia = AppStyles.body_text("")
         self.txt_investimenti_totali_famiglia = AppStyles.body_text("")
@@ -52,7 +63,12 @@ class FamigliaTab(ft.Container):
         )
         
         self.main_content = ft.Column([], expand=True, spacing=10)
-        self.content = self.main_content
+        
+        # Stack principale
+        self.content = ft.Stack([
+            self.main_content,
+            self.loading_view
+        ], expand=True)
 
     def update_view_data(self, is_initial_load=False):
         theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
@@ -64,18 +80,78 @@ class FamigliaTab(ft.Container):
         self.dt_transazioni_famiglia.data_row_color = {"hovered": ft.Colors.with_opacity(0.1, theme.primary)}
         self.dt_transazioni_famiglia.border = ft.border.all(1, ft.Colors.OUTLINE_VARIANT)
 
-        # Popola il filtro sempre per aggiornare i mesi disponibili
+        # Popola filtro mese Sync
         self._popola_filtro_mese()
 
         famiglia_id = self.controller.get_family_id()
         ruolo = self.controller.get_user_role()
 
-        self._aggiorna_contenuto_per_ruolo(famiglia_id, ruolo, theme)
+        # Show Loading
+        self.main_content.visible = False
+        self.loading_view.visible = True
+        if self.page: self.page.update()
         
-        if self.page:
-            self.page.update()
+        # Async Task
+        from utils.async_task import AsyncTask
+        task = AsyncTask(
+            target=self._fetch_data,
+            args=(famiglia_id, ruolo, theme),
+            callback=self._on_data_loaded,
+            error_callback=self._on_error
+        )
+        task.start()
 
-    def _aggiorna_contenuto_per_ruolo(self, famiglia_id, ruolo, theme):
+    def _fetch_data(self, famiglia_id, ruolo, theme):
+        result = {'famiglia_id': famiglia_id, 'ruolo': ruolo, 'theme': theme}
+        
+        if not famiglia_id:
+            return result
+            
+        if ruolo == 'livello3':
+            return result
+            
+        if ruolo == 'livello2':
+            master_key_b64 = self.controller.page.session.get("master_key")
+            totali = ottieni_totali_famiglia(famiglia_id, master_key_b64=master_key_b64)
+            result['totali'] = totali
+            return result
+
+        if ruolo in ['admin', 'livello1']:
+            anno, mese = self._get_anno_mese_selezionato()
+            master_key_b64 = self.controller.page.session.get("master_key")
+            transazioni = ottieni_dettagli_famiglia(
+                famiglia_id, anno, mese, 
+                master_key_b64=master_key_b64, 
+                id_utente=self.controller.get_user_id()
+            )
+            result['transazioni'] = transazioni
+            result['anno'] = anno
+            result['mese'] = mese
+            return result
+
+        return result
+
+    def _on_data_loaded(self, result):
+        famiglia_id = result['famiglia_id']
+        ruolo = result['ruolo']
+        theme = result['theme']
+
+        # Ricostruisci UI con i dati
+        self._aggiorna_contenuto_per_ruolo(famiglia_id, ruolo, theme, result)
+
+        # Hide Loading
+        self.loading_view.visible = False
+        self.main_content.visible = True
+        if self.page: self.page.update()
+
+    def _on_error(self, e):
+        print(f"Errore FamigliaTab: {e}")
+        self.loading_view.visible = False
+        self.main_content.controls = [AppStyles.body_text(f"Errore caricamento: {e}", color=AppColors.ERROR)]
+        self.main_content.visible = True
+        if self.page: self.page.update()
+
+    def _aggiorna_contenuto_per_ruolo(self, famiglia_id, ruolo, theme, data):
         if not famiglia_id:
             self.main_content.controls = [ft.Column(
                 [
@@ -102,8 +178,7 @@ class FamigliaTab(ft.Container):
                 AppStyles.header_text(self.controller.loc.get("wealth_by_member")),
                 ft.Divider(color=ft.Colors.OUTLINE_VARIANT)
             ])
-            master_key_b64 = self.controller.page.session.get("master_key")
-            totali = ottieni_totali_famiglia(famiglia_id, master_key_b64=master_key_b64)
+            totali = data.get('totali', [])
             for m in totali:
                 self.main_content.controls.append(
                     AppStyles.card_container(
@@ -118,9 +193,6 @@ class FamigliaTab(ft.Container):
             return
 
         if ruolo in ['admin', 'livello1']:
-            anno, mese = self._get_anno_mese_selezionato()
-            master_key_b64 = self.controller.page.session.get("master_key")
-            
             loc = self.controller.loc
             
             # Aggiorna i controlli del main_content senza riepilogo patrimonio
@@ -131,7 +203,7 @@ class FamigliaTab(ft.Container):
                 self.data_stack
             ]
 
-            transazioni = ottieni_dettagli_famiglia(famiglia_id, anno, mese, master_key_b64=master_key_b64, id_utente=self.controller.get_user_id())
+            transazioni = data.get('transazioni', [])
             self.dt_transazioni_famiglia.rows.clear()
             if not transazioni:
                 self.dt_transazioni_famiglia.visible = False
@@ -166,13 +238,7 @@ class FamigliaTab(ft.Container):
             ft.DataColumn(ft.Text(loc.get("amount"), weight=ft.FontWeight.BOLD), numeric=True),
         ]
 
-        # Placeholder - i controlli effettivi vengono costruiti in update_view_data
-        return [
-            AppStyles.card_container(
-                content=ft.Text("Caricamento..."),
-                padding=15
-            ),
-        ]
+        return []  # Controlli costruiti dinamicamente in _aggiorna_contenuto_per_ruolo
 
     def _popola_filtro_mese(self):
         id_famiglia = self.controller.get_family_id()

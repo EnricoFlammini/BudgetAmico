@@ -9,6 +9,7 @@ from db.gestione_db import (
 from utils.styles import AppStyles, AppColors, PageConstants
 from utils.yfinance_manager import ottieni_prezzo_asset, ottieni_prezzi_multipli
 from dialogs.investimento_dialog import InvestimentoDialog
+from utils.async_task import AsyncTask
 import datetime
 
 
@@ -28,57 +29,117 @@ class InvestimentiTab(ft.Container):
         self.sincronizzazione_in_corso = False
 
     def update_view_data(self, is_initial_load=False):
+        """
+        Avvia il caricamento asincrono dei dati.
+        """
         theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
         self.content.controls = self.build_controls(theme)
+        
+        # 1. Mostra Loading State dentro la lista portafogli
+        self.lv_portafogli.controls.clear()
+        self.lv_portafogli.controls.append(
+            ft.Container(
+                content=ft.Column([
+                    ft.ProgressRing(color=AppColors.PRIMARY),
+                    ft.Text("Caricamento portafoglio...", color=AppColors.TEXT_SECONDARY)
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                alignment=ft.alignment.center,
+                padding=50
+            )
+        )
+        if self.page:
+            self.page.update()
 
         utente_id = self.controller.get_user_id()
         if not utente_id:
             return
 
-        # Ottieni tutti i conti di investimento dell'utente
         master_key_b64 = self.controller.page.session.get("master_key")
+        
+        # 2. Avvia Task Asincrono
+        task = AsyncTask(
+            target=self._fetch_data,
+            args=(utente_id, master_key_b64),
+            callback=self._on_data_loaded,
+            error_callback=self._on_error
+        )
+        task.start()
+
+    def _fetch_data(self, utente_id, master_key_b64):
+        """
+        Recupera conti e portafogli in background.
+        """
         conti_utente = ottieni_dettagli_conti_utente(utente_id, master_key_b64=master_key_b64)
         conti_investimento = [c for c in conti_utente if c['tipo'] == 'Investimento']
-
-        # Calcola valori totali
-        valore_totale = 0
-        gain_loss_totale = 0
-
-        self.lv_portafogli.controls.clear()
-
-        if not conti_investimento:
-            self.lv_portafogli.controls.append(
-                AppStyles.body_text(self.controller.loc.get("no_investment_accounts"))
-            )
-        else:
-            for conto in conti_investimento:
-                portafoglio = ottieni_portafoglio(conto['id_conto'], master_key_b64=master_key_b64)
-                
-                # Calcola valore e gain/loss per questo portafoglio
-                valore_portafoglio = 0
-                gain_loss_portafoglio = 0
-                
-                for asset in portafoglio:
-                    valore_portafoglio += asset['quantita'] * asset['prezzo_attuale_manuale']
-                    gain_loss_portafoglio += asset['gain_loss_totale']
-                
-                valore_totale += valore_portafoglio
-                gain_loss_totale += gain_loss_portafoglio
-                
-                # Crea widget per questo portafoglio
-                self.lv_portafogli.controls.append(
-                    self._crea_widget_portafoglio(conto, portafoglio, valore_portafoglio, gain_loss_portafoglio, theme)
-                )
-
-        # Aggiorna i totali
-        self.txt_valore_totale.value = self.controller.loc.format_currency(valore_totale)
-        self.txt_valore_totale.color = theme.primary
         
-        self.txt_gain_loss_totale.value = f"{self.controller.loc.get('total_gain_loss')}: {self.controller.loc.format_currency(gain_loss_totale)}"
-        self.txt_gain_loss_totale.color = AppColors.SUCCESS if gain_loss_totale >= 0 else AppColors.ERROR
+        dati_portafogli = []
+        for conto in conti_investimento:
+            portafoglio = ottieni_portafoglio(conto['id_conto'], master_key_b64=master_key_b64)
+            dati_portafogli.append({
+                'conto': conto,
+                'portafoglio': portafoglio
+            })
+            
+        return dati_portafogli
 
-        if self.page:
+    def _on_data_loaded(self, result):
+        """
+        Callback UI.
+        """
+        dati_portafogli = result
+        theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
+        
+        try:
+            self.lv_portafogli.controls.clear()
+
+            valore_totale = 0
+            gain_loss_totale = 0
+
+            if not dati_portafogli:
+                self.lv_portafogli.controls.append(
+                    AppStyles.body_text(self.controller.loc.get("no_investment_accounts"))
+                )
+            else:
+                for item in dati_portafogli:
+                    conto = item['conto']
+                    portafoglio = item['portafoglio']
+                    
+                    # Calcola valore e gain/loss per questo portafoglio
+                    valore_portafoglio = 0
+                    gain_loss_portafoglio = 0
+                    
+                    for asset in portafoglio:
+                        valore_portafoglio += asset['quantita'] * asset['prezzo_attuale_manuale']
+                        gain_loss_portafoglio += asset['gain_loss_totale']
+                    
+                    valore_totale += valore_portafoglio
+                    gain_loss_totale += gain_loss_portafoglio
+                    
+                    # Crea widget per questo portafoglio
+                    self.lv_portafogli.controls.append(
+                        self._crea_widget_portafoglio(conto, portafoglio, valore_portafoglio, gain_loss_portafoglio, theme)
+                    )
+
+            # Aggiorna i totali
+            self.txt_valore_totale.value = self.controller.loc.format_currency(valore_totale)
+            self.txt_valore_totale.color = theme.primary
+            
+            self.txt_gain_loss_totale.value = f"{self.controller.loc.get('total_gain_loss')}: {self.controller.loc.format_currency(gain_loss_totale)}"
+            self.txt_gain_loss_totale.color = AppColors.SUCCESS if gain_loss_totale >= 0 else AppColors.ERROR
+
             self.page.update()
+
+        except Exception as e:
+            self._on_error(e)
+
+    def _on_error(self, e):
+        print(f"Errore in InvestimentiTab._on_error: {e}")
+        try:
+            self.lv_portafogli.controls.clear()
+            self.lv_portafogli.controls.append(AppStyles.body_text(f"Errore caricamento: {e}", color=AppColors.ERROR))
+            self.page.update()
+        except:
+            pass
 
     def build_controls(self, theme):
         loc = self.controller.loc
@@ -254,7 +315,8 @@ class InvestimentiTab(ft.Container):
         # Mostra indicatore di caricamento
         self.controller.show_snack_bar(f"Recupero prezzo per {ticker}...", success=True)
         
-        # Ottieni prezzo da yfinance
+        # Ottieni prezzo da yfinance - Questo è bloccante, ma essendo su azione utente potrebbe essere OK o andrebbe reso async
+        # Per ora lo lascio sincrono per non complicare troppo, ma ideally should be async
         nuovo_prezzo = ottieni_prezzo_asset(ticker)
         
         if nuovo_prezzo:
@@ -264,7 +326,8 @@ class InvestimentiTab(ft.Container):
                 f"{ticker}: {self.controller.loc.format_currency(nuovo_prezzo)}",
                 success=True
             )
-            # Aggiorna la vista
+            # Ricarica asincrono
+            self.update_view_data() 
             self.controller.db_write_operation()
         else:
             self.controller.show_snack_bar(
@@ -284,9 +347,20 @@ class InvestimentiTab(ft.Container):
         if not utente_id:
             self.sincronizzazione_in_corso = False
             return
-
-        # Ottieni tutti i conti di investimento
+            
+        # Potremmo usare un AsyncTask anche qui per la sync pesante
         master_key_b64 = self.controller.page.session.get("master_key")
+        
+        task = AsyncTask(
+            target=self._run_sync_tutti,
+            args=(utente_id, master_key_b64),
+            callback=self._on_sync_complete,
+            error_callback=self._on_sync_error
+        )
+        task.start()
+
+    def _run_sync_tutti(self, utente_id, master_key_b64):
+        # Ottieni tutti i conti di investimento
         conti_utente = ottieni_dettagli_conti_utente(utente_id, master_key_b64=master_key_b64)
         conti_investimento = [c for c in conti_utente if c['tipo'] == 'Investimento']
         
@@ -297,12 +371,7 @@ class InvestimentiTab(ft.Container):
             tutti_asset.extend(portafoglio)
         
         if not tutti_asset:
-            self.controller.show_snack_bar(
-                self.controller.loc.get("no_assets_in_portfolio"),
-                success=False
-            )
-            self.sincronizzazione_in_corso = False
-            return
+            return 0
         
         # Ottieni prezzi per tutti i ticker
         tickers = list(set([asset['ticker'] for asset in tutti_asset]))
@@ -315,21 +384,28 @@ class InvestimentiTab(ft.Container):
             if ticker in prezzi and prezzi[ticker] is not None:
                 aggiorna_prezzo_manuale_asset(asset['id_asset'], prezzi[ticker])
                 aggiornati += 1
-        
+                
+        return aggiornati
+
+    def _on_sync_complete(self, aggiornati):
         self.sincronizzazione_in_corso = False
-        
         if aggiornati > 0:
             self.controller.show_snack_bar(
                 f"{aggiornati} {self.controller.loc.get('price_updated_successfully')}",
                 success=True
             )
+            # Ricarica vista
+            self.update_view_data()
             self.controller.db_write_operation()
         else:
             self.controller.show_snack_bar(
-                self.controller.loc.get("error_fetching_price"),
+                self.controller.loc.get("no_assets_in_portfolio") if aggiornati == 0 else self.controller.loc.get("error_fetching_price"),
                 success=False
             )
 
+    def _on_sync_error(self, e):
+        self.sincronizzazione_in_corso = False
+        self.controller.show_snack_bar(f"Errore sync: {e}", success=False)
 
 
     def _aggiungi_conto_investimento(self, e):

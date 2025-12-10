@@ -2,7 +2,7 @@ import flet as ft
 from functools import partial
 from db.gestione_db import ottieni_prestiti_famiglia, elimina_prestito, ottieni_membri_famiglia
 from utils.styles import AppStyles, AppColors, PageConstants
-
+from utils.async_task import AsyncTask
 
 class PrestitiTab(ft.Container):
     def __init__(self, controller):
@@ -18,44 +18,106 @@ class PrestitiTab(ft.Container):
         self.content = ft.Column(expand=True, spacing=10)
 
     def update_view_data(self, is_initial_load=False):
-        theme = self.page.theme.color_scheme if self.page and self.page.theme else ft.ColorScheme()
-        self.content.controls = self.build_controls()
+        """
+        Avvia il caricamento asincrono dei dati.
+        """
+        # 1. Mostra Loading State
+        self.lv_prestiti.controls.clear()
+        self.lv_prestiti.controls.append(
+            ft.Container(
+                content=ft.Column([
+                    ft.ProgressRing(color=AppColors.PRIMARY),
+                    ft.Text("Caricamento prestiti...", color=AppColors.TEXT_SECONDARY)
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                alignment=ft.alignment.center,
+                padding=50
+            )
+        )
+        self.content.controls = [self.lv_prestiti]
+        
+        # Aggiungi header durante il caricamento per mantenere la UI consistente
+        header = self._build_header()
+        self.lv_prestiti.controls.insert(0, header)
+        self.lv_prestiti.controls.insert(1, AppStyles.page_divider())
 
+        if self.page:
+            self.page.update()
+
+        # 2. Prepara argomenti per il task
         id_famiglia = self.controller.get_family_id()
         if not id_famiglia:
             return
 
         master_key_b64 = self.controller.page.session.get("master_key")
         id_utente = self.controller.get_user_id()
+        
+        # 3. Avvia Task Asincrono
+        task = AsyncTask(
+            target=self._fetch_data,
+            args=(id_famiglia, master_key_b64, id_utente),
+            callback=self._on_data_loaded,
+            error_callback=self._on_error
+        )
+        task.start()
+
+    def _fetch_data(self, id_famiglia, master_key_b64, id_utente):
+        """
+        Esegue le query al DB (in background).
+        """
         prestiti = ottieni_prestiti_famiglia(id_famiglia, master_key_b64, id_utente)
-        self.lv_prestiti.controls.clear()
+        membri = ottieni_membri_famiglia(id_famiglia)
+        return prestiti, membri
 
-        if not prestiti:
-            self.lv_prestiti.controls.append(AppStyles.body_text(self.controller.loc.get("no_loans")))
-        else:
-            # Calcolo quote
-            membri = ottieni_membri_famiglia(id_famiglia)
-            family_ids = [m['id_utente'] for m in membri]
+    def _on_data_loaded(self, result):
+        """
+        Callback chiamata quando i dati sono pronti via AsyncTask.
+        Ricostruisce la UI.
+        """
+        prestiti, membri = result
+        
+        try:
+            self.lv_prestiti.controls.clear()
+            
+            # Re-inserisci header
+            self.lv_prestiti.controls.append(self._build_header())
+            self.lv_prestiti.controls.append(AppStyles.page_divider())
 
-            for prestito in prestiti:
-                # Calcola quota famiglia
-                q_list = prestito.get('lista_quote', [])
-                perc_fam = 100.0
-                if q_list:
-                    perc_fam = sum([q['percentuale'] for q in q_list if q['id_utente'] in family_ids])
-                
-                prestito['perc_famiglia'] = perc_fam
-                
-                self.lv_prestiti.controls.append(self._crea_widget_prestito(prestito, theme))
+            if not prestiti:
+                self.lv_prestiti.controls.append(AppStyles.body_text(self.controller.loc.get("no_loans")))
+            else:
+                theme = self.page.theme.color_scheme if self.page and self.page.theme else ft.ColorScheme()
+                family_ids = [m['id_utente'] for m in membri]
 
-        if self.page:
-            self.page.update()
+                for prestito in prestiti:
+                    # Calcola quota famiglia
+                    q_list = prestito.get('lista_quote', [])
+                    perc_fam = 100.0
+                    if q_list:
+                        perc_fam = sum([q['percentuale'] for q in q_list if q['id_utente'] in family_ids])
+                    
+                    prestito['perc_famiglia'] = perc_fam
+                    
+                    self.lv_prestiti.controls.append(self._crea_widget_prestito(prestito, theme))
 
-    def build_controls(self):
-        """Costruisce e restituisce la lista di controlli per la scheda."""
+            if self.page:
+                self.page.update()
+
+        except Exception as e:
+            self._on_error(e)
+
+    def _on_error(self, e):
+        print(f"Errore in PrestitiTab._on_error: {e}")
+        try:
+            self.lv_prestiti.controls.clear()
+            self.lv_prestiti.controls.append(AppStyles.body_text(f"Errore durante il caricamento: {e}", color=AppColors.ERROR))
+            if self.page:
+                self.page.update()
+        except:
+            pass
+
+    def _build_header(self):
         loc = self.controller.loc
-        return [
-            AppStyles.section_header(
+        return AppStyles.section_header(
                 loc.get("loans_management"),
                 ft.IconButton(
                     icon=ft.Icons.ADD,
@@ -63,10 +125,12 @@ class PrestitiTab(ft.Container):
                     icon_color=AppColors.PRIMARY,
                     on_click=lambda e: self.controller.prestito_dialogs.apri_dialog_prestito()
                 )
-            ),
-            AppStyles.page_divider(),
-            self.lv_prestiti
-        ]
+            )
+
+    def build_controls(self):
+        """Costruisce e restituisce la lista di controlli per la scheda."""
+        # Non più usata direttamente come prima, logica spostata in update_view_data/_on_data_loaded
+        return [self.lv_prestiti]
 
     def _crea_widget_prestito(self, prestito, theme):
         loc = self.controller.loc
@@ -139,9 +203,12 @@ class PrestitiTab(ft.Container):
 
     def elimina_cliccato(self, e):
         id_prestito = e.control.data
+        if not id_prestito: return
+        
         success = elimina_prestito(id_prestito)
         if success:
             self.controller.show_snack_bar("Prestito eliminato con successo.", success=True)
+            self.update_view_data()
             self.controller.db_write_operation()
         else:
             self.controller.show_snack_bar("Errore durante l'eliminazione del prestito.", success=False)

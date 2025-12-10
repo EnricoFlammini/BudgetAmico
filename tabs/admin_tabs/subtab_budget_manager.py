@@ -202,24 +202,36 @@ class AdminSubTabBudgetManager(ft.Column):
         self.spacing = 10
         self.scroll = ft.ScrollMode.ADAPTIVE
     
-    def update_view_data(self, is_initial_load=False):
-        """Aggiorna i dati della vista."""
+    def update_view_data(self, is_initial_load=False, prefetched_data=None):
+        """Aggiorna i dati della vista using optional prefetched data."""
         famiglia_id = self.controller.get_family_id()
         if not famiglia_id:
             return
         
-        # Carica impostazioni correnti
-        impostazioni = get_impostazioni_budget_famiglia(famiglia_id)
+        # Usa dati pre-fetchati se disponibili
+        if prefetched_data:
+            impostazioni = prefetched_data.get('impostazioni_budget')
+            dati_categorie = prefetched_data.get('categorie')
+            budget_impostati = prefetched_data.get('budget_impostati')
+            # Nota: totale_allocato viene ricalcolato in _aggiorna_display, 
+            # ma potremmo passarlo. Per ora va bene così.
+        else:
+            # Fallback al caricamento sincrono (se necessario, ma eviteremo di usarlo)
+            impostazioni = get_impostazioni_budget_famiglia(famiglia_id)
+            dati_categorie = None # Verranno caricati da _popola_lista_budget se mancanti
+            budget_impostati = None
+
+        if impostazioni:
+            self.txt_entrate_mensili.value = f"{impostazioni['entrate_mensili']:.2f}"
+            self.dd_risparmio_tipo.value = impostazioni['risparmio_tipo']
+            self.txt_risparmio_valore.value = f"{impostazioni['risparmio_valore']:.2f}"
         
-        self.txt_entrate_mensili.value = f"{impostazioni['entrate_mensili']:.2f}"
-        self.dd_risparmio_tipo.value = impostazioni['risparmio_tipo']
-        self.txt_risparmio_valore.value = f"{impostazioni['risparmio_valore']:.2f}"
-        
-        # Aggiorna display
+        # Aggiorna display (questo scatenerà un calcolo allocato sincrono leggero o possiamo ottimizzare anche questo)
         self._aggiorna_display()
         
         # Aggiorna lista budget sottocategorie
-        self._popola_lista_budget()
+        self._popola_lista_budget(dati_categorie, budget_impostati)
+
     
     def _aggiorna_display(self):
         """Aggiorna tutti i display calcolati."""
@@ -302,7 +314,7 @@ class AdminSubTabBudgetManager(ft.Column):
         except Exception as e:
             print(f"Errore aggiornamento display: {e}")
     
-    def _popola_lista_budget(self):
+    def _popola_lista_budget(self, dati_categorie=None, budget_impostati=None):
         """Popola la lista dei budget per sottocategoria."""
         self.lv_budget_sottocategorie.controls.clear()
         
@@ -314,9 +326,12 @@ class AdminSubTabBudgetManager(ft.Column):
             master_key_b64 = self.controller.page.session.get("master_key")
             id_utente = self.controller.get_user_id()
             
-            # Recupera categorie e sottocategorie
-            dati_categorie = ottieni_categorie_e_sottocategorie(famiglia_id)
-            budget_impostati = ottieni_budget_famiglia(famiglia_id, master_key_b64, id_utente)
+            # Recupera dati se non passati
+            if not dati_categorie:
+                dati_categorie = ottieni_categorie_e_sottocategorie(famiglia_id)
+            if not budget_impostati:
+                budget_impostati = ottieni_budget_famiglia(famiglia_id, master_key_b64, id_utente)
+
             
             # Mappa budget per sottocategoria
             mappa_budget = {b['id_sottocategoria']: b['importo_limite'] for b in budget_impostati}

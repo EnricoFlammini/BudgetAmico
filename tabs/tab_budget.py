@@ -7,7 +7,7 @@ from db.gestione_db import (
 )
 import datetime
 from utils.styles import AppStyles, AppColors, PageConstants
-
+from utils.async_task import AsyncTask
 
 class BudgetTab(ft.Container):
     def __init__(self, controller):
@@ -87,67 +87,111 @@ class BudgetTab(ft.Container):
         current_month = today.month
         
         # Anni (Corrente +/- 2)
-        self.dd_anno.options = [
-            ft.dropdown.Option(str(y)) for y in range(current_year - 2, current_year + 3)
-        ]
+        if not self.dd_anno.options:
+            self.dd_anno.options = [
+                ft.dropdown.Option(str(y)) for y in range(current_year - 2, current_year + 3)
+            ]
         if not self.dd_anno.value:
             self.dd_anno.value = str(current_year)
             
         # Mesi
-        self.dd_mese.options = [
-            ft.dropdown.Option(str(i), datetime.date(2000, i, 1).strftime("%B")) 
-            for i in range(1, 13)
-        ]
+        if not self.dd_mese.options:
+            self.dd_mese.options = [
+                ft.dropdown.Option(str(i), datetime.date(2000, i, 1).strftime("%B")) 
+                for i in range(1, 13)
+            ]
         if not self.dd_mese.value:
             self.dd_mese.value = str(current_month)
 
     def _on_view_mode_change(self, e):
         """Gestisce cambio vista (Mensile/Annuale)."""
-        self.controller.show_loading("Elaborazione...")
-        try:
-            mode = list(self.seg_view_mode.selected)[0]
-            # Mostra il mese solo se non siamo in vista annuale
-            self.dd_mese.visible = (mode != "annuale")
-            self._aggiorna_contenuto()
+        mode = list(self.seg_view_mode.selected)[0]
+        # Mostra il mese solo se non siamo in vista annuale
+        self.dd_mese.visible = (mode != "annuale")
+        if self.page:
             self.page.update()
-        finally:
-            self.controller.hide_loading()
+        self._aggiorna_contenuto()
 
     def _on_filter_change(self, e):
         """Gestisce cambio filtri."""
-        self.controller.show_loading("Elaborazione...")
-        try:
-            self._aggiorna_contenuto()
-            self.page.update()
-        finally:
-            self.controller.hide_loading()
+        self._aggiorna_contenuto()
 
     def _aggiorna_contenuto(self):
-        """Carica i dati dal DB e aggiorna la UI."""
+        """Carica i dati dal DB e aggiorna la UI in asincrono."""
+        # 1. Mostra Loading
         self.container_content.controls.clear()
-        
+        self.container_content.controls.append(
+            ft.Container(
+                content=ft.Column([
+                    ft.ProgressRing(color=AppColors.PRIMARY),
+                    ft.Text("Elaborazione budget...", color=AppColors.TEXT_SECONDARY)
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                alignment=ft.alignment.center,
+                padding=50
+            )
+        )
+        if self.page:
+            self.page.update()
+
         id_famiglia = self.controller.get_family_id()
         if not id_famiglia:
+            self.container_content.controls.clear()
             self.container_content.controls.append(ft.Text("Nessuna famiglia selezionata."))
+            if self.page:
+                self.page.update()
             return
 
         master_key_b64 = self.controller.page.session.get("master_key")
         id_utente = self.controller.get_user_id()
         anno = int(self.dd_anno.value)
-        
         mode = list(self.seg_view_mode.selected)[0]
+        mese = int(self.dd_mese.value) if self.dd_mese.value else 1
         
+        # 2. Avvia Task
+        task = AsyncTask(
+            target=self._fetch_data,
+            args=(mode, id_famiglia, anno, mese, master_key_b64, id_utente),
+            callback=self._on_data_loaded,
+            error_callback=self._on_error
+        )
+        task.start()
+
+    def _fetch_data(self, mode, id_famiglia, anno, mese, master_key_b64, id_utente):
         if mode == "dettaglio":
-            mese = int(self.dd_mese.value)
-            dati_budget = ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64, id_utente)
-            self._costruisci_vista_dettaglio(dati_budget)
+            return {'mode': mode, 'dati': ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64, id_utente)}
         elif mode == "mensile":
-            mese = int(self.dd_mese.value)
-            dati = ottieni_dati_analisi_mensile(id_famiglia, anno, mese, master_key_b64, id_utente)
-            self._costruisci_vista_mensile(dati)
+            return {'mode': mode, 'dati': ottieni_dati_analisi_mensile(id_famiglia, anno, mese, master_key_b64, id_utente)}
         else:
-            dati = ottieni_dati_analisi_annuale(id_famiglia, anno, master_key_b64, id_utente)
-            self._costruisci_vista_annuale(dati, anno)
+            return {'mode': mode, 'dati': ottieni_dati_analisi_annuale(id_famiglia, anno, master_key_b64, id_utente), 'anno': anno}
+
+    def _on_data_loaded(self, result):
+        try:
+            self.container_content.controls.clear()
+            
+            mode = result['mode']
+            dati = result['dati']
+            
+            if mode == "dettaglio":
+                self._costruisci_vista_dettaglio(dati)
+            elif mode == "mensile":
+                self._costruisci_vista_mensile(dati)
+            else:
+                self._costruisci_vista_annuale(dati, result['anno'])
+                
+            if self.page:
+                self.page.update()
+        except Exception as e:
+            self._on_error(e)
+
+    def _on_error(self, e):
+        print(f"Errore BudgetTab: {e}")
+        try:
+            self.container_content.controls.clear()
+            self.container_content.controls.append(AppStyles.body_text(f"Errore during il caricamento: {e}", color=AppColors.ERROR))
+            if self.page:
+                self.page.update()
+        except:
+            pass
 
     def _costruisci_vista_mensile(self, dati):
         if not dati:
@@ -176,20 +220,13 @@ class BudgetTab(ft.Container):
                                     confronto={'valore': dati_conf.get('media_delta_budget_spese', 0), 'label': 'Media Annua'}),
         ], wrap=True, alignment=ft.MainAxisAlignment.CENTER, spacing=20)
         
-        # Filtra categoria Entrate
         spese_per_categoria = [c for c in dati['spese_per_categoria'] if "entrat" not in c['nome_categoria'].lower()]
         
-        # Preparazione dati grafico
-        # Se Entrate > Spese -> 100% = Entrate (Spese + Risparmio)
-        # Se Spese > Entrate -> 100% = Spese
         totale_entrate = dati['entrate']
         totale_spese = dati['spese_totali']
-        
         base_calcolo = max(totale_entrate, totale_spese)
         
         dati_grafico = []
-        
-        # Aggiungi categorie spese
         for cat in spese_per_categoria:
             percentuale = (cat['importo'] / base_calcolo * 100) if base_calcolo > 0 else 0
             dati_grafico.append({
@@ -198,7 +235,6 @@ class BudgetTab(ft.Container):
                 'percentuale': percentuale
             })
 
-        # Aggiungi Risparmio al grafico SOLO se positivo (cioè Entrate > Spese)
         risparmio_effettivo = totale_entrate - totale_spese
         if risparmio_effettivo > 0:
             percentuale_risparmio = (risparmio_effettivo / base_calcolo * 100) if base_calcolo > 0 else 0
@@ -210,13 +246,8 @@ class BudgetTab(ft.Container):
 
         titolo_grafico = "Ripartizione Entrate" if totale_entrate >= totale_spese else "Ripartizione Spese (Deficit)"
 
-        # Grafico
         chart_container = self._crea_grafico_torta(dati_grafico, titolo_grafico)
         
-        # Lista Dettagli (mostra solo spese, con percentuali ricalcolate su Entrate? O su spese totali? 
-        # Solitamente nella lista dettagli si vuole vedere quanto incide sulla spesa o sulle entrate.
-        # Lasciamo la lista dettagli com'era (incidenza su spese totali) o la aggioniamo?
-        # Il request era specifica "nel grafico voglio vedere...". Lascio la lista dettagli invariata (spese).
         lista_dettagli = ft.Column(spacing=10)
         for cat in spese_per_categoria:
              lista_dettagli.controls.append(self._crea_riga_dettaglio_categoria(cat))
@@ -242,7 +273,6 @@ class BudgetTab(ft.Container):
         delta_color = AppColors.SUCCESS if dati['media_delta_budget_spese'] >= 0 else AppColors.ERROR
         risparmio_color = AppColors.SUCCESS if dati['media_differenza_entrate_spese'] >= 0 else AppColors.ERROR
 
-        # Dati confronto (anno precedente)
         dati_conf = dati.get('dati_confronto')
         label_conf = f"Media {anno-1}"
         
@@ -263,21 +293,16 @@ class BudgetTab(ft.Container):
                                     confronto=get_conf('media_delta_budget_spese')),
         ], wrap=True, alignment=ft.MainAxisAlignment.CENTER, spacing=20)
 
-        # Filtra categoria Entrate
         spese_annuali = [c for c in dati['spese_per_categoria_annuali'] if "entrat" not in c['nome_categoria'].lower()]
 
-        # Preparazione dati grafico (Media Entrate = 100% o Media Spese se Deficit)
         totale_entrate_media = dati['media_entrate_mensili']
         totale_spese_media = dati['media_spese_mensili']
         
         base_calcolo = max(totale_entrate_media, totale_spese_media)
         
         dati_grafico = []
-        
-        # Aggiungi categorie spese (usando i valori medi)
         for cat in spese_annuali:
-            # Usa 'importo_media' calcolato dal DB
-            importo_medio = cat.get('importo_media', cat['importo']) # Fallback safe
+            importo_medio = cat.get('importo_media', cat['importo'])
             percentuale = (importo_medio / base_calcolo * 100) if base_calcolo > 0 else 0
             dati_grafico.append({
                 'nome_categoria': cat['nome_categoria'],
@@ -285,7 +310,6 @@ class BudgetTab(ft.Container):
                 'percentuale': percentuale
             })
 
-        # Aggiungi Risparmio al grafico SOLO se positivo
         media_risparmio = totale_entrate_media - totale_spese_media
         if media_risparmio > 0:
             percentuale_risparmio = (media_risparmio / base_calcolo * 100) if base_calcolo > 0 else 0
@@ -301,17 +325,10 @@ class BudgetTab(ft.Container):
 
         chart_container = self._crea_grafico_torta(dati_grafico, titolo_grafico)
 
-        # Lista Dettagli
         lista_dettagli = ft.Column(spacing=10)
         for cat in spese_annuali:
-             # Adatta il dizionario per usare 'importo_media' come 'importo' per la visualizzazione standard
              cat_view = cat.copy()
              cat_view['importo'] = cat.get('importo_media', cat['importo'])
-             # Percentuale rispetto al totale spese per la lista (come nel mensile) o rispetto alla base?
-             # Manteniamo coerenza con il DB: la percentuale nel DB è rispetto alle spese totali. 
-             # Se vogliamo coerenza visuale con il grafico, ricalcoliamo. 
-             # Ma la lista solitamente dettaglia le spese. Lasciamo il valore del DB o ricalcoliamo su spese.
-             # Dato che nel DB ho aggiornato 'percentuale' basandosi su media_spese_mensili, uso quello.
              lista_dettagli.controls.append(self._crea_riga_dettaglio_categoria(cat_view))
 
         self.container_content.controls.extend([
@@ -358,7 +375,6 @@ class BudgetTab(ft.Container):
             return ft.Container(content=ft.Text("Nessun dato da visualizzare"), padding=20)
             
         sections = []
-        # Colori ciclici per le categorie
         colors = [
             ft.Colors.BLUE, ft.Colors.RED, ft.Colors.GREEN, ft.Colors.ORANGE, 
             ft.Colors.PURPLE, ft.Colors.CYAN, ft.Colors.TEAL, ft.Colors.PINK,
@@ -416,7 +432,6 @@ class BudgetTab(ft.Container):
 
         theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
         
-        # Ordina per nome categoria e filtra "Entrate"
         sorted_cats = sorted(
             [c for c in budget_data.items() if "entrat" not in c[1]['nome_categoria'].lower()],
             key=lambda x: x[1]['nome_categoria'].lower()
@@ -430,8 +445,6 @@ class BudgetTab(ft.Container):
 
     def _crea_widget_categoria(self, cat_data, theme):
         loc = self.controller.loc
-        
-        # Calcoli per la categoria aggregata
         limite_cat = cat_data['importo_limite_totale']
         spesa_cat = cat_data['spesa_totale_categoria']
         rimanente_cat = (limite_cat - spesa_cat)
@@ -444,7 +457,6 @@ class BudgetTab(ft.Container):
         elif percentuale_cat > 0.7:
             colore_cat = AppColors.WARNING
 
-        # Creazione dei widget per le sottocategorie
         sottocategorie_widgets = []
         for sub_data in cat_data['sottocategorie']:
             sottocategorie_widgets.append(self._crea_widget_sottocategoria(sub_data, theme))

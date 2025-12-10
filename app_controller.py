@@ -179,7 +179,10 @@ class AppController:
             self.page.update()
         except Exception as e:
             print(f"[ERRORE CRITICO] Errore in route_change: {e}")
+            import traceback
             traceback.print_exc()
+        finally:
+            self.hide_loading()
 
     def _handle_registration_token(self, token):
         invito_data = ottieni_invito_per_token(token)
@@ -192,32 +195,32 @@ class AppController:
             self.page.go("/")
 
     def _carica_dashboard(self):
-        # Mostra spinner durante il caricamento della dashboard
-        self.show_loading("Caricamento dati...")
+        self.page.views.clear()
+        self.page.views.append(self.dashboard_view.build_view())
+        self.dashboard_view.update_sidebar()
         
-        try:
-            self.page.views.clear()
-            self.page.views.append(self.dashboard_view.build_view())
-            self.dashboard_view.update_sidebar()
+        # Force immediate UI update to show dashboard structure and remove spinner
+        self.page.update()
+        self.hide_loading()
 
-            saved_lang = self.page.client_storage.get("settings.language")
-            if saved_lang: self.loc.set_language(saved_lang)
-            saved_currency = self.page.client_storage.get("settings.currency")
-            if saved_currency: self.loc.set_currency(saved_currency)
+        saved_lang = self.page.client_storage.get("settings.language")
+        if saved_lang: self.loc.set_language(saved_lang)
+        saved_currency = self.page.client_storage.get("settings.currency")
+        if saved_currency: self.loc.set_currency(saved_currency)
 
-            id_famiglia = self.get_family_id()
-            if id_famiglia:
-                pagamenti_fatti = check_e_paga_rate_scadute(id_famiglia)
-                master_key_b64 = self.page.session.get("master_key")
-                id_utente = self.get_user_id()
-                spese_fisse_eseguite = check_e_processa_spese_fisse(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
-                if pagamenti_fatti > 0: self.show_snack_bar(f"{pagamenti_fatti} pagamenti rata automatici eseguiti.", success=True)
-                if spese_fisse_eseguite > 0: self.show_snack_bar(f"{spese_fisse_eseguite} spese fisse automatiche eseguite.", success=True)
+        id_famiglia = self.get_family_id()
+        if id_famiglia:
+            # Note: These checks are still synchronous but usually fast. 
+            # Could be moved to async if needed, but low priority.
+            pagamenti_fatti = check_e_paga_rate_scadute(id_famiglia)
+            master_key_b64 = self.page.session.get("master_key")
+            id_utente = self.get_user_id()
+            spese_fisse_eseguite = check_e_processa_spese_fisse(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
+            if pagamenti_fatti > 0: self.show_snack_bar(f"{pagamenti_fatti} pagamenti rata automatici eseguiti.", success=True)
+            if spese_fisse_eseguite > 0: self.show_snack_bar(f"{spese_fisse_eseguite} spese fisse automatiche eseguite.", success=True)
 
-            self.update_all_views(is_initial_load=True)
-            self.page.update()
-        finally:
-            self.hide_loading()
+        self.update_all_views(is_initial_load=True)
+        self.page.update()
 
     def _download_confirmato(self, e): pass
     def _download_rifiutato(self, e): pass

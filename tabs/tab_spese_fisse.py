@@ -7,6 +7,7 @@ from db.gestione_db import (
     aggiungi_transazione,
     aggiungi_transazione_condivisa
 )
+from utils.async_task import AsyncTask
 from utils.styles import AppStyles, AppColors, PageConstants
 from datetime import datetime
 
@@ -34,11 +35,23 @@ class SpeseFisseTab(ft.Container):
             visible=False
         )
 
-        # Stack per alternare tra tabella e messaggio "nessun dato"
+        # Loading view
+        self.loading_view = ft.Container(
+            content=ft.Column([
+                ft.ProgressRing(color=AppColors.PRIMARY),
+                ft.Text("Caricamento spese fisse...", color=AppColors.TEXT_SECONDARY)
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            alignment=ft.alignment.center,
+            expand=True,
+            visible=False
+        )
+
+        # Stack per alternare tra tabella, loading e messaggio "nessun dato"
         self.data_stack = ft.Stack(
             controls=[
                 ft.Column([self.dt_spese_fisse], scroll=ft.ScrollMode.ADAPTIVE, expand=True),
-                self.no_data_view
+                self.no_data_view,
+                self.loading_view
             ],
             expand=True
         )
@@ -52,9 +65,31 @@ class SpeseFisseTab(ft.Container):
         id_famiglia = self.controller.get_family_id()
         if not id_famiglia: return
 
+        # Mostra loading
+        self.dt_spese_fisse.visible = False
+        self.no_data_view.visible = False
+        self.loading_view.visible = True
+        if self.page:
+            self.page.update()
+
         master_key_b64 = self.controller.page.session.get("master_key")
         current_user_id = self.controller.get_user_id()
-        spese_fisse = ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64, current_user_id)
+        
+        # Async Task
+        task = AsyncTask(
+            target=self._fetch_data,
+            args=(id_famiglia, master_key_b64, current_user_id),
+            callback=self._on_data_loaded,
+            error_callback=self._on_error
+        )
+        task.start()
+
+    def _fetch_data(self, id_famiglia, master_key_b64, current_user_id):
+        return ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64, current_user_id)
+
+    def _on_data_loaded(self, spese_fisse):
+        self.loading_view.visible = False
+        
         self.dt_spese_fisse.rows.clear()
 
         if not spese_fisse:
@@ -90,6 +125,14 @@ class SpeseFisseTab(ft.Container):
                         ])),
                     ])
                 )
+        if self.page:
+            self.page.update()
+
+    def _on_error(self, e):
+        print(f"Errore caricamento spese fisse: {e}")
+        self.loading_view.visible = False
+        self.no_data_view.content = ft.Text(f"Errore: {e}", color=AppColors.ERROR)
+        self.no_data_view.visible = True
         if self.page:
             self.page.update()
 

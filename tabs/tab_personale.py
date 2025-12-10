@@ -8,6 +8,7 @@ from db.gestione_db import (
     ottieni_anni_mesi_storicizzati  # Per popolare il filtro
 )
 import datetime
+from utils.async_task import AsyncTask
 from utils.styles import AppStyles, AppColors, PageConstants
 
 
@@ -36,7 +37,8 @@ class PersonaleTab(ft.Container):
             on_change=self._filtro_mese_cambiato,
             border_color=ft.Colors.OUTLINE,
             text_size=14,
-            content_padding=10
+            content_padding=10,
+            options=[]
         )
 
         self.lista_transazioni = ft.Column(
@@ -44,11 +46,29 @@ class PersonaleTab(ft.Container):
             expand=True,
             spacing=10
         )
+        
+        # Loading Indicator
+        self.loading_view = ft.Container(
+            content=ft.Column([
+                ft.ProgressRing(color=AppColors.PRIMARY),
+                ft.Text(self.controller.loc.get("loading"), color=AppColors.TEXT_SECONDARY)
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            alignment=ft.alignment.center,
+            expand=True,
+            visible=False
+        )
+        
+        # Main content
+        self.main_view = ft.Column(expand=True, visible=True)
 
-        self.content = ft.Column(expand=True)
+        # Stack to switch between content and loading
+        self.content = ft.Stack([
+            self.main_view,
+            self.loading_view
+        ], expand=True)
 
     def update_view_data(self, is_initial_load=False):
-        # Popola il filtro sempre per aggiornare i mesi disponibili
+        # Popola il filtro sempre per aggiornare i mesi disponibili (sync is fast enough usually, or could be async too)
         self._popola_filtro_mese()
 
         utente_id = self.controller.get_user_id()
@@ -60,35 +80,61 @@ class PersonaleTab(ft.Container):
             print("ERRORE in PersonaleTab: utente non trovato in sessione.")
             return
 
+        # Show loading
+        self.main_view.visible = False
+        self.loading_view.visible = True
+        if self.page:
+            self.page.update()
+
         # Ottieni anno e mese dal dropdown, o usa il mese corrente come default
         anno, mese = self._get_anno_mese_selezionato()
-
-        # --- Aggiorna i totali usando la funzione centralizzata ---
         master_key_b64 = self.controller.page.session.get("master_key")
+
+        # Async fetch
+        task = AsyncTask(
+            target=self._fetch_data,
+            args=(utente_id, anno, mese, master_key_b64),
+            callback=partial(self._on_data_loaded, utente),
+            error_callback=self._on_error
+        )
+        task.start()
+
+    def _fetch_data(self, utente_id, anno, mese, master_key_b64):
+        # --- Aggiorna i totali ---
         riepilogo = ottieni_riepilogo_patrimonio_utente(utente_id, anno, mese, master_key_b64=master_key_b64)
         
-        # Estrai i valori
-        val_patrimonio = riepilogo.get('patrimonio_netto', 0)
-        val_liquidita = riepilogo.get('liquidita', 0)
-        val_investimenti = riepilogo.get('investimenti', 0)
-        val_fondi_pensione = riepilogo.get('fondi_pensione', 0)
-        val_risparmio = riepilogo.get('risparmio', 0)
-        
-        loc = self.controller.loc
-        
-        # Carica le transazioni e cachele
-        self.transazioni_correnti = ottieni_transazioni_utente(utente_id, anno, mese, master_key_b64=master_key_b64)
+        # Carica le transazioni
+        transazioni = ottieni_transazioni_utente(utente_id, anno, mese, master_key_b64=master_key_b64)
         # Filtra le transazioni di saldo iniziale
-        self.transazioni_correnti = [
-            t for t in self.transazioni_correnti 
+        transazioni_filtrate = [
+            t for t in transazioni 
             if not t.get('descrizione', '').upper().startswith("SALDO INIZIALE")
         ]
+        
+        return {'riepilogo': riepilogo, 'transazioni': transazioni_filtrate}
 
+    def _on_data_loaded(self, utente, result):
+        riepilogo = result['riepilogo']
+        self.transazioni_correnti = result['transazioni']
+        loc = self.controller.loc
+        
+        # Create UI based on view mode
         if self.vista_compatta:
             self._costruisci_vista_compatta(utente, riepilogo, loc)
         else:
             self._costruisci_vista_espansa(utente, loc)
 
+        # Hide loading
+        self.loading_view.visible = False
+        self.main_view.visible = True
+        if self.page:
+            self.page.update()
+
+    def _on_error(self, e):
+        print(f"Errore PersonaleTab: {e}")
+        self.loading_view.visible = False
+        self.main_view.controls = [AppStyles.body_text(f"Errore caricamento: {e}", color=AppColors.ERROR)]
+        self.main_view.visible = True
         if self.page:
             self.page.update()
 
@@ -165,7 +211,7 @@ class PersonaleTab(ft.Container):
             btn_tutte_transazioni
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
         
-        self.content.controls = [
+        self.main_view.controls = [
             AppStyles.section_header(nome_utente),
             card_riepilogo,
             ft.Container(
@@ -201,7 +247,7 @@ class PersonaleTab(ft.Container):
             ft.Container(content=self.dd_mese_filtro, width=200)
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
         
-        self.content.controls = [
+        self.main_view.controls = [
             header,
             AppStyles.page_divider(),
             self.lista_transazioni
@@ -271,10 +317,6 @@ class PersonaleTab(ft.Container):
         self.vista_compatta = True
         self.update_view_data()
 
-    def build_controls(self):
-        """Non più usato - i controlli sono costruiti in update_view_data."""
-        return []
-
     def _popola_filtro_mese(self):
         """Popola il dropdown con i mesi disponibili."""
         id_famiglia = self.controller.get_family_id()
@@ -311,7 +353,6 @@ class PersonaleTab(ft.Container):
 
     def _filtro_mese_cambiato(self, e):
         self.update_view_data()
-        self.page.update()
 
     def elimina_cliccato(self, e):
         transazione_data = e.control.data

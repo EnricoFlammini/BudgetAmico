@@ -5,6 +5,8 @@ from db.gestione_db import (
     ottieni_tutti_i_conti_utente, ottieni_conto_default_utente, ottieni_dettagli_utente
 )
 
+from utils.async_task import AsyncTask
+
 class ImpostazioniTab(ft.Container):
     def __init__(self, controller):
         super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
@@ -195,29 +197,66 @@ class ImpostazioniTab(ft.Container):
         ]
 
     def update_view_data(self, is_initial_load=False):
-        self.content.controls = self.build_controls()
+        # Mostra loading locale
+        self.content.controls.clear()
+        self.content.controls.append(
+            ft.Container(
+                content=ft.ProgressRing(color=AppColors.PRIMARY),
+                alignment=ft.alignment.center,
+                padding=50
+            )
+        )
+        if self.page:
+            self.page.update()
 
-        # Popola e imposta il conto di default
         utente_id = self.controller.get_user_id()
-        if utente_id:
-            # Passa master_key per decriptare i nomi dei conti
-            master_key_b64 = self.controller.page.session.get("master_key")
-            tutti_i_conti = ottieni_tutti_i_conti_utente(utente_id, master_key_b64=master_key_b64)
-            conti_filtrati = [c for c in tutti_i_conti if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
+        master_key_b64 = self.controller.page.session.get("master_key")
 
+        # Avvia Task
+        task = AsyncTask(
+            target=self._fetch_data,
+            args=(utente_id, master_key_b64),
+            callback=self._on_data_loaded,
+            error_callback=self._on_error
+        )
+        task.start()
+
+    def _fetch_data(self, utente_id, master_key_b64):
+        data = {}
+        if utente_id:
+            # 1. Conti utente per dropdown
+            tutti_i_conti = ottieni_tutti_i_conti_utente(utente_id, master_key_b64=master_key_b64)
+            data['conti_filtrati'] = [c for c in tutti_i_conti if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
+            
+            # 2. Conto Default
+            data['conto_default_info'] = ottieni_conto_default_utente(utente_id)
+            
+            # 3. Dati Profilo
+            data['dati_utente'] = ottieni_dettagli_utente(utente_id, master_key_b64)
+        return data
+
+    def _on_data_loaded(self, result):
+        try:
+            self.content.controls = self.build_controls()
+            
+            # Popola Dropdown Conto Default
+            conti_filtrati = result.get('conti_filtrati', [])
             opzioni_conto = []
             for c in conti_filtrati:
                 prefix = "C" if c['is_condiviso'] else "P"
                 opzioni_conto.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=c['nome_conto']))
             self.dd_conto_default.options = opzioni_conto
 
-            conto_default_info = ottieni_conto_default_utente(utente_id)
+            # Imposta valore Default
+            conto_default_info = result.get('conto_default_info')
             if conto_default_info:
-                self.dd_conto_default.value = f"{conto_default_info['tipo'][0].upper()}{conto_default_info['id']}"
+                val = f"{conto_default_info['tipo'][0].upper()}{conto_default_info['id']}"
+                # Verifica che il valore esista nelle opzioni (potrebbe essere stato cancellato)
+                if any(opt.key == val for opt in opzioni_conto):
+                    self.dd_conto_default.value = val
 
-            # Popola i campi del profilo utente
-            dati_utente = ottieni_dettagli_utente(utente_id, master_key_b64)
-            
+            # Popola Profilo
+            dati_utente = result.get('dati_utente')
             if dati_utente:
                 self.txt_username.value = dati_utente.get("username", "")
                 self.txt_email.value = dati_utente.get("email", "")
@@ -226,6 +265,18 @@ class ImpostazioniTab(ft.Container):
                 self.txt_data_nascita.value = dati_utente.get("data_nascita", "")
                 self.txt_codice_fiscale.value = dati_utente.get("codice_fiscale", "")
                 self.txt_indirizzo.value = dati_utente.get("indirizzo", "")
-        
-        if self.controller.page:
-            self.controller.page.update()
+
+            if self.page:
+                self.page.update()
+        except Exception as e:
+            self._on_error(e)
+
+    def _on_error(self, e):
+        print(f"Errore ImpostazioniTab: {e}")
+        try:
+            self.content.controls.clear()
+            self.content.controls.append(AppStyles.body_text(f"Errore durante il caricamento: {e}", color=AppColors.ERROR))
+            if self.page:
+                self.page.update()
+        except:
+            pass

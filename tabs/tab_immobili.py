@@ -2,7 +2,8 @@ import flet as ft
 from functools import partial
 from db.gestione_db import ottieni_immobili_famiglia, elimina_immobile, ottieni_membri_famiglia
 from utils.styles import AppStyles, AppColors, PageConstants
-
+from utils.async_task import AsyncTask
+import time
 
 class ImmobiliTab(ft.Container):
     def __init__(self, controller):
@@ -18,9 +19,26 @@ class ImmobiliTab(ft.Container):
         self.content = ft.Column(expand=True, spacing=10)
 
     def update_view_data(self, is_initial_load=False):
-        theme = self.page.theme.color_scheme if self.page and self.page.theme else ft.ColorScheme()
-        self.content.controls = self.build_controls()
-        
+        """
+        Avvia il caricamento asincrono dei dati.
+        """
+        # 1. Mostra Loading State
+        self.lv_immobili.controls.clear()
+        self.lv_immobili.controls.append(
+            ft.Container(
+                content=ft.Column([
+                    ft.ProgressRing(color=AppColors.PRIMARY),
+                    ft.Text("Caricamento immobili...", color=AppColors.TEXT_SECONDARY)
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                alignment=ft.alignment.center,
+                padding=50
+            )
+        )
+        self.content.controls = [self.lv_immobili]
+        if self.page:
+            self.page.update()
+
+        # 2. Prepara argomenti per il task
         id_famiglia = self.controller.get_family_id()
         if not id_famiglia:
             return
@@ -28,17 +46,43 @@ class ImmobiliTab(ft.Container):
         master_key_b64 = self.controller.page.session.get("master_key")
         id_utente = self.controller.get_user_id()
         
+        # 3. Avvia Task Asincrono
+        task = AsyncTask(
+            target=self._fetch_data,
+            args=(id_famiglia, master_key_b64, id_utente),
+            callback=self._on_data_loaded,
+            error_callback=self._on_error
+        )
+        task.start()
+
+    def _fetch_data(self, id_famiglia, master_key_b64, id_utente):
+        """
+        Esegue le query al DB (in background).
+        """
+        # Simula un ritardo per verificare che la UI non si blocchi (rimuovere in produzione se necessario)
+        # time.sleep(0.5) 
+        
+        immobili = ottieni_immobili_famiglia(id_famiglia, master_key_b64, id_utente)
+        membri = ottieni_membri_famiglia(id_famiglia)
+        return immobili, membri
+
+    def _on_data_loaded(self, result):
+        """
+        Callback chiamata quando i dati sono pronti via AsyncTask.
+        Ricostruisce la UI.
+        """
+        immobili, membri = result
+        
+        # Poiché siamo in un thread separato, dobbiamo assicurarci di gestire eventuali errori di UI
+        # Ma Flet gestisce page.update() thread-safe.
         try:
-            immobili = ottieni_immobili_famiglia(id_famiglia, master_key_b64, id_utente)
-            
+            theme = self.page.theme.color_scheme if self.page and self.page.theme else ft.ColorScheme()
+            family_ids = [m['id_utente'] for m in membri]
+
             # Calcolo Totali
             tot_acquisto = 0.0
             tot_attuale = 0.0
             tot_mutui = 0.0
-            
-            # Recupera membri famiglia per calcolare quote
-            membri = ottieni_membri_famiglia(id_famiglia)
-            family_ids = [m['id_utente'] for m in membri]
 
             for imm in immobili:
                 val_acq = imm.get('valore_acquisto') or 0.0
@@ -72,7 +116,8 @@ class ImmobiliTab(ft.Container):
             
             tot_netto = tot_attuale - tot_mutui
 
-            self.lv_immobili.controls.clear()
+            # Ricostruisce la lista controlli
+            new_controls = []
 
             # Costruisco header con riepilogo
             header_controls = [
@@ -87,6 +132,7 @@ class ImmobiliTab(ft.Container):
                 ),
                 AppStyles.page_divider(),
             ]
+            new_controls.extend(header_controls)
 
             # Card Riepilogo (se ci sono immobili)
             if immobili:
@@ -100,27 +146,35 @@ class ImmobiliTab(ft.Container):
                         self._crea_info_immobile("Patrimonio Netto (Famiglia)", loc.format_currency(tot_netto), theme, colore_valore=AppColors.PRIMARY),
                     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
                 ])
-                header_controls.append(AppStyles.card_container(summary_content, padding=15))
-                header_controls.append(ft.Container(height=10)) # Spaziatura
+                new_controls.append(AppStyles.card_container(summary_content, padding=15))
+                new_controls.append(ft.Container(height=10)) # Spaziatura
             
-            self.lv_immobili.controls.extend(header_controls)
-
             if not immobili:
-                self.lv_immobili.controls.append(AppStyles.body_text(self.controller.loc.get("no_properties")))
+                new_controls.append(AppStyles.body_text(self.controller.loc.get("no_properties")))
             else:
                 for immobile in immobili:
-                    self.lv_immobili.controls.append(self._crea_widget_immobile(immobile, theme))
+                    new_controls.append(self._crea_widget_immobile(immobile, theme))
+
+            # Aggiorna la UI
+            self.lv_immobili.controls = new_controls
+            if self.page:
+                self.page.update()
+            
         except Exception as e:
-            print(f"Errore in ImmobiliTab.update_view_data: {e}")
+            self._on_error(e)
+
+    def _on_error(self, e):
+        print(f"Errore in ImmobiliTab._on_error: {e}")
+        try:
             self.lv_immobili.controls.clear()
             self.lv_immobili.controls.append(AppStyles.body_text(f"Errore durante il caricamento: {e}", color=AppColors.ERROR))
-
-        if self.page:
-            self.page.update()
+            if self.page:
+                self.page.update()
+        except:
+            pass
 
     def build_controls(self):
         """Costruisce e restituisce la lista di controlli per la scheda."""
-        # Nota: I controlli vengono ora gestiti dinamicamente in update_view_data
         return [self.lv_immobili]
 
     def _crea_widget_immobile(self, immobile, theme):
@@ -203,9 +257,15 @@ class ImmobiliTab(ft.Container):
 
     def elimina_cliccato(self, e):
         id_immobile = e.control.data
+        if not id_immobile: return
+        
+        # Elimina usando la logica sincrona (va bene per azioni utente singole)
+        # O si può rendere async anche questo se serve
         success = elimina_immobile(id_immobile)
         if success:
             self.controller.show_snack_bar("Immobile eliminato con successo.", success=True)
-            self.controller.db_write_operation()
+            # Ricarica i dati (userà la nuova logica async)
+            self.update_view_data()
+            self.controller.db_write_operation() # Questo ricarica tutto, forse ridondante se chiamiamo update_view_data
         else:
             self.controller.show_snack_bar("Errore durante l'eliminazione dell'immobile.", success=False)

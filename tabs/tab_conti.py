@@ -6,6 +6,7 @@ from db.gestione_db import (
     ottieni_riepilogo_patrimonio_utente
 )
 import datetime
+from utils.async_task import AsyncTask
 from utils.styles import AppStyles, AppColors, PageConstants
 
 
@@ -16,32 +17,37 @@ class ContiTab(ft.Container):
         self.page = controller.page
 
         # Controlli UI
-        self.txt_patrimonio_netto = AppStyles.header_text("")
-        self.txt_liquidita = AppStyles.body_text("")
-        self.txt_investimenti = AppStyles.body_text("")
-        self.txt_fondi_pensione = AppStyles.body_text("")
-        self.txt_risparmio = AppStyles.body_text("")
-        
         self.lv_conti_personali = ft.Column(expand=True, scroll=ft.ScrollMode.ADAPTIVE, spacing=10)
-        self.content = ft.Column(expand=True, spacing=10)
+        
+        # Loading view
+        self.loading_view = ft.Container(
+            content=ft.Column([
+                ft.ProgressRing(color=AppColors.PRIMARY),
+                ft.Text(self.controller.loc.get("loading"), color=AppColors.TEXT_SECONDARY)
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            alignment=ft.alignment.center,
+            expand=True,
+            visible=False
+        )
+
+        # Main content
+        self.main_view = ft.Column(expand=True, spacing=10)
+
+        # Stack to switch between content and loading
+        self.content = ft.Stack([
+            self.main_view,
+            self.loading_view
+        ], expand=True)
 
     def update_view_data(self, is_initial_load=False):
         # Get master_key from session for encryption
         master_key_b64 = self.controller.page.session.get("master_key")
         
-        # Soluzione robusta per ottenere il tema
         theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
-
-        self.content.controls = self.build_controls(theme)
-
-        self.txt_patrimonio_netto.color = theme.primary
-
-        utente_id = self.controller.get_user_id()
-        if not utente_id: return
-
         loc = self.controller.loc
-        
-        self.content.controls = [
+
+        # Setup main view structure
+        self.main_view.controls = [
             AppStyles.section_header(
                 loc.get("my_personal_accounts"),
                 ft.IconButton(
@@ -55,39 +61,56 @@ class ContiTab(ft.Container):
             ft.Container(content=self.lv_conti_personali, expand=True),
         ]
 
-        self.lv_conti_personali.controls.clear()
-        conti_personali = ottieni_dettagli_conti_utente(utente_id, master_key_b64=master_key_b64)
+        utente_id = self.controller.get_user_id()
+        if not utente_id: return
+
+        # Show loading
+        self.main_view.visible = False
+        self.loading_view.visible = True
+        if self.page:
+            self.page.update()
+
+        # Async fetch
+        task = AsyncTask(
+            target=self._fetch_data,
+            args=(utente_id, master_key_b64),
+            callback=partial(self._on_data_loaded, theme),
+            error_callback=self._on_error
+        )
+        task.start()
+
+    def _fetch_data(self, utente_id, master_key_b64):
+        conti = ottieni_dettagli_conti_utente(utente_id, master_key_b64=master_key_b64)
         # Filtra i conti di investimento - questi vengono gestiti nel tab Investimenti
-        conti_personali = [c for c in conti_personali if c['tipo'] != 'Investimento']
+        return [c for c in conti if c['tipo'] != 'Investimento']
+
+    def _on_data_loaded(self, theme, conti_personali):
+        loc = self.controller.loc
+        self.lv_conti_personali.controls.clear()
+        
         if not conti_personali:
             self.lv_conti_personali.controls.append(ft.Text(loc.get("no_personal_accounts")))
         else:
             for conto in conti_personali:
                 self.lv_conti_personali.controls.append(self._crea_widget_conto_personale(conto, theme))
 
+        # Hide loading
+        self.loading_view.visible = False
+        self.main_view.visible = True
+        if self.page:
+            self.page.update()
+
+    def _on_error(self, e):
+        print(f"Errore ContiTab: {e}")
+        self.loading_view.visible = False
+        self.main_view.controls = [AppStyles.body_text(f"Errore caricamento: {e}", color=AppColors.ERROR)]
+        self.main_view.visible = True
         if self.page:
             self.page.update()
 
     def build_controls(self, theme):
-        # Questo metodo non è più usato, i controlli sono costruiti in update_view_data
-        loc = self.controller.loc
-        return [
-            AppStyles.card_container(
-                content=ft.Text("Caricamento..."),
-                padding=PageConstants.CARD_PADDING
-            ),
-            AppStyles.section_header(
-                self.controller.loc.get("my_personal_accounts"),
-                ft.IconButton(
-                    icon=ft.Icons.ADD_CARD,
-                    tooltip=self.controller.loc.get("add_personal_account"),
-                    on_click=lambda e: self.controller.conto_dialog.apri_dialog_conto(e, escludi_investimento=True),
-                    icon_color=theme.primary
-                )
-            ),
-            AppStyles.page_divider(),
-            ft.Container(content=self.lv_conti_personali, expand=True),
-        ]
+        # Deprecated
+        return []
 
     def _crea_widget_conto_personale(self, conto: dict, theme) -> ft.Container:
         is_investimento = conto['tipo'] == 'Investimento'

@@ -84,24 +84,18 @@ class DashboardView:
 
     def _sidebar_item_clicked(self, index, view_instance):
         """Gestisce il click su un elemento della sidebar."""
-        # Mostra spinner durante il caricamento
-        self.controller.show_loading("Caricamento...")
+        self.selected_index = index
+        self.content_area.content = view_instance
         
-        try:
-            self.selected_index = index
-            self.content_area.content = view_instance
-            
-            # Aggiorna i dati della vista selezionata
-            if hasattr(view_instance, 'update_view_data'):
-                view_instance.update_view_data()
-            elif hasattr(view_instance, 'update_all_admin_tabs_data'):
-                view_instance.update_all_admin_tabs_data()
-            
-            # Ricostruisci la sidebar per aggiornare la selezione
-            self.update_sidebar()
-            self.page.update()
-        finally:
-            self.controller.hide_loading()
+        # Aggiorna i dati della vista selezionata
+        if hasattr(view_instance, 'update_view_data'):
+            view_instance.update_view_data()
+        elif hasattr(view_instance, 'update_all_admin_tabs_data'):
+            view_instance.update_all_admin_tabs_data()
+        
+        # Ricostruisci la sidebar per aggiornare la selezione
+        self.update_sidebar()
+        self.page.update()
 
     def build_view(self) -> ft.View:
         """

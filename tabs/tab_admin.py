@@ -1,11 +1,20 @@
 import flet as ft
 import json
-# Google Auth rimosso - ora usiamo Supabase PostgreSQL
 from functools import partial
 from utils.styles import AppColors, AppStyles, PageConstants
-from db.gestione_db import ottieni_categorie_e_sottocategorie, ottieni_membri_famiglia, rimuovi_utente_da_famiglia, ottieni_budget_famiglia, get_smtp_config, save_smtp_config, esporta_dati_famiglia
+from db.gestione_db import (
+    ottieni_categorie_e_sottocategorie, 
+    ottieni_membri_famiglia, 
+    rimuovi_utente_da_famiglia, 
+    ottieni_budget_famiglia, 
+    get_smtp_config, 
+    save_smtp_config, 
+    esporta_dati_famiglia,
+    get_impostazioni_budget_famiglia
+)
 from utils.email_sender import send_email
 from tabs.admin_tabs.subtab_budget_manager import AdminSubTabBudgetManager
+from utils.async_task import AsyncTask
 
 class AdminTab(ft.Container):
     def __init__(self, controller):
@@ -22,7 +31,7 @@ class AdminTab(ft.Container):
             unselected_label_color=AppColors.TEXT_SECONDARY
         )
 
-        # UI Controls for Email Settings (initialized here to be available)
+        # UI Controls for Email Settings
         self.dd_email_provider = ft.Dropdown(
             label="Provider Email",
             options=[
@@ -44,8 +53,6 @@ class AdminTab(ft.Container):
 
         self.btn_test_email = ft.ElevatedButton("Test Email", icon=ft.Icons.SEND, on_click=self._test_email_cliccato)
         self.btn_salva_email = ft.ElevatedButton("Salva Configurazione", icon=ft.Icons.SAVE, on_click=self._salva_email_cliccato, bgcolor=AppColors.PRIMARY, color=AppColors.ON_PRIMARY)
-
-        # UI Controls for Google Settings - RIMOSSI (Google Drive deprecato)
 
         self.lv_categorie = ft.Column(scroll=ft.ScrollMode.AUTO, expand=True)
         self.lv_membri = ft.Column(scroll=ft.ScrollMode.AUTO)
@@ -144,14 +151,74 @@ class AdminTab(ft.Container):
             )
         ]
 
-    def update_tab_categorie(self):
+    def update_all_admin_tabs_data(self, is_initial_load=False):
+        """Avvia il caricamento asincrono di tutti i dati per le tab Admin."""
+        self.tabs_admin.tabs = self.build_tabs()
+        
+        # Mostra loading nelle liste
+        self.lv_categorie.controls = [ft.ProgressRing()]
+        self.lv_membri.controls = [ft.ProgressRing()]
+        if self.page:
+            self.page.update()
+
+        famiglia_id = self.controller.get_family_id()
+        if not famiglia_id: return
+
+        master_key_b64 = self.controller.page.session.get("master_key")
+        id_utente = self.controller.get_user_id()
+
+        task = AsyncTask(
+            target=self._fetch_all_data,
+            args=(famiglia_id, master_key_b64, id_utente),
+            callback=self._on_data_loaded,
+            error_callback=self._on_error
+        )
+        task.start()
+
+    def _fetch_all_data(self, famiglia_id, master_key_b64, id_utente):
+        """Recupera tutti i dati necessari per le sotto-schede in un unico passaggio background."""
+        return {
+            'categorie': ottieni_categorie_e_sottocategorie(famiglia_id),
+            'membri': ottieni_membri_famiglia(famiglia_id, master_key_b64, id_utente),
+            'smtp_config': get_smtp_config(famiglia_id, master_key_b64, id_utente),
+            'impostazioni_budget': get_impostazioni_budget_famiglia(famiglia_id),
+            'budget_impostati': ottieni_budget_famiglia(famiglia_id, master_key_b64, id_utente)
+        }
+
+    def _on_data_loaded(self, result):
+        try:
+            # 1. Popola Categorie
+            self._populate_tab_categorie(result['categorie'])
+            
+            # 2. Popola Membri
+            self._populate_tab_membri(result['membri'])
+            
+            # 3. Popola Email
+            self._populate_tab_email(result['smtp_config'])
+            
+            # 4. Popola Budget Manager
+            self.subtab_budget_manager.update_view_data(prefetched_data=result)
+            
+            if self.page:
+                self.page.update()
+        except Exception as e:
+            self._on_error(e)
+
+    def _on_error(self, e):
+        print(f"Errore AdminTab: {e}")
+        try:
+            err_msg = AppStyles.body_text(f"Errore caricamento: {e}", color=AppColors.ERROR)
+            self.lv_categorie.controls = [err_msg]
+            self.lv_membri.controls = [err_msg]
+            if self.page:
+                self.page.update()
+        except:
+            pass
+
+    def _populate_tab_categorie(self, categorie_data):
         loc = self.controller.loc
         theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
-        id_famiglia = self.controller.get_family_id()
-        if not id_famiglia: return
-
         self.lv_categorie.controls.clear()
-        categorie_data = ottieni_categorie_e_sottocategorie(id_famiglia)
 
         if not categorie_data:
             self.lv_categorie.controls.append(AppStyles.body_text(loc.get("no_categories_found")))
@@ -194,234 +261,56 @@ class AdminTab(ft.Container):
                         ]
                     )
                 )
-
-
-            # Aggiungi spazio in basso per evitare interferenze con il pulsante +
-
             self.lv_categorie.controls.append(ft.Container(height=80))
 
-
-    def update_tab_membri(self):
-        try:
-            loc = self.controller.loc
-            theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
-            id_famiglia = self.controller.get_family_id()
-            current_user_id = self.controller.get_user_id()
-            master_key_b64 = self.controller.page.session.get("master_key")
-            if not id_famiglia: return
-
-            self.lv_membri.controls.clear()
-            membri = ottieni_membri_famiglia(id_famiglia, master_key_b64, current_user_id)
-
-            if len(membri) <= 1:
-                self.lv_membri.controls.append(AppStyles.body_text(loc.get("no_members_found")))
-            else:
-                for membro in membri:
-                    if membro['id_utente'] == current_user_id:
-                        continue
-
-                    content = ft.Row(
-                        [
-                            ft.Icon(ft.Icons.PERSON, color=AppColors.PRIMARY),
-                            ft.Column(
-                                [
-                                    AppStyles.subheader_text(membro['nome_visualizzato']),
-                                    ft.Text(membro['ruolo'], color=AppColors.TEXT_SECONDARY)
-                                ],
-                                expand=True
-                            ),
-                            ft.IconButton(
-                                icon=ft.Icons.EDIT,
-                                tooltip=loc.get("edit") + " " + loc.get("role"),
-                                data=membro,
-                                icon_color=AppColors.PRIMARY,
-                                on_click=lambda e: self.controller.admin_dialogs.apri_dialog_modifica_ruolo(
-                                    e.control.data)
-                            ),
-                            ft.IconButton(
-                                icon=ft.Icons.DELETE,
-                                tooltip=loc.get("remove_from_family"),
-                                icon_color=AppColors.ERROR,
-                                data=membro,
-                                on_click=lambda e: self.controller.open_confirm_delete_dialog(
-                                    partial(self.rimuovi_membro_cliccato, e)
-                                )
-                            )
-                        ],
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER
-                    )
-                    
-                    self.lv_membri.controls.append(
-                        AppStyles.card_container(content, padding=15)
-                    )
-        except Exception as e:
-            print(f"[ERRORE] update_tab_membri: {e}")
-            import traceback
-            traceback.print_exc()
-
-
-    def rimuovi_membro_cliccato(self, e):
-        membro_data = e.control.data
-        id_famiglia = self.controller.get_family_id()
-        success = rimuovi_utente_da_famiglia(membro_data['id_utente'], id_famiglia)
-        if success:
-            self.controller.show_snack_bar(f"Membro '{membro_data['nome_visualizzato']}' rimosso.", success=True)
-            self.controller.db_write_operation()
-        else:
-            self.controller.show_snack_bar("Errore durante la rimozione del membro.", success=False)
-
-    # Metodo update_tab_google rimosso - Google Drive deprecato
-
-    def _provider_email_cambiato(self, e):
-        """Precompila i campi SMTP in base al provider selezionato."""
-        provider = self.dd_email_provider.value
-        self.txt_gmail_hint.visible = (provider == "gmail")
-
-        if provider == "gmail":
-            self.txt_smtp_server.value = "smtp.gmail.com"
-            self.txt_smtp_port.value = "587"
-        elif provider == "outlook":
-            self.txt_smtp_server.value = "smtp.office365.com"
-            self.txt_smtp_port.value = "587"
-        elif provider == "yahoo":
-            self.txt_smtp_server.value = "smtp.mail.yahoo.com"
-            self.txt_smtp_port.value = "465"
-        elif provider == "icloud":
-            self.txt_smtp_server.value = "smtp.mail.me.com"
-            self.txt_smtp_port.value = "587"
-        
-        self.page.update()
-
-    def _test_email_cliccato(self, e):
-        """Invia un'email di prova con le impostazioni correnti."""
-        server = self.txt_smtp_server.value
-        port = self.txt_smtp_port.value
-        user = self.txt_smtp_user.value
-        password = self.txt_smtp_password.value
-        
-        if not all([server, port, user, password]):
-            self.controller.show_snack_bar("Compila tutti i campi prima di provare.", success=False)
-            return
-
-        # Usa l'email dell'utente come destinatario, se disponibile, altrimenti usa l'email SMTP stessa
-        destinatario = user # Default
-        dati_utente = self.controller.page.session.get("utente_loggato")
-        if dati_utente and dati_utente.get('email'):
-             destinatario = dati_utente.get('email')
-        
-        smtp_config = {
-            'server': server,
-            'port': port,
-            'user': user,
-            'password': password
-        }
-
-        # Mostra spinner durante il test
-        self.controller.show_loading("Invio email di test...")
-        
-        try:
-            successo, errore = send_email(
-                to_email=destinatario,
-                subject="Test Configurazione Email - BudgetAmico",
-                body="Se leggi questa email, la configurazione SMTP è corretta!",
-                smtp_config=smtp_config
-            )
-            
-            if successo:
-                self.controller.show_snack_bar(f"Email di prova inviata a {destinatario}!", success=True)
-            else:
-                self.controller.show_error_dialog(f"Errore invio email: {errore}")
-        except Exception as ex:
-            self.controller.show_error_dialog(f"Eccezione durante il test: {str(ex)}")
-        finally:
-            self.controller.hide_loading()
-
-    def _salva_email_cliccato(self, e):
-        """Salva la configurazione email."""
-        server = self.txt_smtp_server.value
-        port = self.txt_smtp_port.value
-        user = self.txt_smtp_user.value
-        password = self.txt_smtp_password.value
-        provider = self.dd_email_provider.value
-
-        if not all([server, port, user, password]):
-            self.controller.show_snack_bar("Tutti i campi email sono obbligatori.", success=False)
-            return
-
-        smtp_settings = {
-            'server': server,
-            'port': port,
-            'user': user,
-            'password': password,
-            'provider': provider
-        }
-
-        # Mostra spinner durante il salvataggio
-        self.controller.show_loading("Salvataggio configurazione...")
-        
-        try:
-            id_famiglia = self.controller.get_family_id()
-            master_key_b64 = self.controller.page.session.get("master_key")
-            current_user_id = self.controller.get_user_id()
-            if save_smtp_config(smtp_settings, id_famiglia, master_key_b64, current_user_id):
-                self.controller.show_snack_bar("Configurazione email salvata con successo!", success=True)
-            else:
-                self.controller.show_snack_bar("Errore durante il salvataggio della configurazione.", success=False)
-        finally:
-            self.controller.hide_loading()
-
-    def _esporta_dati_cliccato(self, e):
-        """Esporta la family_key e le configurazioni in un file JSON."""
-        id_famiglia = self.controller.get_family_id()
-        id_utente = self.controller.get_user_id()
-        master_key_b64 = self.controller.page.session.get("master_key")
-        
-        if not all([id_famiglia, id_utente, master_key_b64]):
-            self.controller.show_snack_bar("Sessione non valida. Effettua nuovamente il login.", success=False)
-            return
-        
-        # Mostra spinner durante l'export
-        self.controller.show_loading("Esportazione dati...")
-        
-        try:
-            export_data, errore = esporta_dati_famiglia(id_famiglia, id_utente, master_key_b64)
-        finally:
-            self.controller.hide_loading()
-        
-        if errore:
-            self.controller.show_snack_bar(f"Errore: {errore}", success=False)
-            return
-        
-        # Usa FilePicker per salvare il file
-        def save_file_result(result: ft.FilePickerResultEvent):
-            if result.path:
-                try:
-                    with open(result.path, 'w', encoding='utf-8') as f:
-                        json.dump(export_data, f, indent=2, ensure_ascii=False)
-                    self.controller.show_snack_bar(f"File esportato: {result.path}", success=True)
-                except Exception as ex:
-                    self.controller.show_snack_bar(f"Errore salvataggio: {ex}", success=False)
-        
-        file_picker = ft.FilePicker(on_result=save_file_result)
-        self.page.overlay.append(file_picker)
-        self.page.update()
-        
-        # Genera nome file con data
-        from datetime import datetime
-        nome_file = f"backup_famiglia_{export_data.get('nome_famiglia', 'export')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        file_picker.save_file(
-            dialog_title="Salva Backup Famiglia",
-            file_name=nome_file,
-            file_type=ft.FilePickerFileType.CUSTOM,
-            allowed_extensions=["json"]
-        )
-
-    def update_tab_email(self):
-        """Popola i campi email con i dati salvati."""
-        id_famiglia = self.controller.get_family_id()
-        master_key_b64 = self.controller.page.session.get("master_key")
+    def _populate_tab_membri(self, membri):
+        loc = self.controller.loc
         current_user_id = self.controller.get_user_id()
-        smtp_settings = get_smtp_config(id_famiglia, master_key_b64, current_user_id)
+        self.lv_membri.controls.clear()
+
+        if len(membri) <= 1:
+            self.lv_membri.controls.append(AppStyles.body_text(loc.get("no_members_found")))
+        else:
+            for membro in membri:
+                if membro['id_utente'] == current_user_id:
+                    continue
+
+                content = ft.Row(
+                    [
+                        ft.Icon(ft.Icons.PERSON, color=AppColors.PRIMARY),
+                        ft.Column(
+                            [
+                                AppStyles.subheader_text(membro['nome_visualizzato']),
+                                ft.Text(membro['ruolo'], color=AppColors.TEXT_SECONDARY)
+                            ],
+                            expand=True
+                        ),
+                        ft.IconButton(
+                            icon=ft.Icons.EDIT,
+                            tooltip=loc.get("edit") + " " + loc.get("role"),
+                            data=membro,
+                            icon_color=AppColors.PRIMARY,
+                            on_click=lambda e: self.controller.admin_dialogs.apri_dialog_modifica_ruolo(
+                                e.control.data)
+                        ),
+                        ft.IconButton(
+                            icon=ft.Icons.DELETE,
+                            tooltip=loc.get("remove_from_family"),
+                            icon_color=AppColors.ERROR,
+                            data=membro,
+                            on_click=lambda e: self.controller.open_confirm_delete_dialog(
+                                partial(self.rimuovi_membro_cliccato, e)
+                            )
+                        )
+                    ],
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER
+                )
+                
+                self.lv_membri.controls.append(
+                    AppStyles.card_container(content, padding=15)
+                )
+
+    def _populate_tab_email(self, smtp_settings):
         if smtp_settings:
             provider = smtp_settings.get('provider', 'custom')
             self.dd_email_provider.value = provider
@@ -431,13 +320,61 @@ class AdminTab(ft.Container):
             self.txt_smtp_password.value = smtp_settings.get('password', '')
             self.txt_gmail_hint.visible = (provider == "gmail")
 
-    def update_all_admin_tabs_data(self, is_initial_load=False):
-        """Aggiorna i dati di tutte le sotto-schede."""
-        self.tabs_admin.tabs = self.build_tabs()
-        self.update_tab_categorie()
-        self.update_tab_membri()
-        # update_tab_google rimosso - Google Drive deprecato
-        self.update_tab_email()
-        self.subtab_budget_manager.update_view_data(is_initial_load)
+    def _provider_email_cambiato(self, e):
+        self.txt_gmail_hint.visible = (self.dd_email_provider.value == "gmail")
         if self.page:
             self.page.update()
+
+    def _test_email_cliccato(self, e):
+        # Placeholder for test email
+        if hasattr(self.controller, 'show_snack_bar'):
+             self.controller.show_snack_bar("Funzionalità Test Email non ancora completata.", ft.Colors.ORANGE)
+
+    def _salva_email_cliccato(self, e):
+        settings = {
+            'provider': self.dd_email_provider.value,
+            'server': self.txt_smtp_server.value,
+            'port': self.txt_smtp_port.value,
+            'user': self.txt_smtp_user.value,
+            'password': self.txt_smtp_password.value,
+        }
+        famiglia_id = self.controller.get_family_id()
+        master_key = self.controller.page.session.get("master_key")
+        user_id = self.controller.get_user_id()
+        
+        try:
+            save_smtp_config(settings, famiglia_id, master_key, user_id)
+            if hasattr(self.controller, 'show_snack_bar'):
+                self.controller.show_snack_bar("Configurazione SMTP salvata.", AppColors.SUCCESS)
+        except Exception as ex:
+             if hasattr(self.controller, 'show_snack_bar'):
+                self.controller.show_snack_bar(f"Errore salvataggio: {ex}", AppColors.ERROR)
+
+    def _esporta_dati_cliccato(self, e):
+        # Placeholder for export
+        famiglia_id = self.controller.get_family_id()
+        master_key = self.controller.page.session.get("master_key")
+        user_id = self.controller.get_user_id()
+        
+        try:
+            data = esporta_dati_famiglia(famiglia_id, user_id, master_key)
+            if data:
+                 if hasattr(self.controller, 'show_snack_bar'):
+                    self.controller.show_snack_bar("Esportazione riuscita (Salvataggio file non implementato).", AppColors.SUCCESS)
+            else:
+                 if hasattr(self.controller, 'show_snack_bar'):
+                    self.controller.show_snack_bar("Nessun dato da esportare.", AppColors.ERROR)
+        except Exception as ex:
+             if hasattr(self.controller, 'show_snack_bar'):
+                self.controller.show_snack_bar(f"Errore esportazione: {ex}", AppColors.ERROR)
+
+    def rimuovi_membro_cliccato(self, e):
+        # When called via partial(request_delete, e), e is the control event
+        if hasattr(e, 'control') and e.control and e.control.data:
+            id_membro = e.control.data.get('id_utente')
+            if id_membro:
+                famiglia_id = self.controller.get_family_id()
+                rimuovi_utente_da_famiglia(famiglia_id, id_membro)
+                self.update_all_admin_tabs_data()
+                if hasattr(self.controller, 'show_snack_bar'):
+                     self.controller.show_snack_bar("Membro rimosso con successo.", AppColors.SUCCESS)

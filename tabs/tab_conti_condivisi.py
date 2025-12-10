@@ -4,6 +4,7 @@ from db.gestione_db import (
     ottieni_conti_condivisi_utente,
     elimina_conto_condiviso
 )
+from utils.async_task import AsyncTask
 from utils.styles import AppStyles, AppColors, PageConstants
 
 
@@ -18,8 +19,26 @@ class ContiCondivisiTab(ft.Container):
             scroll=ft.ScrollMode.ADAPTIVE,
             spacing=10
         )
+        
+        # Loading Indicator
+        self.loading_view = ft.Container(
+            content=ft.Column([
+                ft.ProgressRing(color=AppColors.PRIMARY),
+                ft.Text(self.controller.loc.get("loading"), color=AppColors.TEXT_SECONDARY)
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            alignment=ft.alignment.center,
+            expand=True,
+            visible=False
+        )
+        
+        # Main content
+        self.main_view = ft.Column(expand=True, spacing=10)
 
-        self.content = ft.Column(expand=True, spacing=10)
+        # Stack to switch between content and loading
+        self.content = ft.Stack([
+            self.main_view,
+            self.loading_view
+        ], expand=True)
 
     def update_view_data(self, is_initial_load=False):
         utente_id = self.controller.get_user_id()
@@ -28,12 +47,9 @@ class ContiCondivisiTab(ft.Container):
 
         print("Aggiornamento Scheda Conti Condivisi...")
         
-        master_key_b64 = self.controller.page.session.get("master_key")
-        conti_condivisi = ottieni_conti_condivisi_utente(utente_id, master_key_b64=master_key_b64)
-        
+        # Setup static content first (header)
         loc = self.controller.loc
-        
-        self.content.controls = [
+        self.main_view.controls = [
             AppStyles.section_header(
                 loc.get("shared_accounts"),
                 ft.IconButton(
@@ -46,8 +62,31 @@ class ContiCondivisiTab(ft.Container):
             AppStyles.page_divider(),
             self.lv_conti_condivisi
         ]
+
+        # Show loading
+        self.main_view.visible = False
+        self.loading_view.visible = True
+        if self.page:
+            self.page.update()
+
+        master_key_b64 = self.controller.page.session.get("master_key")
         
+        # Async Task
+        task = AsyncTask(
+            target=self._fetch_data,
+            args=(utente_id, master_key_b64),
+            callback=self._on_data_loaded,
+            error_callback=self._on_error
+        )
+        task.start()
+        
+    def _fetch_data(self, utente_id, master_key_b64):
+        return ottieni_conti_condivisi_utente(utente_id, master_key_b64=master_key_b64)
+
+    def _on_data_loaded(self, conti_condivisi):
+        loc = self.controller.loc
         self.lv_conti_condivisi.controls.clear()
+        
         if not conti_condivisi:
             self.lv_conti_condivisi.controls.append(AppStyles.body_text(loc.get("no_shared_accounts")))
         else:
@@ -91,24 +130,23 @@ class ContiCondivisiTab(ft.Container):
                     AppStyles.card_container(content, padding=10)
                 )
 
+        # Hide loading
+        self.loading_view.visible = False
+        self.main_view.visible = True
+        if self.page:
+            self.page.update()
+
+    def _on_error(self, e):
+        print(f"Errore ContiCondivisiTab: {e}")
+        self.loading_view.visible = False
+        self.main_view.controls = [AppStyles.body_text(f"Errore caricamento: {e}", color=AppColors.ERROR)]
+        self.main_view.visible = True
         if self.page:
             self.page.update()
 
     def build_controls(self):
-        """Costruisce e restituisce la lista di controlli per la scheda."""
-        return [
-            AppStyles.section_header(
-                self.controller.loc.get("shared_accounts"),
-                ft.IconButton(
-                    icon=ft.Icons.GROUP_ADD,
-                    tooltip=self.controller.loc.get("manage_shared_account"),
-                    icon_color=AppColors.PRIMARY,
-                    on_click=lambda e: self.controller.conto_condiviso_dialog.apri_dialog()
-                )
-            ),
-            AppStyles.page_divider(),
-            self.lv_conti_condivisi
-        ]
+        """Deprecated."""
+        return []
 
     def elimina_conto_condiviso_cliccato(self, e):
         id_conto_condiviso = e.control.data

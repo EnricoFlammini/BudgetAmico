@@ -36,7 +36,7 @@ class SupabaseManager:
                 if cls._connection_pool is None:
                     cls._connection_pool = psycopg2.pool.ThreadedConnectionPool(
                         minconn=1,
-                        maxconn=10,
+                        maxconn=20,
                         dsn=db_url,
                         cursor_factory=extras.RealDictCursor  # Restituisce dizionari invece di tuple
                     )

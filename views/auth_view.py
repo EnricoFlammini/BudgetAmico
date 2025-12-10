@@ -171,8 +171,10 @@ class AuthView:
                 self.txt_errore_login.value = "Username o password non validi."
                 self.txt_errore_login.visible = True
                 self.page.update()
-        finally:
+                self.controller.hide_loading()
+        except Exception:
             self.controller.hide_loading()
+            raise
 
     def _registra_cliccato(self, e):
         # Disable button to prevent double submission
