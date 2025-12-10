@@ -1094,7 +1094,6 @@ def registra_utente(nome: str, cognome: str, username: str, password: str, email
         encrypted_mk_backup_b64 = None
         if SERVER_SECRET_KEY:
              try:
-                 import hashlib
                  srv_key_bytes = hashlib.sha256(SERVER_SECRET_KEY.encode()).digest()
                  srv_fernet_key = base64.urlsafe_b64encode(srv_key_bytes)
                  encrypted_mk_backup = crypto.encrypt_master_key(master_key, srv_fernet_key)

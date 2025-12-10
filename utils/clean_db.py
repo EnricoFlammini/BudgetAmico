@@ -9,6 +9,26 @@ def clean_database():
     
     # Usa lowercase come visto nel DB
     tables_to_truncate = [
+        "transazionicondivise",
+        "transazioni",
+        "storicopagamentirate",
+        "quoteimmobili",
+        "quoteprestiti",
+        "partecipazionecontocondiviso",
+        "storico_asset",
+        "asset",
+        "budget",
+        "budget_storico",
+        "spesefisse",
+        "prestiti",
+        "immobili",
+        "sottocategorie",
+        "categorie",
+        "inviti",
+        "configurazioni",
+        "conticondivisi",
+        "conti",
+        "appartenenza_famiglia",
         "utenti",
         "famiglie"
     ]
