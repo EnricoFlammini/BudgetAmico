@@ -194,6 +194,14 @@ BudgetAmico/
 
 ---
 
+## 📊 Novità Versione 0.17
+
+### Stabilità, Sicurezza e Logging
+-   **Logging Completo**: Implementazione di un sistema di logging rotativo (conservazione 48h) in `%APPDATA%\BudgetAmico\logs`. Tracciamento dettagliato di errori, operazioni critiche e flusso UI per facilitare il debug.
+-   **Database Cleanup**: Risolto un bug critico negli script di pulizia database che causava errori di decrittazione (`InvalidToken`) dopo la ri-registrazione utente.
+-   **Row Level Security (RLS)**: Abilitata e configurata la sicurezza a livello di riga su tutte le tabelle critiche, incluse `QuoteImmobili` e `QuotePrestiti`, garantendo che gli utenti accedano solo ai dati della propria famiglia.
+-   **UI Debugging**: Aggiunti strumenti diagnostici per monitorare il ciclo di vita degli overlay di caricamento e risolvere problemi di interfaccia (es. "rettangolo grigio").
+
 ## 📊 Novità Versione 0.16
 
 ### Miglioramenti Tecnici e Qualità del Codice

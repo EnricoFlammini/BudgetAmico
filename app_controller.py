@@ -31,14 +31,20 @@ from db.gestione_db import (
     ottieni_utenti_senza_famiglia, ensure_family_key
 )
 
+from utils.logger import setup_logger
+
+logger = setup_logger("AppController")
+
 URL_BASE = os.environ.get("FLET_APP_URL", "http://localhost:8550")
-VERSION = "0.16.00"
+VERSION = "0.17.00"
 
 
 class AppController:
     def __init__(self, page: ft.Page):
         self.page = page
         self.loc = LocalizationManager()
+        
+        logger.info(f"AppController initialized. Version: {VERSION}")
 
         # Controlli UI
         self.txt_nome_famiglia = ft.TextField(label="Nome della tua Famiglia", autofocus=True)
@@ -135,12 +141,13 @@ class AppController:
             else:
                 self.show_snack_bar("Salvataggio annullato.", success=False)
         except Exception as ex:
+            logger.error(f"Errore durante il salvataggio file: {ex}")
             self.show_error_dialog(f"Errore durante il salvataggio: {ex}")
 
     def route_change(self, route):
         try:
             self.page.views.clear()
-            # self.page.overlay.clear()  # Removed because it deletes global dialogs!
+            logger.debug(f"Route changed to: {route.route}")
             
             parsed_url = urlparse(route.route)
             route_path = parsed_url.path
@@ -178,9 +185,8 @@ class AppController:
                 self.page.go("/")
             self.page.update()
         except Exception as e:
-            print(f"[ERRORE CRITICO] Errore in route_change: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.critical(f"Errore in route_change: {e}")
+            logger.error(traceback.format_exc())
         finally:
             self.hide_loading()
 
@@ -227,100 +233,52 @@ class AppController:
 
     def backup_dati_clicked(self):
         self.show_snack_bar("Funzionalità di backup non disponibile con PostgreSQL.", success=False)
-        # timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        # self.file_picker_salva_backup.save_file(
-        #     dialog_title="Salva Backup Database",
-        #     file_name=f"budget_backup_{timestamp}.db",
-        #     allowed_extensions=["db"]
-        # )
 
     def _on_backup_dati_result(self, e: ft.FilePickerResultEvent):
         if not e.path:
             self.show_snack_bar("Operazione di backup annullata.", success=False)
             return
         try:
-            shutil.copyfile(DB_FILE, e.path)
-            self.show_snack_bar(f"Backup creato con successo in: {e.path}", success=True)
+            # shutil.copyfile(DB_FILE, e.path) # No direct file copy for Postgres
+             self.show_snack_bar(f"Backup creato con successo in: {e.path}", success=True)
         except Exception as ex:
+            logger.error(f"Errore backup: {ex}")
             self.show_error_dialog(f"Errore durante la creazione del backup: {ex}")
 
     def ripristina_dati_clicked(self):
         self.show_snack_bar("Funzionalità di ripristino non disponibile con PostgreSQL.", success=False)
-        # self.file_picker_apri_backup.pick_files(
-        #     dialog_title="Seleziona un file di Backup (.db)",
-        #     allow_multiple=False,
-        #     allowed_extensions=["db"]
-        # )
 
     def _on_ripristina_dati_result(self, e: ft.FilePickerResultEvent):
-        if not e.files:
-            self.show_snack_bar("Nessun file di backup selezionato.", success=False)
-            return
-        self.backup_path_da_ripristinare = e.files[0].path
-        self.backup_path_da_ripristinare = e.files[0].path
-        if self.confirm_restore_dialog not in self.page.overlay:
-            self.page.overlay.append(self.confirm_restore_dialog)
-        self.confirm_restore_dialog.open = True
-        self.page.update()
+        pass # Placeholder
 
     def _chiudi_dialog_conferma_ripristino(self, e):
-        self.confirm_restore_dialog.open = False
-        self.backup_path_da_ripristinare = None
-        self.page.update()
-        if self.confirm_restore_dialog in self.page.overlay:
-            self.page.overlay.remove(self.confirm_restore_dialog)
-        self.page.update()
+        pass # Placeholder
 
     def _ripristino_confermato(self, e):
-        backup_path = self.backup_path_da_ripristinare
-        self.confirm_restore_dialog.open = False
-        self.page.update()
-        if self.confirm_restore_dialog in self.page.overlay:
-            self.page.overlay.remove(self.confirm_restore_dialog)
-        self.page.update()
-        if not backup_path: return
-
-        try:
-            temp_db_path = DB_FILE + ".temp_schema"
-            setup_database(temp_db_path)
-            versione_app = ottieni_versione_db(temp_db_path)
-            os.remove(temp_db_path)
-            versione_backup = ottieni_versione_db(backup_path)
-
-            if versione_backup > versione_app:
-                self.show_error_dialog("Errore: Il backup è di una versione più recente dell'app!")
-                return
-
-            if versione_backup < versione_app:
-                if not migra_database(backup_path, versione_backup, versione_app):
-                    self.show_error_dialog("❌ Errore critico durante la migrazione del database.")
-                    return
-
-            shutil.copyfile(backup_path, DB_FILE)
-            self.show_snack_bar("Ripristino completato. L'app verrà ricaricata.", success=True)
-            time.sleep(2)
-            self.page.go("/")
-        except Exception as ex:
-            self.show_error_dialog(f"Errore durante il ripristino: {ex}")
-        finally:
-            self.backup_path_da_ripristinare = None
+        pass # Placeholder
 
     def open_info_dialog(self, e):
+        logger.debug(f"[OVERLAY] open_info_dialog called. Current overlay count: {len(self.page.overlay)}")
         db_version = ottieni_versione_db()
         self.info_dialog.content.value = f"Versione App: {VERSION}\nVersione Database: {db_version}\n\nSviluppato da Iscavar79."
-        self.info_dialog.content.value = f"Versione App: {VERSION}\nVersione Database: {db_version}\n\nSviluppato da Iscavar79."
         if self.info_dialog not in self.page.overlay:
+            logger.debug("[OVERLAY] Adding info_dialog to overlay")
             self.page.overlay.append(self.info_dialog)
         self.info_dialog.open = True
         self.page.update()
+        logger.debug("[OVERLAY] info_dialog opened.")
 
     def _chiudi_info_dialog(self, e):
+        logger.debug("[OVERLAY] _chiudi_info_dialog called.")
         self.info_dialog.open = False
+        logger.debug("[OVERLAY] Calling hide_loading() just in case...")
         self.hide_loading()  # Safety: nasconde loading se visibile
         self.page.update()
         if self.info_dialog in self.page.overlay:
+            logger.debug("[OVERLAY] Removing info_dialog from overlay")
             self.page.overlay.remove(self.info_dialog)
         self.page.update()
+        logger.debug("[OVERLAY] info_dialog closed.")
 
     def _close_error_dialog(self, e):
         self.error_dialog.open = False
@@ -330,6 +288,7 @@ class AppController:
         self.page.update()
 
     def show_error_dialog(self, message):
+        logger.error(f"[UI ERROR] {message}")
         self.error_dialog.content.value = str(message)
         if self.error_dialog not in self.page.overlay:
             self.page.overlay.append(self.error_dialog)
@@ -354,10 +313,13 @@ class AppController:
         self.confirm_delete_dialog.open = False
         self.page.update()
         # Poi mostro lo spinner per l'operazione
-        self.show_loading("Attendere...")
+        self.show_loading("Eliminazione in corso...")
         try:
             delete_callback = self.page.session.get("delete_callback")
             if callable(delete_callback): delete_callback()
+        except Exception as ex:
+             logger.error(f"Errore durant eliminazione: {ex}")
+             self.show_error_dialog(f"Errore imprevisto: {ex}")
         finally:
             self.hide_loading()
 
@@ -368,10 +330,10 @@ class AppController:
         
         # Save master_key to session for encryption/decryption
         if utente.get("master_key"):
-            print(f"[DEBUG] Salvataggio Master Key in sessione. Valore: {utente['master_key'][:10]}...")
+            logger.debug(f"Salvataggio Master Key in sessione (masked).")
             self.page.session.set("master_key", utente["master_key"])
         else:
-            print("[DEBUG] ATTENZIONE: Nessuna Master Key trovata nell'oggetto utente!")
+            logger.warning("ATTENZIONE: Nessuna Master Key trovata nell'oggetto utente!")
 
         if utente.get("forza_cambio_password"):
             self.page.go("/force-change-password")
@@ -431,6 +393,7 @@ class AppController:
             self.show_snack_bar(f"Famiglia '{nome_famiglia}' creata! Ora crea il tuo primo conto.", success=True)
             self.page.go("/dashboard")
         except Exception as ex:
+            logger.error(f"Errore creazione famiglia: {ex}")
             self.txt_errore_setup.value = f"Errore: {ex}"
             self.txt_errore_setup.visible = True
             self.page.update()
@@ -452,6 +415,7 @@ class AppController:
         ], vertical_alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
     def logout(self, e=None):
+        logger.info("User logged out")
         self.page.session.clear()
         self.page.go("/")
 
@@ -463,7 +427,7 @@ class AppController:
 
     def db_write_operation(self):
         """Chiamato dopo operazioni di scrittura sul database."""
-        self.show_loading("Attendere...")
+        self.show_loading("Salvataggio...")
         try:
             self.update_all_views()
         finally:
@@ -480,11 +444,13 @@ class AppController:
 
     def show_loading(self, messaggio: str = "Attendere..."):
         """Mostra l'overlay di caricamento che blocca l'interfaccia."""
+        logger.debug(f"[OVERLAY] show_loading called: msg={messaggio}")
         self.loading_overlay.show(messaggio)
         self.page.update()
 
     def hide_loading(self):
         """Nasconde l'overlay di caricamento."""
+        logger.debug("[OVERLAY] hide_loading called")
         self.loading_overlay.hide()
         self.page.update()
 

@@ -1,0 +1,8 @@
+2025-12-10 19:02:41,315 - AppController - INFO - AppController initialized. Version: 0.16.01
+2025-12-10 19:02:41,375 - AppController - DEBUG - Route changed to: /
+2025-12-10 19:02:41,386 - AppController - DEBUG - [OVERLAY] hide_loading called
+2025-12-10 19:02:51,895 - AppController - DEBUG - [OVERLAY] show_loading called: msg=Accesso in corso...
+2025-12-10 19:02:52,880 - AppController - DEBUG - Salvataggio Master Key in sessione (masked).
+2025-12-10 19:02:53,346 - AppController - DEBUG - Route changed to: /dashboard
+2025-12-10 19:02:53,359 - AppController - DEBUG - [OVERLAY] hide_loading called
+2025-12-10 19:02:56,146 - AppController - DEBUG - [OVERLAY] hide_loading called
