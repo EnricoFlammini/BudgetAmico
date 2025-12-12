@@ -12,6 +12,10 @@ from tabs.tab_immobili import ImmobiliTab
 from tabs.tab_impostazioni import ImpostazioniTab
 from tabs.tab_spese_fisse import SpeseFisseTab
 from tabs.tab_investimenti import InvestimentiTab
+from utils.logger import setup_logger
+from utils.cache_manager import cache_manager
+
+logger = setup_logger("DashboardView")
 
 
 class DashboardView:
@@ -84,6 +88,10 @@ class DashboardView:
 
     def _sidebar_item_clicked(self, index, view_instance):
         """Gestisce il click su un elemento della sidebar."""
+        # Get the label for logging
+        label = self.sidebar_items[index]['label'] if index < len(self.sidebar_items) else f"index_{index}"
+        logger.info(f"[NAV] Tab clicked: '{label}' (index={index})")
+        
         self.selected_index = index
         self.content_area.content = view_instance
         
@@ -127,6 +135,11 @@ class DashboardView:
                 center_title=False,
                 actions=[
                     ft.IconButton(
+                        icon=ft.Icons.REFRESH,
+                        tooltip=loc.get("refresh_data", "Aggiorna dati"),
+                        on_click=self._refresh_all_data
+                    ),
+                    ft.IconButton(
                         icon=ft.Icons.INFO_OUTLINE,
                         tooltip=loc.get("info"),
                         on_click=self.controller.open_info_dialog
@@ -153,6 +166,7 @@ class DashboardView:
 
     def _open_add_menu(self, e):
         """Apre un BottomSheet con le opzioni di aggiunta."""
+        logger.info("[ACTION] FAB '+' clicked: Opening add menu")
         loc = self.controller.loc
 
         def close_bs(e):
@@ -326,11 +340,34 @@ class DashboardView:
         if self.sidebar_listview.page:
             self.sidebar_listview.update()
 
+    def _refresh_all_data(self, e=None):
+        """
+        Forza l'aggiornamento di tutti i dati (pulsante refresh nell'AppBar).
+        Invalida la cache e ricarica tutto dal database.
+        """
+        logger.info("[ACTION] Refresh button clicked: forcing data reload")
+        self.controller.show_loading("Aggiornamento dati...")
+        
+        try:
+            # Invalida la cache per questa famiglia
+            id_famiglia = self.controller.get_family_id()
+            if id_famiglia:
+                cache_manager.invalidate_all(id_famiglia)
+            
+            # Ricarica tutti i dati
+            self.update_all_tabs_data(is_initial_load=False)
+            self.controller.show_snack_bar("Dati aggiornati!", success=True)
+        finally:
+            self.controller.hide_loading()
+
     def update_all_tabs_data(self, is_initial_load=False):
         """
         Aggiorna i dati di tutte le viste e della sidebar.
+        
+        Se is_initial_load=True, carica i dati dalla cache per UI immediata.
+        I dati verranno aggiornati dal DB quando l'utente accede alle singole tabs.
         """
-        print("DashboardView: Aggiornamento dati completo...")
+        logger.debug(f"Updating all tabs data... (is_initial_load={is_initial_load})")
 
         # Aggiorna la sidebar (lingue, ruoli)
         self.update_sidebar()
@@ -338,22 +375,28 @@ class DashboardView:
         # Aggiorna il titolo
         self.appbar_title.value = self.controller.loc.get("app_title")
 
-        # Aggiorna i dati di TUTTE le schede (così sono pronte quando ci clicchi)
-        # Nota: Potremmo ottimizzare aggiornando solo la visibile e le altre on-demand,
-        # ma per ora manteniamo la logica "eager" per semplicità.
-        self.tab_personale.update_view_data(is_initial_load)
-        self.tab_famiglia.update_view_data(is_initial_load)
-        self.tab_conti.update_view_data(is_initial_load)
-        self.tab_conti_condivisi.update_view_data(is_initial_load)
-        self.tab_spese_fisse.update_view_data(is_initial_load)
-        self.tab_budget.update_view_data(is_initial_load)
-        self.tab_investimenti.update_view_data(is_initial_load)
-        self.tab_prestiti.update_view_data(is_initial_load)
-        self.tab_immobili.update_view_data(is_initial_load)
-        self.tab_impostazioni.update_view_data(is_initial_load)
+        # Pattern: Stale-While-Revalidate
+        # - All'avvio: carica solo la tab corrente (tab_personale)
+        # - Le altre tabs si aggiorneranno quando l'utente ci clicca
+        if is_initial_load:
+            # Carica solo la tab visibile inizialmente per avvio rapido
+            logger.debug("Initial load: loading only visible tab (PersonaleTab)")
+            self.tab_personale.update_view_data(is_initial_load)
+        else:
+            # Aggiornamento completo (richiesto esplicitamente)
+            self.tab_personale.update_view_data(is_initial_load)
+            self.tab_famiglia.update_view_data(is_initial_load)
+            self.tab_conti.update_view_data(is_initial_load)
+            self.tab_conti_condivisi.update_view_data(is_initial_load)
+            self.tab_spese_fisse.update_view_data(is_initial_load)
+            self.tab_budget.update_view_data(is_initial_load)
+            self.tab_investimenti.update_view_data(is_initial_load)
+            self.tab_prestiti.update_view_data(is_initial_load)
+            self.tab_immobili.update_view_data(is_initial_load)
+            self.tab_impostazioni.update_view_data(is_initial_load)
 
-        if self.controller.get_user_role() == 'admin':
-            self.tab_admin.update_all_admin_tabs_data(is_initial_load)
+            if self.controller.get_user_role() == 'admin':
+                self.tab_admin.update_all_admin_tabs_data(is_initial_load)
 
         if self.page:
             self.page.update()

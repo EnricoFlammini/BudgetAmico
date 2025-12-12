@@ -185,63 +185,43 @@ class AppStyles:
 
 class LoadingOverlay(ft.Container):
     """
-    Overlay modale di caricamento.
-    Mostra uno spinner circolare con un messaggio personalizzabile.
-    Sfondo trasparente con rettangolo opaco al centro.
+    Overlay modale di caricamento semplice.
+    Solo uno spinner centrato, senza background.
     """
     
     def __init__(self, messaggio: str = "Attendere..."):
         self.messaggio_text = ft.Text(
             messaggio, 
-            size=16, 
-            weight=ft.FontWeight.W_500,
-            color=ft.Colors.WHITE
+            size=14, 
+            color=ft.Colors.ON_SURFACE
         )
         
-        # Rettangolo opaco centrale con spinner e messaggio
-        self.spinner_box = ft.Container(
+        super().__init__(
             content=ft.Column(
                 [
                     ft.ProgressRing(
-                        width=50,
-                        height=50,
-                        stroke_width=4,
-                        color=ft.Colors.WHITE
+                        width=40,
+                        height=40,
+                        stroke_width=3,
+                        color=ft.Colors.PRIMARY
                     ),
-                    ft.Container(height=15),
+                    ft.Container(height=10),
                     self.messaggio_text,
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 alignment=ft.MainAxisAlignment.CENTER,
             ),
-            width=200,
-            height=150,
-            padding=20,
-            border_radius=15,
-            bgcolor=ft.Colors.with_opacity(0.92, ft.Colors.BLACK),
-            shadow=ft.BoxShadow(
-                spread_radius=2,
-                blur_radius=20,
-                color=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
-            ),
-            visible=False,  # Inizialmente nascosto
-        )
-        
-        super().__init__(
-            content=self.spinner_box,
             alignment=ft.alignment.center,
             expand=True,
-            visible=False,  # Container principale nascosto
+            visible=False,
         )
     
     def show(self, messaggio: str = None):
         """Mostra l'overlay con un messaggio opzionale."""
         if messaggio:
             self.messaggio_text.value = messaggio
-        self.spinner_box.visible = True
         self.visible = True
     
     def hide(self):
         """Nasconde l'overlay."""
-        self.spinner_box.visible = False
         self.visible = False

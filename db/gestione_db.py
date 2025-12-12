@@ -11,6 +11,7 @@ import secrets
 import string
 import base64
 from utils.crypto_manager import CryptoManager
+from utils.cache_manager import cache_manager
 
 # --- BLOCCO DI CODICE PER CORREGGERE IL PERCORSO ---
 script_dir = os.path.dirname(__file__)
@@ -193,25 +194,14 @@ def get_configurazione(chiave: str, id_famiglia: Optional[str] = None, master_ke
             sensitive_keys = ['smtp_server', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_from_email']
             
             if chiave in sensitive_keys:
-                if id_famiglia and master_key_b64 and id_utente:
-                     # Decrypt Family Config
-                    crypto, master_key = _get_crypto_and_key(master_key_b64)
-                    if master_key:
-                        family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
-                        if family_key:
-                            valore = _decrypt_if_key(valore, family_key, crypto)
-                        else:
-                            print(f"[DEBUG] get_configurazione - family_key non trovata per id_famiglia={id_famiglia}, id_utente={id_utente}")
-                    else:
-                        print("[DEBUG] get_configurazione - master_key non valida")
-                elif id_famiglia is None:
-                    # Decrypt Global Config (System Key)
-                    try:
-                        decrypted = decrypt_system_data(valore)
-                        if decrypted:
-                            valore = decrypted
-                    except Exception as e:
-                        print(f"[WARN] Failed to system-decrypt {chiave}: {e}")
+                # SMTP credentials are ALWAYS encrypted with SERVER_KEY (not family_key)
+                # This allows decryption without user context (e.g., for password reset)
+                try:
+                    decrypted = decrypt_system_data(valore)
+                    if decrypted:
+                        valore = decrypted
+                except Exception as e:
+                    print(f"[WARN] Failed to system-decrypt {chiave}: {e}")
             
             return valore
     except Exception as e:
@@ -237,21 +227,13 @@ def set_configurazione(chiave: str, valore: str, id_famiglia: Optional[str] = No
         encrypted_valore = valore
         sensitive_keys = ['smtp_server', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_from_email']
         
-        if chiave in sensitive_keys:
-            if id_famiglia and master_key_b64 and id_utente:
-                # Encrypt with Family Key (User Data)
-                crypto, master_key = _get_crypto_and_key(master_key_b64)
-                if master_key:
-                    family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
-                    if family_key:
-                        encrypted_valore = _encrypt_if_key(valore, family_key, crypto)
-            elif id_famiglia is None and SERVER_SECRET_KEY:
-                # Encrypt with System Key (Global Config accessible by Server)
-                # Used for SMTP credentials needed for Password Reset
-                try:
-                    encrypted_valore = encrypt_system_data(valore)
-                except Exception as e:
-                    print(f"[WARN] Failed to system-encrypt {chiave}: {e}")
+        if chiave in sensitive_keys and SERVER_SECRET_KEY:
+            # SMTP credentials are ALWAYS encrypted with SERVER_KEY (not family_key)
+            # This allows the server to decrypt them for password reset without user context
+            try:
+                encrypted_valore = encrypt_system_data(valore)
+            except Exception as e:
+                print(f"[WARN] Failed to system-encrypt {chiave}: {e}")
         
         with get_db_connection() as con:
             cur = con.cursor()
@@ -1010,6 +992,22 @@ def crea_utente_invitato(email: str, ruolo: str, id_famiglia: str, id_admin: Opt
         temp_master_key = crypto.generate_master_key()
         encrypted_temp_mk = crypto.encrypt_master_key(temp_master_key, temp_kek)
         
+        # Generate Recovery Key
+        recovery_key = crypto.generate_recovery_key()
+        recovery_key_hash = hashlib.sha256(recovery_key.encode()).hexdigest()
+        encrypted_mk_recovery = crypto.encrypt_master_key(temp_master_key, crypto.derive_key(recovery_key, temp_salt))
+        
+        # --- SERVER KEY BACKUP ---
+        encrypted_mk_backup_b64 = None
+        if SERVER_SECRET_KEY:
+            try:
+                srv_key_bytes = hashlib.sha256(SERVER_SECRET_KEY.encode()).digest()
+                srv_fernet_key = base64.urlsafe_b64encode(srv_key_bytes)
+                encrypted_mk_backup = crypto.encrypt_master_key(temp_master_key, srv_fernet_key)
+                encrypted_mk_backup_b64 = base64.urlsafe_b64encode(encrypted_mk_backup).decode()
+            except Exception as e_bk:
+                print(f"[WARNING] Failed to generate server backup key for invited user: {e_bk}")
+        
         # Recupera la family key dell'admin (se disponibile)
         family_key_encrypted_for_new_user = None
         if id_admin and master_key_b64:
@@ -1036,12 +1034,15 @@ def crea_utente_invitato(email: str, ruolo: str, id_famiglia: str, id_admin: Opt
             c_enc_srv = encrypt_system_data("Utente")
             
             cur.execute("""
-                INSERT INTO Utenti (username, email, password_hash, nome, cognome, forza_cambio_password, salt, encrypted_master_key, username_bindex, email_bindex, username_enc, email_enc, nome_enc_server, cognome_enc_server)
-                VALUES (%s, %s, %s, %s, %s, TRUE, %s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO Utenti (username, email, password_hash, nome, cognome, forza_cambio_password, salt, encrypted_master_key, recovery_key_hash, encrypted_master_key_recovery, encrypted_master_key_backup, username_bindex, email_bindex, username_enc, email_enc, nome_enc_server, cognome_enc_server)
+                VALUES (%s, %s, %s, %s, %s, TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id_utente
-            """, (temp_username, email, password_hash, "Nuovo", "Utente",
+            """, (None, None, password_hash, None, None,
                   base64.urlsafe_b64encode(temp_salt).decode(),
                   base64.urlsafe_b64encode(encrypted_temp_mk).decode(),
+                  recovery_key_hash,
+                  base64.urlsafe_b64encode(encrypted_mk_recovery).decode(),
+                  encrypted_mk_backup_b64,
                   u_bindex, e_bindex, u_enc, e_enc, n_enc_srv, c_enc_srv))
             
             id_utente = cur.fetchone()['id_utente']
@@ -1103,11 +1104,12 @@ def registra_utente(nome: str, cognome: str, username: str, password: str, email
 
         with get_db_connection() as con:
             cur = con.cursor()
+            # NOTA: username e email legacy sono NULL - usiamo solo le versioni _bindex e _enc
             cur.execute("""
                 INSERT INTO Utenti (nome, cognome, username, password_hash, email, data_nascita, codice_fiscale, indirizzo, salt, encrypted_master_key, recovery_key_hash, encrypted_master_key_recovery, encrypted_master_key_backup, username_bindex, email_bindex, username_enc, email_enc, nome_enc_server, cognome_enc_server)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id_utente
-            """, (enc_nome, enc_cognome, username, password_hash, email, data_nascita, enc_cf, enc_indirizzo, 
+            """, (enc_nome, enc_cognome, None, password_hash, None, data_nascita, enc_cf, enc_indirizzo, 
                   base64.urlsafe_b64encode(salt).decode(), 
                   base64.urlsafe_b64encode(encrypted_mk).decode(),
                   recovery_key_hash,
@@ -1208,9 +1210,14 @@ def trova_utente_per_email(email: str) -> Optional[Dict[str, str]]:
         e_bindex = compute_blind_index(email)
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("SELECT id_utente, nome, email, email_enc FROM Utenti WHERE email_bindex = %s", (e_bindex,))
+            # Join con Appartenenza_Famiglia per ottenere id_famiglia
+            cur.execute("""
+                SELECT U.id_utente, U.nome, U.email, U.email_enc, AF.id_famiglia
+                FROM Utenti U
+                LEFT JOIN Appartenenza_Famiglia AF ON U.id_utente = AF.id_utente
+                WHERE U.email_bindex = %s
+            """, (e_bindex,))
             res = cur.fetchone()
-            # Fallback removed
 
             
             if res:
@@ -1228,7 +1235,8 @@ def trova_utente_per_email(email: str) -> Optional[Dict[str, str]]:
              return {
                  'id_utente': res['id_utente'],
                  'nome': "Utente", # Placeholder as we can't decrypt name without password
-                 'email': real_email
+                 'email': real_email,
+                 'id_famiglia': res.get('id_famiglia')  # Può essere None se non appartiene a una famiglia
              }
             return None
     except Exception as e:
@@ -1652,7 +1660,10 @@ def aggiungi_categoria(id_famiglia, nome_categoria, master_key_b64=None, id_uten
             cur.execute(
                 "INSERT INTO Categorie (id_famiglia, nome_categoria) VALUES (%s, %s) RETURNING id_categoria",
                 (id_famiglia, encrypted_nome))
-            return cur.fetchone()['id_categoria']
+            result = cur.fetchone()['id_categoria']
+            # Invalida la cache delle categorie
+            cache_manager.invalidate("categories", id_famiglia)
+            return result
     except Exception as e:
         print(f"[ERRORE] Errore aggiunta categoria: {e}")
         return None
@@ -1678,7 +1689,11 @@ def modifica_categoria(id_categoria, nome_categoria, master_key_b64=None, id_ute
 
             cur.execute("UPDATE Categorie SET nome_categoria = %s WHERE id_categoria = %s",
                         (encrypted_nome, id_categoria))
-            return cur.rowcount > 0
+            result = cur.rowcount > 0
+            if result:
+                # Invalida la cache delle categorie
+                cache_manager.invalidate("categories", id_famiglia)
+            return result
     except Exception as e:
         print(f"[ERRORE] Errore modifica categoria: {e}")
         return False
@@ -1687,8 +1702,16 @@ def elimina_categoria(id_categoria):
     try:
         with get_db_connection() as con:
             cur = con.cursor()
+            # Get id_famiglia before deletion
+            cur.execute("SELECT id_famiglia FROM Categorie WHERE id_categoria = %s", (id_categoria,))
+            res = cur.fetchone()
+            id_famiglia = res['id_famiglia'] if res else None
+            
             cur.execute("DELETE FROM Categorie WHERE id_categoria = %s", (id_categoria,))
-            return cur.rowcount > 0
+            result = cur.rowcount > 0
+            if result and id_famiglia:
+                cache_manager.invalidate("categories", id_famiglia)
+            return result
     except Exception as e:
         print(f"[ERRORE] Errore eliminazione categoria: {e}")
         return False
@@ -1746,7 +1769,10 @@ def aggiungi_sottocategoria(id_categoria, nome_sottocategoria, master_key_b64=No
             cur.execute(
                 "INSERT INTO Sottocategorie (id_categoria, nome_sottocategoria) VALUES (%s, %s) RETURNING id_sottocategoria",
                 (id_categoria, encrypted_nome))
-            return cur.fetchone()['id_sottocategoria']
+            result = cur.fetchone()['id_sottocategoria']
+            # Invalida la cache delle categorie (include sottocategorie)
+            cache_manager.invalidate("categories", id_famiglia)
+            return result
     except Exception as e:
         print(f"[ERRORE] Errore aggiunta sottocategoria: {e}")
         return None
@@ -1777,7 +1803,10 @@ def modifica_sottocategoria(id_sottocategoria, nome_sottocategoria, master_key_b
 
             cur.execute("UPDATE Sottocategorie SET nome_sottocategoria = %s WHERE id_sottocategoria = %s",
                         (encrypted_nome, id_sottocategoria))
-            return cur.rowcount > 0
+            result = cur.rowcount > 0
+            if result:
+                cache_manager.invalidate("categories", id_famiglia)
+            return result
     except Exception as e:
         print(f"[ERRORE] Errore modifica sottocategoria: {e}")
         return False
@@ -1786,17 +1815,43 @@ def elimina_sottocategoria(id_sottocategoria):
     try:
         with get_db_connection() as con:
             cur = con.cursor()
+            # Get id_famiglia before deletion
+            cur.execute("""
+                SELECT C.id_famiglia 
+                FROM Sottocategorie S 
+                JOIN Categorie C ON S.id_categoria = C.id_categoria 
+                WHERE S.id_sottocategoria = %s
+            """, (id_sottocategoria,))
+            res = cur.fetchone()
+            id_famiglia = res['id_famiglia'] if res else None
+            
             cur.execute("DELETE FROM Sottocategorie WHERE id_sottocategoria = %s", (id_sottocategoria,))
-            return cur.rowcount > 0
+            result = cur.rowcount > 0
+            if result and id_famiglia:
+                cache_manager.invalidate("categories", id_famiglia)
+            return result
     except Exception as e:
         print(f"[ERRORE] Errore eliminazione sottocategoria: {e}")
         return False
 
 def ottieni_categorie_e_sottocategorie(id_famiglia, master_key_b64=None, id_utente=None):
+    """
+    Recupera categorie e sottocategorie. Usa la cache per performance migliore.
+    """
     try:
+        # Prova prima dalla cache
+        cached = cache_manager.get_stale("categories", id_famiglia)
+        if cached is not None:
+            return cached
+        
+        # Se non in cache, fetch dal DB
         categorie = ottieni_categorie(id_famiglia, master_key_b64, id_utente)
         for cat in categorie:
             cat['sottocategorie'] = ottieni_sottocategorie(cat['id_categoria'], master_key_b64, id_utente)
+        
+        # Salva in cache per prossimi accessi
+        cache_manager.set("categories", categorie, id_famiglia)
+        
         return categorie
     except Exception as e:
         print(f"[ERRORE] Errore recupero categorie e sottocategorie: {e}")

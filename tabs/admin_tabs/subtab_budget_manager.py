@@ -449,7 +449,7 @@ class AdminSubTabBudgetManager(ft.Column):
                 
                 if success:
                     self.controller.show_snack_bar(f"Budget per '{nome}' salvato!", success=True)
-                    self.page.close(dialog)
+                    self.controller.page.close(dialog)
                     self._popola_lista_budget()
                     self._aggiorna_display()
                 else:
@@ -458,7 +458,7 @@ class AdminSubTabBudgetManager(ft.Column):
                 self.controller.show_snack_bar(f"Errore: {ex}", success=False)
         
         def chiudi(e_dialog):
-            self.page.close(dialog)
+            self.controller.page.close(dialog)
         
         dialog = ft.AlertDialog(
             title=ft.Text(f"Modifica Budget: {nome}"),
@@ -469,7 +469,7 @@ class AdminSubTabBudgetManager(ft.Column):
             ]
         )
         
-        self.page.open(dialog)
+        self.controller.page.open(dialog)
     
     def _salva_impostazioni_click(self, e):
         """Salva le impostazioni budget correnti."""

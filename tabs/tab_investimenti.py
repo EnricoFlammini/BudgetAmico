@@ -137,7 +137,8 @@ class InvestimentiTab(ft.Container):
         try:
             self.lv_portafogli.controls.clear()
             self.lv_portafogli.controls.append(AppStyles.body_text(f"Errore caricamento: {e}", color=AppColors.ERROR))
-            self.page.update()
+            if self.page:
+                self.page.update()
         except:
             pass
 

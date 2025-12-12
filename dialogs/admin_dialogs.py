@@ -183,7 +183,6 @@ class AdminDialogs:
 
     def _chiudi_dialog_sottocategoria(self, e):
         self.dialog_sottocategoria.open = False
-        self.controller.hide_loading()  # Safety: nasconde loading se visibile
         self.controller.page.update()
         if self.dialog_sottocategoria in self.controller.page.overlay:
             self.controller.page.overlay.remove(self.dialog_sottocategoria)
@@ -231,17 +230,14 @@ class AdminDialogs:
         self.txt_username_o_email.value = ""
         self.txt_username_o_email.error_text = None
         
-        if self.dialog_invito_membri not in self.controller.page.overlay:
-            self.controller.page.overlay.append(self.dialog_invito_membri)
-        self.dialog_invito_membri.open = True
-        self.controller.page.update()
+        # Usa page.open() per gestire correttamente il dialog
+        self.page.open(self.dialog_invito_membri)
+        self.page.update()
 
-    def _chiudi_dialog_invito(self, e):
-        self.dialog_invito_membri.open = False
-        self.controller.page.update()
-        if self.dialog_invito_membri in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_invito_membri)
-        self.controller.page.update()
+    def _chiudi_dialog_invito(self, e=None):
+        # Usa page.close() per chiudere correttamente il dialog
+        self.page.close(self.dialog_invito_membri)
+        self.page.update()
 
     def _invita_membro_cliccato(self, e):
         email = self.txt_username_o_email.value
@@ -259,8 +255,11 @@ class AdminDialogs:
         if existing_user:
             # Add to family
             success = aggiungi_utente_a_famiglia(id_famiglia, existing_user['id_utente'], ruolo)
+            # Chiudi il dialog prima del feedback
+            self._chiudi_dialog_invito(e)
             if success:
                 self.controller.show_snack_bar(f"Utente {email} aggiunto alla famiglia!", success=True)
+                self.controller.db_write_operation()
             else:
                 self.controller.show_snack_bar("Errore durante l'aggiunta dell'utente.", success=False)
         else:
@@ -269,29 +268,44 @@ class AdminDialogs:
             current_user_id = self.controller.get_user_id()
             credenziali = crea_utente_invitato(email, ruolo, id_famiglia, id_admin=current_user_id, master_key_b64=master_key_b64)
             if credenziali:
-                # Recupera Configurazione SMTP decriptata
-                print(f"[DEBUG] AdminDialogs: Recupero SMTP config per id_famiglia={id_famiglia}, id_utente={current_user_id}")
-                smtp_config = get_smtp_config(id_famiglia, master_key_b64, current_user_id)
-                print(f"[DEBUG] AdminDialogs: SMTP Config recuperata: {smtp_config}")
-                
-                # Send email
-                print(f"[DEBUG] AdminDialogs: Tentativo invio email a {email}...")
-                success, error = send_email(
-                    to_email=email,
-                    subject="Benvenuto in Budget Amico - Credenziali di Accesso",
-                    body=f"Sei stato invitato nella famiglia!\n\nEcco le tue credenziali temporanee:\nEmail: {email}\nUsername: {credenziali['username']}\nPassword: {credenziali['password']}\n\nAccedi e completa il tuo profilo.",
-                    smtp_config=smtp_config
-                )
-                print(f"[DEBUG] AdminDialogs: Esito invio email: {success}, Errore: {error}")
-                
-                self.dialog_invito_membri.open = False
+                # Chiudi il dialog SUBITO (prima dell'invio email)
+                self._chiudi_dialog_invito(e)
                 self.controller.db_write_operation()
-
-                if success:
-                    self.controller.show_snack_bar(f"Invito inviato a {email}!", success=True)
-                else:
-                    self.controller.show_snack_bar(f"Utente creato, ma errore invio email: {error}", success=False)
+                self.controller.show_snack_bar(f"Utente creato. Invio email in corso...", success=True)
+                
+                # Recupera Configurazione SMTP decriptata
+                smtp_config = get_smtp_config(id_famiglia, master_key_b64, current_user_id)
+                
+                # Invia email in modo asincrono
+                from utils.async_task import AsyncTask
+                
+                def _send_invite_email():
+                    return send_email(
+                        to_email=email,
+                        subject="Benvenuto in Budget Amico - Credenziali di Accesso",
+                        body=f"Sei stato invitato nella famiglia!\n\nEcco le tue credenziali temporanee:\nEmail: {email}\nUsername: {credenziali['username']}\nPassword: {credenziali['password']}\n\nAccedi e completa il tuo profilo.",
+                        smtp_config=smtp_config
+                    )
+                
+                def _on_email_sent(result):
+                    success, error = result
+                    if success:
+                        self.controller.show_snack_bar(f"Email inviata a {email}!", success=True)
+                    else:
+                        self.controller.show_snack_bar(f"Errore invio email: {error}", success=False)
+                
+                def _on_email_error(err):
+                    self.controller.show_snack_bar(f"Errore invio email: {err}", success=False)
+                
+                task = AsyncTask(
+                    target=_send_invite_email,
+                    callback=_on_email_sent,
+                    error_callback=_on_email_error
+                )
+                task.start()
             else:
+                # Chiudi il dialog anche in caso di errore
+                self._chiudi_dialog_invito(e)
                 self.controller.show_snack_bar("Errore durante la creazione dell'utente.", success=False)
 
     def apri_dialog_modifica_ruolo(self, membro_data):
@@ -305,7 +319,6 @@ class AdminDialogs:
 
     def _chiudi_dialog_modifica_ruolo(self, e):
         self.dialog_modifica_ruolo.open = False
-        self.controller.hide_loading()  # Safety: nasconde loading se visibile
         self.controller.page.update()
         if self.dialog_modifica_ruolo in self.controller.page.overlay:
             self.controller.page.overlay.remove(self.dialog_modifica_ruolo)

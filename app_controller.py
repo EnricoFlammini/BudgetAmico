@@ -36,7 +36,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 URL_BASE = os.environ.get("FLET_APP_URL", "http://localhost:8550")
-VERSION = "0.17.00"
+VERSION = "0.18.00"
 
 
 class AppController:
@@ -127,8 +127,8 @@ class AppController:
             self.prestito_dialogs.dialog_prestito, self.prestito_dialogs.dialog_paga_rata,
             self.immobile_dialog, self.fondo_pensione_dialog, self.giroconto_dialog,
             self.conto_condiviso_dialog, self.spesa_fissa_dialog, self.confirm_delete_dialog,
-            self.file_picker_salva_backup, self.file_picker_apri_backup, self.error_dialog, self.info_dialog,
-            self.loading_overlay
+            self.file_picker_salva_backup, self.file_picker_apri_backup, self.error_dialog
+            # NOTE: info_dialog e loading_overlay sono gestiti dinamicamente
         ])
 
     def on_file_picker_result(self, e: ft.FilePickerResultEvent):
@@ -258,27 +258,16 @@ class AppController:
         pass # Placeholder
 
     def open_info_dialog(self, e):
-        logger.debug(f"[OVERLAY] open_info_dialog called. Current overlay count: {len(self.page.overlay)}")
+        logger.debug(f"[OVERLAY] open_info_dialog called.")
         db_version = ottieni_versione_db()
         self.info_dialog.content.value = f"Versione App: {VERSION}\nVersione Database: {db_version}\n\nSviluppato da Iscavar79."
-        if self.info_dialog not in self.page.overlay:
-            logger.debug("[OVERLAY] Adding info_dialog to overlay")
-            self.page.overlay.append(self.info_dialog)
-        self.info_dialog.open = True
-        self.page.update()
-        logger.debug("[OVERLAY] info_dialog opened.")
+        # Usa page.open() - pattern moderno di Flet
+        self.page.open(self.info_dialog)
 
     def _chiudi_info_dialog(self, e):
         logger.debug("[OVERLAY] _chiudi_info_dialog called.")
-        self.info_dialog.open = False
-        logger.debug("[OVERLAY] Calling hide_loading() just in case...")
-        self.hide_loading()  # Safety: nasconde loading se visibile
-        self.page.update()
-        if self.info_dialog in self.page.overlay:
-            logger.debug("[OVERLAY] Removing info_dialog from overlay")
-            self.page.overlay.remove(self.info_dialog)
-        self.page.update()
-        logger.debug("[OVERLAY] info_dialog closed.")
+        # Usa page.close() - rimuove automaticamente dall'overlay
+        self.page.close(self.info_dialog)
 
     def _close_error_dialog(self, e):
         self.error_dialog.open = False
@@ -445,13 +434,19 @@ class AppController:
     def show_loading(self, messaggio: str = "Attendere..."):
         """Mostra l'overlay di caricamento che blocca l'interfaccia."""
         logger.debug(f"[OVERLAY] show_loading called: msg={messaggio}")
+        # Aggiungi all'overlay se non presente
+        if self.loading_overlay not in self.page.overlay:
+            self.page.overlay.append(self.loading_overlay)
         self.loading_overlay.show(messaggio)
         self.page.update()
 
     def hide_loading(self):
-        """Nasconde l'overlay di caricamento."""
+        """Nasconde e rimuove l'overlay di caricamento."""
         logger.debug("[OVERLAY] hide_loading called")
         self.loading_overlay.hide()
+        # Rimuovi dall'overlay per evitare il rettangolo grigio
+        if self.loading_overlay in self.page.overlay:
+            self.page.overlay.remove(self.loading_overlay)
         self.page.update()
 
     def get_user_id(self):

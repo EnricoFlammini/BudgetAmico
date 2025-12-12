@@ -1,7 +1,8 @@
 import flet as ft
 from db.gestione_db import (
     registra_utente, verifica_login, aggiungi_utente_a_famiglia, trova_utente_per_email,
-    imposta_password_temporanea, cambia_password, hash_password, cambia_password_e_username
+    imposta_password_temporanea, cambia_password, hash_password, cambia_password_e_username,
+    get_smtp_config
 )
 from utils.email_sender import send_email
 import os
@@ -147,12 +148,18 @@ class AuthView:
         )
 
     def _login_cliccato(self, e):
+        # Disable button to prevent double submission
+        btn_login = e.control
+        btn_login.disabled = True
+        btn_login.update()
+
         username = self.txt_username.value.strip()
         password = self.txt_password.value
 
         if not username or not password:
             self.txt_errore_login.value = "Inserisci username e password."
             self.txt_errore_login.visible = True
+            btn_login.disabled = False
             self.page.update()
             return
 
@@ -170,9 +177,11 @@ class AuthView:
             else:
                 self.txt_errore_login.value = "Username o password non validi."
                 self.txt_errore_login.visible = True
+                btn_login.disabled = False
                 self.page.update()
                 self.controller.hide_loading()
         except Exception:
+            btn_login.disabled = False
             self.controller.hide_loading()
             raise
 
@@ -322,53 +331,84 @@ class AuthView:
         )
 
     def _invia_link_reset(self, e):
+        # Disable button to prevent double submission
+        btn_invia = e.control
+        btn_invia.disabled = True
+        btn_invia.update()
+
         email = self.txt_recovery_email.value.lower().strip()
         self.txt_recovery_email.error_text = None
 
         if not email:
             self.txt_recovery_email.error_text = self.loc.get("email_is_required")
+            btn_invia.disabled = False
             self.page.update()
             return
 
-        utente = trova_utente_per_email(email)
+        # Mostra spinner durante l'invio
+        self.controller.show_loading("Invio email in corso...")
 
-        if utente:
-            # Genera una password temporanea
-            import secrets
-            temp_password = secrets.token_urlsafe(8)
-            # temp_password_hash = hash_password(temp_password) # NO! Passiamo la password raw
+        try:
+            utente = trova_utente_per_email(email)
 
-            if imposta_password_temporanea(utente['id_utente'], temp_password):
-                body = f"""
-                    <html><body>
-                        <p>Ciao {utente['nome']},</p>
-                        <p>La tua password temporanea è: <b>{temp_password}</b></p>
-                        <p>Al prossimo accesso ti verrà chiesto di impostare una nuova password personale.</p>
-                        <p><i>Nota: I tuoi dati sono stati recuperati con successo grazie al backup server.</i></p>
-                    </body></html>
-                    """
-                success, error = send_email(email, "Password Temporanea - Budget Amico", body)
-                
-                if not success and "SMTP" in str(error):
-                     # Show configuration error
-                    self.recovery_status_text.value = f"Errore configurazione: {error}"
+            if utente:
+                # Genera una password temporanea
+                import secrets
+                temp_password = secrets.token_urlsafe(8)
+
+                if imposta_password_temporanea(utente['id_utente'], temp_password):
+                    body = f"""
+                        <html><body>
+                            <p>Ciao {utente['nome']},</p>
+                            <p>La tua password temporanea è: <b>{temp_password}</b></p>
+                            <p>Al prossimo accesso ti verrà chiesto di impostare una nuova password personale.</p>
+                            <p><i>Nota: I tuoi dati sono stati recuperati con successo grazie al backup server.</i></p>
+                        </body></html>
+                        """
+                    
+                    # Recupera la configurazione SMTP della famiglia dell'utente
+                    id_famiglia = utente.get('id_famiglia')
+                    smtp_config = None
+                    if id_famiglia:
+                        smtp_config = get_smtp_config(id_famiglia=id_famiglia)
+                        if not smtp_config or not smtp_config.get('server'):
+                            smtp_config = get_smtp_config()
+                    else:
+                        smtp_config = get_smtp_config()
+                    
+                    success, error = send_email(email, "Password Temporanea - Budget Amico", body, smtp_config=smtp_config)
+                    
+                    if not success and "SMTP" in str(error):
+                        self.controller.hide_loading()
+                        self.recovery_status_text.value = f"Errore configurazione: {error}"
+                        self.recovery_status_text.color = ft.Colors.RED
+                        self.recovery_status_text.visible = True
+                        btn_invia.disabled = False
+                        self.page.update()
+                        return
+                else:
+                    self.controller.hide_loading()
+                    self.recovery_status_text.value = "Impossibile recuperare l'account (Chiave di backup non trovata)."
                     self.recovery_status_text.color = ft.Colors.RED
                     self.recovery_status_text.visible = True
+                    btn_invia.disabled = False
                     self.page.update()
                     return
-            else:
-                 # Fallback error (e.g. no server key or no backup)
-                 self.recovery_status_text.value = "Impossibile recuperare l'account (Chiave di backup non trovata)."
-                 self.recovery_status_text.color = ft.Colors.RED
-                 self.recovery_status_text.visible = True
-                 self.page.update()
-                 return
 
-        # Mostra un messaggio generico per motivi di sicurezza
-        self.recovery_status_text.value = self.loc.get("reset_link_sent_confirmation")
-        self.recovery_status_text.color = ft.Colors.GREEN
-        self.recovery_status_text.visible = True
-        self.page.update()
+            # Mostra un messaggio generico per motivi di sicurezza
+            self.controller.hide_loading()
+            self.recovery_status_text.value = self.loc.get("reset_link_sent_confirmation")
+            self.recovery_status_text.color = ft.Colors.GREEN
+            self.recovery_status_text.visible = True
+            btn_invia.disabled = False
+            self.page.update()
+        except Exception as ex:
+            self.controller.hide_loading()
+            self.recovery_status_text.value = f"Errore: {ex}"
+            self.recovery_status_text.color = ft.Colors.RED
+            self.recovery_status_text.visible = True
+            btn_invia.disabled = False
+            self.page.update()
 
     # --- VISTA E LOGICA RESET PASSWORD ---
 
@@ -409,6 +449,11 @@ class AuthView:
         )
 
     def _salva_nuova_password(self, e):
+        # Disable button to prevent double submission
+        btn_salva = e.control
+        btn_salva.disabled = True
+        btn_salva.update()
+
         nuovo_username = self.txt_reset_username.value.strip()
         nome = self.txt_reset_nome.value.strip()
         cognome = self.txt_reset_cognome.value.strip()
@@ -419,6 +464,7 @@ class AuthView:
             self.reset_status_text.value = "Compila tutti i campi e verifica che le password coincidano."
             self.reset_status_text.color = ft.Colors.RED
             self.reset_status_text.visible = True
+            btn_salva.disabled = False
             self.page.update()
             return
 
@@ -427,68 +473,82 @@ class AuthView:
             self.page.go("/")
             return
 
-        # Pass RAW password, not hash!
-        # Get old password for re-encrypting family key
-        vecchia_password = self.page.session.get("_temp_password_for_reencrypt")
-        if vecchia_password:
-            self.page.session.remove("_temp_password_for_reencrypt")
-        result = cambia_password_e_username(id_utente, nuova_pass, nuovo_username, nome=nome, cognome=cognome, vecchia_password=vecchia_password)
+        # Mostra spinner durante il salvataggio
+        self.controller.show_loading("Salvataggio in corso...")
 
-        if result and result.get("success"):
-            # Update session username and keys
-            utente = self.page.session.get("utente_loggato")
-            if utente:
-                utente['username'] = nuovo_username
-                if result.get("master_key"):
-                     utente['master_key'] = result.get("master_key")
-                     self.page.session.set("master_key", result.get("master_key"))
-                self.page.session.set("utente_loggato", utente)
-            
-            recovery_key = result.get("recovery_key")
-            
-            # Show recovery key dialog identical to registration
-            def close_dialog(e):
-                dialog.open = False
-                if dialog in self.page.overlay:
-                   self.page.overlay.remove(dialog)
-                self.page.update()
+        try:
+            # Pass RAW password, not hash!
+            # Get old password for re-encrypting family key
+            vecchia_password = self.page.session.get("_temp_password_for_reencrypt")
+            if vecchia_password:
+                self.page.session.remove("_temp_password_for_reencrypt")
+            result = cambia_password_e_username(id_utente, nuova_pass, nuovo_username, nome=nome, cognome=cognome, vecchia_password=vecchia_password)
+
+            self.controller.hide_loading()
+
+            if result and result.get("success"):
+                # Update session username and keys
+                utente = self.page.session.get("utente_loggato")
+                if utente:
+                    utente['username'] = nuovo_username
+                    if result.get("master_key"):
+                         utente['master_key'] = result.get("master_key")
+                         self.page.session.set("master_key", result.get("master_key"))
+                    self.page.session.set("utente_loggato", utente)
                 
-                self.controller.show_snack_bar("Profilo aggiornato con successo!", success=True)
-                # Ricarica la dashboard con la sessione valida e chiavi
-                self.page.go("/dashboard")
+                recovery_key = result.get("recovery_key")
+                
+                # Show recovery key dialog identical to registration
+                def close_dialog(e):
+                    dialog.open = False
+                    if dialog in self.page.overlay:
+                       self.page.overlay.remove(dialog)
+                    self.page.update()
+                    
+                    self.controller.show_snack_bar("Profilo aggiornato con successo!", success=True)
+                    # Ricarica la dashboard con la sessione valida e chiavi
+                    self.page.go("/dashboard")
 
-            dialog = ft.AlertDialog(
-                modal=True,
-                title=ft.Text("⚠️ SALVA LA TUA CHIAVE DI RECUPERO", weight=ft.FontWeight.BOLD, size=18),
-                content=ft.Column([
-                    ft.Text("Password aggiornata! Ecco la tua chiave di recupero.", 
-                           size=14, weight=ft.FontWeight.BOLD),
-                    ft.Text("Questa chiave è essenziale per decriptare i tuoi dati se perdi la password.", 
-                           size=12, color=ft.Colors.RED_400),
-                    ft.Container(height=10),
-                    ft.TextField(
-                        value=recovery_key,
-                        read_only=True,
-                        multiline=True,
-                        text_size=12,
-                        border_color=ft.Colors.BLUE_400,
-                        text_style=ft.TextStyle(font_family="Courier New")
-                    ),
-                ], tight=True, scroll=ft.ScrollMode.AUTO, width=500),
-                actions=[
-                    ft.TextButton("✅ Ho salvato e capito", on_click=close_dialog, 
-                                 style=ft.ButtonStyle(color=ft.Colors.GREEN_400))
-                ],
-                actions_alignment=ft.MainAxisAlignment.END
-            )
-            
-            self.page.overlay.append(dialog)
-            dialog.open = True
-            self.page.update()
+                dialog = ft.AlertDialog(
+                    modal=True,
+                    title=ft.Text("⚠️ SALVA LA TUA CHIAVE DI RECUPERO", weight=ft.FontWeight.BOLD, size=18),
+                    content=ft.Column([
+                        ft.Text("Password aggiornata! Ecco la tua chiave di recupero.", 
+                               size=14, weight=ft.FontWeight.BOLD),
+                        ft.Text("Questa chiave è essenziale per decriptare i tuoi dati se perdi la password.", 
+                               size=12, color=ft.Colors.RED_400),
+                        ft.Container(height=10),
+                        ft.TextField(
+                            value=recovery_key,
+                            read_only=True,
+                            multiline=True,
+                            text_size=12,
+                            border_color=ft.Colors.BLUE_400,
+                            text_style=ft.TextStyle(font_family="Courier New")
+                        ),
+                    ], tight=True, scroll=ft.ScrollMode.AUTO, width=500),
+                    actions=[
+                        ft.TextButton("✅ Ho salvato e capito", on_click=close_dialog, 
+                                     style=ft.ButtonStyle(color=ft.Colors.GREEN_400))
+                    ],
+                    actions_alignment=ft.MainAxisAlignment.END
+                )
+                
+                self.page.overlay.append(dialog)
+                dialog.open = True
+                self.page.update()
 
-        else:
-            error_msg = result.get("error") if result else "Errore sconosciuto"
-            self.reset_status_text.value = f"Errore aggiornamento: {error_msg}"
+            else:
+                error_msg = result.get("error") if result else "Errore sconosciuto"
+                self.reset_status_text.value = f"Errore aggiornamento: {error_msg}"
+                self.reset_status_text.color = ft.Colors.RED
+                self.reset_status_text.visible = True
+                btn_salva.disabled = False
+                self.page.update()
+        except Exception as ex:
+            self.controller.hide_loading()
+            self.reset_status_text.value = f"Errore: {ex}"
             self.reset_status_text.color = ft.Colors.RED
             self.reset_status_text.visible = True
+            btn_salva.disabled = False
             self.page.update()

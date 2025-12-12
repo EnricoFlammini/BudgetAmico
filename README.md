@@ -194,6 +194,19 @@ BudgetAmico/
 
 ---
 
+## 📊 Novità Versione 0.18
+
+### Performance e Caching
+-   **Sistema Cache Stale-While-Revalidate**: I dati (categorie, sottocategorie) vengono ora memorizzati localmente in `%APPDATA%\BudgetAmico\cache.json` per un avvio quasi istantaneo.
+-   **Lazy Loading Tab**: All'avvio l'app carica solo la tab visibile, le altre vengono caricate on-demand quando l'utente ci clicca.
+-   **Invalidazione Automatica Cache**: La cache viene invalidata automaticamente dopo ogni operazione di scrittura (aggiunta, modifica, eliminazione di categorie/sottocategorie).
+-   **Pulsante Refresh**: Nuovo pulsante 🔄 nell'AppBar per forzare l'aggiornamento manuale di tutti i dati.
+
+### Stabilità UI
+-   **Risolto "Rettangolo Grigio"**: Eliminato definitivamente il problema del rettangolo grigio che appariva durante la chiusura dei dialog.
+-   **Dialoghi Moderni**: Migrazione dei dialog a `page.open()`/`page.close()` per una gestione più affidabile.
+-   **Fix NoneType Errors**: Corretti errori in `subtab_budget_manager.py` relativi a riferimenti pagina nulli.
+
 ## 📊 Novità Versione 0.17
 
 ### Stabilità, Sicurezza e Logging
@@ -201,6 +214,17 @@ BudgetAmico/
 -   **Database Cleanup**: Risolto un bug critico negli script di pulizia database che causava errori di decrittazione (`InvalidToken`) dopo la ri-registrazione utente.
 -   **Row Level Security (RLS)**: Abilitata e configurata la sicurezza a livello di riga su tutte le tabelle critiche, incluse `QuoteImmobili` e `QuotePrestiti`, garantendo che gli utenti accedano solo ai dati della propria famiglia.
 -   **UI Debugging**: Aggiunti strumenti diagnostici per monitorare il ciclo di vita degli overlay di caricamento e risolvere problemi di interfaccia (es. "rettangolo grigio").
+
+### Sicurezza SMTP e Inviti
+-   **SMTP per Famiglia**: Ogni famiglia ha ora la propria configurazione SMTP, criptata con la chiave server per permettere il recupero password senza contesto utente.
+-   **Invito Membri Asincrono**: L'invio email per l'invito membri ora avviene in background, il dialog si chiude immediatamente.
+-   **Chiavi Complete per Utenti Invitati**: Gli utenti invitati ora ricevono correttamente `encrypted_master_key_recovery` e `encrypted_master_key_backup` per il recupero password.
+-   **Privacy Dati Utente**: I campi legacy `email` e `username` ora sono `NULL` nel database - usiamo solo i campi criptati `*_bindex` e `*_enc`.
+
+### UI/UX
+-   **Spinner Uniformati**: Stile inline leggero (cerchio blu) per tutti gli spinner di caricamento.
+-   **Feedback Pulsanti**: Disabilitazione pulsanti durante operazioni critiche (login, registrazione, recupero password, salvataggio SMTP) per prevenire click multipli.
+-   **Chiusura Dialog Corretta**: I dialog (invito membri, modifica ruolo) ora si chiudono correttamente in tutti i percorsi usando `page.close()`.
 
 ## 📊 Novità Versione 0.16
 

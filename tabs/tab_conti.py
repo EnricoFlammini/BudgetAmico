@@ -19,7 +19,7 @@ class ContiTab(ft.Container):
         # Controlli UI
         self.lv_conti_personali = ft.Column(expand=True, scroll=ft.ScrollMode.ADAPTIVE, spacing=10)
         
-        # Loading view
+        # Loading view (inline spinner)
         self.loading_view = ft.Container(
             content=ft.Column([
                 ft.ProgressRing(color=AppColors.PRIMARY),

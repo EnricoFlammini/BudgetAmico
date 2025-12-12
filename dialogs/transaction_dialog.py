@@ -12,6 +12,9 @@ from db.gestione_db import (
     elimina_transazione,
     elimina_transazione_condivisa
 )
+from utils.logger import setup_logger
+
+logger = setup_logger("TransactionDialog")
 
 
 class TransactionDialog(ft.AlertDialog):
@@ -82,13 +85,14 @@ class TransactionDialog(ft.AlertDialog):
             if self.controller.page: self.controller.page.update()
 
     def chiudi_dialog(self, e=None):
+        logger.debug("[DIALOG] Closing TransactionDialog")
         try:
             self.open = False
             self.controller.page.session.set("transazione_in_modifica", None)
             if self.controller.page:
                 self.controller.page.update()
         except Exception as ex:
-            print(f"Errore chiusura dialog transazione: {ex}")
+            logger.error(f"Errore chiusura dialog transazione: {ex}")
             traceback.print_exc()
 
     def _popola_dropdowns(self):
@@ -130,6 +134,7 @@ class TransactionDialog(ft.AlertDialog):
         self.dd_sottocategoria_dialog.value = None
 
     def apri_dialog_nuova_transazione(self, e=None):
+        logger.info("[DIALOG] Opening: New Transaction")
         try:
             self._update_texts()
             self.controller.page.session.set("transazione_in_modifica", None)
@@ -146,11 +151,12 @@ class TransactionDialog(ft.AlertDialog):
             self.open = True
             if self.controller.page: self.controller.page.update()
         except Exception as ex:
-            print(f"Errore apertura dialog nuova transazione: {ex}")
+            logger.error(f"Errore apertura dialog nuova transazione: {ex}")
             traceback.print_exc()
             self.controller.show_snack_bar(f"Errore: {ex}", success=False)
 
     def apri_dialog_modifica_transazione(self, transazione_dati):
+        logger.info(f"[DIALOG] Opening: Edit Transaction (id={transazione_dati.get('id_transazione') or transazione_dati.get('id_transazione_condivisa')})")
         try:
             self._update_texts()
             self.title.value = self.loc.get("edit") + " " + self.loc.get("new_transaction")
@@ -176,7 +182,7 @@ class TransactionDialog(ft.AlertDialog):
             self.open = True
             if self.controller.page: self.controller.page.update()
         except Exception as ex:
-            print(f"Errore apertura dialog modifica transazione: {ex}")
+            logger.error(f"Errore apertura dialog modifica transazione: {ex}")
             traceback.print_exc()
             self.controller.show_snack_bar(f"Errore: {ex}", success=False)
 
@@ -233,7 +239,7 @@ class TransactionDialog(ft.AlertDialog):
                 "is_nuovo_conto_condiviso": self.dd_conto_dialog.value.startswith('C')
             }
         except Exception as ex:
-            print(f"Errore validazione dati transazione: {ex}")
+            logger.error(f"Errore validazione dati transazione: {ex}")
             traceback.print_exc()
             return None
 
@@ -329,8 +335,10 @@ class TransactionDialog(ft.AlertDialog):
                 
                 # 3. Ora avvia l'aggiornamento globale (che mostrerà lo spinner correttamente)
                 self.controller.db_write_operation()
+                logger.info(f"[DB] Transaction saved successfully: {messaggio}")
                 self.controller.show_snack_bar(f"Transazione {messaggio} con successo!", success=True)
             else:
+                logger.warning(f"[DB] Transaction save failed: {messaggio}")
                 self.controller.show_snack_bar(f"❌ {messaggio.capitalize()}.", success=False)
                 # Ripristina pulsanti in caso di errore logico
                 save_btn.text = original_text
@@ -339,7 +347,7 @@ class TransactionDialog(ft.AlertDialog):
                 self.update()
 
         except Exception as ex:
-            print(f"Errore salvataggio transazione: {ex}")
+            logger.error(f"Errore salvataggio transazione: {ex}")
             traceback.print_exc()
             self.controller.show_error_dialog(f"Errore inaspettato durante il salvataggio: {ex}")
             # Ripristina pulsanti

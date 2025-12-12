@@ -402,6 +402,12 @@ class AdminTab(ft.Container):
         task.start()
 
     def _salva_email_cliccato(self, e):
+        # Disable button to prevent double submission
+        btn_salva = e.control
+        btn_salva.disabled = True
+        btn_salva.text = "Salvataggio..."
+        btn_salva.update()
+
         settings = {
             'provider': self.dd_email_provider.value,
             'server': self.txt_smtp_server.value,
@@ -410,19 +416,27 @@ class AdminTab(ft.Container):
             'password': self.txt_smtp_password.value,
         }
         famiglia_id = self.controller.get_family_id()
-        master_key = self.controller.page.session.get("master_key")
-        user_id = self.controller.get_user_id()
         
-        # Save as GLOBAL CONFIG (System-Wide)
-        # This is required for Password Reset to work (since it has no user context/keys)
-        # The backend will encrypt it with the SERVER KEY.
         try:
-            save_smtp_config(settings, id_famiglia=None, master_key_b64=None, id_utente=None)
-            if hasattr(self.controller, 'show_snack_bar'):
-                self.controller.show_snack_bar("Configurazione SMTP salvata (Globale).", AppColors.SUCCESS)
+            # Save as FAMILY CONFIG (Family-Specific)
+            # Each family has its own SMTP configuration.
+            # SMTP credentials are encrypted with SERVER_KEY (not family_key),
+            # so they can be decrypted for password reset without user context.
+            if famiglia_id:
+                save_smtp_config(settings, id_famiglia=famiglia_id)
+                if hasattr(self.controller, 'show_snack_bar'):
+                    self.controller.show_snack_bar("Configurazione SMTP salvata.", AppColors.SUCCESS)
+            else:
+                if hasattr(self.controller, 'show_snack_bar'):
+                    self.controller.show_snack_bar("Errore: contesto famiglia non disponibile.", AppColors.ERROR)
         except Exception as ex:
              if hasattr(self.controller, 'show_snack_bar'):
                 self.controller.show_snack_bar(f"Errore salvataggio: {ex}", AppColors.ERROR)
+        finally:
+            # Re-enable button
+            btn_salva.disabled = False
+            btn_salva.text = "Salva Configurazione"
+            btn_salva.update()
 
     def _esporta_dati_cliccato(self, e):
         # Placeholder for export
