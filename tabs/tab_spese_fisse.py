@@ -5,7 +5,8 @@ from db.gestione_db import (
     elimina_spesa_fissa,
     modifica_stato_spesa_fissa,
     aggiungi_transazione,
-    aggiungi_transazione_condivisa
+    aggiungi_transazione_condivisa,
+    ottieni_tutti_i_conti_utente
 )
 from utils.async_task import AsyncTask
 from utils.styles import AppStyles, AppColors, PageConstants
@@ -96,16 +97,41 @@ class SpeseFisseTab(ft.Container):
             self.dt_spese_fisse.visible = False
             self.no_data_view.visible = True
         else:
+            # Ottieni la lista di conti accessibili all'utente corrente
+            master_key_b64 = self.controller.page.session.get("master_key")
+            current_user_id = self.controller.get_user_id()
+            conti_utente = ottieni_tutti_i_conti_utente(current_user_id, master_key_b64=master_key_b64)
+            
+            # Crea set di ID conti accessibili (separati per personale e condiviso)
+            id_conti_personali_accessibili = set(
+                c['id_conto'] for c in conti_utente if not c.get('is_condiviso')
+            )
+            id_conti_condivisi_accessibili = set(
+                c['id_conto'] for c in conti_utente if c.get('is_condiviso')
+            )
+            
             self.dt_spese_fisse.visible = True
             self.no_data_view.visible = False
             for spesa in spese_fisse:
+                # Determina se l'utente ha accesso al conto della spesa
+                ha_accesso = False
+                if spesa.get('id_conto_personale_addebito'):
+                    ha_accesso = spesa['id_conto_personale_addebito'] in id_conti_personali_accessibili
+                elif spesa.get('id_conto_condiviso_addebito'):
+                    ha_accesso = spesa['id_conto_condiviso_addebito'] in id_conti_condivisi_accessibili
+                
                 self.dt_spese_fisse.rows.append(
                     ft.DataRow(cells=[
                         ft.DataCell(ft.Text(spesa['nome'], weight=ft.FontWeight.BOLD)),
                         ft.DataCell(ft.Text(self.controller.loc.format_currency(spesa['importo']))),
                         ft.DataCell(ft.Text(spesa['nome_conto'])),
                         ft.DataCell(ft.Text(str(spesa['giorno_addebito']))),
-                        ft.DataCell(ft.Switch(value=bool(spesa['attiva']), data=spesa['id_spesa_fissa'], on_change=self._cambia_stato_attiva)),
+                        ft.DataCell(ft.Switch(
+                            value=bool(spesa['attiva']), 
+                            data=spesa['id_spesa_fissa'], 
+                            on_change=self._cambia_stato_attiva,
+                            disabled=not ha_accesso
+                        )),
                         ft.DataCell(ft.Row([
                             # Icona addebito automatico
                             ft.Icon(
@@ -113,15 +139,30 @@ class SpeseFisseTab(ft.Container):
                                 color=AppColors.SUCCESS if spesa.get('addebito_automatico') else ft.Colors.GREY_400,
                                 size=20
                             ),
-                            ft.IconButton(icon=ft.Icons.PAYMENT, tooltip="Paga", data=spesa,
-                                          icon_color=AppColors.SUCCESS,
-                                          on_click=self._paga_spesa_fissa),
-                            ft.IconButton(icon=ft.Icons.EDIT, tooltip=self.controller.loc.get("edit"), data=spesa,
-                                          icon_color=AppColors.PRIMARY,
-                                          on_click=lambda e: self.controller.spesa_fissa_dialog.apri_dialog(e.control.data)),
-                            ft.IconButton(icon=ft.Icons.DELETE, tooltip=self.controller.loc.get("delete"), icon_color=AppColors.ERROR,
-                                          data=spesa['id_spesa_fissa'],
-                                          on_click=lambda e: self.controller.open_confirm_delete_dialog(partial(self.elimina_cliccato, e))),
+                            ft.IconButton(
+                                icon=ft.Icons.PAYMENT, 
+                                tooltip="Paga" if ha_accesso else "Non hai accesso a questo conto", 
+                                data=spesa,
+                                icon_color=AppColors.SUCCESS if ha_accesso else ft.Colors.GREY_400,
+                                disabled=not ha_accesso,
+                                on_click=self._paga_spesa_fissa
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.EDIT, 
+                                tooltip=self.controller.loc.get("edit") if ha_accesso else "Non hai accesso a questo conto", 
+                                data=spesa,
+                                icon_color=AppColors.PRIMARY if ha_accesso else ft.Colors.GREY_400,
+                                disabled=not ha_accesso,
+                                on_click=lambda e: self.controller.spesa_fissa_dialog.apri_dialog(e.control.data)
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.DELETE, 
+                                tooltip=self.controller.loc.get("delete") if ha_accesso else "Non hai accesso a questo conto", 
+                                icon_color=AppColors.ERROR if ha_accesso else ft.Colors.GREY_400,
+                                disabled=not ha_accesso,
+                                data=spesa['id_spesa_fissa'],
+                                on_click=lambda e: self.controller.open_confirm_delete_dialog(partial(self.elimina_cliccato, e))
+                            ),
                         ])),
                     ])
                 )

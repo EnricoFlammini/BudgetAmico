@@ -194,6 +194,35 @@ BudgetAmico/
 
 ---
 
+## 📊 Novità Versione 0.20
+
+### Ristrutturazione Livelli Utente
+-   **Nuova Gerarchia Progressiva**: I livelli utente ora seguono una progressione lineare e intuitiva:
+    | Livello | Accesso |
+    |---------|---------|
+    | **Livello 3** | Solo Dati Personali (ideale per bambini) |
+    | **Livello 2** | + Investimenti, Prestiti, Immobili, Famiglia (riepilogo spese mensili) |
+    | **Livello 1** | + Dettagli completi transazioni Famiglia |
+    | **Admin** | + Gestione pannello Admin |
+-   **Visibilità Tab Dinamica**: I tab Budget, Investimenti, Prestiti e Immobili sono nascosti per Livello 3.
+-   **Tabella Riferimento Livelli**: Nuova tabella nel pannello Admin > Membri con i permessi per ogni livello.
+-   **Descrizioni Aggiornate**: Dialog "Invita Membro" e "Modifica Ruolo" mostrano descrizioni chiare per ogni livello.
+
+### Permessi Spese Fisse
+-   **Controllo Accesso Conti**: Le azioni (modifica, elimina, paga) sulle spese fisse sono disabilitate se l'utente non ha accesso al conto associato.
+-   **Dropdown Conti Filtrato**: Nel dialog spesa fissa, il dropdown mostra solo i conti dell'utente e quelli condivisi a cui ha accesso.
+
+### Tab Famiglia per Livello 2
+-   **Riepilogo Spese Mensili**: Gli utenti Livello 2 vedono entrate, spese totali e risparmio del mese invece del patrimonio dei membri.
+-   **Filtro Mese**: Possibilità di selezionare il mese da visualizzare.
+
+### Logging Opzionale
+-   **Toggle Admin**: Nuovo switch in Admin > Backup/Export per abilitare/disabilitare il logging.
+-   **Default Disabilitato**: Nessun file di log generato di default per risparmiare spazio.
+-   **Handler Sicuro Windows**: Risolti errori di rotazione log su Windows.
+
+---
+
 ## 📊 Novità Versione 0.19
 
 ### Ricerca Ticker con Autocomplete

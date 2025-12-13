@@ -138,13 +138,31 @@ class AdminTab(ft.Container):
                         content=ft.Column([
                             ft.Icon(ft.Icons.WARNING_AMBER, color=AppColors.WARNING, size=32),
                             AppStyles.body_text(
-                                "⚠️ ATTENZIONE: Il file esportato contiene la chiave di crittografia della famiglia. "
+                                "ATTENZIONE: Il file esportato contiene la chiave di crittografia della famiglia. "
                                 "Conservalo in un luogo sicuro e non condividerlo con persone non autorizzate.",
                                 color=AppColors.WARNING
                             ),
                         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                         padding=20,
                         border=ft.border.all(1, AppColors.WARNING),
+                        border_radius=10
+                    ),
+                    ft.Divider(height=30),
+                    AppStyles.subheader_text("Impostazioni Sistema"),
+                    ft.Container(
+                        content=ft.Row([
+                            ft.Column([
+                                ft.Text("Abilita Logging", weight=ft.FontWeight.W_500),
+                                ft.Text("Genera file di log per debug. Richiede riavvio app.", 
+                                       size=12, color=AppColors.TEXT_SECONDARY)
+                            ], expand=True),
+                            ft.Switch(
+                                value=self._get_logging_enabled(),
+                                on_change=self._toggle_logging
+                            )
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        padding=15,
+                        border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
                         border_radius=10
                     )
                 ], scroll=ft.ScrollMode.AUTO)
@@ -608,3 +626,26 @@ class AdminTab(ft.Container):
             error_callback=lambda ex: _on_invio_complete((False, str(ex)))
         )
         task.start()
+
+    def _get_logging_enabled(self):
+        """Ottiene lo stato del logging dalle impostazioni."""
+        from utils.logger import is_logging_enabled
+        return is_logging_enabled()
+    
+    def _toggle_logging(self, e):
+        """Cambia lo stato del logging."""
+        from utils.logger import set_logging_enabled
+        enabled = e.control.value
+        if set_logging_enabled(enabled):
+            stato = "abilitato" if enabled else "disabilitato"
+            if hasattr(self.controller, 'show_snack_bar'):
+                self.controller.show_snack_bar(
+                    f"Logging {stato}. Riavvia l'app per applicare.", 
+                    success=True
+                )
+        else:
+            if hasattr(self.controller, 'show_snack_bar'):
+                self.controller.show_snack_bar(
+                    "Errore nel salvataggio dell'impostazione.", 
+                    success=False
+                )

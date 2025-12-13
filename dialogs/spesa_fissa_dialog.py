@@ -1,7 +1,7 @@
 import flet as ft
 import traceback
 from db.gestione_db import (
-    ottieni_tutti_i_conti_famiglia,
+    ottieni_tutti_i_conti_utente,
     ottieni_categorie_e_sottocategorie,
     aggiungi_spesa_fissa,
     modifica_spesa_fissa
@@ -123,10 +123,10 @@ class SpesaFissaDialog(ft.AlertDialog):
         self.dd_sottocategoria.error_text = None
 
     def _popola_dropdowns(self):
-        # Popola conti - escludiamo Risparmio, Investimento e Fondo Pensione
+        # Popola conti - solo quelli accessibili all'utente corrente
         master_key = self.controller.page.session.get("master_key")
         user_id = self.controller.get_user_id()
-        conti = ottieni_tutti_i_conti_famiglia(self.controller.get_family_id(), master_key_b64=master_key, id_utente=user_id)
+        conti = ottieni_tutti_i_conti_utente(user_id, master_key_b64=master_key)
         
         # Filtra i tipi di conto che non fanno parte della liquidità
         tipi_esclusi = ['Investimento', 'Fondo Pensione', 'Risparmio']

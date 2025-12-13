@@ -2,7 +2,7 @@ import flet as ft
 from db.gestione_db import (
     ottieni_riepilogo_patrimonio_famiglia_aggregato,
     ottieni_dettagli_famiglia,
-    ottieni_totali_famiglia,
+    ottieni_dati_analisi_mensile,
     ottieni_anni_mesi_storicizzati
 )
 import datetime
@@ -111,9 +111,13 @@ class FamigliaTab(ft.Container):
             return result
             
         if ruolo == 'livello2':
+            anno, mese = self._get_anno_mese_selezionato()
             master_key_b64 = self.controller.page.session.get("master_key")
-            totali = ottieni_totali_famiglia(famiglia_id, master_key_b64=master_key_b64)
-            result['totali'] = totali
+            id_utente = self.controller.get_user_id()
+            dati_mensili = ottieni_dati_analisi_mensile(famiglia_id, anno, mese, master_key_b64, id_utente)
+            result['dati_mensili'] = dati_mensili
+            result['anno'] = anno
+            result['mese'] = mese
             return result
 
         if ruolo in ['admin', 'livello1']:
@@ -173,23 +177,43 @@ class FamigliaTab(ft.Container):
             return
             
         if ruolo == 'livello2':
-            self.main_content.controls.clear()
-            self.main_content.controls.extend([
-                AppStyles.header_text(self.controller.loc.get("wealth_by_member")),
-                ft.Divider(color=ft.Colors.OUTLINE_VARIANT)
-            ])
-            totali = data.get('totali', [])
-            for m in totali:
-                self.main_content.controls.append(
-                    AppStyles.card_container(
-                        content=ft.Row([
-                            AppStyles.subheader_text(m['nome_visualizzato']),
-                            AppStyles.currency_text(self.controller.loc.format_currency(m['saldo_totale']),
-                                    color=AppColors.SUCCESS if m['saldo_totale'] >= 0 else AppColors.ERROR)
+            loc = self.controller.loc
+            dati = data.get('dati_mensili') or {}
+            
+            entrate = dati.get('entrate', 0)
+            spese_totali = dati.get('spese_totali', 0)
+            risparmio = dati.get('risparmio', 0)
+            
+            # Titolo con mese/anno
+            anno = data.get('anno', datetime.date.today().year)
+            mese = data.get('mese', datetime.date.today().month)
+            titolo_mese = datetime.date(anno, mese, 1).strftime("%B %Y").capitalize()
+            
+            self.main_content.controls = [
+                AppStyles.section_header(f"Riepilogo Famiglia - {titolo_mese}"),
+                ft.Container(content=self.dd_mese_filtro, padding=ft.padding.only(top=5, bottom=10)),
+                AppStyles.page_divider(),
+                AppStyles.card_container(
+                    content=ft.Column([
+                        ft.Row([
+                            AppStyles.subheader_text("Entrate Mensili"),
+                            AppStyles.currency_text(loc.format_currency(entrate), color=AppColors.SUCCESS)
                         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                        padding=15
-                    )
+                        ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+                        ft.Row([
+                            AppStyles.subheader_text("Spese Totali"),
+                            AppStyles.currency_text(loc.format_currency(spese_totali), color=AppColors.ERROR)
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+                        ft.Row([
+                            AppStyles.subheader_text("Risparmio"),
+                            AppStyles.currency_text(loc.format_currency(risparmio), 
+                                color=AppColors.SUCCESS if risparmio >= 0 else AppColors.ERROR)
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    ], spacing=10),
+                    padding=20
                 )
+            ]
             return
 
         if ruolo in ['admin', 'livello1']:

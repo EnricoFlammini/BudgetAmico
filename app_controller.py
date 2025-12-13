@@ -36,7 +36,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 URL_BASE = os.environ.get("FLET_APP_URL", "http://localhost:8550")
-VERSION = "0.19"
+VERSION = "0.20.00"
 
 
 class AppController:
@@ -279,7 +279,7 @@ class AppController:
         def _on_complete(aggiornati):
             if aggiornati > 0:
                 logger.info(f"Prezzi asset aggiornati: {aggiornati}")
-                self.show_snack_bar(f"📈 Prezzi asset aggiornati ({aggiornati})", success=True)
+                self.show_snack_bar(f"Prezzi asset aggiornati ({aggiornati})", success=True)
                 # Refresh tab investimenti se visibile
                 if hasattr(self.dashboard_view, 'tab_contents') and 'Investimenti' in self.dashboard_view.tab_contents:
                     self.dashboard_view.tab_contents['Investimenti'].update_view_data()

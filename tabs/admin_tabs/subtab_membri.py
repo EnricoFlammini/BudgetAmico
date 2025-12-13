@@ -18,10 +18,43 @@ class AdminSubTabMembri(ft.Column):
             scroll=ft.ScrollMode.ADAPTIVE
         )
 
-        # --- Layout della Scheda (SIMPLIFICATO) ---
+        # --- Tabella Riferimento Livelli ---
+        self.tabella_livelli = ft.DataTable(
+            columns=[
+                ft.DataColumn(ft.Text("Livello", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Accesso", weight=ft.FontWeight.BOLD)),
+            ],
+            rows=[
+                ft.DataRow(cells=[
+                    ft.DataCell(ft.Text("Admin", weight=ft.FontWeight.BOLD)),
+                    ft.DataCell(ft.Text("Tutto + Gestione Admin"))
+                ]),
+                ft.DataRow(cells=[
+                    ft.DataCell(ft.Text("Livello 1")),
+                    ft.DataCell(ft.Text("Tutto + Dettagli Famiglia"))
+                ]),
+                ft.DataRow(cells=[
+                    ft.DataCell(ft.Text("Livello 2")),
+                    ft.DataCell(ft.Text("Patrimonio + Solo Totali Famiglia"))
+                ]),
+                ft.DataRow(cells=[
+                    ft.DataCell(ft.Text("Livello 3")),
+                    ft.DataCell(ft.Text("Solo Dati Personali e Condivisi"))
+                ]),
+            ],
+            border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+            border_radius=10,
+            heading_row_color=ft.Colors.SURFACE_VARIANT,
+            data_row_max_height=40,
+        )
+
+        # --- Layout della Scheda ---
         self.controls = [
             ft.Text("Membri Famiglia", size=24, weight=ft.FontWeight.BOLD),
             ft.Text("I membri possono essere aggiunti o invitati tramite il pulsante 'Invita/Sblocca'.", size=12, color=ft.Colors.GREY_500),
+            ft.Divider(),
+            ft.Text("Riferimento Livelli", size=16, weight=ft.FontWeight.BOLD),
+            self.tabella_livelli,
             ft.Divider(),
             self.lv_membri_famiglia
         ]

@@ -57,9 +57,9 @@ class AdminDialogs:
         self.dd_ruolo = ft.Dropdown(
             label=self.loc.get("role"),
             options=[
-                ft.dropdown.Option("livello1", "Livello 1 (Accesso Completo)"),
-                ft.dropdown.Option("livello2", "Livello 2 (Solo Totali Famiglia)"),
-                ft.dropdown.Option("livello3", "Livello 3 (Nessun Accesso Famiglia)"),
+                ft.dropdown.Option("livello1", "Livello 1 (Dettagli Famiglia)"),
+                ft.dropdown.Option("livello2", "Livello 2 (Patrimonio + Totali Famiglia)"),
+                ft.dropdown.Option("livello3", "Livello 3 (Solo Dati Personali)"),
             ],
             value="livello1"
         )
@@ -80,10 +80,10 @@ class AdminDialogs:
         self.dd_modifica_ruolo = ft.Dropdown(
             label=self.loc.get("role"),
             options=[
-                ft.dropdown.Option("admin", "Admin"),
-                ft.dropdown.Option("livello1", "Livello 1"),
-                ft.dropdown.Option("livello2", "Livello 2"),
-                ft.dropdown.Option("livello3", "Livello 3"),
+                ft.dropdown.Option("admin", "Admin (Gestione Completa)"),
+                ft.dropdown.Option("livello1", "Livello 1 (Dettagli Famiglia)"),
+                ft.dropdown.Option("livello2", "Livello 2 (Patrimonio + Totali Famiglia)"),
+                ft.dropdown.Option("livello3", "Livello 3 (Solo Dati Personali)"),
             ]
         )
         self.dialog_modifica_ruolo = ft.AlertDialog(

@@ -229,15 +229,16 @@ class DashboardView:
         })
         index += 1
         
-        # 2. Budget
-        self.sidebar_items.append({
-            'icon': ft.Icons.PIE_CHART_OUTLINE,
-            'selected_icon': ft.Icons.PIE_CHART,
-            'label': loc.get("budget"),
-            'view': self.tab_budget,
-            'index': index
-        })
-        index += 1
+        # 2. Budget (Livello 2+)
+        if ruolo in ['admin', 'livello1', 'livello2']:
+            self.sidebar_items.append({
+                'icon': ft.Icons.PIE_CHART_OUTLINE,
+                'selected_icon': ft.Icons.PIE_CHART,
+                'label': loc.get("budget"),
+                'view': self.tab_budget,
+                'index': index
+            })
+            index += 1
 
         # 3. Conti Personali
         self.sidebar_items.append({
@@ -269,37 +270,40 @@ class DashboardView:
         })
         index += 1
 
-        # 6. Investimenti
-        self.sidebar_items.append({
-            'icon': ft.Icons.TRENDING_UP_OUTLINED,
-            'selected_icon': ft.Icons.TRENDING_UP,
-            'label': loc.get("investments"),
-            'view': self.tab_investimenti,
-            'index': index
-        })
-        index += 1
+        # 6. Investimenti (Livello 2+)
+        if ruolo in ['admin', 'livello1', 'livello2']:
+            self.sidebar_items.append({
+                'icon': ft.Icons.TRENDING_UP_OUTLINED,
+                'selected_icon': ft.Icons.TRENDING_UP,
+                'label': loc.get("investments"),
+                'view': self.tab_investimenti,
+                'index': index
+            })
+            index += 1
 
-        # 7. Prestiti
-        self.sidebar_items.append({
-            'icon': ft.Icons.CREDIT_CARD_OUTLINED,
-            'selected_icon': ft.Icons.CREDIT_CARD,
-            'label': loc.get("loans"),
-            'view': self.tab_prestiti,
-            'index': index
-        })
-        index += 1
+        # 7. Prestiti (Livello 2+)
+        if ruolo in ['admin', 'livello1', 'livello2']:
+            self.sidebar_items.append({
+                'icon': ft.Icons.CREDIT_CARD_OUTLINED,
+                'selected_icon': ft.Icons.CREDIT_CARD,
+                'label': loc.get("loans"),
+                'view': self.tab_prestiti,
+                'index': index
+            })
+            index += 1
 
-        # 8. Immobili
-        self.sidebar_items.append({
-            'icon': ft.Icons.HOME_WORK_OUTLINED,
-            'selected_icon': ft.Icons.HOME_WORK,
-            'label': loc.get("properties"),
-            'view': self.tab_immobili,
-            'index': index
-        })
-        index += 1
+        # 8. Immobili (Livello 2+)
+        if ruolo in ['admin', 'livello1', 'livello2']:
+            self.sidebar_items.append({
+                'icon': ft.Icons.HOME_WORK_OUTLINED,
+                'selected_icon': ft.Icons.HOME_WORK,
+                'label': loc.get("properties"),
+                'view': self.tab_immobili,
+                'index': index
+            })
+            index += 1
 
-        # 9. Famiglia (Solo se autorizzato)
+        # 9. Famiglia (Livello 2+)
         if ruolo in ['admin', 'livello1', 'livello2']:
             self.sidebar_items.append({
                 'icon': ft.Icons.DIVERSITY_3_OUTLINED,
