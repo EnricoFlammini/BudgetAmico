@@ -88,7 +88,9 @@ class ContoCondivisoDialog(ft.AlertDialog):
         else:
             self.container_partecipanti.visible = False
             self.lv_partecipanti.controls.clear()
-        self.content.update()
+        # Solo aggiornare se il dialog è già nella pagina
+        if self.page:
+            self.page.update()
 
     def _popola_lista_utenti(self, utenti_selezionati_ids=None):
         self.lv_partecipanti.controls.clear()
@@ -106,7 +108,7 @@ class ContoCondivisoDialog(ft.AlertDialog):
                     data=user['id_utente']
                 )
             )
-        self.content.update()
+        # Non chiamare update() qui - verrà chiamato dopo che il dialog è aperto
 
     def apri_dialog(self, conto_data=None):
         self._update_texts()
@@ -123,7 +125,16 @@ class ContoCondivisoDialog(ft.AlertDialog):
         if conto_data:
             self.title.value = self.loc.get("edit_shared_account")
             self.id_conto_condiviso_in_modifica = conto_data['id_conto']
-            dettagli_conto = ottieni_dettagli_conto_condiviso(conto_data['id_conto'])
+            
+            # Passa i parametri per la decriptazione
+            master_key_b64 = self.controller.page.session.get("master_key")
+            id_utente = self.controller.get_user_id()
+            
+            dettagli_conto = ottieni_dettagli_conto_condiviso(
+                conto_data['id_conto'],
+                master_key_b64=master_key_b64,
+                id_utente=id_utente
+            )
             if dettagli_conto:
                 self.txt_nome_conto.value = dettagli_conto['nome_conto']
                 self.dd_tipo_conto.value = dettagli_conto['tipo']
@@ -140,6 +151,7 @@ class ContoCondivisoDialog(ft.AlertDialog):
             self.dd_tipo_condivisione.value = "famiglia"
             self.txt_saldo_iniziale.visible = True
 
+        # Prima aggiungi il dialog alla pagina, POI aggiorna
         if self not in self.controller.page.overlay:
             self.controller.page.overlay.append(self)
         self.open = True
@@ -186,7 +198,8 @@ class ContoCondivisoDialog(ft.AlertDialog):
                     is_valid = False
 
             if not is_valid:
-                self.content.update()
+                if self.page:
+                    self.page.update()
                 self.controller.hide_loading()
                 return
 

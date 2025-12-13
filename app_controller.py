@@ -36,7 +36,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 URL_BASE = os.environ.get("FLET_APP_URL", "http://localhost:8550")
-VERSION = "0.18.00"
+VERSION = "0.18.01"
 
 
 class AppController:
@@ -423,13 +423,16 @@ class AppController:
             self.hide_loading()
 
     def show_snack_bar(self, messaggio, success=True):
+        print(f"[DEBUG] show_snack_bar chiamato: messaggio='{messaggio}', success={success}")
         theme = self._get_current_theme_scheme() or ft.ColorScheme()
-        self.page.snack_bar = ft.SnackBar(
-            ft.Text(messaggio),
-            bgcolor=theme.primary_container if success else theme.error_container
+        snack = ft.SnackBar(
+            content=ft.Text(messaggio),
+            bgcolor=theme.primary_container if success else theme.error_container,
+            duration=3000  # 3 secondi
         )
-        self.page.snack_bar.open = True
-        self.page.update()
+        # Usa page.open() - pattern moderno di Flet
+        self.page.open(snack)
+        print(f"[DEBUG] show_snack_bar completato")
 
     def show_loading(self, messaggio: str = "Attendere..."):
         """Mostra l'overlay di caricamento che blocca l'interfaccia."""

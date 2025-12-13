@@ -155,6 +155,11 @@ class DashboardView:
                         tooltip=loc.get("logout"),
                         on_click=self.controller.logout
                     ),
+                    ft.IconButton(
+                        icon=ft.Icons.CLOSE,
+                        tooltip="Chiudi Applicazione",
+                        on_click=self._close_app
+                    ),
                 ]
             ),
             floating_action_button=ft.FloatingActionButton(
@@ -163,6 +168,12 @@ class DashboardView:
                 on_click=self._open_add_menu
             )
         )
+
+    def _close_app(self, e):
+        """Chiude l'applicazione."""
+        logger.info("[ACTION] Close app button clicked")
+        print("[INFO] ===== CHIUSURA APPLICAZIONE =====")
+        self.page.window.close()
 
     def _open_add_menu(self, e):
         """Apre un BottomSheet con le opzioni di aggiunta."""

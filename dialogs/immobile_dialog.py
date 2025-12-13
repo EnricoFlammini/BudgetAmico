@@ -103,7 +103,11 @@ class ImmobileDialog(ft.AlertDialog):
         self.quote_inputs = {}
         
         id_famiglia = self.controller.get_family_id()
-        membri = ottieni_membri_famiglia(id_famiglia)
+        master_key_b64 = self.controller.page.session.get("master_key")
+        id_utente = self.controller.get_user_id()
+        
+        # Passa i parametri di decriptazione per ottenere i nomi corretti
+        membri = ottieni_membri_famiglia(id_famiglia, master_key_b64, id_utente)
         
         # Recupera quote esistenti se in modifica
         quote_esistenti = {} # id_utente -> perc
@@ -120,6 +124,9 @@ class ImmobileDialog(ft.AlertDialog):
             uid = membro['id_utente']
             perc_val = quote_esistenti.get(uid, 0.0)
             
+            # Usa nome_visualizzato per mostrare il nome corretto
+            nome_display = membro.get('nome_visualizzato') or membro.get('username', 'Utente')
+            
             # Text Field per la percentuale
             txt_perc = ft.TextField(
                 value=str(perc_val) if perc_val > 0 else "0",
@@ -133,7 +140,7 @@ class ImmobileDialog(ft.AlertDialog):
             self.quote_inputs[uid] = txt_perc
             
             row = ft.Row([
-                ft.Text(membro['username'], expand=True),
+                ft.Text(nome_display, expand=True),
                 txt_perc
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
             

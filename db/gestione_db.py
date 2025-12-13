@@ -1396,14 +1396,72 @@ def aggiungi_utente_a_famiglia(id_utente: str, id_famiglia: str, ruolo: str = 'u
         return False
 
 def rimuovi_utente_da_famiglia(id_utente: str, id_famiglia: str) -> bool:
+    """
+    Disabilita un utente dalla famiglia (soft delete):
+    - Rimuove l'appartenenza alla famiglia
+    - Disabilita l'accesso (password invalidata)
+    - Anonimizza email e username
+    - Mantiene nome e cognome per riferimento storico
+    - Preserva tutti i dati storici (transazioni, conti, ecc.)
+    """
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("DELETE FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s",
-                        (id_utente, id_famiglia))
-            return cur.rowcount > 0
+            
+            # Prima verifica che l'utente appartenga effettivamente a questa famiglia
+            cur.execute("""
+                SELECT ruolo FROM Appartenenza_Famiglia 
+                WHERE id_utente = %s AND id_famiglia = %s
+            """, (id_utente, id_famiglia))
+            
+            row = cur.fetchone()
+            if not row:
+                print(f"[WARN] Utente {id_utente} non appartiene alla famiglia {id_famiglia}")
+                return False
+            
+            # Genera dati anonimi unici
+            import secrets
+            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+            anonymous_suffix = secrets.token_hex(4)
+            anonymous_username = f"utente_rimosso_{timestamp}_{anonymous_suffix}"
+            anonymous_email = f"removed_{timestamp}_{anonymous_suffix}@disabled.local"
+            invalid_password_hash = "ACCOUNT_DISABLED_" + secrets.token_hex(16)
+            
+            # 1. Rimuovi l'appartenenza alla famiglia
+            cur.execute("""
+                DELETE FROM Appartenenza_Famiglia 
+                WHERE id_utente = %s AND id_famiglia = %s
+            """, (id_utente, id_famiglia))
+            
+            # 2. Anonimizza e disabilita l'utente
+            # - Cambia username e email con valori anonimi
+            # - Invalida la password
+            # - Mantiene nome_enc_server e cognome_enc_server per riferimento storico
+            # - Rimuove le chiavi crittografiche (l'utente non potrà più accedere)
+            cur.execute("""
+                UPDATE Utenti SET
+                    username = %s,
+                    email = %s,
+                    password_hash = %s,
+                    username_bindex = NULL,
+                    username_enc = NULL,
+                    email_bindex = NULL,
+                    email_enc = NULL,
+                    encrypted_master_key = NULL,
+                    encrypted_master_key_backup = NULL,
+                    encrypted_master_key_recovery = NULL,
+                    salt = NULL,
+                    forza_cambio_password = FALSE
+                WHERE id_utente = %s
+            """, (anonymous_username, anonymous_email, invalid_password_hash, id_utente))
+            
+            con.commit()
+            
+            print(f"[INFO] Utente {id_utente} disabilitato e anonimizzato (soft delete)")
+            return True
+            
     except Exception as e:
-        print(f"[ERRORE] Errore rimozione utente da famiglia: {e}")
+        print(f"[ERRORE] Errore disabilitazione utente: {e}")
         return False
 
 def ottieni_membri_famiglia(id_famiglia: str, master_key_b64: Optional[str] = None, id_utente_current: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -1412,7 +1470,7 @@ def ottieni_membri_famiglia(id_famiglia: str, master_key_b64: Optional[str] = No
             cur = con.cursor()
             cur.execute("""
                 SELECT U.id_utente, U.username, U.email, AF.ruolo, 
-                       U.nome_enc_server, U.cognome_enc_server
+                       U.nome_enc_server, U.cognome_enc_server, U.email_enc
                 FROM Utenti U
                 JOIN Appartenenza_Famiglia AF ON U.id_utente = AF.id_utente
                 WHERE AF.id_famiglia = %s
@@ -1428,6 +1486,16 @@ def ottieni_membri_famiglia(id_famiglia: str, master_key_b64: Optional[str] = No
                      row['nome_visualizzato'] = f"{n or ''} {c or ''}".strip()
                  else:
                      row['nome_visualizzato'] = row['username']
+                 
+                 # Decripta l'email se è nella colonna criptata
+                 # Prova prima email_enc (nuovi utenti), poi email legacy
+                 email_enc = row.get('email_enc')
+                 if email_enc:
+                     decrypted_email = decrypt_system_data(email_enc)
+                     if decrypted_email:
+                         row['email'] = decrypted_email
+                 # Se email è ancora None o sembra anonimizzata, non fare nulla
+                 # L'email legacy potrebbe essere già in chiaro per utenti vecchi
 
             return or_rows
     except Exception as e:
@@ -2762,7 +2830,7 @@ def ottieni_conti_condivisi_utente(id_utente, master_key_b64=None):
         return []
 
 
-def ottieni_dettagli_conto_condiviso(id_conto_condiviso):
+def ottieni_dettagli_conto_condiviso(id_conto_condiviso, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None):
     try:
         with get_db_connection() as con:
             # con.row_factory = sqlite3.Row # Removed for Supabase
@@ -2782,6 +2850,14 @@ def ottieni_dettagli_conto_condiviso(id_conto_condiviso):
             conto = cur.fetchone()
             if conto:
                 conto_dict = dict(conto)
+                
+                # Decripta il nome_conto usando la family_key
+                if master_key_b64 and id_utente and conto_dict.get('id_famiglia'):
+                    crypto, master_key = _get_crypto_and_key(master_key_b64)
+                    family_key = _get_family_key_for_user(conto_dict['id_famiglia'], id_utente, master_key, crypto)
+                    if family_key:
+                        conto_dict['nome_conto'] = _decrypt_if_key(conto_dict['nome_conto'], family_key, crypto, silent=True)
+                
                 if conto_dict['tipo_condivisione'] == 'utenti':
                     cur.execute("""
                                 SELECT U.id_utente,
@@ -5457,7 +5533,7 @@ def check_e_processa_spese_fisse(id_famiglia, master_key_b64=None, id_utente=Non
                     if spesa['id_conto_personale_addebito']:
                         aggiungi_transazione(
                             spesa['id_conto_personale_addebito'], data_esecuzione, descrizione, importo,
-                            spesa['id_categoria'], cursor=cur
+                            spesa['id_sottocategoria'], cursor=cur
                         )
                     elif spesa['id_conto_condiviso_addebito']:
                         # L'autore è l'admin della famiglia (o il primo utente)
@@ -5466,7 +5542,7 @@ def check_e_processa_spese_fisse(id_famiglia, master_key_b64=None, id_utente=Non
                         admin_id = cur.fetchone()['id_utente']
                         aggiungi_transazione_condivisa(
                             admin_id, spesa['id_conto_condiviso_addebito'], data_esecuzione, descrizione, importo,
-                            spesa['id_categoria'], cursor=cur
+                            spesa['id_sottocategoria'], cursor=cur
                         )
                     spese_eseguite += 1
             if spese_eseguite > 0:

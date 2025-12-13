@@ -84,9 +84,20 @@ class ImpostazioniTab(ft.Container):
                     self.controller.show_error_dialog("Errore durante il cambio password.")
             else:
                 self.txt_conferma_password.error_text = loc.get("passwords_do_not_match")
+                successo_password = False
         
+        # Mostra messaggio di conferma o errore
+        print(f"[DEBUG] _salva_profilo_cliccato: successo_profilo={successo_profilo}, successo_password={successo_password}")
         if successo_profilo and successo_password:
-             self.controller.show_snack_bar(loc.get("profile_updated"), success=True)
+            self.controller.show_snack_bar("Profilo aggiornato con successo!", success=True)
+            # Pulisci i campi password dopo il salvataggio
+            self.txt_nuova_password.value = ""
+            self.txt_conferma_password.value = ""
+            self.txt_conferma_password.error_text = None
+            if self.page:
+                self.page.update()
+        elif not successo_profilo:
+            self.controller.show_snack_bar("Errore durante l'aggiornamento del profilo.", success=False)
 
     def build_controls(self):
         loc = self.loc

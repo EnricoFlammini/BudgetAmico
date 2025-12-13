@@ -155,8 +155,12 @@ class AuthView:
 
         username = self.txt_username.value.strip()
         password = self.txt_password.value
+        
+        print(f"[INFO] ===== INIZIO SESSIONE LOGIN =====")
+        print(f"[INFO] Tentativo di login per utente: {username}")
 
         if not username or not password:
+            print(f"[WARN] Login fallito: username o password mancante")
             self.txt_errore_login.value = "Inserisci username e password."
             self.txt_errore_login.visible = True
             btn_login.disabled = False
@@ -167,20 +171,28 @@ class AuthView:
         self.controller.show_loading("Accesso in corso...")
         
         try:
+            from db.gestione_db import verifica_login
             utente = verifica_login(username, password)
             if utente:
+                print(f"[INFO] LOGIN RIUSCITO - Utente ID: {utente.get('id')}")
+                print(f"[INFO] - Forza cambio password: {utente.get('forza_cambio_password')}")
+                print(f"[INFO] - Master key presente: {'Si' if utente.get('master_key') else 'No'}")
                 self.txt_errore_login.visible = False
                 # Save temp password if user needs to change it (for re-encrypting family key)
                 if utente.get("forza_cambio_password"):
                     self.page.session.set("_temp_password_for_reencrypt", password)
                 self.controller.post_login_setup(utente)
             else:
+                print(f"[WARN] LOGIN FALLITO - Credenziali non valide per: {username}")
                 self.txt_errore_login.value = "Username o password non validi."
                 self.txt_errore_login.visible = True
                 btn_login.disabled = False
                 self.page.update()
                 self.controller.hide_loading()
-        except Exception:
+        except Exception as ex:
+            print(f"[ERROR] Errore durante il login: {ex}")
+            import traceback
+            traceback.print_exc()
             btn_login.disabled = False
             self.controller.hide_loading()
             raise

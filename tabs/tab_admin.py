@@ -275,6 +275,34 @@ class AdminTab(ft.Container):
                 if membro['id_utente'] == current_user_id:
                     continue
 
+                # Bottoni azione per il membro
+                action_buttons = [
+                    ft.IconButton(
+                        icon=ft.Icons.SEND,
+                        tooltip="Rimanda Credenziali",
+                        data=membro,
+                        icon_color=AppColors.PRIMARY,
+                        on_click=lambda e: self._rimanda_credenziali_cliccato(e)
+                    ),
+                    ft.IconButton(
+                        icon=ft.Icons.EDIT,
+                        tooltip=loc.get("edit") + " " + loc.get("role"),
+                        data=membro,
+                        icon_color=AppColors.PRIMARY,
+                        on_click=lambda e: self.controller.admin_dialogs.apri_dialog_modifica_ruolo(
+                            e.control.data)
+                    ),
+                    ft.IconButton(
+                        icon=ft.Icons.DELETE,
+                        tooltip=loc.get("remove_from_family"),
+                        icon_color=AppColors.ERROR,
+                        data=membro,
+                        on_click=lambda e: self.controller.open_confirm_delete_dialog(
+                            partial(self.rimuovi_membro_cliccato, e)
+                        )
+                    )
+                ]
+
                 content = ft.Row(
                     [
                         ft.Icon(ft.Icons.PERSON, color=AppColors.PRIMARY),
@@ -285,23 +313,7 @@ class AdminTab(ft.Container):
                             ],
                             expand=True
                         ),
-                        ft.IconButton(
-                            icon=ft.Icons.EDIT,
-                            tooltip=loc.get("edit") + " " + loc.get("role"),
-                            data=membro,
-                            icon_color=AppColors.PRIMARY,
-                            on_click=lambda e: self.controller.admin_dialogs.apri_dialog_modifica_ruolo(
-                                e.control.data)
-                        ),
-                        ft.IconButton(
-                            icon=ft.Icons.DELETE,
-                            tooltip=loc.get("remove_from_family"),
-                            icon_color=AppColors.ERROR,
-                            data=membro,
-                            on_click=lambda e: self.controller.open_confirm_delete_dialog(
-                                partial(self.rimuovi_membro_cliccato, e)
-                            )
-                        )
+                        ft.Row(action_buttons, spacing=0)
                     ],
                     vertical_alignment=ft.CrossAxisAlignment.CENTER
                 )
@@ -403,10 +415,10 @@ class AdminTab(ft.Container):
 
     def _salva_email_cliccato(self, e):
         # Disable button to prevent double submission
-        btn_salva = e.control
-        btn_salva.disabled = True
-        btn_salva.text = "Salvataggio..."
-        btn_salva.update()
+        self.btn_salva_email.disabled = True
+        self.btn_salva_email.text = "Salvataggio..."
+        if self.page:
+            self.page.update()
 
         settings = {
             'provider': self.dd_email_provider.value,
@@ -416,27 +428,48 @@ class AdminTab(ft.Container):
             'password': self.txt_smtp_password.value,
         }
         famiglia_id = self.controller.get_family_id()
-        
-        try:
-            # Save as FAMILY CONFIG (Family-Specific)
-            # Each family has its own SMTP configuration.
-            # SMTP credentials are encrypted with SERVER_KEY (not family_key),
-            # so they can be decrypted for password reset without user context.
-            if famiglia_id:
-                save_smtp_config(settings, id_famiglia=famiglia_id)
+
+        def _run_save():
+            """Esegue il salvataggio in background."""
+            try:
+                if famiglia_id:
+                    # Save as FAMILY CONFIG (Family-Specific)
+                    # Each family has its own SMTP configuration.
+                    # SMTP credentials are encrypted with SERVER_KEY (not family_key),
+                    # so they can be decrypted for password reset without user context.
+                    success = save_smtp_config(settings, id_famiglia=famiglia_id)
+                    return success, None
+                else:
+                    return False, "Errore: contesto famiglia non disponibile."
+            except Exception as ex:
+                return False, str(ex)
+
+        def _on_save_complete(result):
+            """Callback chiamato quando il salvataggio è completato."""
+            success, error = result
+            
+            # Re-enable button
+            self.btn_salva_email.disabled = False
+            self.btn_salva_email.text = "Salva Configurazione"
+            
+            if success:
                 if hasattr(self.controller, 'show_snack_bar'):
                     self.controller.show_snack_bar("Configurazione SMTP salvata.", AppColors.SUCCESS)
             else:
                 if hasattr(self.controller, 'show_snack_bar'):
-                    self.controller.show_snack_bar("Errore: contesto famiglia non disponibile.", AppColors.ERROR)
-        except Exception as ex:
-             if hasattr(self.controller, 'show_snack_bar'):
-                self.controller.show_snack_bar(f"Errore salvataggio: {ex}", AppColors.ERROR)
-        finally:
-            # Re-enable button
-            btn_salva.disabled = False
-            btn_salva.text = "Salva Configurazione"
-            btn_salva.update()
+                    self.controller.show_snack_bar(f"Errore salvataggio: {error}", AppColors.ERROR)
+            
+            if self.page:
+                self.page.update()
+
+        # Run async to avoid blocking UI
+        task = AsyncTask(
+            target=_run_save,
+            args=(),
+            callback=_on_save_complete,
+            error_callback=lambda ex: _on_save_complete((False, str(ex)))
+        )
+        task.start()
 
     def _esporta_dati_cliccato(self, e):
         # Placeholder for export
@@ -462,7 +495,116 @@ class AdminTab(ft.Container):
             id_membro = e.control.data.get('id_utente')
             if id_membro:
                 famiglia_id = self.controller.get_family_id()
-                rimuovi_utente_da_famiglia(famiglia_id, id_membro)
-                self.update_all_admin_tabs_data()
+                # NOTA: l'ordine dei parametri è (id_utente, id_famiglia)
+                success = rimuovi_utente_da_famiglia(id_membro, famiglia_id)
+                if success:
+                    # Aggiorna la lista membri immediatamente
+                    self.update_all_admin_tabs_data()
+                    if hasattr(self.controller, 'show_snack_bar'):
+                        self.controller.show_snack_bar("Membro disabilitato e rimosso dalla famiglia.", AppColors.SUCCESS)
+                else:
+                    if hasattr(self.controller, 'show_snack_bar'):
+                        self.controller.show_snack_bar("Errore durante la rimozione del membro.", AppColors.ERROR)
+                if self.page:
+                    self.page.update()
+
+    def _rimanda_credenziali_cliccato(self, e):
+        """Rimanda le credenziali di accesso a un membro della famiglia."""
+        if not hasattr(e, 'control') or not e.control or not e.control.data:
+            print("[DEBUG] _rimanda_credenziali: Nessun dato nel controllo")
+            return
+        
+        membro = e.control.data
+        email = membro.get('email')
+        id_utente_membro = membro.get('id_utente')
+        nome = membro.get('nome_visualizzato', 'Utente')
+        
+        print(f"[DEBUG] Rimanda credenziali per: {nome}, email: {email}, id: {id_utente_membro}")
+        
+        if not email or email.startswith('removed_') or '@disabled.local' in str(email):
+            if hasattr(self.controller, 'show_snack_bar'):
+                self.controller.show_snack_bar("Email del membro non disponibile o account disabilitato.", AppColors.ERROR)
+            return
+        
+        # Disabilita il pulsante durante l'invio
+        e.control.disabled = True
+        if self.page:
+            self.page.update()
+        
+        def _invia_credenziali():
+            try:
+                from db.gestione_db import get_smtp_config, imposta_password_temporanea
+                from utils.email_sender import send_email
+                import secrets
+                
+                famiglia_id = self.controller.get_family_id()
+                master_key_b64 = self.controller.page.session.get("master_key")
+                id_utente = self.controller.get_user_id()
+                
+                print(f"[DEBUG] Recupero config SMTP per famiglia: {famiglia_id}")
+                
+                # Recupera configurazione SMTP
+                smtp_config = get_smtp_config(famiglia_id, master_key_b64, id_utente)
+                
+                print(f"[DEBUG] SMTP config - server: {smtp_config.get('server')}, user: {smtp_config.get('user')}")
+                
+                if not smtp_config.get('server') or not smtp_config.get('password'):
+                    return False, "Configurazione SMTP non completa. Configura prima le impostazioni email."
+                
+                # Genera una password temporanea
+                temp_password = secrets.token_urlsafe(8)
+                print(f"[DEBUG] Password temporanea generata")
+                
+                # Imposta la password temporanea per l'utente
+                print(f"[DEBUG] Chiamata imposta_password_temporanea per utente ID: {id_utente_membro}")
+                if not imposta_password_temporanea(id_utente_membro, temp_password):
+                    return False, "Impossibile generare le credenziali temporanee. Verificare che l'utente abbia un backup key."
+                
+                print(f"[DEBUG] Password temporanea impostata, invio email a: {email}")
+                
+                # Costruisci l'email
+                subject = "Budget Amico - Le tue credenziali di accesso"
+                body = f"""
+                <h2>Ciao {nome}!</h2>
+                <p>L'amministratore della tua famiglia ti ha inviato le credenziali per accedere a Budget Amico.</p>
+                <p>Ecco la tua password temporanea:</p>
+                <p style="font-size: 18px; font-weight: bold; background-color: #f0f0f0; padding: 10px; border-radius: 5px;">{temp_password}</p>
+                <p>Al prossimo accesso ti verrà chiesto di impostare una nuova password personale.</p>
+                <br>
+                <p><small>Se non hai richiesto questo messaggio, contatta l'amministratore della tua famiglia.</small></p>
+                """
+                
+                success, error = send_email(email, subject, body, smtp_config=smtp_config)
+                print(f"[DEBUG] Risultato invio email: success={success}, error={error}")
+                return success, error
+                
+            except Exception as ex:
+                print(f"[ERRORE] Eccezione in _invia_credenziali: {ex}")
+                import traceback
+                traceback.print_exc()
+                return False, str(ex)
+        
+        def _on_invio_complete(result):
+            success, error = result
+            
+            # Riabilita il pulsante
+            e.control.disabled = False
+            
+            if success:
                 if hasattr(self.controller, 'show_snack_bar'):
-                     self.controller.show_snack_bar("Membro rimosso con successo.", AppColors.SUCCESS)
+                    self.controller.show_snack_bar(f"Credenziali inviate a {email}", AppColors.SUCCESS)
+            else:
+                if hasattr(self.controller, 'show_snack_bar'):
+                    self.controller.show_snack_bar(f"Errore invio: {error}", AppColors.ERROR)
+            
+            if self.page:
+                self.page.update()
+        
+        # Esegui in background
+        task = AsyncTask(
+            target=_invia_credenziali,
+            args=(),
+            callback=_on_invio_complete,
+            error_callback=lambda ex: _on_invio_complete((False, str(ex)))
+        )
+        task.start()

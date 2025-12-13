@@ -194,6 +194,23 @@ BudgetAmico/
 
 ---
 
+## 📊 Novità Versione 0.18.01
+
+### Miglioramenti Gestione Utenti
+-   **Soft Delete Utenti**: La rimozione di un membro ora disabilita l'account invece di eliminarlo, preservando tutti i dati storici (transazioni, nomi per riferimento).
+-   **Pulsante "Rimanda Credenziali"**: Nuovo pulsante nella gestione membri per inviare nuove credenziali di accesso via email.
+
+### Correzioni Bug
+-   **Spese Fisse Automatiche**: Corretto bug che registrava le transazioni con la categoria sbagliata invece della sottocategoria.
+-   **Conti Condivisi Criptati**: Risolto problema di visualizzazione nomi criptati per conti creati da altri utenti autorizzati.
+-   **Dialog Conto Condiviso**: Risolto errore "Column Control must be added to page first".
+-   **Quote Immobili**: I nomi dei membri sono ora visibili correttamente nel dialog di ripartizione quote.
+-   **SnackBar Messaggi**: Migrazione a `page.open()` per garantire la visualizzazione corretta dei messaggi di conferma.
+
+### Logging e Diagnostica
+-   **Logging Login**: Tracciamento dettagliato dell'inizio sessione con stato master key e forza cambio password.
+-   **Pulsante Chiusura App**: Nuovo pulsante nell'AppBar per chiudere l'applicazione con log di chiusura.
+
 ## 📊 Novità Versione 0.18
 
 ### Performance e Caching
