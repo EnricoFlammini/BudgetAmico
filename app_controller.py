@@ -36,7 +36,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 URL_BASE = os.environ.get("FLET_APP_URL", "http://localhost:8550")
-VERSION = "0.18.01"
+VERSION = "0.19"
 
 
 class AppController:
@@ -227,6 +227,69 @@ class AppController:
 
         self.update_all_views(is_initial_load=True)
         self.page.update()
+        
+        # Aggiorna prezzi asset in background (non blocca UI)
+        self._aggiorna_prezzi_asset_in_background()
+
+    def _aggiorna_prezzi_asset_in_background(self):
+        """Aggiorna i prezzi degli asset nel portafoglio in background."""
+        from utils.async_task import AsyncTask
+        from utils.yfinance_manager import ottieni_prezzi_multipli
+        from db.gestione_db import ottieni_dettagli_conti_utente, ottieni_portafoglio, aggiorna_prezzo_manuale_asset
+        
+        utente_id = self.get_user_id()
+        master_key_b64 = self.page.session.get("master_key")
+        
+        if not utente_id:
+            return
+        
+        def _sync_prezzi():
+            try:
+                # Ottieni tutti i conti di investimento
+                conti_utente = ottieni_dettagli_conti_utente(utente_id, master_key_b64=master_key_b64)
+                conti_investimento = [c for c in conti_utente if c['tipo'] == 'Investimento']
+                
+                # Raccogli tutti i ticker unici
+                tutti_asset = []
+                for conto in conti_investimento:
+                    portafoglio = ottieni_portafoglio(conto['id_conto'], master_key_b64=master_key_b64)
+                    tutti_asset.extend(portafoglio)
+                
+                if not tutti_asset:
+                    return 0
+                
+                # Ottieni prezzi per tutti i ticker
+                tickers = list(set([asset['ticker'] for asset in tutti_asset]))
+                logger.info(f"Aggiornamento automatico prezzi per {len(tickers)} ticker...")
+                prezzi = ottieni_prezzi_multipli(tickers)
+                
+                # Aggiorna i prezzi nel database
+                aggiornati = 0
+                for asset in tutti_asset:
+                    ticker = asset['ticker']
+                    if ticker in prezzi and prezzi[ticker] is not None:
+                        aggiorna_prezzo_manuale_asset(asset['id_asset'], prezzi[ticker])
+                        aggiornati += 1
+                
+                return aggiornati
+            except Exception as e:
+                logger.error(f"Errore aggiornamento prezzi in background: {e}")
+                return 0
+        
+        def _on_complete(aggiornati):
+            if aggiornati > 0:
+                logger.info(f"Prezzi asset aggiornati: {aggiornati}")
+                self.show_snack_bar(f"📈 Prezzi asset aggiornati ({aggiornati})", success=True)
+                # Refresh tab investimenti se visibile
+                if hasattr(self.dashboard_view, 'tab_contents') and 'Investimenti' in self.dashboard_view.tab_contents:
+                    self.dashboard_view.tab_contents['Investimenti'].update_view_data()
+        
+        def _on_error(e):
+            logger.error(f"Errore sync prezzi: {e}")
+        
+        # Avvia in background
+        task = AsyncTask(target=_sync_prezzi, callback=_on_complete, error_callback=_on_error)
+        task.start()
 
     def _download_confirmato(self, e): pass
     def _download_rifiutato(self, e): pass
@@ -423,7 +486,7 @@ class AppController:
             self.hide_loading()
 
     def show_snack_bar(self, messaggio, success=True):
-        print(f"[DEBUG] show_snack_bar chiamato: messaggio='{messaggio}', success={success}")
+        logger.debug(f"show_snack_bar: messaggio='{messaggio}', success={success}")
         theme = self._get_current_theme_scheme() or ft.ColorScheme()
         snack = ft.SnackBar(
             content=ft.Text(messaggio),
@@ -432,7 +495,6 @@ class AppController:
         )
         # Usa page.open() - pattern moderno di Flet
         self.page.open(snack)
-        print(f"[DEBUG] show_snack_bar completato")
 
     def show_loading(self, messaggio: str = "Attendere..."):
         """Mostra l'overlay di caricamento che blocca l'interfaccia."""

@@ -10,6 +10,7 @@ from utils.styles import AppStyles, AppColors, PageConstants
 from utils.yfinance_manager import ottieni_prezzo_asset, ottieni_prezzi_multipli
 from dialogs.investimento_dialog import InvestimentoDialog
 from utils.async_task import AsyncTask
+from tabs.subtab_storico_asset import StoricoAssetSubTab
 import datetime
 
 
@@ -19,21 +20,54 @@ class InvestimentiTab(ft.Container):
         self.controller = controller
         self.page = controller.page
 
-        # Controlli UI
+        # Controlli UI Portafoglio
         self.txt_valore_totale = AppStyles.header_text("")
         self.txt_gain_loss_totale = AppStyles.body_text("")
         self.lv_portafogli = ft.Column(expand=True, scroll=ft.ScrollMode.ADAPTIVE, spacing=15)
-        self.content = ft.Column(expand=True, spacing=10)
+        
+        # Sotto-tab Storico
+        self.storico_subtab = StoricoAssetSubTab(controller)
+        
+        # Container per contenuto portafoglio
+        self.portafoglio_content = ft.Column(expand=True, spacing=10)
+        
+        # Tabs principali
+        self.tabs = ft.Tabs(
+            selected_index=0,
+            animation_duration=300,
+            tabs=[
+                ft.Tab(
+                    text="Portafoglio",
+                    icon=ft.Icons.ACCOUNT_BALANCE_WALLET,
+                    content=ft.Container(content=self.portafoglio_content, padding=10, expand=True)
+                ),
+                ft.Tab(
+                    text="Andamento Storico",
+                    icon=ft.Icons.SHOW_CHART,
+                    content=ft.Container(content=self.storico_subtab, padding=10, expand=True)
+                ),
+            ],
+            expand=True,
+            on_change=self._on_tab_change
+        )
+        
+        self.content = self.tabs
         
         # Stato per sincronizzazione
         self.sincronizzazione_in_corso = False
+    
+    def _on_tab_change(self, e):
+        """Gestisce cambio sotto-tab."""
+        if e.control.selected_index == 1:
+            # Carica dati storico quando si passa alla tab
+            self.storico_subtab.update_view_data()
 
     def update_view_data(self, is_initial_load=False):
         """
         Avvia il caricamento asincrono dei dati.
         """
         theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
-        self.content.controls = self.build_controls(theme)
+        self.portafoglio_content.controls = self.build_controls(theme)
         
         # 1. Mostra Loading State dentro la lista portafogli
         self.lv_portafogli.controls.clear()

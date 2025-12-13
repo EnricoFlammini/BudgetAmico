@@ -4,8 +4,10 @@ from db.gestione_db import (
     imposta_conto_default_utente, aggiorna_profilo_utente, cambia_password, hash_password,
     ottieni_tutti_i_conti_utente, ottieni_conto_default_utente, ottieni_dettagli_utente
 )
-
 from utils.async_task import AsyncTask
+from utils.logger import setup_logger
+
+logger = setup_logger("ImpostazioniTab")
 
 class ImpostazioniTab(ft.Container):
     def __init__(self, controller):
@@ -87,7 +89,7 @@ class ImpostazioniTab(ft.Container):
                 successo_password = False
         
         # Mostra messaggio di conferma o errore
-        print(f"[DEBUG] _salva_profilo_cliccato: successo_profilo={successo_profilo}, successo_password={successo_password}")
+        logger.debug(f"_salva_profilo_cliccato: successo_profilo={successo_profilo}, successo_password={successo_password}")
         if successo_profilo and successo_password:
             self.controller.show_snack_bar("Profilo aggiornato con successo!", success=True)
             # Pulisci i campi password dopo il salvataggio

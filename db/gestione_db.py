@@ -5508,26 +5508,38 @@ def check_e_processa_spese_fisse(id_famiglia, master_key_b64=None, id_utente=Non
             for spesa in spese_da_processare:
                 if not spesa['attiva']:
                     continue
+                
+                # Processa solo le spese con addebito automatico abilitato
+                if not spesa.get('addebito_automatico'):
+                    continue
+
+                # Suffisso univoco per identificare la spesa (non criptato, usato per controllo duplicati)
+                suffisso_id = f"[SF-{spesa['id_spesa_fissa']}]"
 
                 # Controlla se la spesa è già stata eseguita questo mese
+                # Usa POSITION per cercare il suffisso ID nella descrizione (che è criptata ma il suffisso no)
                 cur.execute("""
                     SELECT 1 FROM Transazioni
-                    WHERE (id_conto = %s AND descrizione = %s)
+                    WHERE id_conto = %s
+                    AND POSITION(%s IN descrizione) > 0
                     AND TO_CHAR(data::date, 'YYYY-MM') = %s
-                """, (spesa['id_conto_personale_addebito'], f"Spesa Fissa: {spesa['nome']}", oggi.strftime('%Y-%m')))
+                """, (spesa['id_conto_personale_addebito'], suffisso_id, oggi.strftime('%Y-%m')))
                 if cur.fetchone(): continue
 
                 cur.execute("""
                     SELECT 1 FROM TransazioniCondivise
-                    WHERE (id_conto_condiviso = %s AND descrizione = %s)
+                    WHERE id_conto_condiviso = %s
+                    AND POSITION(%s IN descrizione) > 0
                     AND TO_CHAR(data::date, 'YYYY-MM') = %s
-                """, (spesa['id_conto_condiviso_addebito'], f"Spesa Fissa: {spesa['nome']}", oggi.strftime('%Y-%m')))
+                """, (spesa['id_conto_condiviso_addebito'], suffisso_id, oggi.strftime('%Y-%m')))
                 if cur.fetchone(): continue
 
                 # Se il giorno di addebito è passato, esegui la transazione
                 if oggi.day >= spesa['giorno_addebito']:
-                    data_esecuzione = oggi.strftime('%Y-%m-%d')
-                    descrizione = f"Spesa Fissa: {spesa['nome']}"
+                    # Usa il giorno configurato per la data di esecuzione, non la data odierna
+                    data_esecuzione = datetime.date(oggi.year, oggi.month, spesa['giorno_addebito']).strftime('%Y-%m-%d')
+                    # Aggiungi suffisso ID alla descrizione per tracciabilità e controllo duplicati
+                    descrizione = f"Spesa Fissa: {spesa['nome']} {suffisso_id}"
                     importo = -abs(spesa['importo'])
 
                     if spesa['id_conto_personale_addebito']:
@@ -5551,6 +5563,261 @@ def check_e_processa_spese_fisse(id_famiglia, master_key_b64=None, id_utente=Non
     except Exception as e:
         print(f"[ERRORE] Errore critico durante il processamento delle spese fisse: {e}")
         return 0
+
+
+# --- FUNZIONI STORICO ASSET GLOBALE (cross-famiglia) ---
+
+def _crea_tabella_storico_asset_globale():
+    """Crea la tabella StoricoAssetGlobale se non esiste."""
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS StoricoAssetGlobale (
+                    id SERIAL PRIMARY KEY,
+                    ticker VARCHAR(30) NOT NULL,
+                    data DATE NOT NULL,
+                    prezzo_chiusura DECIMAL(18, 6) NOT NULL,
+                    data_aggiornamento TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(ticker, data)
+                );
+            """)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_storico_ticker ON StoricoAssetGlobale(ticker);")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_storico_data ON StoricoAssetGlobale(data);")
+            con.commit()
+            return True
+    except Exception as e:
+        print(f"[ERRORE] Errore creazione tabella StoricoAssetGlobale: {e}")
+        return False
+
+
+def _pulisci_storico_vecchio():
+    """
+    Elimina i record più vecchi di 5 anni dalla tabella StoricoAssetGlobale.
+    Chiamata automaticamente ad ogni accesso per mantenere il DB leggero.
+    """
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            # Calcola la data limite (5 anni fa)
+            data_limite = (datetime.date.today() - datetime.timedelta(days=1825)).strftime('%Y-%m-%d')
+            cur.execute("DELETE FROM StoricoAssetGlobale WHERE data < %s", (data_limite,))
+            eliminati = cur.rowcount
+            if eliminati > 0:
+                print(f"[INFO] Eliminati {eliminati} record storici più vecchi di 5 anni")
+            con.commit()
+            return eliminati
+    except Exception as e:
+        print(f"[ERRORE] Errore pulizia storico vecchio: {e}")
+        return 0
+
+
+def salva_storico_asset_globale(ticker: str, dati_storici: list):
+    """
+    Salva/aggiorna prezzi storici nella cache globale.
+    
+    Args:
+        ticker: Il ticker dell'asset (es. "AAPL")
+        dati_storici: Lista di dict con {'data': 'YYYY-MM-DD', 'prezzo': float}
+    
+    Returns:
+        Numero di record inseriti/aggiornati
+    """
+    if not dati_storici:
+        return 0
+    
+    # Assicurati che la tabella esista
+    _crea_tabella_storico_asset_globale()
+    
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            inseriti = 0
+            
+            for record in dati_storici:
+                try:
+                    cur.execute("""
+                        INSERT INTO StoricoAssetGlobale (ticker, data, prezzo_chiusura, data_aggiornamento)
+                        VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                        ON CONFLICT (ticker, data) DO UPDATE SET 
+                            prezzo_chiusura = EXCLUDED.prezzo_chiusura,
+                            data_aggiornamento = CURRENT_TIMESTAMP
+                    """, (ticker.upper(), record['data'], record['prezzo']))
+                    inseriti += 1
+                except Exception as e:
+                    print(f"[ERRORE] Errore inserimento record storico per {ticker}: {e}")
+            
+            con.commit()
+            return inseriti
+    except Exception as e:
+        print(f"[ERRORE] Errore salvataggio storico asset globale: {e}")
+        return 0
+
+
+def ottieni_storico_asset_globale(ticker: str, data_inizio: str = None, data_fine: str = None):
+    """
+    Recupera storico prezzi dalla cache globale.
+    
+    Args:
+        ticker: Il ticker dell'asset
+        data_inizio: Data inizio filtro (YYYY-MM-DD), opzionale
+        data_fine: Data fine filtro (YYYY-MM-DD), opzionale
+    
+    Returns:
+        Lista di dict con {data, prezzo_chiusura} ordinati per data crescente
+    """
+    # Assicurati che la tabella esista
+    _crea_tabella_storico_asset_globale()
+    
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            query = "SELECT data, prezzo_chiusura FROM StoricoAssetGlobale WHERE ticker = %s"
+            params = [ticker.upper()]
+            
+            if data_inizio:
+                query += " AND data >= %s"
+                params.append(data_inizio)
+            
+            if data_fine:
+                query += " AND data <= %s"
+                params.append(data_fine)
+            
+            query += " ORDER BY data ASC"
+            
+            cur.execute(query, tuple(params))
+            return [{'data': str(row['data']), 'prezzo_chiusura': float(row['prezzo_chiusura'])} for row in cur.fetchall()]
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero storico asset globale: {e}")
+        return []
+
+
+def ultimo_aggiornamento_storico(ticker: str):
+    """
+    Restituisce la data dell'ultimo record per il ticker.
+    
+    Args:
+        ticker: Il ticker dell'asset
+    
+    Returns:
+        Data come stringa 'YYYY-MM-DD' o None se non esiste
+    """
+    # Assicurati che la tabella esista
+    _crea_tabella_storico_asset_globale()
+    
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("""
+                SELECT MAX(data) as ultima_data FROM StoricoAssetGlobale WHERE ticker = %s
+            """, (ticker.upper(),))
+            result = cur.fetchone()
+            if result and result['ultima_data']:
+                return str(result['ultima_data'])
+            return None
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero ultimo aggiornamento storico: {e}")
+        return None
+
+
+def aggiorna_storico_asset_se_necessario(ticker: str, anni: int = 5):
+    """
+    Aggiorna lo storico di un asset da yfinance se necessario.
+    Scarica SOLO i giorni mancanti per ottimizzare le chiamate.
+    
+    Args:
+        ticker: Il ticker dell'asset
+        anni: Numero di anni di storico (default 5)
+    
+    Returns:
+        True se è stato effettuato un aggiornamento, False altrimenti
+    """
+    from utils.yfinance_manager import ottieni_storico_asset
+    
+    # Prima pulisci i dati vecchi
+    _pulisci_storico_vecchio()
+    
+    ultima_data = ultimo_aggiornamento_storico(ticker)
+    oggi = datetime.date.today().strftime('%Y-%m-%d')
+    
+    # Se non abbiamo dati, scarica tutto lo storico (5 anni)
+    if not ultima_data:
+        print(f"[INFO] Download completo storico per {ticker} (prima volta)...")
+        dati = ottieni_storico_asset(ticker, anni)
+        if dati:
+            inseriti = salva_storico_asset_globale(ticker, dati)
+            print(f"[INFO] Salvati {inseriti} record per {ticker}")
+            return True
+        return False
+    
+    # Se l'ultimo dato è già di oggi, non serve aggiornare
+    if ultima_data >= oggi:
+        print(f"[INFO] Storico {ticker} già aggiornato")
+        return False
+    
+    # Altrimenti scarica solo i giorni mancanti (aggiornamento incrementale)
+    # Calcoliamo quanti giorni mancano
+    from datetime import datetime as dt
+    ultima_dt = dt.strptime(ultima_data, '%Y-%m-%d')
+    oggi_dt = dt.strptime(oggi, '%Y-%m-%d')
+    giorni_mancanti = (oggi_dt - ultima_dt).days
+    
+    if giorni_mancanti <= 0:
+        return False
+    
+    # Scarica solo gli ultimi N giorni (usiamo un range più breve)
+    print(f"[INFO] Aggiornamento incrementale {ticker}: {giorni_mancanti} giorni mancanti...")
+    
+    # yfinance accetta solo periodi standard, usiamo il più piccolo che copra i giorni
+    if giorni_mancanti <= 5:
+        range_yf = '5d'
+    elif giorni_mancanti <= 30:
+        range_yf = '1mo'
+    elif giorni_mancanti <= 90:
+        range_yf = '3mo'
+    else:
+        range_yf = '6mo'
+    
+    # Chiamata diretta all'API con range personalizzato
+    try:
+        import requests
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        params = {'interval': '1d', 'range': range_yf}
+        
+        response = requests.get(url, headers=headers, params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+        
+        dati_nuovi = []
+        if 'chart' in data and 'result' in data['chart'] and data['chart']['result']:
+            result = data['chart']['result'][0]
+            if 'timestamp' in result and 'indicators' in result:
+                timestamps = result['timestamp']
+                quotes = result['indicators']['quote'][0]
+                closes = quotes.get('close', [])
+                
+                for i, ts in enumerate(timestamps):
+                    if i < len(closes) and closes[i] is not None:
+                        data_str = dt.fromtimestamp(ts).strftime('%Y-%m-%d')
+                        # Filtra solo i nuovi dati
+                        if data_str > ultima_data:
+                            dati_nuovi.append({
+                                'data': data_str,
+                                'prezzo': float(closes[i])
+                            })
+        
+        if dati_nuovi:
+            inseriti = salva_storico_asset_globale(ticker, dati_nuovi)
+            print(f"[INFO] Aggiunti {inseriti} nuovi record per {ticker}")
+            return True
+        
+        return False
+        
+    except Exception as e:
+        print(f"[ERRORE] Errore aggiornamento incrementale {ticker}: {e}")
+        return False
 
 
 # --- MAIN ---

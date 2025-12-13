@@ -194,6 +194,25 @@ BudgetAmico/
 
 ---
 
+## 📊 Novità Versione 0.19
+
+### Ricerca Ticker con Autocomplete
+-   **Nuovo Componente `TickerSearchField`**: Campo di ricerca intelligente che interroga Yahoo Finance in tempo reale.
+-   **Filtro per Borsa**: Supporto per ricerca combinata nome + borsa (es. "Apple Milano", "Amazon XETRA").
+-   **Integrazione Completa nei Dialog**:
+    -   Dialog "Aggiungi Operazione" (compra/vendi asset)
+    -   Dialog "Aggiungi Asset Esistente"
+    -   Dialog "Modifica Asset"
+    -   Tab "Andamento Storico" per ticker preferiti
+-   **Compilazione Automatica Nome**: Selezionando un ticker dal dropdown, il nome dell'asset viene compilato automaticamente.
+-   **Debounce Intelligente**: Ritardo di 500ms per evitare chiamate API eccessive durante la digitazione.
+
+### Miglioramenti Grafici Storici
+-   **Visualizzazione Descrizione Asset**: Ticker e descrizione ora mostrati su righe separate con tooltip per nomi lunghi.
+-   **Preferiti Persistenti**: I ticker preferiti vengono salvati nel client storage e ripristinati all'avvio.
+
+---
+
 ## 📊 Novità Versione 0.18.01
 
 ### Miglioramenti Gestione Utenti

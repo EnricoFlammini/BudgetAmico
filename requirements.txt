@@ -12,6 +12,9 @@ pandas>=2.3.0
 openpyxl>=3.1.0
 numpy>=2.3.0
 
+# Charts
+matplotlib>=3.8.0
+
 # Utilities
 python-dateutil>=2.9.0
 requests>=2.32.0
@@ -25,3 +28,4 @@ cryptography>=42.0.0
 
 # Dev Tools
 pre-commit>=3.5.0
+

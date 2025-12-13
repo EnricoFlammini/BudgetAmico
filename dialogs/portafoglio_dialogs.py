@@ -11,6 +11,7 @@ from db.gestione_db import (
     aggiungi_transazione_condivisa
 )
 from utils.yfinance_manager import applica_suffisso_borsa
+from utils.ticker_search import TickerSearchField
 
 
 class PortafoglioDialogs:
@@ -51,8 +52,18 @@ class PortafoglioDialogs:
         # --- Dialogo per operazione (compra/vendi) ---
         self.dd_asset_esistenti = ft.Dropdown(on_change=self._on_asset_selezionato)
         self.dd_conto_transazione = ft.Dropdown()
-        self.txt_ticker = ft.TextField()
-        self.txt_nome_asset = ft.TextField()
+        
+        # Campo ricerca ticker con autocomplete
+        self.ticker_search = TickerSearchField(
+            on_select=self._on_ticker_autocomplete_select,
+            controller=controller,  # Riferimento stabile per update
+            label="Cerca ticker",
+            hint_text="es. Apple Milano, AAPL...",
+            width=380,
+            show_borsa=True
+        )
+        self.txt_ticker = ft.TextField()  # Nascosto, usato solo per valore
+        self.txt_nome_asset = ft.TextField()  # Nascosto, usato solo per valore
         self.txt_quantita = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.txt_prezzo_unitario = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.radio_operazione = ft.RadioGroup(content=ft.Row())
@@ -61,13 +72,12 @@ class PortafoglioDialogs:
             title=ft.Text(),
             content=ft.Column([
                 self.dd_asset_esistenti,
-                self.txt_ticker,
-                self.txt_nome_asset,
+                self.ticker_search,  # Autocomplete + nome automatico
                 self.txt_quantita,
                 self.txt_prezzo_unitario,
                 self.dd_conto_transazione,
                 self.radio_operazione
-            ], tight=True, spacing=10, height=550, width=400),
+            ], tight=True, spacing=10, height=450, width=420),
             actions=[
                 ft.TextButton(on_click=self._chiudi_dialog_operazione),
                 ft.TextButton(on_click=self._salva_operazione)
@@ -88,13 +98,22 @@ class PortafoglioDialogs:
         )
 
         # --- Dialogo per modificare dettagli asset ---
-        self.txt_modifica_ticker = ft.TextField()
-        self.txt_modifica_nome = ft.TextField()
+        # Campo ricerca per modifica ticker
+        self.ticker_search_modifica = TickerSearchField(
+            on_select=self._on_ticker_modifica_select,
+            controller=controller,
+            label="Cerca nuovo ticker",
+            hint_text="es. Apple, MSFT...",
+            width=380,
+            show_borsa=True
+        )
+        self.txt_modifica_ticker = ft.TextField()  # Nascosto, usato per valore
+        self.txt_modifica_nome = ft.TextField()  # Nascosto, usato per valore
         self.asset_da_modificare = None
         self.dialog_modifica_asset = ft.AlertDialog(
             modal=True,
             title=ft.Text(),
-            content=ft.Column([self.txt_modifica_ticker, self.txt_modifica_nome], tight=True),
+            content=ft.Column([self.ticker_search_modifica], tight=True, width=400),
             actions=[
                 ft.TextButton(on_click=self._chiudi_dialog_modifica_asset),
                 ft.TextButton(on_click=self._salva_modifica_asset)
@@ -102,8 +121,17 @@ class PortafoglioDialogs:
         )
 
         # --- Dialogo per aggiungere asset esistente ---
-        self.txt_ticker_esistente = ft.TextField()
-        self.txt_nome_asset_esistente = ft.TextField()
+        # Campo ricerca per asset esistente
+        self.ticker_search_esistente = TickerSearchField(
+            on_select=self._on_ticker_esistente_select,
+            controller=controller,
+            label="Cerca ticker",
+            hint_text="es. Apple, MSFT...",
+            width=380,
+            show_borsa=True
+        )
+        self.txt_ticker_esistente = ft.TextField()  # Nascosto, usato per valore
+        self.txt_nome_asset_esistente = ft.TextField()  # Nascosto, usato per valore
         self.txt_quantita_esistente = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.txt_prezzo_medio_acquisto = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.txt_valore_attuale_unitario = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
@@ -111,12 +139,11 @@ class PortafoglioDialogs:
             modal=True,
             title=ft.Text(),
             content=ft.Column([
-                self.txt_ticker_esistente,
-                self.txt_nome_asset_esistente,
+                self.ticker_search_esistente,  # Autocomplete invece di txt
                 self.txt_quantita_esistente,
                 self.txt_prezzo_medio_acquisto,
                 self.txt_valore_attuale_unitario
-            ], tight=True, spacing=10, height=550, width=400),
+            ], tight=True, spacing=10, height=450, width=420),
             actions=[
                 ft.TextButton(on_click=self._chiudi_dialog_asset_esistente),
                 ft.TextButton(on_click=self._salva_asset_esistente)
@@ -242,13 +269,12 @@ class PortafoglioDialogs:
         # RIPRISTINA IL CONTENUTO ORIGINALE (perché potrebbe essere stato alterato da _apri_dialog_asset_esistente)
         self.dialog_operazione_asset.content = ft.Column([
             self.dd_asset_esistenti,
-            self.txt_ticker,
-            self.txt_nome_asset,
+            self.ticker_search,  # Autocomplete + nome automatico
             self.txt_quantita,
             self.txt_prezzo_unitario,
             self.dd_conto_transazione,
             self.radio_operazione
-        ], tight=True, spacing=10, height=550, width=400)
+        ], tight=True, spacing=10, height=450, width=420)
         
         self.dialog_operazione_asset.actions = [
             ft.TextButton(on_click=self._chiudi_dialog_operazione),
@@ -259,11 +285,10 @@ class PortafoglioDialogs:
         # Reset dei campi
         self.txt_ticker.value = ""
         self.txt_nome_asset.value = ""
+        self.ticker_search.reset()
         self.txt_quantita.value = ""
         self.txt_prezzo_unitario.value = ""
         self.radio_operazione.value = "COMPRA"
-        self.txt_ticker.read_only = False
-        self.txt_nome_asset.read_only = False
 
         master_key_b64 = self.page.session.get("master_key")
 
@@ -315,24 +340,62 @@ class PortafoglioDialogs:
         if selected_option and selected_option.data:
             asset_data = selected_option.data
             self.txt_ticker.value = asset_data['ticker']
+            self.ticker_search.value = asset_data['ticker']
             self.txt_nome_asset.value = asset_data['nome_asset']
-            self.txt_ticker.read_only = True
             self.txt_nome_asset.read_only = True
+            self.ticker_search.txt_search.read_only = True
         else:
             self.txt_ticker.value = ""
+            self.ticker_search.reset()
             self.txt_nome_asset.value = ""
-            self.txt_ticker.read_only = False
             self.txt_nome_asset.read_only = False
+            self.ticker_search.txt_search.read_only = False
 
         if self.dialog_operazione_asset.open:
             self.dialog_operazione_asset.update()
+    
+    def _on_ticker_autocomplete_select(self, risultato: dict):
+        """Callback quando un ticker viene selezionato dall'autocomplete."""
+        ticker = risultato['ticker']
+        nome = risultato['nome']
+        
+        # Imposta valori nei campi
+        self.txt_ticker.value = ticker
+        self.txt_nome_asset.value = nome
+        self.txt_nome_asset.read_only = False  # L'utente può modificare il nome
+        
+        if self.dialog_operazione_asset.open:
+            self.dialog_operazione_asset.update()
+    
+    def _on_ticker_esistente_select(self, risultato: dict):
+        """Callback per autocomplete nel dialog Aggiungi Asset Esistente."""
+        ticker = risultato['ticker']
+        nome = risultato['nome']
+        
+        self.txt_ticker_esistente.value = ticker
+        self.txt_nome_asset_esistente.value = nome
+        
+        if self.dialog_operazione_asset.open:
+            self.dialog_operazione_asset.update()
+    
+    def _on_ticker_modifica_select(self, risultato: dict):
+        """Callback per autocomplete nel dialog Modifica Asset."""
+        ticker = risultato['ticker']
+        nome = risultato['nome']
+        
+        self.txt_modifica_ticker.value = ticker
+        self.txt_modifica_nome.value = nome
+        
+        if self.dialog_modifica_asset.open:
+            self.dialog_modifica_asset.update()
 
     def _salva_operazione(self, e):
         try:
             tipo_op = self.radio_operazione.value
             quantita = float(self.txt_quantita.value.replace(",", "."))
             prezzo = float(self.txt_prezzo_unitario.value.replace(",", "."))
-            ticker = self.txt_ticker.value.strip().upper()
+            # Usa txt_ticker se settato (da autocomplete), altrimenti dal campo search
+            ticker = self.txt_ticker.value.strip().upper() or self.ticker_search.value.strip().upper()
             
             # Aggiungi suffisso borsa default se presente e se il ticker non ha già un suffisso
             borsa_default = None
@@ -465,9 +528,13 @@ class PortafoglioDialogs:
 
     def _apri_dialog_modifica_asset(self, e):
         self.asset_da_modificare = e.control.data
+        # Setta valori correnti
         self.txt_modifica_ticker.value = self.asset_da_modificare['ticker']
         self.txt_modifica_nome.value = self.asset_da_modificare['nome_asset']
-        self.dialog_modifica_asset.title.value = f"{self.loc.get('edit_asset_details')}: {self.asset_da_modificare['ticker']}"
+        # Mostra ticker corrente nel campo search
+        self.ticker_search_modifica.txt_search.value = self.asset_da_modificare['ticker']
+        self.ticker_search_modifica.dd_risultati.visible = False
+        
         self.dialog_modifica_asset.title.value = f"{self.loc.get('edit_asset_details')}: {self.asset_da_modificare['ticker']}"
         self.controller.page.open(self.dialog_modifica_asset)
         self.controller.page.update()
@@ -482,8 +549,9 @@ class PortafoglioDialogs:
             traceback.print_exc()
 
     def _salva_modifica_asset(self, e):
-        nuovo_ticker = self.txt_modifica_ticker.value.strip().upper()
-        nuovo_nome = self.txt_modifica_nome.value.strip()
+        # Usa txt se settato (da autocomplete), altrimenti dal campo search
+        nuovo_ticker = self.txt_modifica_ticker.value.strip().upper() or self.ticker_search_modifica.value.strip().upper()
+        nuovo_nome = self.txt_modifica_nome.value.strip() or nuovo_ticker  # Se nome non settato, usa ticker
         master_key_b64 = self.page.session.get("master_key")
         
         if nuovo_ticker and nuovo_nome:
@@ -498,6 +566,7 @@ class PortafoglioDialogs:
         # Reset dei campi
         self.txt_ticker_esistente.value = ""
         self.txt_nome_asset_esistente.value = ""
+        self.ticker_search_esistente.reset()
         self.txt_quantita_esistente.value = ""
         self.txt_prezzo_medio_acquisto.value = ""
         self.txt_valore_attuale_unitario.value = ""
@@ -506,12 +575,11 @@ class PortafoglioDialogs:
         # Sostituisco il contenuto con i campi per l'asset esistente
         self.dialog_operazione_asset.title.value = self.loc.get("add_existing_asset")
         self.dialog_operazione_asset.content = ft.Column([
-            self.txt_ticker_esistente,
-            self.txt_nome_asset_esistente,
+            self.ticker_search_esistente,  # Autocomplete
             self.txt_quantita_esistente,
             self.txt_prezzo_medio_acquisto,
             self.txt_valore_attuale_unitario
-        ], tight=True, spacing=10, height=550, width=400)
+        ], tight=True, spacing=10, height=450, width=420)
         
         # Sostituisco le azioni
         self.dialog_operazione_asset.actions = [
@@ -535,8 +603,9 @@ class PortafoglioDialogs:
 
     def _salva_asset_esistente(self, e):
         try:
-            ticker = self.txt_ticker_esistente.value.strip().upper()
-            nome_asset = self.txt_nome_asset_esistente.value.strip()
+            # Usa txt se settato (da autocomplete), altrimenti dal campo search
+            ticker = self.txt_ticker_esistente.value.strip().upper() or self.ticker_search_esistente.value.strip().upper()
+            nome_asset = self.txt_nome_asset_esistente.value.strip() or ticker  # Se nome non settato, usa ticker
             quantita = float(self.txt_quantita_esistente.value.replace(",", "."))
             prezzo_medio = float(self.txt_prezzo_medio_acquisto.value.replace(",", "."))
             valore_attuale = float(self.txt_valore_attuale_unitario.value.replace(",", "."))

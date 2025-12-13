@@ -171,8 +171,7 @@ class DashboardView:
 
     def _close_app(self, e):
         """Chiude l'applicazione."""
-        logger.info("[ACTION] Close app button clicked")
-        print("[INFO] ===== CHIUSURA APPLICAZIONE =====")
+        logger.info("===== CHIUSURA APPLICAZIONE =====")
         self.page.window.close()
 
     def _open_add_menu(self, e):
