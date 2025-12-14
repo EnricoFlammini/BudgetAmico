@@ -481,6 +481,7 @@ def ottieni_dati_analisi_mensile(id_famiglia: str, anno: int, mese: int, master_
             cur = con.cursor()
             
             # Query UNICA per spese personali raggruppate per sottocategoria
+            # Esclude i giroconti (transazioni senza sottocategoria)
             cur.execute("""
                 SELECT T.id_sottocategoria, SUM(T.importo) as totale
                 FROM Transazioni T
@@ -489,11 +490,13 @@ def ottieni_dati_analisi_mensile(id_famiglia: str, anno: int, mese: int, master_
                 WHERE AF.id_famiglia = %s
                   AND T.data BETWEEN %s AND %s
                   AND T.importo < 0
+                  AND T.id_sottocategoria IS NOT NULL
                 GROUP BY T.id_sottocategoria
             """, (id_famiglia, data_inizio, data_fine))
             spese_personali = {row['id_sottocategoria']: abs(row['totale']) for row in cur.fetchall()}
 
             # Query UNICA per spese condivise raggruppate per sottocategoria
+            # Esclude i giroconti (transazioni senza sottocategoria)
             cur.execute("""
                 SELECT TC.id_sottocategoria, SUM(TC.importo) as totale
                 FROM TransazioniCondivise TC
@@ -501,6 +504,7 @@ def ottieni_dati_analisi_mensile(id_famiglia: str, anno: int, mese: int, master_
                 WHERE CC.id_famiglia = %s
                   AND TC.data BETWEEN %s AND %s
                   AND TC.importo < 0
+                  AND TC.id_sottocategoria IS NOT NULL
                 GROUP BY TC.id_sottocategoria
             """, (id_famiglia, data_inizio, data_fine))
             spese_condivise = {row['id_sottocategoria']: abs(row['totale']) for row in cur.fetchall()}
@@ -585,7 +589,7 @@ def ottieni_dati_analisi_annuale(id_famiglia: str, anno: int, master_key_b64: st
             cur = con.cursor()
             
             # --- SPESE ---
-            # Personali
+            # Personali (esclude giroconti)
             cur.execute("""
                 SELECT T.id_sottocategoria, SUM(T.importo) as totale
                 FROM Transazioni T
@@ -594,11 +598,12 @@ def ottieni_dati_analisi_annuale(id_famiglia: str, anno: int, master_key_b64: st
                 WHERE AF.id_famiglia = %s
                   AND T.data BETWEEN %s AND %s
                   AND T.importo < 0
+                  AND T.id_sottocategoria IS NOT NULL
                 GROUP BY T.id_sottocategoria
             """, (id_famiglia, data_inizio_anno, data_fine_anno))
             spese_personali = {row['id_sottocategoria']: abs(row['totale']) for row in cur.fetchall()}
             
-            # Condivise
+            # Condivise (esclude giroconti)
             cur.execute("""
                 SELECT TC.id_sottocategoria, SUM(TC.importo) as totale
                 FROM TransazioniCondivise TC
@@ -606,6 +611,7 @@ def ottieni_dati_analisi_annuale(id_famiglia: str, anno: int, master_key_b64: st
                 WHERE CC.id_famiglia = %s
                   AND TC.data BETWEEN %s AND %s
                   AND TC.importo < 0
+                  AND TC.id_sottocategoria IS NOT NULL
                 GROUP BY TC.id_sottocategoria
             """, (id_famiglia, data_inizio_anno, data_fine_anno))
             spese_condivise = {row['id_sottocategoria']: abs(row['totale']) for row in cur.fetchall()}
@@ -4162,6 +4168,7 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64=Non
                         JOIN Conti CO ON T.id_conto = CO.id_conto
                         JOIN Appartenenza_Famiglia AF ON CO.id_utente = AF.id_utente
                         WHERE AF.id_famiglia = %s AND T.importo < 0 AND T.data BETWEEN %s AND %s
+                          AND T.id_sottocategoria IS NOT NULL
                         GROUP BY T.id_sottocategoria
                         UNION ALL
                         SELECT
@@ -4170,6 +4177,7 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64=Non
                         FROM TransazioniCondivise TC
                         JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
                         WHERE CC.id_famiglia = %s AND TC.importo < 0 AND TC.data BETWEEN %s AND %s
+                          AND TC.id_sottocategoria IS NOT NULL
                         GROUP BY TC.id_sottocategoria
                     ) AS U
                     GROUP BY id_sottocategoria

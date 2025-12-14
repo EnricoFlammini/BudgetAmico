@@ -24,7 +24,6 @@ Thumbs.db
 # Build
 build/
 dist/
-*.spec
 
 # Database (local backups only)
 *.db
