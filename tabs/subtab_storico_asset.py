@@ -232,18 +232,73 @@ class StoricoAssetSubTab(ft.Container):
         # Testo ticker (bold)
         txt_ticker = ft.Text(f"{prefisso}{ticker}", weight=ft.FontWeight.BOLD, size=13)
         
+        # Pulsante elimina per preferiti
+        btn_elimina = None
+        if is_preferito:
+            btn_elimina = ft.IconButton(
+                icon=ft.Icons.CLOSE,
+                icon_size=14,
+                icon_color=AppColors.ERROR,
+                tooltip="Rimuovi preferito",
+                data=ticker,
+                on_click=self._elimina_preferito
+            )
+        
         # Contenuto con tooltip per descrizione completa
         if descrizione and descrizione != ticker:
             # Descrizione troncata visibile
             desc_troncata = descrizione[:25] + "..." if len(descrizione) > 25 else descrizione
             txt_desc = ft.Text(desc_troncata, size=10, color=AppColors.TEXT_SECONDARY, italic=True)
             content = ft.Column([txt_ticker, txt_desc], spacing=0)
-            row = ft.Row([cb, content], spacing=5)
-            # Usa Container con tooltip invece di Tooltip widget
+            
+            if btn_elimina:
+                row = ft.Row([cb, content, btn_elimina], spacing=5, alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+            else:
+                row = ft.Row([cb, content], spacing=5)
             row.tooltip = descrizione
             return row
         else:
+            if btn_elimina:
+                return ft.Row([cb, txt_ticker, btn_elimina], spacing=5, alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
             return ft.Row([cb, txt_ticker], spacing=5)
+    
+    def _elimina_preferito(self, e):
+        """Elimina un ticker dai preferiti."""
+        ticker = e.control.data
+        
+        if ticker in self.tickers_preferiti:
+            del self.tickers_preferiti[ticker]
+            self._salva_preferiti()
+        
+        # Rimuovi dalla selezione
+        self.tickers_selezionati.discard(ticker)
+        
+        # Ricostruisci la lista checkbox
+        self._ricostruisci_lista_asset()
+        
+        self.controller.show_snack_bar(f"✓ {ticker} rimosso dai preferiti", success=True)
+    
+    def _ricostruisci_lista_asset(self):
+        """Ricostruisce la lista degli asset/preferiti nella UI."""
+        self.checkbox_container.controls.clear()
+        
+        # Aggiungi asset del portafoglio
+        for asset in self.tutti_asset:
+            ticker = asset['ticker']
+            nome = asset.get('nome', '')
+            if ticker in self.tickers_selezionati:
+                pass  # Mantieni selezione esistente
+            checkbox_row = self._crea_checkbox_asset(ticker, nome, is_preferito=False)
+            self.checkbox_container.controls.append(checkbox_row)
+        
+        # Aggiungi preferiti
+        for ticker, descrizione in self.tickers_preferiti.items():
+            checkbox_row = self._crea_checkbox_asset(ticker, descrizione, is_preferito=True)
+            self.checkbox_container.controls.append(checkbox_row)
+        
+        self._update_btn_state()
+        if self.page:
+            self.page.update()
     
     def _on_checkbox_change(self, e):
         """Gestisce selezione/deselezione asset."""
@@ -302,11 +357,13 @@ class StoricoAssetSubTab(ft.Container):
             self.page.update()
     
     def _carica_preferiti_salvati(self):
-        """Carica i ticker preferiti salvati da client_storage."""
+        """Carica i ticker preferiti salvati da client_storage (per utente)."""
         try:
             if self.controller and self.controller.page:
-                salvati = self.controller.page.client_storage.get("storico_asset.preferiti")
-                print(f"[DEBUG] Preferiti caricati: {salvati}")
+                utente_id = self.controller.get_user_id()
+                storage_key = f"storico_asset.preferiti.{utente_id}" if utente_id else "storico_asset.preferiti"
+                salvati = self.controller.page.client_storage.get(storage_key)
+                print(f"[DEBUG] Preferiti caricati per user {utente_id}: {salvati}")
                 if salvati and isinstance(salvati, dict):
                     self.tickers_preferiti = salvati
                 elif salvati and isinstance(salvati, str):
@@ -317,11 +374,13 @@ class StoricoAssetSubTab(ft.Container):
             print(f"[ERRORE] Caricamento preferiti: {e}")
     
     def _salva_preferiti(self):
-        """Salva i ticker preferiti in client_storage."""
+        """Salva i ticker preferiti in client_storage (per utente)."""
         try:
             if self.controller and self.controller.page:
-                print(f"[DEBUG] Salvataggio preferiti: {self.tickers_preferiti}")
-                self.controller.page.client_storage.set("storico_asset.preferiti", dict(self.tickers_preferiti))
+                utente_id = self.controller.get_user_id()
+                storage_key = f"storico_asset.preferiti.{utente_id}" if utente_id else "storico_asset.preferiti"
+                print(f"[DEBUG] Salvataggio preferiti per user {utente_id}: {self.tickers_preferiti}")
+                self.controller.page.client_storage.set(storage_key, dict(self.tickers_preferiti))
         except Exception as e:
             print(f"[ERRORE] Salvataggio preferiti: {e}")
     
