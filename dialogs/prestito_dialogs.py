@@ -256,7 +256,7 @@ class PrestitoDialogs:
             self.quote_inputs[uid] = txt_perc
             
             row = ft.Row([
-                ft.Text(membro['username'], expand=True),
+                ft.Text(membro['nome_visualizzato'], expand=True),
                 txt_perc
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
             
