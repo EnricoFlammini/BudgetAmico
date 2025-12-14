@@ -36,7 +36,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 URL_BASE = os.environ.get("FLET_APP_URL", "http://localhost:8550")
-VERSION = "0.21.00"
+VERSION = "0.22.00"
 
 
 class AppController:
@@ -230,6 +230,9 @@ class AppController:
         
         # Aggiorna prezzi asset in background (non blocca UI)
         self._aggiorna_prezzi_asset_in_background()
+        
+        # Controlla aggiornamenti in background
+        self._controlla_aggiornamenti_in_background()
 
     def _aggiorna_prezzi_asset_in_background(self):
         """Aggiorna i prezzi degli asset nel portafoglio in background."""
@@ -290,6 +293,75 @@ class AppController:
         # Avvia in background
         task = AsyncTask(target=_sync_prezzi, callback=_on_complete, error_callback=_on_error)
         task.start()
+
+    def _controlla_aggiornamenti_in_background(self):
+        """Controlla se ci sono aggiornamenti disponibili su GitHub."""
+        from utils.async_task import AsyncTask
+        from utils.update_checker import check_for_updates
+        
+        def _check_updates():
+            return check_for_updates(VERSION)
+        
+        def _on_update_available(update_info):
+            if update_info:
+                logger.info(f"Aggiornamento disponibile: {update_info['version']}")
+                self._mostra_banner_aggiornamento(update_info)
+        
+        def _on_error(e):
+            logger.debug(f"Controllo aggiornamenti fallito: {e}")
+        
+        # Avvia in background
+        task = AsyncTask(target=_check_updates, callback=_on_update_available, error_callback=_on_error)
+        task.start()
+    
+    def _mostra_banner_aggiornamento(self, update_info):
+        """Mostra un banner nella dashboard per l'aggiornamento disponibile."""
+        import webbrowser
+        
+        version = update_info.get('version', 'Nuova versione')
+        download_url = update_info.get('download_url') or update_info.get('html_url')
+        
+        def _on_scarica(e):
+            if download_url:
+                webbrowser.open(download_url)
+                self.show_snack_bar("Apertura pagina download...", success=True)
+        
+        def _on_ignora(e):
+            # Rimuovi il banner
+            if hasattr(self.dashboard_view, 'update_banner') and self.dashboard_view.update_banner:
+                self.dashboard_view.update_banner.visible = False
+                self.page.update()
+        
+        # Crea il banner
+        banner = ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.Icons.SYSTEM_UPDATE, color=ft.Colors.WHITE),
+                ft.Text(
+                    f"🎉 Nuova versione {version} disponibile!",
+                    color=ft.Colors.WHITE,
+                    weight=ft.FontWeight.BOLD,
+                    expand=True
+                ),
+                ft.TextButton(
+                    "Scarica",
+                    style=ft.ButtonStyle(color=ft.Colors.WHITE),
+                    on_click=_on_scarica
+                ),
+                ft.IconButton(
+                    icon=ft.Icons.CLOSE,
+                    icon_color=ft.Colors.WHITE,
+                    on_click=_on_ignora
+                )
+            ], alignment=ft.MainAxisAlignment.START),
+            bgcolor=ft.Colors.BLUE_700,
+            padding=ft.padding.symmetric(horizontal=15, vertical=8),
+            border_radius=ft.border_radius.only(bottom_left=8, bottom_right=8),
+        )
+        
+        # Aggiungi alla dashboard
+        if hasattr(self.dashboard_view, 'set_update_banner'):
+            self.dashboard_view.set_update_banner(banner)
+            self.page.update()
 
     def _download_confirmato(self, e): pass
     def _download_rifiutato(self, e): pass

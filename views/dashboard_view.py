@@ -52,6 +52,10 @@ class DashboardView:
             expand=True,
             padding=10
         )
+        
+        # 4. Banner per notifiche di aggiornamento
+        self.update_banner = None
+        self.update_banner_container = ft.Container(visible=False)
 
         # 4. Memorizza i componenti dell'AppBar
         self.appbar_title = ft.Text()
@@ -112,24 +116,28 @@ class DashboardView:
         loc = self.controller.loc
         self.appbar_title.value = loc.get("app_title")
 
+        # Area contenuto con banner opzionale sopra
+        main_content = ft.Column([
+            self.update_banner_container,  # Banner aggiornamenti (nascosto di default)
+            ft.Row(
+                [
+                    # Sidebar personalizzata scrollabile
+                    ft.Container(
+                        content=self.sidebar_listview,
+                        width=220,
+                        bgcolor=ft.Colors.SURFACE,
+                        padding=5,
+                    ),
+                    ft.VerticalDivider(width=1),
+                    self.content_area
+                ],
+                expand=True
+            )
+        ], expand=True, spacing=0)
+
         return ft.View(
             "/dashboard",
-            [
-                ft.Row(
-                    [
-                        # Sidebar personalizzata scrollabile
-                        ft.Container(
-                            content=self.sidebar_listview,
-                            width=220,
-                            bgcolor=ft.Colors.SURFACE,
-                            padding=5,
-                        ),
-                        ft.VerticalDivider(width=1),
-                        self.content_area
-                    ],
-                    expand=True
-                )
-            ],
+            [main_content],
             appbar=ft.AppBar(
                 title=self.appbar_title,
                 center_title=False,
@@ -168,6 +176,14 @@ class DashboardView:
                 on_click=self._open_add_menu
             )
         )
+    
+    def set_update_banner(self, banner: ft.Container):
+        """Mostra un banner di aggiornamento nella dashboard."""
+        self.update_banner = banner
+        self.update_banner_container.content = banner
+        self.update_banner_container.visible = True
+        if self.page:
+            self.page.update()
 
     def _close_app(self, e):
         """Chiude l'applicazione."""

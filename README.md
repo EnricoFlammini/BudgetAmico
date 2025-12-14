@@ -214,6 +214,15 @@ BudgetAmico/
 
 ---
 
+## 📊 Novità Versione 0.22
+
+### Notifica Aggiornamenti Automatica
+-   **Controllo Versione GitHub**: All'avvio, l'app controlla se è disponibile una nuova versione su GitHub Releases.
+-   **Banner Aggiornamento**: Se disponibile un aggiornamento, appare un banner blu con pulsante "Scarica".
+-   **Download Diretto**: Il pulsante apre il browser sulla pagina di download della nuova versione.
+
+---
+
 ## 📊 Novità Versione 0.21
 
 ### Migrazione Driver Database
