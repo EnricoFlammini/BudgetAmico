@@ -25,6 +25,7 @@ class TestGestioneDB(unittest.TestCase):
         # Setup query result
         mock_cursor.fetchone.return_value = {'valore': 'test_value'}
         
+        
         # Execute
         result = gestione_db.get_configurazione('some_key')
         
