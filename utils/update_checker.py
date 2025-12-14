@@ -7,7 +7,8 @@ from typing import Optional, Dict, Any
 
 # URL API GitHub Releases - CONFIGURARE CON IL TUO REPOSITORY
 GITHUB_REPO = "EnricoFlammini/BudgetAmico"  # Formato: "owner/repo"
-GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+# Usa /releases invece di /releases/latest per includere pre-release
+GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases"
 
 
 def parse_version(version_str: str) -> tuple:
@@ -78,7 +79,14 @@ def check_for_updates(current_version: str) -> Optional[Dict[str, Any]]:
             return None
             
         response.raise_for_status()
-        release_data = response.json()
+        releases = response.json()
+        
+        # Prendi la prima release (include pre-release)
+        if not releases:
+            print("[UPDATE] Nessuna release trovata su GitHub")
+            return None
+        
+        release_data = releases[0]
         
         # Estrai versione dal tag
         remote_version = release_data.get("tag_name", "")
