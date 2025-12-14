@@ -2,7 +2,13 @@ import sqlite3
 import os
 
 # --- GESTIONE PERCORSI ---
-APP_DATA_DIR = os.path.join(os.getenv('APPDATA'), 'BudgetAmico')
+if os.name == 'nt':
+    base_dir = os.getenv('APPDATA')
+else:
+    # Linux/Mac fallback - standard XDG path or home
+    base_dir = os.path.join(os.path.expanduser("~"), ".local", "share")
+
+APP_DATA_DIR = os.path.join(base_dir, 'BudgetAmico')
 if not os.path.exists(APP_DATA_DIR):
     os.makedirs(APP_DATA_DIR)
 DB_FILE = os.path.join(APP_DATA_DIR, 'budget_amico.db')
