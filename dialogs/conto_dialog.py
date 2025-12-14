@@ -324,6 +324,7 @@ class ContoDialog(ft.AlertDialog):
                 return
 
             utente_id = self.controller.get_user_id()
+            id_famiglia = self.controller.get_family_id()  # Get family ID for family_key encryption
             success = False
             messaggio = ""
             new_conto_id = None
@@ -332,7 +333,7 @@ class ContoDialog(ft.AlertDialog):
                 # Passa il saldo_iniziale come valore_manuale solo se il tipo è 'Fondo Pensione'
                 valore_manuale_modifica = saldo_iniziale if tipo == 'Fondo Pensione' else None
                 
-                success, msg = modifica_conto(self.conto_id_in_modifica, utente_id, nome, tipo, iban, valore_manuale=valore_manuale_modifica, master_key_b64=master_key_b64)
+                success, msg = modifica_conto(self.conto_id_in_modifica, utente_id, nome, tipo, iban, valore_manuale=valore_manuale_modifica, master_key_b64=master_key_b64, id_famiglia=id_famiglia)
                 messaggio = "modificato" if success else "errore modifica"
                 new_conto_id = self.conto_id_in_modifica
                 
@@ -343,7 +344,7 @@ class ContoDialog(ft.AlertDialog):
             else:
                 # Passa il saldo_iniziale come valore_manuale solo se il tipo è 'Fondo Pensione'
                 valore_manuale_iniziale = saldo_iniziale if tipo == 'Fondo Pensione' else 0.0
-                res = aggiungi_conto(utente_id, nome, tipo, iban, valore_manuale=valore_manuale_iniziale, master_key_b64=master_key_b64)
+                res = aggiungi_conto(utente_id, nome, tipo, iban, valore_manuale=valore_manuale_iniziale, master_key_b64=master_key_b64, id_famiglia=id_famiglia)
                 if isinstance(res, tuple):
                     new_conto_id, msg = res
                 else:

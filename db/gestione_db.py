@@ -1610,11 +1610,19 @@ def ottieni_conti(id_utente: str, master_key_b64: Optional[str] = None) -> List[
         print(f"[ERRORE] Errore recupero conti: {e}")
         return []
 
-def aggiungi_conto(id_utente: str, nome_conto: str, tipo: str, saldo_iniziale: float = 0.0, data_saldo_iniziale: Optional[str] = None, master_key_b64: Optional[str] = None) -> Optional[str]:
+def aggiungi_conto(id_utente: str, nome_conto: str, tipo: str, saldo_iniziale: float = 0.0, data_saldo_iniziale: Optional[str] = None, master_key_b64: Optional[str] = None, id_famiglia: Optional[str] = None) -> Optional[str]:
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
-    encrypted_nome = _encrypt_if_key(nome_conto, master_key, crypto)
-    encrypted_tipo = _encrypt_if_key(tipo, master_key, crypto)
+    
+    # Use family_key for account name encryption (so other family members can decrypt it)
+    encryption_key = master_key
+    if master_key and id_famiglia:
+        family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+        if family_key:
+            encryption_key = family_key
+    
+    encrypted_nome = _encrypt_if_key(nome_conto, encryption_key, crypto)
+    encrypted_tipo = _encrypt_if_key(tipo, master_key, crypto)  # tipo can stay with master_key
     encrypted_saldo = _encrypt_if_key(str(saldo_iniziale), master_key, crypto)
     
     if not data_saldo_iniziale:
@@ -1641,11 +1649,19 @@ def aggiungi_conto(id_utente: str, nome_conto: str, tipo: str, saldo_iniziale: f
         print(f"[ERRORE] Errore aggiunta conto: {e}")
         return None
 
-def modifica_conto(id_conto: str, nome_conto: str, tipo: str, saldo_iniziale: float, data_saldo_iniziale: str, master_key_b64: Optional[str] = None) -> bool:
+def modifica_conto(id_conto: str, nome_conto: str, tipo: str, saldo_iniziale: float, data_saldo_iniziale: str, master_key_b64: Optional[str] = None, id_famiglia: Optional[str] = None, id_utente: Optional[str] = None) -> bool:
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
-    encrypted_nome = _encrypt_if_key(nome_conto, master_key, crypto)
-    encrypted_tipo = _encrypt_if_key(tipo, master_key, crypto)
+    
+    # Use family_key for account name encryption (so other family members can decrypt it)
+    encryption_key = master_key
+    if master_key and id_famiglia and id_utente:
+        family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+        if family_key:
+            encryption_key = family_key
+    
+    encrypted_nome = _encrypt_if_key(nome_conto, encryption_key, crypto)
+    encrypted_tipo = _encrypt_if_key(tipo, master_key, crypto)  # tipo can stay with master_key
     encrypted_saldo = _encrypt_if_key(str(saldo_iniziale), master_key, crypto)
 
     try:
@@ -2361,15 +2377,23 @@ def ottieni_invito_per_token(token):
 
 
 # --- Funzioni Conti Personali ---
-def aggiungi_conto(id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=0.0, borsa_default=None, master_key_b64=None):
+def aggiungi_conto(id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=0.0, borsa_default=None, master_key_b64=None, id_famiglia=None):
     if not valida_iban_semplice(iban):
         return None, "IBAN non valido"
     iban_pulito = iban.strip().upper() if iban else None
     
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
-    encrypted_nome = _encrypt_if_key(nome_conto, master_key, crypto)
-    encrypted_iban = _encrypt_if_key(iban_pulito, master_key, crypto)
+    
+    # Use family_key for account name encryption (so other family members can decrypt it)
+    encryption_key = master_key
+    if master_key and id_famiglia:
+        family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+        if family_key:
+            encryption_key = family_key
+    
+    encrypted_nome = _encrypt_if_key(nome_conto, encryption_key, crypto)
+    encrypted_iban = _encrypt_if_key(iban_pulito, master_key, crypto)  # IBAN stays with master_key
     
     try:
         with get_db_connection() as con:
@@ -2390,7 +2414,8 @@ def ottieni_conti_utente(id_utente, master_key_b64=None):
         with get_db_connection() as con:
             # con.row_factory = sqlite3.Row # Removed for Supabase
             cur = con.cursor()
-            cur.execute("SELECT id_conto, nome_conto, tipo FROM Conti WHERE id_utente = %s", (id_utente,))
+            # Exclude hidden accounts (nascosto = FALSE or NULL for backwards compatibility)
+            cur.execute("SELECT id_conto, nome_conto, tipo FROM Conti WHERE id_utente = %s AND (nascosto = FALSE OR nascosto IS NULL)", (id_utente,))
             results = [dict(row) for row in cur.fetchall()]
             
             # Decrypt if key available
@@ -2426,7 +2451,7 @@ def ottieni_dettagli_conti_utente(id_utente, master_key_b64=None):
                                         COALESCE(CAST(NULLIF(CAST(C.rettifica_saldo AS TEXT), '') AS NUMERIC), 0.0) AS TEXT)
                                    END AS saldo_calcolato
                         FROM Conti C
-                        WHERE C.id_utente = %s
+                        WHERE C.id_utente = %s AND (C.nascosto = FALSE OR C.nascosto IS NULL)
                         ORDER BY C.nome_conto
                         """, (id_utente,))
             results = [dict(row) for row in cur.fetchall()]
@@ -2434,10 +2459,28 @@ def ottieni_dettagli_conti_utente(id_utente, master_key_b64=None):
             # Decrypt if key available
             crypto, master_key = _get_crypto_and_key(master_key_b64)
             
+            # Get family_key for this user (accounts may be encrypted with it)
+            family_key = None
+            if master_key:
+                cur.execute("SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s", (id_utente,))
+                fam_res = cur.fetchone()
+                if fam_res and fam_res['id_famiglia']:
+                    family_key = _get_family_key_for_user(fam_res['id_famiglia'], id_utente, master_key, crypto)
+            
             for row in results:
-                # Decrypt text fields
-                if master_key:
+                # Try family_key first, then master_key as fallback
+                decrypted_nome = None
+                if family_key:
+                    decrypted_nome = _decrypt_if_key(row['nome_conto'], family_key, crypto, silent=True)
+                
+                if decrypted_nome and decrypted_nome != "[ENCRYPTED]" and not decrypted_nome.startswith("gAAAAA"):
+                    row['nome_conto'] = decrypted_nome
+                elif master_key:
+                    # Fallback to master_key for legacy data
                     row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
+                
+                # IBAN always uses master_key (personal data)
+                if master_key:
                     row['iban'] = _decrypt_if_key(row['iban'], master_key, crypto)
                 
                 # Handle saldo_calcolato
@@ -2457,15 +2500,23 @@ def ottieni_dettagli_conti_utente(id_utente, master_key_b64=None):
         return []
 
 
-def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=None, borsa_default=None, master_key_b64=None):
+def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=None, borsa_default=None, master_key_b64=None, id_famiglia=None):
     if not valida_iban_semplice(iban):
         return False, "IBAN non valido"
     iban_pulito = iban.strip().upper() if iban else None
     
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
-    encrypted_nome = _encrypt_if_key(nome_conto, master_key, crypto)
-    encrypted_iban = _encrypt_if_key(iban_pulito, master_key, crypto)
+    
+    # Use family_key for account name encryption (so other family members can decrypt it)
+    encryption_key = master_key
+    if master_key and id_famiglia:
+        family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+        if family_key:
+            encryption_key = family_key
+    
+    encrypted_nome = _encrypt_if_key(nome_conto, encryption_key, crypto)
+    encrypted_iban = _encrypt_if_key(iban_pulito, master_key, crypto)  # IBAN stays with master_key
 
     try:
         with get_db_connection() as con:
@@ -2575,14 +2626,19 @@ def aggiorna_saldo_iniziale_conto(id_conto, nuovo_saldo):
 
 
 def elimina_conto(id_conto, id_utente):
+    """
+    Elimina un conto se vuoto, oppure lo nasconde se ha transazioni ma saldo = 0.
+    Ritorna: True = eliminato, "NASCOSTO" = nascosto, "SALDO_NON_ZERO" = errore, False = errore generico
+    """
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("SELECT tipo, valore_manuale FROM Conti WHERE id_conto = %s AND id_utente = %s", (id_conto, id_utente))
+            cur.execute("SELECT tipo, valore_manuale, COALESCE(CAST(rettifica_saldo AS NUMERIC), 0.0) as rettifica_saldo FROM Conti WHERE id_conto = %s AND id_utente = %s", (id_conto, id_utente))
             res = cur.fetchone()
             if not res: return False
             tipo = res['tipo']
             valore_manuale = res['valore_manuale']
+            rettifica_saldo = float(res['rettifica_saldo']) if res['rettifica_saldo'] else 0.0
 
             saldo = 0.0
             num_transazioni = 0
@@ -2597,19 +2653,21 @@ def elimina_conto(id_conto, id_utente):
                 saldo = res['saldo']
                 num_transazioni = res['num_transazioni']
             else:
+                # Per conti Corrente/Risparmio/Contanti: somma transazioni + rettifica_saldo
                 cur.execute("SELECT COALESCE(SUM(importo), 0.0) AS saldo, COUNT(*) AS num_transazioni FROM Transazioni T WHERE T.id_conto = %s", (id_conto,))
                 res = cur.fetchone()
-                saldo = res['saldo']
+                saldo = float(res['saldo']) + rettifica_saldo
                 num_transazioni = res['num_transazioni']
 
             if abs(saldo) > 1e-9:
                 return "SALDO_NON_ZERO"
             
-            # Nuovo controllo: impedisce la cancellazione se ci sono transazioni/asset, anche se il saldo è zero.
+            # Se ci sono transazioni ma saldo = 0, NASCONDI il conto invece di bloccare
             if num_transazioni > 0:
-                return "CONTO_NON_VUOTO"
+                cur.execute("UPDATE Conti SET nascosto = TRUE WHERE id_conto = %s AND id_utente = %s", (id_conto, id_utente))
+                return "NASCOSTO"
 
-            # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
+            # Se non ci sono transazioni, elimina veramente
             cur.execute("DELETE FROM Conti WHERE id_conto = %s AND id_utente = %s", (id_conto, id_utente))
             return cur.rowcount > 0
     except Exception as e:
@@ -2940,13 +2998,13 @@ def ottieni_tutti_i_conti_famiglia(id_famiglia, master_key_b64=None, id_utente=N
             # con.row_factory = sqlite3.Row # Removed for Supabase
             cur = con.cursor()
 
-            # Conti Personali di tutti i membri della famiglia
+            # Conti Personali di tutti i membri della famiglia (esclude nascosti)
             cur.execute("""
                         SELECT C.id_conto, C.nome_conto, C.tipo, 0 as is_condiviso, U.username_enc as proprietario_enc, C.id_utente
                         FROM Conti C
                         JOIN Utenti U ON C.id_utente = U.id_utente
                         JOIN Appartenenza_Famiglia AF ON U.id_utente = AF.id_utente
-                        WHERE AF.id_famiglia = %s AND C.tipo != 'Investimento'
+                        WHERE AF.id_famiglia = %s AND C.tipo != 'Investimento' AND (C.nascosto = FALSE OR C.nascosto IS NULL)
                         
                         UNION ALL
                         
@@ -2959,6 +3017,12 @@ def ottieni_tutti_i_conti_famiglia(id_famiglia, master_key_b64=None, id_utente=N
             
             # Decrypt loop
             crypto, master_key = _get_crypto_and_key(master_key_b64)
+            
+            # Get family_key once for efficiency
+            family_key = None
+            if master_key and id_utente:
+                family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+            
             for row in results:
                 # Decrypt proprietario if it's a person
                 if row.get('proprietario_enc') and row['proprietario_enc'] != 'Condiviso':
@@ -2966,24 +3030,27 @@ def ottieni_tutti_i_conti_famiglia(id_famiglia, master_key_b64=None, id_utente=N
                 else:
                      row['proprietario'] = row.get('proprietario_enc') # 'Condiviso'
 
-                if row['is_condiviso']:
-                    # Shared Account: Try Family Key, then Master Key
-                    family_key = None
-                    if master_key and id_utente:
-                        family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
-
-                    if family_key:
-                        row['nome_conto'] = _decrypt_if_key(row['nome_conto'], family_key, crypto, silent=True)
-                        if row['nome_conto'] == "[ENCRYPTED]" and isinstance(row['nome_conto'], str) and row['nome_conto'].startswith("gAAAAA"):
-                            row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
-                    else:
-                         # No family key, try master key (legacy/fallback)
-                         row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
+                # Try Family Key first for ALL accounts (shared and personal)
+                # This works for accounts created after the family_key encryption fix
+                decrypted = None
+                if family_key:
+                    decrypted = _decrypt_if_key(row['nome_conto'], family_key, crypto, silent=True)
+                
+                # Check if decryption was successful
+                if decrypted and decrypted != "[ENCRYPTED]" and not decrypted.startswith("gAAAAA"):
+                    row['nome_conto'] = decrypted
                 else:
-                    # Personal Account: Decrypt ONLY if it belongs to the current user
-                    if id_utente and row.get('id_utente') == id_utente:
-                        row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
-                    # Else: Leave encrypted (or show placeholder if desired, but for now leave as is)
+                    # Fallback: For personal accounts belonging to the current user, try master_key (legacy data)
+                    if not row['is_condiviso'] and id_utente and row.get('id_utente') == id_utente:
+                        fallback = _decrypt_if_key(row['nome_conto'], master_key, crypto, silent=True)
+                        if fallback and fallback != "[ENCRYPTED]":
+                            row['nome_conto'] = fallback
+                    # For shared accounts, try master_key as legacy fallback
+                    elif row['is_condiviso'] and master_key:
+                        fallback = _decrypt_if_key(row['nome_conto'], master_key, crypto, silent=True)
+                        if fallback and fallback != "[ENCRYPTED]":
+                            row['nome_conto'] = fallback
+                    # Else: leave as-is (encrypted string will show for other members' legacy accounts)
             
             return results
 
@@ -3423,13 +3490,16 @@ def ottieni_transazioni_utente(id_utente, anno, mese, master_key_b64=None):
                         
                     row['descrizione'] = decrypted_desc
                     
-                    # Decrypt other fields
-                    if row.get('tipo_transazione') == 'condivisa' and family_key:
-                        key_conto = family_key
-                    else:
-                        key_conto = master_key
-
-                    row['nome_conto'] = _decrypt_if_key(row['nome_conto'], key_conto, crypto)
+                    # Decrypt nome_conto: Try Family Key first, then Master Key (for legacy)
+                    nome_conto_decrypted = None
+                    if family_key:
+                        nome_conto_decrypted = _decrypt_if_key(row['nome_conto'], family_key, crypto, silent=True)
+                    
+                    if nome_conto_decrypted and nome_conto_decrypted != "[ENCRYPTED]" and not nome_conto_decrypted.startswith("gAAAAA"):
+                        row['nome_conto'] = nome_conto_decrypted
+                    elif master_key:
+                        # Fallback to master_key for legacy data
+                        row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
                     
                     # Categories are always encrypted with Family Key
                     cat_name = row['nome_categoria']

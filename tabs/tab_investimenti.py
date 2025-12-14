@@ -501,10 +501,11 @@ class InvestimentiTab(ft.Container):
         if risultato is True:
             self.controller.show_snack_bar("Conto di investimento eliminato.", success=True)
             self.controller.db_write_operation()
+        elif risultato == "NASCOSTO":
+            self.controller.show_snack_bar("✅ Conto nascosto. Gli asset storici sono stati mantenuti.", success=True)
+            self.controller.db_write_operation()
         elif risultato == "SALDO_NON_ZERO":
             self.controller.show_snack_bar("❌ Errore: Il valore del conto non è 0.", success=False)
-        elif risultato == "CONTO_NON_VUOTO":
-            self.controller.show_snack_bar("❌ Errore: Non puoi eliminare un conto con asset.", success=False)
         elif isinstance(risultato, tuple) and not risultato[0]:
             self.controller.show_error_dialog(risultato[1])
         else:

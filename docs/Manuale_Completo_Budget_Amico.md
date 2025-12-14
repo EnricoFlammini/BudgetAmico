@@ -507,5 +507,5 @@ La Recovery Key generata alla registrazione è l'unico modo per recuperare i tuo
 
 ---
 
-*Budget Amico - Versione 0.23*
+*Budget Amico - Versione 0.24*
 *Sviluppato con ❤️ da Iscavar79*

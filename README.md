@@ -214,6 +214,19 @@ BudgetAmico/
 
 ---
 
+## 📊 Novità Versione 0.24
+
+### Gestione Conti Migliorata
+-   **Nascondi Conti a Saldo Zero**: I conti con transazioni ma saldo zero possono ora essere nascosti invece che eliminati, mantenendo lo storico delle transazioni intatto.
+-   **Nome Proprietario nei Giroconti**: Il dropdown destinazione nei giroconti mostra ora il nome del proprietario del conto tra parentesi (es. "BBVA (Roberta)").
+
+### Sicurezza e Crittografia
+-   **Crittografia con Family Key**: I nomi dei conti personali vengono ora criptati con la chiave famiglia, permettendo la visibilità tra tutti i membri della famiglia.
+-   **Decriptazione Migliorata**: Logica di fallback per decriptare dati legacy (criptati con master_key) mantenendo la retrocompatibilità.
+-   **Migrazione Trasparente**: I conti rinominati vengono automaticamente ri-criptati con la nuova chiave famiglia.
+
+---
+
 ## 📊 Novità Versione 0.23
 
 ### Manuali Utente Integrati

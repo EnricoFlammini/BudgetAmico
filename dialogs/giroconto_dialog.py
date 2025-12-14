@@ -120,7 +120,12 @@ class GirocontoDialog(ft.AlertDialog):
         opzioni_destinazione = []
         for c in conti_destinazione_filtrati:
             prefix = "C" if c['is_condiviso'] else "P"
-            suffix = " (Condiviso)" if c['is_condiviso'] else ""
+            # Show owner name for personal accounts, "Condiviso" for shared accounts
+            if c['is_condiviso']:
+                suffix = " (Condiviso)"
+            else:
+                proprietario = c.get('proprietario', '')
+                suffix = f" ({proprietario})" if proprietario and proprietario != "Sconosciuto" else ""
             opzioni_destinazione.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}{suffix}"))
         self.dd_conto_destinazione.options = opzioni_destinazione
 
