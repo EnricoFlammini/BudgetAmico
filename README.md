@@ -160,6 +160,26 @@ pyinstaller --name "Budget Amico" --windowed --onedir --clean --noconfirm --add-
 L'eseguibile sarà disponibile in `dist\Budget Amico\Budget Amico.exe`.
 **Importante**: Assicurati che il file `.env` sia presente nella stessa cartella dell'eseguibile o configurato nel sistema target.
 
+### Build per Mobile (Android/iOS)
+
+Per creare un pacchetto installabile per dispositivi mobili (APK per Android o IPA per iOS), utilizza il comando `flet build` con il file dei requisiti specifico:
+
+**Android (APK):**
+```bash
+flet build apk --requirements requirements_mobile.txt
+```
+*L'APK generato si troverà nella cartella `build/apk`.*
+
+**iOS (IPA):**
+```bash
+flet build ipa --requirements requirements_mobile.txt
+```
+*Nota: Per compilare per iOS è necessario un Mac.*
+
+**Importante**:
+- Assicurati di avere installato l'SDK appropriato (Android SDK o Xcode).
+- Potresti dover configurare le chiavi di firma per la distribuzione sugli store.
+
 ---
 
 ## 📁 Struttura del Progetto

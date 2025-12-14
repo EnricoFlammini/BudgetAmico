@@ -161,7 +161,8 @@ class InvestimentiTab(ft.Container):
             self.txt_gain_loss_totale.value = f"{self.controller.loc.get('total_gain_loss')}: {self.controller.loc.format_currency(gain_loss_totale)}"
             self.txt_gain_loss_totale.color = AppColors.SUCCESS if gain_loss_totale >= 0 else AppColors.ERROR
 
-            self.page.update()
+            if self.page:
+                self.page.update()
 
         except Exception as e:
             self._on_error(e)

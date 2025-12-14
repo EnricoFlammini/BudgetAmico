@@ -4,7 +4,8 @@ flet>=0.28.0
 flet-desktop>=0.28.0
 
 # Database
-psycopg2-binary>=2.9.9
+pg8000>=1.30.0
+scramp>=1.4.0  # Required for pg8000 SASL auth (Supabase uses SCRAM)
 python-dotenv>=1.0.0
 
 # Data Processing & Export
@@ -28,4 +29,3 @@ cryptography>=42.0.0
 
 # Dev Tools
 pre-commit>=3.5.0
-

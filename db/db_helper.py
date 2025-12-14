@@ -1,16 +1,22 @@
 """
-Database Helper - Wrapper per transizione da SQLite a PostgreSQL
-Questo modulo fornisce funzioni helper per facilitare la migrazione graduale.
+Database Helper - Wrapper per transizione da SQLite a PostgreSQL (pg8000)
+Questo modulo fornisce funzioni helper per facilitare la migrazione.
 """
 
-import psycopg2
-from psycopg2 import extras
-import psycopg2.errors
+import pg8000.dbapi
 from contextlib import contextmanager
 from db.supabase_manager import SupabaseManager
 
-# Mapping errori SQLite -> PostgreSQL
-IntegrityError = psycopg2.errors.IntegrityConstraintViolation
+# Mapping errori per compatibilità: pg8000 solleva semplicemente DatabaseError o IntegrityError
+IntegrityError = pg8000.dbapi.IntegrityError
+DatabaseError = pg8000.dbapi.DatabaseError
+
+# Factory per cursori che restituiscono dizionari (emula RealDictCursor)
+def dict_row_factory(cursor, row):
+    d = {}
+    for idx, col in enumerate(cursor.description):
+        d[col[0]] = row[idx]
+    return d
 
 @contextmanager
 def get_db_connection(id_utente=None):
@@ -113,15 +119,49 @@ def execute_with_returning(cursor, query, params=None, returning_col=None):
 def dict_factory_cursor(conn):
     """
     Crea un cursor che restituisce dizionari invece di tuple.
-    Equivalente a sqlite3.Row per PostgreSQL.
+    In pg8000 (dbapi) impostiamo row_factory.
     
     Args:
-        conn: Connessione PostgreSQL
+        conn: Connessione PostgreSQL (pg8000)
         
     Returns:
-        cursor: Cursor con dict factory
+        cursor: Cursor configurato
     """
-    return conn.cursor(cursor_factory=extras.RealDictCursor)
+    # In pg8000 dbapi possiamo impostare row_factory sul cursore
+    # NOTA: pg8000 implementation specifica può variare, controlliamo la doc o proviamo.
+    # pg8000 standard non ha cursor_factory nel metodo cursor().
+    # Ma ha una property row_factory sulla connessione o cursore in versioni recenti.
+    # Se fallisce, useremo un wrapper al momento del fetch.
+    
+    cursor = conn.cursor()
+    # pg8000 non supporta nativamente row_factory come sqlite3 in tutte le versioni
+    # Ma il nostro codice client si aspetta che fetchall() ritorni dict.
+    # Quindi avvolgiamo il cursore o usiamo una logica diversa.
+    # PROVIAMO: Usare la nostra funzione custom quando serve.
+    # ATTENZIONE: pg8000 non ha row_factory. Dobbiamo farlo manualmente.
+    
+    # Monkey patch del cursore per autoconvertire? Troppo rischioso.
+    # Restituiamo un nostro wrapper
+    return DictCursorWrapper(cursor)
+
+class DictCursorWrapper:
+    def __init__(self, cursor):
+        self.cursor = cursor
+        
+    def execute(self, query, params=None):
+        return self.cursor.execute(query, params)
+        
+    def fetchone(self):
+        row = self.cursor.fetchone()
+        if row is None: return None
+        return dict_row_factory(self.cursor, row)
+        
+    def fetchall(self):
+        rows = self.cursor.fetchall()
+        return [dict_row_factory(self.cursor, row) for row in rows]
+        
+    def __getattr__(self, name):
+        return getattr(self.cursor, name)
 
 
 # Funzioni di compatibilità per codice esistente
