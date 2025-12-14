@@ -37,11 +37,9 @@ class TestGestioneDB(unittest.TestCase):
         self.assertEqual(args[1], ('some_key',))
 
     @patch('db.gestione_db.get_db_connection')
-    @patch('db.gestione_db._get_family_key_for_user')
-    @patch('db.gestione_db._get_crypto_and_key')
-    @patch('db.gestione_db._decrypt_if_key')
-    def test_get_configurazione_smtp_encrypted_success(self, mock_decrypt, mock_crypto_key, mock_fam_key, mock_get_conn):
-        # Scenario: Admin requesting SMTP password (encrypted)
+    @patch('db.gestione_db.decrypt_system_data')
+    def test_get_configurazione_smtp_encrypted_success(self, mock_decrypt, mock_get_conn):
+        # Scenario: Admin requesting SMTP password (encrypted with system key)
         
         # Mocks
         mock_conn = MagicMock()
@@ -52,27 +50,18 @@ class TestGestioneDB(unittest.TestCase):
         # Query returns encrypted value
         mock_cursor.fetchone.return_value = {'valore': 'encrypted_stuff'}
         
-        # Crypto setup
-        mock_crypto = MagicMock()
-        mock_master_key = b'some_bytes'
-        mock_crypto_key.return_value = (mock_crypto, mock_master_key)
-        
-        mock_family_key = b'fam_key'
-        mock_fam_key.return_value = mock_family_key
-        
+        # Mock system decryption
         mock_decrypt.return_value = 'decrypted_password'
         
         # Execute
         result = gestione_db.get_configurazione(
             'smtp_password', 
-            id_famiglia=1, 
-            master_key_b64='encoded_master', 
-            id_utente=99
+            id_famiglia=1
         )
         
         # Verify
         self.assertEqual(result, 'decrypted_password')
-        mock_decrypt.assert_called_with('encrypted_stuff', mock_family_key, mock_crypto)
+        mock_decrypt.assert_called_with('encrypted_stuff')
 
     @patch('db.gestione_db.get_db_connection')
     def test_set_configurazione_global(self, mock_get_conn):
