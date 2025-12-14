@@ -207,10 +207,27 @@ BudgetAmico/
 -   **Database**: PostgreSQL su Supabase (sostituisce SQLite)
 -   **API**: Yahoo Finance API per prezzi asset
 -   **Librerie**:
-    - `psycopg2` - Connessione PostgreSQL
+    - `pg8000` - Driver PostgreSQL pure-Python (compatibile mobile)
     - `python-dotenv` - Gestione configurazione
     - `pandas` e `openpyxl` - Esportazione dati
     - `cryptography` - Crittografia dati sensibili (Fernet)
+
+---
+
+## 📊 Novità Versione 0.21
+
+### Migrazione Driver Database
+-   **Da psycopg2 a pg8000**: Migrazione al driver PostgreSQL pure-Python per compatibilità mobile.
+-   **Connection Pool Custom**: Implementato pool di connessioni thread-safe per pg8000.
+-   **DictCursor Wrapper**: Cursore personalizzato che restituisce dizionari invece di tuple.
+
+### Preferiti Asset per Utente
+-   **Preferiti Privati**: I ticker preferiti nel grafico storico sono ora salvati per singolo utente.
+-   **Eliminazione Preferiti**: Aggiunto pulsante X rossa per rimuovere i preferiti dalla lista.
+
+### Bug Fix
+-   **Fix Commit Database**: Corretto bug che annullava le modifiche al database dopo il commit.
+-   **Fix NoneType Error**: Aggiunto controllo null in `InvestimentiTab` per evitare errori.
 
 ---
 

@@ -1,0 +1,7 @@
+flet>=0.28.0
+pg8000>=1.30.0
+scramp>=1.4.0
+python-dotenv>=1.0.0
+python-dateutil>=2.9.0
+requests>=2.32.0
+cryptography>=42.0.0
