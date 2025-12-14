@@ -4,6 +4,8 @@ import os
 import traceback
 import time
 import shutil
+import subprocess
+import sys
 from urllib.parse import urlparse, parse_qs
 import threading
 
@@ -36,7 +38,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 URL_BASE = os.environ.get("FLET_APP_URL", "http://localhost:8550")
-VERSION = "0.22.00"
+VERSION = "0.23.00"
 
 
 class AppController:
@@ -109,10 +111,29 @@ class AppController:
             modal=True, title=ft.Text("Errore"), content=ft.Text(""),
             actions=[ft.TextButton("Chiudi", on_click=self._close_error_dialog)]
         )
+        # Info dialog con pulsanti manuali
+        self.info_dialog_content = ft.Column([
+            ft.Text("", key="version_text"),
+            ft.Divider(height=20),
+            ft.Text("📚 Manuali Utente", weight=ft.FontWeight.BOLD),
+            ft.Row([
+                ft.ElevatedButton(
+                    "📖 Guida Rapida",
+                    icon=ft.Icons.MENU_BOOK,
+                    on_click=lambda e: self._apri_manuale("guida_rapida")
+                ),
+                ft.ElevatedButton(
+                    "📚 Manuale Completo",
+                    icon=ft.Icons.LIBRARY_BOOKS,
+                    on_click=lambda e: self._apri_manuale("manuale_completo")
+                ),
+            ], wrap=True, spacing=10),
+        ], tight=True, spacing=10)
+        
         self.info_dialog = ft.AlertDialog(
             modal=True,
             title=ft.Text("Informazioni"),
-            content=ft.Text(""),
+            content=self.info_dialog_content,
             actions=[ft.TextButton("Chiudi", on_click=self._chiudi_info_dialog)],
             actions_alignment=ft.MainAxisAlignment.END,
         )
@@ -395,9 +416,64 @@ class AppController:
     def open_info_dialog(self, e):
         logger.debug(f"[OVERLAY] open_info_dialog called.")
         db_version = ottieni_versione_db()
-        self.info_dialog.content.value = f"Versione App: {VERSION}\nVersione Database: {db_version}\n\nSviluppato da Iscavar79."
+        # Aggiorna il testo della versione nel dialog
+        version_text = self.info_dialog_content.controls[0]
+        version_text.value = f"Versione App: {VERSION}\nVersione Database: {db_version}\n\nSviluppato da Iscavar79."
         # Usa page.open() - pattern moderno di Flet
         self.page.open(self.info_dialog)
+    
+    def _apri_manuale(self, tipo: str):
+        """Apre il manuale (HTML, PDF o Markdown)."""
+        try:
+            # Determina il nome base del file
+            if tipo == "guida_rapida":
+                basename = "Guida_Rapida_Budget_Amico"
+            else:
+                basename = "Manuale_Completo_Budget_Amico"
+            
+            # Ordine di preferenza: HTML > PDF > Markdown
+            extensions = [".html", ".pdf", ".md"]
+            
+            # Cerca il file nella cartella docs con le diverse estensioni
+            found_path = None
+            found_filename = None
+            
+            for ext in extensions:
+                filename = basename + ext
+                possible_paths = [
+                    # Percorso in sviluppo
+                    os.path.join(os.path.dirname(os.path.abspath(__file__)), "docs", filename),
+                    # Percorso in produzione (PyInstaller --onedir)
+                    os.path.join(os.path.dirname(sys.executable), "docs", filename),
+                    # Percorso alternativo PyInstaller
+                    os.path.join(getattr(sys, '_MEIPASS', ''), "docs", filename) if hasattr(sys, '_MEIPASS') else None,
+                ]
+                
+                for path in possible_paths:
+                    if path and os.path.exists(path):
+                        found_path = path
+                        found_filename = filename
+                        break
+                
+                if found_path:
+                    break
+            
+            if found_path:
+                logger.info(f"Apertura manuale: {found_path}")
+                # Apri con l'applicazione predefinita
+                if sys.platform == 'win32':
+                    os.startfile(found_path)
+                elif sys.platform == 'darwin':  # macOS
+                    subprocess.run(['open', found_path])
+                else:  # Linux
+                    subprocess.run(['xdg-open', found_path])
+                self.show_snack_bar(f"Apertura {found_filename}...", success=True)
+            else:
+                self.show_snack_bar("Manuale non trovato. Verifica l'installazione.", success=False)
+                logger.warning(f"Manuale non trovato: {basename}")
+        except Exception as ex:
+            logger.error(f"Errore apertura manuale: {ex}")
+            self.show_snack_bar(f"Errore apertura manuale: {ex}", success=False)
 
     def _chiudi_info_dialog(self, e):
         logger.debug("[OVERLAY] _chiudi_info_dialog called.")

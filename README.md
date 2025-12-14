@@ -214,6 +214,19 @@ BudgetAmico/
 
 ---
 
+## 📊 Novità Versione 0.23
+
+### Manuali Utente Integrati
+-   **Guida Rapida**: Nuovo manuale per i nuovi utenti con i primi passi essenziali (registrazione, creazione conti, prima transazione).
+-   **Manuale Completo**: Documentazione dettagliata di tutte le funzionalità dell'applicazione.
+-   **Accesso dall'App**: I manuali sono accessibili cliccando sul pulsante ℹ️ (Info) nella barra superiore.
+-   **Formato HTML**: I manuali si aprono nel browser predefinito per una facile consultazione.
+
+### Bug Fix
+-   **Nomi Utenti Prestiti**: Corretto bug che non mostrava i nomi degli utenti nella sezione "Ripartizione Quote di Competenza" del dialog prestiti/mutui.
+
+---
+
 ## 📊 Novità Versione 0.22
 
 ### Notifica Aggiornamenti Automatica

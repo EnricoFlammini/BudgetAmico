@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Manuale Completo - Budget Amico</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Manuale Completo - Budget Amico</h1>
+</header>
+<h1 id="manuale-completo---budget-amico">Manuale Completo - Budget
+Amico</h1>
+<h2 id="indice">Indice</h2>
+<ol type="1">
+<li><a href="#1-introduzione">Introduzione</a></li>
+<li><a href="#2-registrazione-e-accesso">Registrazione e
+Accesso</a></li>
+<li><a href="#3-dashboard-e-navigazione">Dashboard e
+Navigazione</a></li>
+<li><a href="#4-conti-personali">Conti Personali</a></li>
+<li><a href="#5-conti-condivisi">Conti Condivisi</a></li>
+<li><a href="#6-transazioni-e-categorie">Transazioni e
+Categorie</a></li>
+<li><a href="#7-budget-mensile">Budget Mensile</a></li>
+<li><a href="#8-spese-fisse">Spese Fisse</a></li>
+<li><a href="#9-investimenti-e-portafogli">Investimenti e
+Portafogli</a></li>
+<li><a href="#10-prestiti-e-mutui">Prestiti e Mutui</a></li>
+<li><a href="#11-immobili">Immobili</a></li>
+<li><a href="#12-gestione-famiglia">Gestione Famiglia</a></li>
+<li><a href="#13-pannello-admin">Pannello Admin</a></li>
+<li><a href="#14-impostazioni">Impostazioni</a></li>
+<li><a href="#15-backup-e-sicurezza">Backup e Sicurezza</a></li>
+<li><a href="#16-faq-e-risoluzione-problemi">FAQ e Risoluzione
+Problemi</a></li>
+</ol>
+<hr />
+<h2 id="introduzione">1. Introduzione</h2>
+<h3 id="cosè-budget-amico">Cos’è Budget Amico?</h3>
+<p>Budget Amico è un’applicazione desktop per la gestione completa del
+budget personale e familiare. Ti permette di:</p>
+<ul>
+<li>✅ Tracciare entrate e uscite su più conti</li>
+<li>✅ Impostare e monitorare budget mensili</li>
+<li>✅ Gestire investimenti e portafogli</li>
+<li>✅ Tenere traccia di mutui e prestiti</li>
+<li>✅ Catalogare i tuoi immobili</li>
+<li>✅ Condividere dati finanziari con la famiglia</li>
+<li>✅ Esportare report in Excel</li>
+</ul>
+<h3 id="requisiti-di-sistema">Requisiti di Sistema</h3>
+<ul>
+<li>Windows 10/11, macOS 10.14+ o Linux</li>
+<li>Connessione internet (per sincronizzazione)</li>
+<li>100 MB di spazio libero</li>
+</ul>
+<hr />
+<h2 id="registrazione-e-accesso">2. Registrazione e Accesso</h2>
+<h3 id="creare-un-account">2.1 Creare un Account</h3>
+<ol type="1">
+<li>Avvia Budget Amico</li>
+<li>Clicca su <strong>“Non hai un account? Registrati”</strong></li>
+<li>Compila il modulo di registrazione:
+<ul>
+<li><strong>Nome</strong> e <strong>Cognome</strong>: i tuoi dati
+personali</li>
+<li><strong>Username</strong>: identificativo univoco per il login</li>
+<li><strong>Email</strong>: per recupero password e inviti
+familiari</li>
+<li><strong>Password</strong>: minimo 8 caratteri</li>
+<li><strong>Data di nascita</strong>: opzionale</li>
+</ul></li>
+<li>Clicca su <strong>“Registrati”</strong></li>
+</ol>
+<h3 id="recovery-key">2.2 Recovery Key</h3>
+<p>Dopo la registrazione, ti verrà mostrata una <strong>Recovery
+Key</strong> di 24 caratteri.</p>
+<blockquote>
+<p>⚠️ <strong>IMPORTANTE</strong>: Conserva questa chiave in un luogo
+sicuro! È l’unico modo per recuperare i tuoi dati se dimentichi la
+password. Scrivila su carta e conservala separatamente dai tuoi
+dispositivi.</p>
+</blockquote>
+<h3 id="login">2.3 Login</h3>
+<ol type="1">
+<li>Inserisci <strong>Username</strong> (o Email)</li>
+<li>Inserisci <strong>Password</strong></li>
+<li>Clicca <strong>“Accedi”</strong></li>
+</ol>
+<h3 id="recupero-password">2.4 Recupero Password</h3>
+<p>Se hai dimenticato la password:</p>
+<ol type="1">
+<li>Clicca su <strong>“Password dimenticata?”</strong></li>
+<li>Inserisci la tua <strong>Email</strong></li>
+<li>Riceverai un’email con le istruzioni</li>
+<li>Segui il link per reimpostare la password</li>
+</ol>
+<blockquote>
+<p><strong>Nota</strong>: Per il recupero password è necessario che
+l’Admin della famiglia abbia configurato le impostazioni SMTP.</p>
+</blockquote>
+<hr />
+<h2 id="dashboard-e-navigazione">3. Dashboard e Navigazione</h2>
+<h3 id="layout-della-dashboard">3.1 Layout della Dashboard</h3>
+<p>La dashboard è composta da:</p>
+<table>
+<colgroup>
+<col style="width: 31%" />
+<col style="width: 68%" />
+</colgroup>
+<thead>
+<tr>
+<th>Area</th>
+<th>Descrizione</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Barra superiore (AppBar)</strong></td>
+<td>Titolo, pulsanti azioni rapide, logout</td>
+</tr>
+<tr>
+<td><strong>Barra laterale (Sidebar)</strong></td>
+<td>Navigazione tra le sezioni</td>
+</tr>
+<tr>
+<td><strong>Area contenuti</strong></td>
+<td>Visualizzazione della sezione selezionata</td>
+</tr>
+<tr>
+<td><strong>FAB (+)</strong></td>
+<td>Pulsante per azioni rapide</td>
+</tr>
+</tbody>
+</table>
+<h3 id="pulsanti-appbar">3.2 Pulsanti AppBar</h3>
+<table>
+<thead>
+<tr>
+<th>Icona</th>
+<th>Azione</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>🔄</td>
+<td>Aggiorna tutti i dati dal database</td>
+</tr>
+<tr>
+<td>ℹ️</td>
+<td>Informazioni app e manuali</td>
+</tr>
+<tr>
+<td>📥</td>
+<td>Esporta dati in Excel</td>
+</tr>
+<tr>
+<td>🚪</td>
+<td>Logout</td>
+</tr>
+<tr>
+<td>✖️</td>
+<td>Chiudi applicazione</td>
+</tr>
+</tbody>
+</table>
+<h3 id="navigazione-sidebar">3.3 Navigazione Sidebar</h3>
+<p>La sidebar mostra le sezioni disponibili in base al tuo ruolo:</p>
+<ul>
+<li><strong>Tutti gli utenti</strong>: Conti, Spese Fisse,
+Impostazioni</li>
+<li><strong>Livello 2+</strong>: Budget, Investimenti, Prestiti,
+Immobili, Famiglia</li>
+<li><strong>Solo Admin</strong>: Pannello Admin</li>
+</ul>
+<hr />
+<h2 id="conti-personali">4. Conti Personali</h2>
+<h3 id="creare-un-conto">4.1 Creare un Conto</h3>
+<ol type="1">
+<li>Vai in <strong>“Conti Personali”</strong></li>
+<li>Clicca <strong>“+ Nuovo Conto”</strong></li>
+<li>Compila:
+<ul>
+<li><strong>Nome conto</strong>: nome descrittivo</li>
+<li><strong>Tipo</strong>: Corrente, Risparmio, Contanti, Carta di
+Credito</li>
+<li><strong>Saldo iniziale</strong>: saldo attuale</li>
+<li><strong>Data saldo</strong>: data di riferimento</li>
+</ul></li>
+<li>Clicca <strong>“Salva”</strong></li>
+</ol>
+<h3 id="tipi-di-conto">4.2 Tipi di Conto</h3>
+<table>
+<thead>
+<tr>
+<th>Tipo</th>
+<th>Descrizione</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Corrente</strong></td>
+<td>Conto bancario principale</td>
+</tr>
+<tr>
+<td><strong>Risparmio</strong></td>
+<td>Conti deposito o accumulo</td>
+</tr>
+<tr>
+<td><strong>Contanti</strong></td>
+<td>Denaro fisico</td>
+</tr>
+<tr>
+<td><strong>Carta di Credito</strong></td>
+<td>Carte con saldo negativo</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Nota</strong>: I conti di tipo “Investimento” e “Fondo
+Pensione” sono gestiti nelle rispettive sezioni dedicate.</p>
+</blockquote>
+<h3 id="visualizzare-le-transazioni">4.3 Visualizzare le
+Transazioni</h3>
+<ol type="1">
+<li>Clicca su un conto per espandere i dettagli</li>
+<li>Usa il selettore mese per filtrare le transazioni</li>
+<li>Ogni transazione mostra: data, descrizione, categoria, importo</li>
+</ol>
+<h3 id="modificareeliminare-un-conto">4.4 Modificare/Eliminare un
+Conto</h3>
+<ul>
+<li><strong>Modifica</strong>: clicca sull’icona ✏️ accanto al
+conto</li>
+<li><strong>Elimina</strong>: clicca sull’icona 🗑️</li>
+</ul>
+<blockquote>
+<p>⚠️ L’eliminazione di un conto rimuove anche tutte le transazioni
+associate!</p>
+</blockquote>
+<hr />
+<h2 id="conti-condivisi">5. Conti Condivisi</h2>
+<p>I conti condivisi permettono a più membri della famiglia di
+registrare transazioni sullo stesso conto.</p>
+<h3 id="creare-un-conto-condiviso">5.1 Creare un Conto Condiviso</h3>
+<ol type="1">
+<li>Vai in <strong>“Conti Condivisi”</strong></li>
+<li>Clicca <strong>“+ Nuovo Conto Condiviso”</strong></li>
+<li>Compila i dati del conto</li>
+<li>Seleziona i <strong>partecipanti</strong> (membri della
+famiglia)</li>
+<li>Definisci le <strong>quote di partecipazione</strong>
+(percentuali)</li>
+<li>Clicca <strong>“Salva”</strong></li>
+</ol>
+<h3 id="quote-di-partecipazione">5.2 Quote di Partecipazione</h3>
+<p>Le quote determinano come vengono suddivise le spese: - Es. Coppia
+50%/50%: le spese vengono divise equamente - Es. Famiglia: 40%/40%/20%
+per tre membri</p>
+<hr />
+<h2 id="transazioni-e-categorie">6. Transazioni e Categorie</h2>
+<h3 id="aggiungere-una-transazione">6.1 Aggiungere una Transazione</h3>
+<p><strong>Metodo rapido:</strong> 1. Clicca il pulsante
+<strong>“+”</strong> (FAB) 2. Seleziona <strong>“Nuova
+Transazione”</strong> 3. Compila i campi e salva</p>
+<p><strong>Dalla lista transazioni:</strong> 1. Espandi un conto 2.
+Clicca <strong>“+ Aggiungi”</strong></p>
+<h3 id="campi-della-transazione">6.2 Campi della Transazione</h3>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Descrizione</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Conto</strong></td>
+<td>Il conto su cui registrare</td>
+</tr>
+<tr>
+<td><strong>Importo</strong></td>
+<td>Positivo = entrata, Negativo = uscita</td>
+</tr>
+<tr>
+<td><strong>Data</strong></td>
+<td>Data della transazione</td>
+</tr>
+<tr>
+<td><strong>Descrizione</strong></td>
+<td>Note descrittive</td>
+</tr>
+<tr>
+<td><strong>Categoria</strong></td>
+<td>Categoria principale</td>
+</tr>
+<tr>
+<td><strong>Sottocategoria</strong></td>
+<td>Sottocategoria specifica</td>
+</tr>
+</tbody>
+</table>
+<h3 id="giroconto">6.3 Giroconto</h3>
+<p>Per trasferire denaro tra conti (es. da Corrente a Risparmio):</p>
+<ol type="1">
+<li>Clicca <strong>“+”</strong> → <strong>“Nuovo
+Giroconto”</strong></li>
+<li>Seleziona <strong>conto origine</strong> e <strong>conto
+destinazione</strong></li>
+<li>Inserisci <strong>importo</strong> e <strong>data</strong></li>
+<li>Clicca <strong>“Esegui”</strong></li>
+</ol>
+<p>Il giroconto crea automaticamente due transazioni collegate.</p>
+<hr />
+<h2 id="budget-mensile">7. Budget Mensile</h2>
+<h3 id="impostare-un-budget">7.1 Impostare un Budget</h3>
+<ol type="1">
+<li>Vai nella sezione <strong>“Budget”</strong></li>
+<li>Per ogni sottocategoria, clicca sull’importo budget</li>
+<li>Inserisci il limite mensile desiderato</li>
+<li>Clicca fuori dal campo per salvare</li>
+</ol>
+<h3 id="monitorare-le-spese">7.2 Monitorare le Spese</h3>
+<p>La sezione Budget mostra: - <strong>Barra di progresso</strong>:
+colorata in base alla percentuale di utilizzo - 🟢 Verde: &lt; 75% - 🟡
+Giallo: 75-100% - 🔴 Rosso: &gt; 100% - <strong>Importo speso</strong>
+vs <strong>Budget allocato</strong> - <strong>Riepilogo
+mensile</strong>: totale entrate, spese, risparmio</p>
+<h3 id="analisi-annuale">7.3 Analisi Annuale</h3>
+<p>Clicca su <strong>“Vista Annuale”</strong> per vedere: - Media
+mensile delle spese - Confronto con l’anno precedente - Trend delle
+categorie principali</p>
+<hr />
+<h2 id="spese-fisse">8. Spese Fisse</h2>
+<p>Le spese fisse sono pagamenti ricorrenti come affitto, bollette,
+abbonamenti.</p>
+<h3 id="aggiungere-una-spesa-fissa">8.1 Aggiungere una Spesa Fissa</h3>
+<ol type="1">
+<li>Vai in <strong>“Spese Fisse”</strong></li>
+<li>Clicca <strong>“+ Nuova Spesa Fissa”</strong></li>
+<li>Compila:
+<ul>
+<li><strong>Nome</strong>: es. “Netflix”, “Affitto”</li>
+<li><strong>Importo</strong>: costo mensile</li>
+<li><strong>Giorno scadenza</strong>: giorno del mese (1-28)</li>
+<li><strong>Conto</strong>: conto da addebitare</li>
+<li><strong>Categoria/Sottocategoria</strong>: per classificazione</li>
+<li><strong>Addebito automatico</strong>: se attivo, la transazione
+viene creata automaticamente</li>
+</ul></li>
+</ol>
+<h3 id="gestione-automatica">8.2 Gestione Automatica</h3>
+<p>Se attivi <strong>“Addebito automatico”</strong>, Budget Amico: -
+Crea la transazione il giorno della scadenza - Aggiorna il saldo del
+conto - Registra la spesa nella categoria corretta</p>
+<hr />
+<h2 id="investimenti-e-portafogli">9. Investimenti e Portafogli</h2>
+<h3 id="creare-un-conto-investimento">9.1 Creare un Conto
+Investimento</h3>
+<ol type="1">
+<li>Vai in <strong>“Investimenti”</strong></li>
+<li>Clicca <strong>“+ Nuovo Conto”</strong> nella sezione
+portafogli</li>
+<li>Compila nome e tipo (Investimento o Fondo Pensione)</li>
+</ol>
+<h3 id="aggiungere-asset">9.2 Aggiungere Asset</h3>
+<ol type="1">
+<li>Espandi un portafoglio</li>
+<li>Clicca <strong>“+ Aggiungi Asset”</strong></li>
+<li>Cerca il <strong>Ticker</strong> (es. AAPL, VWCE.MI)</li>
+<li>Inserisci: quantità, prezzo medio, data acquisto</li>
+<li>Il nome viene compilato automaticamente</li>
+</ol>
+<h3 id="sincronizzazione-prezzi">9.3 Sincronizzazione Prezzi</h3>
+<p>Budget Amico recupera i prezzi da Yahoo Finance: -
+<strong>Automatico</strong>: all’avvio dell’app -
+<strong>Manuale</strong>: clicca 🔄 accanto all’asset</p>
+<h3 id="suffissi-di-mercato">9.4 Suffissi di Mercato</h3>
+<p>Per asset non americani, usa il suffisso corretto:</p>
+<table>
+<thead>
+<tr>
+<th>Mercato</th>
+<th>Suffisso</th>
+<th>Esempio</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Milano</td>
+<td>.MI</td>
+<td>ENI.MI</td>
+</tr>
+<tr>
+<td>Londra</td>
+<td>.L</td>
+<td>VUSA.L</td>
+</tr>
+<tr>
+<td>Francoforte</td>
+<td>.DE</td>
+<td>VWCE.DE</td>
+</tr>
+<tr>
+<td>Parigi</td>
+<td>.PA</td>
+<td>AIR.PA</td>
+</tr>
+</tbody>
+</table>
+<h3 id="statistiche-portafoglio">9.5 Statistiche Portafoglio</h3>
+<p>Per ogni portafoglio puoi vedere: - Valore totale attuale - Gain/Loss
+(guadagno o perdita) - Percentuale di rendimento</p>
+<hr />
+<h2 id="prestiti-e-mutui">10. Prestiti e Mutui</h2>
+<h3 id="aggiungere-un-prestito">10.1 Aggiungere un Prestito</h3>
+<ol type="1">
+<li>Vai in <strong>“Prestiti”</strong></li>
+<li>Clicca <strong>“+ Aggiungi Prestito”</strong> o <strong>“+ Aggiungi
+Mutuo”</strong></li>
+<li>Compila:
+<ul>
+<li><strong>Nome</strong>: es. “Mutuo Casa”</li>
+<li><strong>Importo finanziato</strong>: capitale totale</li>
+<li><strong>Importo interessi</strong>: totale interessi</li>
+<li><strong>Rata mensile</strong>: importo rata</li>
+<li><strong>Numero rate totali</strong>: durata in mesi</li>
+<li><strong>Rate rimanenti</strong>: quante ne mancano</li>
+<li><strong>Giorno scadenza rata</strong>: giorno del mese</li>
+</ul></li>
+</ol>
+<h3 id="ripartizione-quote">10.2 Ripartizione Quote</h3>
+<p>Per prestiti condivisi (es. mutuo cointestato): 1. Nella sezione
+<strong>“Ripartizione Quote”</strong> 2. Assegna la percentuale a
+ciascun membro 3. Le quote devono sommare al 100%</p>
+<h3 id="pagamento-rata">10.3 Pagamento Rata</h3>
+<p>Per registrare il pagamento di una rata: 1. Clicca <strong>“Paga
+Rata”</strong> accanto al prestito 2. Conferma importo e data 3. La
+transazione viene creata automaticamente</p>
+<h3 id="addebito-automatico">10.4 Addebito Automatico</h3>
+<p>Se attivi <strong>“Addebito automatico”</strong>, la rata viene
+registrata automaticamente alla scadenza.</p>
+<hr />
+<h2 id="immobili">11. Immobili</h2>
+<h3 id="aggiungere-un-immobile">11.1 Aggiungere un Immobile</h3>
+<ol type="1">
+<li>Vai in <strong>“Immobili”</strong></li>
+<li>Clicca <strong>“+ Aggiungi Immobile”</strong></li>
+<li>Compila:
+<ul>
+<li><strong>Nome/Indirizzo</strong>: identificativo</li>
+<li><strong>Tipologia</strong>: Appartamento, Villa, Terreno, ecc.</li>
+<li><strong>Valore stimato</strong>: valore di mercato attuale</li>
+<li><strong>Nuda proprietà</strong>: se è solo nuda proprietà</li>
+</ul></li>
+</ol>
+<h3 id="nuda-proprietà">11.2 Nuda Proprietà</h3>
+<p>Gli immobili contrassegnati come <strong>“Nuda proprietà”</strong>: -
+Sono evidenziati con colore diverso - <strong>Non</strong> vengono
+inclusi nel patrimonio netto disponibile - Rimangono visibili
+nell’inventario</p>
+<h3 id="quote-di-proprietà">11.3 Quote di Proprietà</h3>
+<p>Per immobili in comproprietà: 1. Nella sezione quote, assegna la
+percentuale a ogni membro 2. Il valore visualizzato è proporzionale alla
+quota</p>
+<hr />
+<h2 id="gestione-famiglia">12. Gestione Famiglia</h2>
+<h3 id="ruoli-utente">12.1 Ruoli Utente</h3>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Ruolo</th>
+<th>Accesso</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Livello 3</strong></td>
+<td>Solo dati personali</td>
+</tr>
+<tr>
+<td><strong>Livello 2</strong></td>
+<td>+ Investimenti, Prestiti, Immobili, Famiglia (riepilogo)</td>
+</tr>
+<tr>
+<td><strong>Livello 1</strong></td>
+<td>+ Dettagli completi transazioni familiari</td>
+</tr>
+<tr>
+<td><strong>Admin</strong></td>
+<td>+ Pannello Admin, gestione membri</td>
+</tr>
+</tbody>
+</table>
+<h3 id="visualizzazione-famiglia">12.2 Visualizzazione Famiglia</h3>
+<p>La sezione <strong>“Famiglia”</strong> mostra: - <strong>Livello
+1</strong>: tutte le transazioni di tutti i membri - <strong>Livello
+2</strong>: solo riepilogo spese mensili (entrate, uscite,
+risparmio)</p>
+<hr />
+<h2 id="pannello-admin">13. Pannello Admin</h2>
+<p>Accessibile solo agli utenti con ruolo <strong>Admin</strong>.</p>
+<h3 id="gestione-categorie">13.1 Gestione Categorie</h3>
+<ol type="1">
+<li>Vai in <strong>Admin</strong> → <strong>“Categorie”</strong></li>
+<li>Per aggiungere: clicca <strong>“+ Categoria”</strong> o <strong>“+
+Sottocategoria”</strong></li>
+<li>Per modificare: clicca ✏️</li>
+<li>Per eliminare: clicca 🗑️</li>
+</ol>
+<h3 id="gestione-membri">13.2 Gestione Membri</h3>
+<ol type="1">
+<li>Vai in <strong>Admin</strong> → <strong>“Gestione
+Membri”</strong></li>
+<li>Visualizza tutti i membri della famiglia</li>
+<li><strong>Invita nuovo membro</strong>: clicca “Invita Membro”,
+inserisci email</li>
+<li><strong>Modifica ruolo</strong>: clicca su un membro per cambiare
+livello</li>
+<li><strong>Rimanda credenziali</strong>: per inviare nuove credenziali
+via email</li>
+</ol>
+<h3 id="configurazione-smtp">13.3 Configurazione SMTP</h3>
+<p>Per permettere l’invio email (inviti, recupero password):</p>
+<ol type="1">
+<li>Vai in <strong>Admin</strong> → <strong>“Impostazioni
+Email”</strong></li>
+<li>Compila:
+<ul>
+<li><strong>Server SMTP</strong>: es. smtp.gmail.com</li>
+<li><strong>Porta</strong>: es. 587</li>
+<li><strong>Username</strong>: la tua email</li>
+<li><strong>Password</strong>: password app (non la password
+normale!)</li>
+<li><strong>Email mittente</strong>: indirizzo visualizzato</li>
+</ul></li>
+</ol>
+<blockquote>
+<p><strong>Per Gmail</strong>: usa una “Password per le app” generata
+nelle impostazioni sicurezza Google.</p>
+</blockquote>
+<h3 id="budget-manager">13.4 Budget Manager</h3>
+<p>Gestione avanzata dei budget per categoria/sottocategoria.</p>
+<h3 id="backupexport">13.5 Backup/Export</h3>
+<ul>
+<li><strong>Esporta dati</strong>: scarica un file Excel con tutti i
+dati</li>
+<li><strong>Logging</strong>: abilita/disabilita i log di sistema</li>
+</ul>
+<hr />
+<h2 id="impostazioni">14. Impostazioni</h2>
+<h3 id="profilo-utente">14.1 Profilo Utente</h3>
+<p>Modifica i tuoi dati personali: - Nome e Cognome - Email -
+Password</p>
+<h3 id="conto-predefinito">14.2 Conto Predefinito</h3>
+<p>Imposta il conto che viene preselezionato nelle nuove
+transazioni.</p>
+<h3 id="lingua-e-valuta">14.3 Lingua e Valuta</h3>
+<p>Cambia lingua dell’interfaccia e simbolo valuta.</p>
+<hr />
+<h2 id="backup-e-sicurezza">15. Backup e Sicurezza</h2>
+<h3 id="crittografia">15.1 Crittografia</h3>
+<p>Budget Amico utilizza crittografia <strong>End-to-End</strong>: - I
+tuoi dati sono criptati prima di essere inviati al database - Solo tu
+(con la tua password) puoi decriptarli - Nemmeno gli amministratori del
+server possono leggere i tuoi dati</p>
+<h3 id="backup-manuale">15.2 Backup Manuale</h3>
+<p>Gli Admin possono esportare i dati dalla sezione
+<strong>Admin</strong> → <strong>“Backup/Export”</strong>.</p>
+<h3 id="recovery-key-1">15.3 Recovery Key</h3>
+<p>La Recovery Key generata alla registrazione è l’unico modo per
+recuperare i tuoi dati se: - Dimentichi la password - Il recupero via
+email non è disponibile</p>
+<p><strong>Conservala in modo sicuro!</strong></p>
+<hr />
+<h2 id="faq-e-risoluzione-problemi">16. FAQ e Risoluzione Problemi</h2>
+<h3 id="non-riesco-ad-accedere">Non riesco ad accedere</h3>
+<ul>
+<li>Verifica username e password</li>
+<li>Prova il recupero password via email</li>
+<li>Contatta l’Admin della tua famiglia</li>
+</ul>
+<h3 id="i-prezzi-degli-asset-non-si-aggiornano">I prezzi degli asset non
+si aggiornano</h3>
+<ul>
+<li>Verifica la connessione internet</li>
+<li>Controlla che il ticker sia corretto (incluso suffisso mercato)</li>
+<li>Prova il refresh manuale (🔄)</li>
+</ul>
+<h3 id="non-vedo-alcune-sezioni">Non vedo alcune sezioni</h3>
+<ul>
+<li>Verifica il tuo ruolo (visibile in Impostazioni)</li>
+<li>Contatta l’Admin per modificare i permessi</li>
+</ul>
+<h3 id="lapp-si-avvia-lentamente">L’app si avvia lentamente</h3>
+<ul>
+<li>È normale al primo avvio (caricamento cache)</li>
+<li>Gli avvii successivi saranno più veloci</li>
+</ul>
+<h3 id="come-cambio-famiglia">Come cambio famiglia?</h3>
+<ul>
+<li>Non è possibile cambiare famiglia</li>
+<li>Contatta l’Admin per essere rimosso e ricevere un nuovo invito</li>
+</ul>
+<hr />
+<h2 id="contatti-e-supporto">Contatti e Supporto</h2>
+<ul>
+<li><strong>GitHub Issues</strong>: per segnalare bug o richiedere
+funzionalità</li>
+<li><strong>Email Admin</strong>: contatta l’Admin della tua famiglia
+per problemi di accesso</li>
+</ul>
+<hr />
+<p><em>Budget Amico - Versione 0.23</em> <em>Sviluppato con ❤️ da
+Iscavar79</em></p>
+</body>
+</html>
