@@ -214,6 +214,26 @@ BudgetAmico/
 
 ---
 
+## 📊 Novità Versione 0.25
+
+### Patrimonio Immobiliare Integrato
+-   **Pagina Personale**: Nuova riga "Patrimonio Immobile" nel riepilogo totali, mostrando il valore netto (valore immobile - mutuo residuo) della quota personale dell'utente.
+-   **Pagina Famiglia**: Nuova card riepilogo per Admin/Livello1 con: Patrimonio Totale Famiglia, Liquidità Totale, Investimenti Totali e Patrimonio Immobile Totale.
+-   **Esclusione Nuda Proprietà**: Gli immobili contrassegnati come "Nuda Proprietà" sono automaticamente esclusi dai calcoli del patrimonio.
+-   **Quote di Proprietà**: Il calcolo tiene conto delle percentuali di proprietà e delle quote mutuo per ogni membro della famiglia.
+
+### Privacy Transazioni
+-   **Nascondi Importo**: Nuova opzione "Nascondi importo in Famiglia" nel dialog di creazione/modifica transazione.
+-   **Visualizzazione Riservata**: Le transazioni con importo nascosto mostrano "Riservato" invece dell'importo nella pagina Famiglia.
+-   **Privacy Selettiva**: Ogni utente può decidere quali transazioni rendere visibili agli altri membri della famiglia.
+
+### Calcolo Liquidità Migliorato
+-   **Saldi Reali**: La liquidità ora viene calcolata come somma dei saldi reali dei conti (transazioni + rettifica), non più dalla sola somma delle transazioni.
+-   **Pro-Quota Condivisi**: Per i conti condivisi, la liquidità personale è calcolata come saldo / numero partecipanti.
+-   **Esclusione Corretta**: I conti di tipo Investimento, Fondo Pensione e Risparmio sono correttamente esclusi dalla liquidità.
+
+---
+
 ## 📊 Novità Versione 0.24
 
 ### Gestione Conti Migliorata

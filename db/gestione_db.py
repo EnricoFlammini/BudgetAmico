@@ -3135,7 +3135,7 @@ def _get_key_for_transaction(id_conto, master_key, crypto):
         
     return master_key
 
-def aggiungi_transazione(id_conto, data, descrizione, importo, id_sottocategoria=None, cursor=None, master_key_b64=None):
+def aggiungi_transazione(id_conto, data, descrizione, importo, id_sottocategoria=None, cursor=None, master_key_b64=None, importo_nascosto=False):
     # Encrypt if key available using Family Key if possible (for shared visibility)
     crypto, master_key = _get_crypto_and_key(master_key_b64)
     encryption_key = _get_key_for_transaction(id_conto, master_key, crypto)
@@ -3144,23 +3144,23 @@ def aggiungi_transazione(id_conto, data, descrizione, importo, id_sottocategoria
     # Permette di passare un cursore esistente per le transazioni atomiche
     if cursor:
         cursor.execute(
-            "INSERT INTO Transazioni (id_conto, id_sottocategoria, data, descrizione, importo) VALUES (%s, %s, %s, %s, %s) RETURNING id_transazione",
-            (id_conto, id_sottocategoria, data, encrypted_descrizione, importo))
+            "INSERT INTO Transazioni (id_conto, id_sottocategoria, data, descrizione, importo, importo_nascosto) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id_transazione",
+            (id_conto, id_sottocategoria, data, encrypted_descrizione, importo, importo_nascosto))
         return cursor.fetchone()['id_transazione']
     else:
         try:
             with get_db_connection() as con:
                 cur = con.cursor()
                 cur.execute(
-                    "INSERT INTO Transazioni (id_conto, id_sottocategoria, data, descrizione, importo) VALUES (%s, %s, %s, %s, %s) RETURNING id_transazione",
-                    (id_conto, id_sottocategoria, data, encrypted_descrizione, importo))
+                    "INSERT INTO Transazioni (id_conto, id_sottocategoria, data, descrizione, importo, importo_nascosto) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id_transazione",
+                    (id_conto, id_sottocategoria, data, encrypted_descrizione, importo, importo_nascosto))
                 return cur.fetchone()['id_transazione']
         except Exception as e:
             print(f"[ERRORE] Errore generico: {e}")
             return None
 
 
-def modifica_transazione(id_transazione, data, descrizione, importo, id_sottocategoria=None, id_conto=None, master_key_b64=None):
+def modifica_transazione(id_transazione, data, descrizione, importo, id_sottocategoria=None, id_conto=None, master_key_b64=None, importo_nascosto=False):
     # Encrypt if key available using Family Key if possible (for shared visibility)
     crypto, master_key = _get_crypto_and_key(master_key_b64)
     encryption_key = _get_key_for_transaction(id_conto, master_key, crypto)
@@ -3169,15 +3169,14 @@ def modifica_transazione(id_transazione, data, descrizione, importo, id_sottocat
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
             if id_conto is not None:
                 cur.execute(
-                    "UPDATE Transazioni SET data = %s, descrizione = %s, importo = %s, id_sottocategoria = %s, id_conto = %s WHERE id_transazione = %s",
-                    (data, encrypted_descrizione, importo, id_sottocategoria, id_conto, id_transazione))
+                    "UPDATE Transazioni SET data = %s, descrizione = %s, importo = %s, id_sottocategoria = %s, id_conto = %s, importo_nascosto = %s WHERE id_transazione = %s",
+                    (data, encrypted_descrizione, importo, id_sottocategoria, id_conto, importo_nascosto, id_transazione))
             else:
                 cur.execute(
-                    "UPDATE Transazioni SET data = %s, descrizione = %s, importo = %s, id_sottocategoria = %s WHERE id_transazione = %s",
-                    (data, encrypted_descrizione, importo, id_sottocategoria, id_transazione))
+                    "UPDATE Transazioni SET data = %s, descrizione = %s, importo = %s, id_sottocategoria = %s, importo_nascosto = %s WHERE id_transazione = %s",
+                    (data, encrypted_descrizione, importo, id_sottocategoria, importo_nascosto, id_transazione))
             return cur.rowcount > 0
     except Exception as e:
         print(f"[ERRORE] Errore generico durante la modifica: {e}")
@@ -3204,51 +3203,52 @@ def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese, master_key_b64=No
         with get_db_connection() as con:
             cur = con.cursor()
             
-            # 1. Liquidità Personale (somma transazioni + rettifica)
+            # 1. Liquidità Personale (somma saldi conti personali)
+            # Saldo = SUM(transazioni fino a data_limite) + rettifica_saldo
             cur.execute("""
-                SELECT COALESCE(SUM(T.importo), 0.0) as val
-                FROM Transazioni T
-                JOIN Conti C ON T.id_conto = C.id_conto
-                WHERE C.id_utente = %s
-                  AND C.tipo NOT IN ('Investimento', 'Fondo Pensione')
-                  AND T.data <= %s
-            """, (id_utente, data_limite_str))
-            transazioni_personali = float(cur.fetchone()['val'] or 0.0)
-            
-            # 1.1 Rettifiche Conti Personali
-            cur.execute("""
-                SELECT COALESCE(SUM(CAST(NULLIF(CAST(C.rettifica_saldo AS TEXT), '') AS NUMERIC)), 0.0) as val
+                SELECT COALESCE(SUM(
+                    (SELECT COALESCE(SUM(T.importo), 0.0) FROM Transazioni T WHERE T.id_conto = C.id_conto AND T.data <= %s) +
+                    COALESCE(CAST(NULLIF(CAST(C.rettifica_saldo AS TEXT), '') AS NUMERIC), 0.0)
+                ), 0.0) as val
                 FROM Conti C
                 WHERE C.id_utente = %s
-                  AND C.tipo NOT IN ('Investimento', 'Fondo Pensione')
-            """, (id_utente,))
-            rettifica_personali = float(cur.fetchone()['val'] or 0.0)
-            
-            liquidita_personale = transazioni_personali + rettifica_personali
+                  AND C.tipo NOT IN ('Investimento', 'Fondo Pensione', 'Risparmio')
+                  AND (C.nascosto = FALSE OR C.nascosto IS NULL)
+            """, (data_limite_str, id_utente))
+            liquidita_personale = float(cur.fetchone()['val'] or 0.0)
 
-            # 1.2 Liquidità Condivisa (somma transazioni)
+            # 1.2 Liquidità Condivisa (saldo / n.partecipanti per ogni conto)
+            # Recupera i conti condivisi a cui l'utente ha accesso
             cur.execute("""
-                SELECT COALESCE(SUM(TC.importo), 0.0) as val
-                FROM TransazioniCondivise TC
-                JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
-                LEFT JOIN PartecipazioneContoCondiviso PCC ON CC.id_conto_condiviso = PCC.id_conto_condiviso
-                WHERE ((PCC.id_utente = %s AND CC.tipo_condivisione = 'utenti')
-                   OR (CC.id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s) AND CC.tipo_condivisione = 'famiglia'))
-                  AND TC.data <= %s
-            """, (id_utente, id_utente, data_limite_str))
-            transazioni_condivise = float(cur.fetchone()['val'] or 0.0)
-            
-            # 1.3 Rettifiche Conti Condivisi
-            cur.execute("""
-                SELECT COALESCE(SUM(CAST(NULLIF(CAST(CC.rettifica_saldo AS TEXT), '') AS NUMERIC)), 0.0) as val
+                SELECT CC.id_conto_condiviso, CC.tipo_condivisione,
+                    (SELECT COALESCE(SUM(TC.importo), 0.0) FROM TransazioniCondivise TC 
+                     WHERE TC.id_conto_condiviso = CC.id_conto_condiviso AND TC.data <= %s) +
+                    COALESCE(CAST(NULLIF(CAST(CC.rettifica_saldo AS TEXT), '') AS NUMERIC), 0.0) as saldo,
+                    CASE 
+                        WHEN CC.tipo_condivisione = 'famiglia' THEN 
+                            (SELECT COUNT(*) FROM Appartenenza_Famiglia AF WHERE AF.id_famiglia = CC.id_famiglia)
+                        ELSE
+                            (SELECT COUNT(*) FROM PartecipazioneContoCondiviso PCC WHERE PCC.id_conto_condiviso = CC.id_conto_condiviso)
+                    END as n_partecipanti
                 FROM ContiCondivisi CC
                 LEFT JOIN PartecipazioneContoCondiviso PCC ON CC.id_conto_condiviso = PCC.id_conto_condiviso
-                WHERE (PCC.id_utente = %s AND CC.tipo_condivisione = 'utenti')
-                   OR (CC.id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s) AND CC.tipo_condivisione = 'famiglia')
-            """, (id_utente, id_utente))
-            rettifica_condivisi = float(cur.fetchone()['val'] or 0.0)
+                WHERE CC.tipo NOT IN ('Investimento')
+                  AND (
+                      (PCC.id_utente = %s AND CC.tipo_condivisione = 'utenti')
+                      OR (CC.id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s) AND CC.tipo_condivisione = 'famiglia')
+                  )
+            """, (data_limite_str, id_utente, id_utente))
             
-            liquidita_condivisa = transazioni_condivise + rettifica_condivisi
+            liquidita_condivisa = 0.0
+            conti_visti = set()  # Per evitare duplicati
+            for row in cur.fetchall():
+                id_conto = row['id_conto_condiviso']
+                if id_conto not in conti_visti:
+                    conti_visti.add(id_conto)
+                    saldo = float(row['saldo'] or 0.0)
+                    n_part = int(row['n_partecipanti'] or 1)
+                    if n_part > 0:
+                        liquidita_condivisa += saldo / n_part
 
             liquidita = liquidita_personale + liquidita_condivisa
             
@@ -3289,6 +3289,27 @@ def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese, master_key_b64=No
             """, (id_utente, data_limite_str))
             risparmio = cur.fetchone()['val'] or 0.0
             
+            # 5. Patrimonio Immobiliare (quota personale dell'utente)
+            # Somma il valore attuale * percentuale quota, meno mutuo residuo * percentuale quota mutuo
+            # Esclude immobili con nuda_proprieta = true
+            # Gli immobili hanno id_prestito_collegato che punta a Prestiti
+            cur.execute("""
+                SELECT 
+                    COALESCE(SUM(
+                        (CAST(I.valore_attuale AS NUMERIC) * COALESCE(QI.percentuale, 100.0) / 100.0) -
+                        (COALESCE(CAST(P.importo_residuo AS NUMERIC), 0.0) * COALESCE(QP.percentuale, COALESCE(QI.percentuale, 100.0)) / 100.0)
+                    ), 0.0) as val
+                FROM Immobili I
+                LEFT JOIN QuoteImmobili QI ON I.id_immobile = QI.id_immobile AND QI.id_utente = %s
+                LEFT JOIN Prestiti P ON I.id_prestito_collegato = P.id_prestito
+                LEFT JOIN QuotePrestiti QP ON P.id_prestito = QP.id_prestito AND QP.id_utente = %s
+                WHERE I.id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s)
+                  AND (I.nuda_proprieta = FALSE OR I.nuda_proprieta IS NULL)
+                  AND (QI.id_utente = %s OR QI.id_utente IS NULL)
+            """, (id_utente, id_utente, id_utente, id_utente))
+            result = cur.fetchone()['val']
+            patrimonio_immobile = float(result) if result else 0.0
+            
             patrimonio_netto = liquidita + investimenti + fondi_pensione
             
             return {
@@ -3296,11 +3317,12 @@ def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese, master_key_b64=No
                 'liquidita': liquidita,
                 'investimenti': investimenti,
                 'fondi_pensione': fondi_pensione,
-                'risparmio': risparmio
+                'risparmio': risparmio,
+                'patrimonio_immobile': patrimonio_immobile
             }
     except Exception as e:
         print(f"[ERRORE] Errore in ottieni_riepilogo_patrimonio_utente: {e}")
-        return {'patrimonio_netto': 0.0, 'liquidita': 0.0, 'investimenti': 0.0, 'fondi_pensione': 0.0, 'risparmio': 0.0}
+        return {'patrimonio_netto': 0.0, 'liquidita': 0.0, 'investimenti': 0.0, 'fondi_pensione': 0.0, 'risparmio': 0.0, 'patrimonio_immobile': 0.0}
 
 
 def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese, master_key_b64=None):
@@ -3311,39 +3333,35 @@ def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese, mas
         with get_db_connection() as con:
             cur = con.cursor()
             
-            # 1. Liquidità Personale (Tutti i membri)
+            # 1. Liquidità Personale (somma saldi conti personali di tutti i membri)
+            # Saldo = SUM(transazioni fino a data_limite) + rettifica_saldo
             cur.execute("""
-                SELECT COALESCE(SUM(T.importo), 0.0) as val
-                FROM Transazioni T
-                JOIN Conti C ON T.id_conto = C.id_conto
+                SELECT COALESCE(SUM(
+                    (SELECT COALESCE(SUM(T.importo), 0.0) FROM Transazioni T WHERE T.id_conto = C.id_conto AND T.data <= %s) +
+                    COALESCE(CAST(NULLIF(CAST(C.rettifica_saldo AS TEXT), '') AS NUMERIC), 0.0)
+                ), 0.0) as val
+                FROM Conti C
                 JOIN Appartenenza_Famiglia AF ON C.id_utente = AF.id_utente
                 WHERE AF.id_famiglia = %s
-                  AND C.tipo NOT IN ('Investimento', 'Fondo Pensione')
-                  AND T.data <= %s
-            """, (id_famiglia, data_limite_str))
-            liquidita_personale = cur.fetchone()['val'] or 0.0
+                  AND C.tipo NOT IN ('Investimento', 'Fondo Pensione', 'Risparmio')
+                  AND (C.nascosto = FALSE OR C.nascosto IS NULL)
+            """, (data_limite_str, id_famiglia))
+            liquidita_personale = float(cur.fetchone()['val'] or 0.0)
             
-            # 1b. Liquidità Conti Condivisi
+            # 1b. Liquidità Conti Condivisi (somma saldi totali, non pro-quota per la famiglia)
             cur.execute("""
-                SELECT COALESCE(SUM(TC.importo), 0.0) as val
-                FROM TransazioniCondivise TC
-                JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
-                WHERE CC.id_famiglia = %s
-                  AND CC.tipo NOT IN ('Investimento')
-                  AND TC.data <= %s
-            """, (id_famiglia, data_limite_str))
-            liquidita_condivisa = cur.fetchone()['val'] or 0.0
-            
-            # Include rettifica_saldo for shared accounts
-            cur.execute("""
-                SELECT COALESCE(SUM(CAST(NULLIF(CAST(CC.rettifica_saldo AS TEXT), '') AS NUMERIC)), 0.0) as val
+                SELECT COALESCE(SUM(
+                    (SELECT COALESCE(SUM(TC.importo), 0.0) FROM TransazioniCondivise TC 
+                     WHERE TC.id_conto_condiviso = CC.id_conto_condiviso AND TC.data <= %s) +
+                    COALESCE(CAST(NULLIF(CAST(CC.rettifica_saldo AS TEXT), '') AS NUMERIC), 0.0)
+                ), 0.0) as val
                 FROM ContiCondivisi CC
                 WHERE CC.id_famiglia = %s
                   AND CC.tipo NOT IN ('Investimento')
-            """, (id_famiglia,))
-            rettifica_condivisi = cur.fetchone()['val'] or 0.0
+            """, (data_limite_str, id_famiglia))
+            liquidita_condivisa = float(cur.fetchone()['val'] or 0.0)
             
-            liquidita = liquidita_personale + liquidita_condivisa + rettifica_condivisi
+            liquidita = liquidita_personale + liquidita_condivisa
             
             # 2. Investimenti (Tutti i membri)
             cur.execute("""
@@ -3354,7 +3372,7 @@ def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese, mas
                 WHERE AF.id_famiglia = %s
                   AND C.tipo = 'Investimento'
             """, (id_famiglia,))
-            investimenti = cur.fetchone()['val'] or 0.0
+            investimenti = float(cur.fetchone()['val'] or 0.0)
             
             # 3. Fondi Pensione (Tutti i membri)
             fondi_pensione = 0.0
@@ -3383,7 +3401,23 @@ def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese, mas
                   AND C.tipo = 'Risparmio'
                   AND T.data <= %s
             """, (id_famiglia, data_limite_str))
-            risparmio = cur.fetchone()['val'] or 0.0
+            risparmio = float(cur.fetchone()['val'] or 0.0)
+            
+            # 5. Patrimonio Immobiliare (totale famiglia)
+            # Somma (valore_attuale - mutuo_residuo) per tutti gli immobili della famiglia
+            # Esclude immobili con nuda_proprieta = true
+            # Gli immobili hanno id_prestito_collegato che punta a Prestiti
+            cur.execute("""
+                SELECT COALESCE(SUM(
+                    CAST(I.valore_attuale AS NUMERIC) - COALESCE(CAST(P.importo_residuo AS NUMERIC), 0.0)
+                ), 0.0) as val
+                FROM Immobili I
+                LEFT JOIN Prestiti P ON I.id_prestito_collegato = P.id_prestito
+                WHERE I.id_famiglia = %s
+                  AND (I.nuda_proprieta = FALSE OR I.nuda_proprieta IS NULL)
+            """, (id_famiglia,))
+            result = cur.fetchone()['val']
+            patrimonio_immobile = float(result) if result else 0.0
             
             patrimonio_netto = liquidita + investimenti + fondi_pensione
             
@@ -3392,11 +3426,12 @@ def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese, mas
                 'liquidita': liquidita,
                 'investimenti': investimenti,
                 'fondi_pensione': fondi_pensione,
-                'risparmio': risparmio
+                'risparmio': risparmio,
+                'patrimonio_immobile': patrimonio_immobile
             }
     except Exception as e:
         print(f"[ERRORE] Errore in ottieni_riepilogo_patrimonio_famiglia_aggregato: {e}")
-        return {'patrimonio_netto': 0.0, 'liquidita': 0.0, 'investimenti': 0.0, 'fondi_pensione': 0.0, 'risparmio': 0.0}
+        return {'patrimonio_netto': 0.0, 'liquidita': 0.0, 'investimenti': 0.0, 'fondi_pensione': 0.0, 'risparmio': 0.0, 'patrimonio_immobile': 0.0}
 
 
 def ottieni_transazioni_utente(id_utente, anno, mese, master_key_b64=None):
@@ -3524,7 +3559,7 @@ def ottieni_transazioni_utente(id_utente, anno, mese, master_key_b64=None):
         return []
 
 
-def aggiungi_transazione_condivisa(id_utente_autore, id_conto_condiviso, data, descrizione, importo, id_sottocategoria=None, cursor=None, master_key_b64=None):
+def aggiungi_transazione_condivisa(id_utente_autore, id_conto_condiviso, data, descrizione, importo, id_sottocategoria=None, cursor=None, master_key_b64=None, importo_nascosto=False):
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
     
@@ -3553,23 +3588,23 @@ def aggiungi_transazione_condivisa(id_utente_autore, id_conto_condiviso, data, d
     # Permette di passare un cursore esistente per le transazioni atomiche
     if cursor:
         cursor.execute(
-            "INSERT INTO TransazioniCondivise (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, descrizione, importo) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id_transazione_condivisa",
-            (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, encrypted_descrizione, importo))
+            "INSERT INTO TransazioniCondivise (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, descrizione, importo, importo_nascosto) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id_transazione_condivisa",
+            (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, encrypted_descrizione, importo, importo_nascosto))
         return cursor.fetchone()['id_transazione_condivisa']
     else:
         try:
             with get_db_connection() as con:
                 cur = con.cursor()
                 cur.execute(
-                    "INSERT INTO TransazioniCondivise (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, descrizione, importo) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id_transazione_condivisa",
-                    (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, encrypted_descrizione, importo))
+                    "INSERT INTO TransazioniCondivise (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, descrizione, importo, importo_nascosto) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id_transazione_condivisa",
+                    (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, encrypted_descrizione, importo, importo_nascosto))
                 return cur.fetchone()['id_transazione_condivisa']
         except Exception as e:
             print(f"[ERRORE] Errore generico durante l'aggiunta transazione condivisa: {e}")
             return None
 
 
-def modifica_transazione_condivisa(id_transazione_condivisa, data, descrizione, importo, id_sottocategoria=None, master_key_b64=None, id_utente=None):
+def modifica_transazione_condivisa(id_transazione_condivisa, data, descrizione, importo, id_sottocategoria=None, master_key_b64=None, id_utente=None, importo_nascosto=False):
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
     
@@ -3600,15 +3635,15 @@ def modifica_transazione_condivisa(id_transazione_condivisa, data, descrizione, 
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
             cur.execute("""
                         UPDATE TransazioniCondivise
                         SET data         = %s,
                             descrizione  = %s,
                             importo      = %s,
-                            id_sottocategoria = %s
+                            id_sottocategoria = %s,
+                            importo_nascosto = %s
                         WHERE id_transazione_condivisa = %s
-                        """, (data, encrypted_descrizione, importo, id_sottocategoria, id_transazione_condivisa))
+                        """, (data, encrypted_descrizione, importo, id_sottocategoria, importo_nascosto, id_transazione_condivisa))
             return cur.rowcount > 0
     except Exception as e:
         print(f"[ERRORE] Errore generico durante la modifica transazione condivisa: {e}")
@@ -3846,6 +3881,7 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese, master_key_b64=None, id_u
                                T.data, 
                                T.descrizione, 
                                T.importo, 
+                               T.importo_nascosto,
                                C.nome_conto,
                                Cat.nome_categoria,
                                Sub.nome_sottocategoria,
@@ -3868,6 +3904,7 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese, master_key_b64=None, id_u
                                TC.data,
                                TC.descrizione,
                                TC.importo,
+                               TC.importo_nascosto,
                                CC.nome_conto,
                                Cat.nome_categoria,
                                SCat.nome_sottocategoria,

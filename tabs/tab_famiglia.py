@@ -128,7 +128,11 @@ class FamigliaTab(ft.Container):
                 master_key_b64=master_key_b64, 
                 id_utente=self.controller.get_user_id()
             )
+            riepilogo = ottieni_riepilogo_patrimonio_famiglia_aggregato(
+                famiglia_id, anno, mese, master_key_b64=master_key_b64
+            )
             result['transazioni'] = transazioni
+            result['riepilogo'] = riepilogo
             result['anno'] = anno
             result['mese'] = mese
             return result
@@ -218,10 +222,49 @@ class FamigliaTab(ft.Container):
 
         if ruolo in ['admin', 'livello1']:
             loc = self.controller.loc
+            riepilogo = data.get('riepilogo', {})
             
-            # Aggiorna i controlli del main_content senza riepilogo patrimonio
+            val_patrimonio = riepilogo.get('patrimonio_netto', 0)
+            val_liquidita = riepilogo.get('liquidita', 0)
+            val_investimenti = riepilogo.get('investimenti', 0)
+            val_patrimonio_immobile = riepilogo.get('patrimonio_immobile', 0)
+            
+            # Costruisci righe dettaglio
+            righe_dettaglio = []
+            righe_dettaglio.append(ft.Row([
+                AppStyles.body_text(loc.get("liquidity")),
+                AppStyles.currency_text(loc.format_currency(val_liquidita))
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+            
+            if val_investimenti > 0:
+                righe_dettaglio.append(ft.Row([
+                    AppStyles.body_text(loc.get("investments")),
+                    AppStyles.currency_text(loc.format_currency(val_investimenti))
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+            
+            if val_patrimonio_immobile > 0:
+                righe_dettaglio.append(ft.Row([
+                    AppStyles.body_text(loc.get("real_estate_equity")),
+                    AppStyles.currency_text(loc.format_currency(val_patrimonio_immobile))
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+            
+            # Card riepilogo patrimonio famiglia
+            card_riepilogo = AppStyles.card_container(
+                content=ft.Row([
+                    ft.Column([
+                        AppStyles.caption_text(loc.get("family_net_worth")),
+                        AppStyles.big_currency_text(loc.format_currency(val_patrimonio),
+                            color=AppColors.SUCCESS if val_patrimonio >= 0 else AppColors.ERROR)
+                    ], expand=1),
+                    ft.Column(righe_dettaglio, spacing=8, expand=2, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.START),
+                padding=20
+            )
+            
+            # Aggiorna i controlli del main_content con riepilogo patrimonio
             self.main_content.controls = [
                 AppStyles.section_header(loc.get("family_transactions")),
+                card_riepilogo,
                 ft.Container(content=self.dd_mese_filtro, padding=ft.padding.only(top=5, bottom=10)),
                 AppStyles.page_divider(),
                 self.data_stack
@@ -236,6 +279,14 @@ class FamigliaTab(ft.Container):
                 self.dt_transazioni_famiglia.visible = True
                 self.no_data_view.visible = False
                 for t in transazioni:
+                    # Determina il testo dell'importo
+                    if t.get('importo_nascosto'):
+                        importo_text = self.controller.loc.get("amount_reserved")
+                        importo_color = AppColors.TEXT_SECONDARY
+                    else:
+                        importo_text = self.controller.loc.format_currency(t.get('importo', 0))
+                        importo_color = AppColors.SUCCESS if t.get('importo', 0) >= 0 else AppColors.ERROR
+                    
                     self.dt_transazioni_famiglia.rows.append(
                         ft.DataRow(cells=[
                             ft.DataCell(ft.Text(t.get('utente_nome') or self.controller.loc.get("shared"))),
@@ -243,8 +294,8 @@ class FamigliaTab(ft.Container):
                             ft.DataCell(ft.Text(t.get('descrizione') or "N/A", tooltip=t.get('descrizione'))),
                             ft.DataCell(ft.Text(t.get('nome_sottocategoria') or "N/A")),
                             ft.DataCell(ft.Text(t.get('conto_nome') or "N/A")),
-                            ft.DataCell(ft.Text(self.controller.loc.format_currency(t.get('importo', 0)),
-                                                color=AppColors.SUCCESS if t.get('importo', 0) >= 0 else AppColors.ERROR,
+                            ft.DataCell(ft.Text(importo_text,
+                                                color=importo_color,
                                                 weight=ft.FontWeight.BOLD)),
                         ])
                     )

@@ -34,6 +34,7 @@ class TransactionDialog(ft.AlertDialog):
         self.txt_importo_dialog = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.dd_conto_dialog = ft.Dropdown(expand=True)
         self.dd_sottocategoria_dialog = ft.Dropdown(expand=True)
+        self.cb_importo_nascosto = ft.Checkbox(value=False)
         
         self.content = ft.Column(
             [
@@ -47,8 +48,9 @@ class TransactionDialog(ft.AlertDialog):
                 self.txt_importo_dialog,
                 self.dd_conto_dialog,
                 self.dd_sottocategoria_dialog,
+                self.cb_importo_nascosto,
             ],
-            tight=True, height=420, width=400,
+            tight=True, height=450, width=400,
         )
 
         self.actions = [
@@ -70,6 +72,7 @@ class TransactionDialog(ft.AlertDialog):
         self.txt_importo_dialog.prefix_text = self.loc.currencies[self.loc.currency]['symbol']
         self.dd_conto_dialog.label = self.loc.get("account")
         self.dd_sottocategoria_dialog.label = self.loc.get("subcategory")
+        self.cb_importo_nascosto.label = self.loc.get("hide_amount_in_family")
         self.actions[0].text = self.loc.get("cancel")
         self.actions[1].text = self.loc.get("save")
         self.actions[0].disabled = False
@@ -132,6 +135,7 @@ class TransactionDialog(ft.AlertDialog):
         self.txt_importo_dialog.value = ""
         self.dd_conto_dialog.value = None
         self.dd_sottocategoria_dialog.value = None
+        self.cb_importo_nascosto.value = False
 
     def apri_dialog_nuova_transazione(self, e=None):
         logger.info("[DIALOG] Opening: New Transaction")
@@ -175,6 +179,7 @@ class TransactionDialog(ft.AlertDialog):
             self.dd_conto_dialog.value = f"{prefix}{transazione_dati['id_conto']}"
 
             self.dd_sottocategoria_dialog.value = transazione_dati.get('id_sottocategoria')
+            self.cb_importo_nascosto.value = transazione_dati.get('importo_nascosto', False)
 
             self.controller.page.session.set("transazione_in_modifica", transazione_dati)
             if self not in self.controller.page.overlay:
@@ -236,7 +241,8 @@ class TransactionDialog(ft.AlertDialog):
                 "data": data, "descrizione": descrizione, "importo": importo,
                 "id_sottocategoria": id_sottocategoria,
                 "id_conto": int(self.dd_conto_dialog.value[1:]),
-                "is_nuovo_conto_condiviso": self.dd_conto_dialog.value.startswith('C')
+                "is_nuovo_conto_condiviso": self.dd_conto_dialog.value.startswith('C'),
+                "importo_nascosto": self.cb_importo_nascosto.value
             }
         except Exception as ex:
             logger.error(f"Errore validazione dati transazione: {ex}")
@@ -255,10 +261,10 @@ class TransactionDialog(ft.AlertDialog):
             if is_originale_condivisa:
                 id_trans = transazione_originale['id_transazione_condivisa']
                 id_utente = self.controller.get_user_id()
-                return modifica_transazione_condivisa(id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], dati_nuovi['id_sottocategoria'], master_key_b64=master_key_b64, id_utente=id_utente)
+                return modifica_transazione_condivisa(id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], dati_nuovi['id_sottocategoria'], master_key_b64=master_key_b64, id_utente=id_utente, importo_nascosto=dati_nuovi.get('importo_nascosto', False))
             else:
                 id_trans = transazione_originale['id_transazione']
-                return modifica_transazione(id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], dati_nuovi['id_sottocategoria'], dati_nuovi['id_conto'], master_key_b64=master_key_b64)
+                return modifica_transazione(id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], dati_nuovi['id_sottocategoria'], dati_nuovi['id_conto'], master_key_b64=master_key_b64, importo_nascosto=dati_nuovi.get('importo_nascosto', False))
         
         # Caso 2: Il tipo di conto è cambiato (es. da Personale a Condiviso)
         # Trattiamo come un'operazione di "elimina e crea"
@@ -281,12 +287,14 @@ class TransactionDialog(ft.AlertDialog):
             return aggiungi_transazione_condivisa(
                 id_utente_autore=id_utente_autore, id_conto_condiviso=dati['id_conto'],
                 data=dati['data'], descrizione=dati['descrizione'], importo=dati['importo'],
-                id_sottocategoria=dati['id_sottocategoria'], master_key_b64=master_key_b64
+                id_sottocategoria=dati['id_sottocategoria'], master_key_b64=master_key_b64,
+                importo_nascosto=dati.get('importo_nascosto', False)
             ) is not None
         else:
             return aggiungi_transazione(
                 id_conto=dati['id_conto'], data=dati['data'], descrizione=dati['descrizione'],
-                importo=dati['importo'], id_sottocategoria=dati['id_sottocategoria'], master_key_b64=master_key_b64
+                importo=dati['importo'], id_sottocategoria=dati['id_sottocategoria'], 
+                master_key_b64=master_key_b64, importo_nascosto=dati.get('importo_nascosto', False)
             ) is not None
 
     def _salva_nuova_transazione(self, e):

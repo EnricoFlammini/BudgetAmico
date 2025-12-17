@@ -145,6 +145,7 @@ class PersonaleTab(ft.Container):
         val_investimenti = riepilogo.get('investimenti', 0)
         val_fondi_pensione = riepilogo.get('fondi_pensione', 0)
         val_risparmio = riepilogo.get('risparmio', 0)
+        val_patrimonio_immobile = riepilogo.get('patrimonio_immobile', 0)
         
         # Costruisci il riepilogo schematico
         righe_dettaglio = []
@@ -174,6 +175,13 @@ class PersonaleTab(ft.Container):
             righe_dettaglio.append(ft.Row([
                 AppStyles.body_text(loc.get("pension_funds")),
                 AppStyles.currency_text(loc.format_currency(val_fondi_pensione))
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+        
+        # Patrimonio Immobile (se presente)
+        if val_patrimonio_immobile > 0:
+            righe_dettaglio.append(ft.Row([
+                AppStyles.body_text(loc.get("real_estate_equity")),
+                AppStyles.currency_text(loc.format_currency(val_patrimonio_immobile))
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
         
         # Usa il nome utente come titolo
