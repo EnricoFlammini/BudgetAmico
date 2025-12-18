@@ -30,7 +30,7 @@ from db.gestione_db import (
     check_e_processa_spese_fisse, get_user_count, crea_famiglia_e_admin,
     aggiungi_categorie_iniziali, cerca_utente_per_username, aggiungi_utente_a_famiglia,
     ottieni_versione_db, crea_invito, ottieni_invito_per_token,
-    ottieni_utenti_senza_famiglia, ensure_family_key
+    ottieni_utenti_senza_famiglia, ensure_family_key, trigger_budget_history_update
 )
 
 from utils.logger import setup_logger
@@ -546,6 +546,19 @@ class AppController:
 
             self.page.session.set("id_famiglia", id_famiglia)
             self.page.session.set("ruolo_utente", ottieni_ruolo_utente(id_utente, id_famiglia))
+            
+            # --- Auto-Update History Snapshot on Login ---
+            try:
+                from utils.async_task import AsyncTask
+                def _bg_budget_update():
+                    master_key_b64 = utente.get("master_key")
+                    now = datetime.datetime.now()
+                    trigger_budget_history_update(id_famiglia, now, master_key_b64, id_utente)
+                
+                AsyncTask(target=_bg_budget_update).start()
+            except Exception as e:
+                logger.warning(f"Failed background budget update on login: {e}")
+
             self.page.go("/dashboard")
         else:
             # Se l'utente non ha una famiglia, lo reindirizziamo alla creazione

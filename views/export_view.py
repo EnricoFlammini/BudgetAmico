@@ -35,6 +35,11 @@ class ExportView:
 
         self.chk_export_conti = ft.Checkbox(label="Esporta Riepilogo Conti e Totali", value=True)
         self.chk_export_portafogli = ft.Checkbox(label="Esporta Dettaglio Portafogli (Asset)", value=True)
+        
+        # Nuove Opzioni
+        self.chk_export_immobili = ft.Checkbox(label="Esporta Patrimonio Immobiliare", value=True)
+        self.chk_export_prestiti = ft.Checkbox(label="Esporta Prestiti e Mutui", value=True)
+        self.chk_export_spese_fisse = ft.Checkbox(label="Esporta Spese Fisse", value=True)
 
     def build_view(self) -> ft.View:
         """ Costruisce e restituisce la vista di Esportazione """
@@ -61,7 +66,7 @@ class ExportView:
                         self.chk_export_budget_tutti,
                         ft.Container(
                             content=self.lv_export_periodi,
-                            height=200,
+                            height=150,
                             border=ft.border.all(1, ft.Colors.GREY_800)
                         )
                     ]),
@@ -74,6 +79,9 @@ class ExportView:
                     content=ft.Column([
                         self.chk_export_conti,
                         self.chk_export_portafogli,
+                        self.chk_export_immobili,
+                        self.chk_export_prestiti,
+                        self.chk_export_spese_fisse,
                     ]),
                     padding=10, border=ft.border.all(1, ft.Colors.GREY_800), border_radius=5
                 ),
@@ -129,9 +137,6 @@ class ExportView:
         self.txt_export_data_inizio.value = primo_giorno
         self.txt_export_data_fine.value = now.strftime('%Y-%m-%d')
 
-        # RIMOSSI: self.lv_export_periodi.update(), self.txt_export_data_inizio.update(), ecc.
-        # L'aggiornamento avverrà tramite la chiamata page.update() in app_controller.route_change
-
     def _toggle_selezione_periodi(self, e):
         for chk in self.lv_export_periodi.controls:
             if isinstance(chk, ft.Checkbox):
@@ -148,11 +153,18 @@ class ExportView:
             self.controller.show_snack_bar("❌ Errore: Famiglia non trovata.", success=False)
             return
 
+        # Retrieve keys from session
+        master_key_b64 = self.page.session.get("master_key")
+        user_id = self.controller.get_user_id()
+
         try:
             dati_transazioni = []
             dati_budget = []
             dati_conti = []
             dati_portafogli = []
+            dati_immobili = []
+            dati_prestiti = []
+            dati_spese_fisse = []
 
             # 1. Prepara Dati Transazioni
             if self.chk_export_transazioni.value:
@@ -168,7 +180,9 @@ class ExportView:
                 self.txt_export_data_fine.error_text = None
                 self.txt_export_data_inizio.update()
                 self.txt_export_data_fine.update()
-                dati_transazioni = ottieni_transazioni_famiglia_per_export(famiglia_id, data_inizio, data_fine)
+                dati_transazioni = ottieni_transazioni_famiglia_per_export(
+                    famiglia_id, data_inizio, data_fine, master_key_b64, user_id
+                )
 
             # 2. Prepara Dati Budget
             if self.chk_export_budget.value:
@@ -177,39 +191,54 @@ class ExportView:
                     if isinstance(chk, ft.Checkbox) and chk.value:
                         periodi_selezionati.append(chk.data)
                 if periodi_selezionati:
-                    dati_budget = ottieni_storico_budget_per_export(famiglia_id, periodi_selezionati)
+                    dati_budget = ottieni_storico_budget_per_export(
+                        famiglia_id, periodi_selezionati, master_key_b64, user_id
+                    )
 
             # 3. Prepara Dati Conti
             if self.chk_export_conti.value:
-                dati_conti = ottieni_riepilogo_conti_famiglia(famiglia_id)
+                dati_conti = ottieni_riepilogo_conti_famiglia(famiglia_id, master_key_b64, user_id)
 
             # 4. Prepara Dati Portafogli
             if self.chk_export_portafogli.value:
-                dati_portafogli = ottieni_dettaglio_portafogli_famiglia(famiglia_id)
+                dati_portafogli = ottieni_dettaglio_portafogli_famiglia(famiglia_id, master_key_b64, user_id)
 
-            if not dati_transazioni and not dati_budget and not dati_conti and not dati_portafogli:
+            # 5. Prepara Dati Immobili
+            if self.chk_export_immobili.value:
+                # Import here to avoid circular dependencies if not already imported
+                from db.gestione_db import ottieni_dati_immobili_famiglia_per_export
+                dati_immobili = ottieni_dati_immobili_famiglia_per_export(famiglia_id, master_key_b64, user_id)
+
+            # 6. Prepara Dati Prestiti
+            if self.chk_export_prestiti.value:
+                from db.gestione_db import ottieni_dati_prestiti_famiglia_per_export
+                dati_prestiti = ottieni_dati_prestiti_famiglia_per_export(famiglia_id, master_key_b64, user_id)
+            
+            # 7. Prepara Dati Spese Fisse
+            if self.chk_export_spese_fisse.value:
+                from db.gestione_db import ottieni_dati_spese_fisse_famiglia_per_export
+                dati_spese_fisse = ottieni_dati_spese_fisse_famiglia_per_export(famiglia_id, master_key_b64, user_id)
+
+            if not any([dati_transazioni, dati_budget, dati_conti, dati_portafogli, 
+                        dati_immobili, dati_prestiti, dati_spese_fisse]):
                 self.controller.show_snack_bar("Nessun dato selezionato o trovato.", success=False)
                 return
 
-            # 5. Crea l'Excel in memoria
+            # 8. Crea l'Excel in memoria
             output_bytes = io.BytesIO()
             with pd.ExcelWriter(output_bytes, engine='openpyxl') as writer:
                 if dati_transazioni:
-                    df_transazioni = pd.DataFrame(dati_transazioni)
-                    df_transazioni.to_excel(writer, sheet_name='Transazioni_Famiglia', index=False)
+                    pd.DataFrame(dati_transazioni).to_excel(writer, sheet_name='Transazioni_Famiglia', index=False)
                 if dati_budget:
-                    df_budget = pd.DataFrame(dati_budget)
-                    df_budget.to_excel(writer, sheet_name='Storico_Budget', index=False)
+                    pd.DataFrame(dati_budget).to_excel(writer, sheet_name='Storico_Budget', index=False)
 
                 if dati_conti:
                     df_conti_completo = pd.DataFrame(dati_conti)
-
                     df_liquidi = df_conti_completo[df_conti_completo['tipo'] != 'Investimento']
                     if not df_liquidi.empty:
                         df_totali_tipo = df_liquidi.groupby('tipo')['saldo_calcolato'].sum().reset_index()
                         df_totali_tipo.columns = ['Tipo Conto', 'Saldo Totale']
                         df_totali_tipo.to_excel(writer, sheet_name='Totali_Conti_Liquidi', index=False)
-
                         df_liquidi.to_excel(writer, sheet_name='Dettaglio_Conti_Liquidi', index=False)
 
                     df_investimenti = df_conti_completo[df_conti_completo['tipo'] == 'Investimento']
@@ -217,18 +246,26 @@ class ExportView:
                         df_investimenti.to_excel(writer, sheet_name='Riepilogo_Investimenti', index=False)
 
                 if dati_portafogli:
-                    df_portafogli = pd.DataFrame(dati_portafogli)
-                    df_portafogli.to_excel(writer, sheet_name='Dettaglio_Portafogli', index=False)
+                    pd.DataFrame(dati_portafogli).to_excel(writer, sheet_name='Dettaglio_Portafogli', index=False)
+                
+                if dati_immobili:
+                    pd.DataFrame(dati_immobili).to_excel(writer, sheet_name='Patrimonio_Immobiliare', index=False)
+                    
+                if dati_prestiti:
+                    pd.DataFrame(dati_prestiti).to_excel(writer, sheet_name='Prestiti_Mutui', index=False)
+                    
+                if dati_spese_fisse:
+                     pd.DataFrame(dati_spese_fisse).to_excel(writer, sheet_name='Spese_Fisse', index=False)
 
             output_bytes.seek(0)
             file_data_bytes = output_bytes.getvalue()
 
-            # 6. Salva i byte nella sessione
+            # 9. Salva i byte nella sessione
             self.page.session.set("excel_export_data", file_data_bytes)
 
-            # 7. Apri il dialogo "Salva con nome"
+            # 10. Apri il dialogo "Salva con nome"
             self.controller.file_picker_salva_excel.save_file(
-                file_name="Report_Budget_Familiare.xlsx"
+                file_name=f"Report_Budget_Famiglia_{datetime.date.today()}.xlsx"
             )
 
         except Exception as ex:
