@@ -236,8 +236,9 @@ class ExportView:
                     df_conti_completo = pd.DataFrame(dati_conti)
                     df_liquidi = df_conti_completo[df_conti_completo['tipo'] != 'Investimento']
                     if not df_liquidi.empty:
-                        df_totali_tipo = df_liquidi.groupby('tipo')['saldo_calcolato'].sum().reset_index()
-                        df_totali_tipo.columns = ['Tipo Conto', 'Saldo Totale']
+                        df_totali_tipo = df_liquidi.groupby(['tipo', 'membro'])['saldo_calcolato'].sum().reset_index()
+                        df_totali_tipo.columns = ['Tipo Conto', 'Intestatario', 'Saldo Totale']
+                        df_totali_tipo = df_totali_tipo.sort_values(by=['Tipo Conto', 'Intestatario'])
                         df_totali_tipo.to_excel(writer, sheet_name='Totali_Conti_Liquidi', index=False)
                         df_liquidi.to_excel(writer, sheet_name='Dettaglio_Conti_Liquidi', index=False)
 

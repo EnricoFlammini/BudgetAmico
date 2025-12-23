@@ -38,7 +38,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 URL_BASE = os.environ.get("FLET_APP_URL", "http://localhost:8550")
-VERSION = "0.25.00"
+VERSION = "0.26.00"
 
 
 class AppController:
@@ -161,9 +161,15 @@ class AppController:
                 self.page.session.remove("excel_export_data")
             else:
                 self.show_snack_bar("Salvataggio annullato.", success=False)
+        except PermissionError:
+            logger.error(f"Errore permesso salvataggio file: {e.path}")
+            filename = os.path.basename(e.path) if e.path else "il file"
+            self.show_error_dialog(f"Impossibile salvare il file.\nÈ probabile che '{filename}' sia aperto in un altro programma (es. Excel).\nChiudilo e riprova.")
         except Exception as ex:
             logger.error(f"Errore durante il salvataggio file: {ex}")
             self.show_error_dialog(f"Errore durante il salvataggio: {ex}")
+        finally:
+            self.page.update()
 
     def route_change(self, route):
         try:

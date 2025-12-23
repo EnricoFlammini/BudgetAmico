@@ -3127,7 +3127,7 @@ def _get_key_for_transaction(id_conto, master_key, crypto):
                 # Decrypt family key with provided master key
                 # Assumption: master_key provided belongs to account owner (who is creating the transaction)
                 fk_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key, silent=True)
-                if fk_b64 != "[ENCRYPTED]":
+                if fk_b64 and fk_b64 != "[ENCRYPTED]":
                     return base64.b64decode(fk_b64)
     except Exception as e:
         # Non bloccante, fallback a master_key
@@ -5186,6 +5186,8 @@ def vendi_asset(id_conto_investimento, ticker, quantita_da_vendere, prezzo_di_ve
     
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
+    # Determine correct key (Family Key if applicable)
+    encryption_key = _get_key_for_transaction(id_conto_investimento, master_key, crypto)
     
     try:
         with get_db_connection() as con:
@@ -5200,7 +5202,11 @@ def vendi_asset(id_conto_investimento, ticker, quantita_da_vendere, prezzo_di_ve
             risultato = None
             for asset in assets:
                 db_ticker = asset['ticker']
-                decrypted_ticker = _decrypt_if_key(db_ticker, master_key, crypto)
+                # Decrypt logic similar to compra_asset
+                decrypted_ticker = _decrypt_if_key(db_ticker, encryption_key, crypto, silent=True)
+                if (decrypted_ticker == "[ENCRYPTED]" or decrypted_ticker == db_ticker) and encryption_key != master_key:
+                     decrypted_ticker = _decrypt_if_key(db_ticker, master_key, crypto)
+
                 if decrypted_ticker == ticker_upper:
                     risultato = asset
                     break
@@ -5216,7 +5222,7 @@ def vendi_asset(id_conto_investimento, ticker, quantita_da_vendere, prezzo_di_ve
             nuova_quantita = quantita_attuale - quantita_da_vendere
             
             # Encrypt ticker for history
-            encrypted_ticker = _encrypt_if_key(ticker_upper, master_key, crypto)
+            encrypted_ticker = _encrypt_if_key(ticker_upper, encryption_key, crypto)
             
             cur.execute(
                 "INSERT INTO Storico_Asset (id_conto, ticker, data, tipo_movimento, quantita, prezzo_unitario_movimento) VALUES (%s, %s, %s, %s, %s, %s)",
@@ -5258,9 +5264,23 @@ def ottieni_portafoglio(id_conto_investimento, master_key_b64=None):
             
             # Decrypt fields
             if master_key:
+                # Determine correct key for this account (Family or Master)
+                encryption_key = _get_key_for_transaction(id_conto_investimento, master_key, crypto)
+                
                 for row in results:
-                    row['ticker'] = _decrypt_if_key(row['ticker'], master_key, crypto)
-                    row['nome_asset'] = _decrypt_if_key(row['nome_asset'], master_key, crypto)
+                    # Try encryption_key first (could be Family key)
+                    row['ticker'] = _decrypt_if_key(row['ticker'], encryption_key, crypto, silent=True)
+                    row['nome_asset'] = _decrypt_if_key(row['nome_asset'], encryption_key, crypto, silent=True)
+                    
+                    # Fallback to master_key if failed (and keys are different)
+                    if encryption_key != master_key:
+                        if row['ticker'] == "[ENCRYPTED]" or row['ticker'].startswith("gAAAAA"):
+                             decrypted = _decrypt_if_key(row['ticker_orig'] if 'ticker_orig' in row else row['ticker'], master_key, crypto, silent=True)
+                             if decrypted and decrypted != "[ENCRYPTED]": row['ticker'] = decrypted
+                        
+                        if row['nome_asset'] == "[ENCRYPTED]" or row['nome_asset'].startswith("gAAAAA"):
+                             decrypted = _decrypt_if_key(row['nome_asset_orig'] if 'nome_asset_orig' in row else row['nome_asset'], master_key, crypto, silent=True)
+                             if decrypted and decrypted != "[ENCRYPTED]": row['nome_asset'] = decrypted
             
             # Sort by ticker (in Python because DB has encrypted data)
             results.sort(key=lambda x: x['ticker'])
@@ -5289,10 +5309,24 @@ def modifica_asset_dettagli(id_asset, nuovo_ticker, nuovo_nome, master_key_b64=N
     nuovo_ticker_upper = nuovo_ticker.upper()
     nuovo_nome_upper = nuovo_nome.upper()
     
+    # Fetch id_conto to determine key
+    id_conto = None
+    try:
+         with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT id_conto FROM Asset WHERE id_asset = %s", (id_asset,))
+            res = cur.fetchone()
+            if res:
+                id_conto = res['id_conto']
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero conto per modifica dettagli asset: {e}")
+
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
-    encrypted_ticker = _encrypt_if_key(nuovo_ticker_upper, master_key, crypto)
-    encrypted_nome = _encrypt_if_key(nuovo_nome_upper, master_key, crypto)
+    encryption_key = _get_key_for_transaction(id_conto, master_key, crypto)
+    
+    encrypted_ticker = _encrypt_if_key(nuovo_ticker_upper, encryption_key, crypto)
+    encrypted_nome = _encrypt_if_key(nuovo_nome_upper, encryption_key, crypto)
     
     try:
         with get_db_connection() as con:
@@ -5314,8 +5348,11 @@ def modifica_asset_dettagli(id_asset, nuovo_ticker, nuovo_nome, master_key_b64=N
 def aggiungi_investimento(id_conto, ticker, nome_asset, quantita, costo_unitario, data_acquisto, master_key_b64=None):
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
-    encrypted_ticker = _encrypt_if_key(ticker.upper(), master_key, crypto)
-    encrypted_nome = _encrypt_if_key(nome_asset, master_key, crypto)
+    # Determine correct key (Family Key if applicable)
+    encryption_key = _get_key_for_transaction(id_conto, master_key, crypto)
+    
+    encrypted_ticker = _encrypt_if_key(ticker.upper(), encryption_key, crypto)
+    encrypted_nome = _encrypt_if_key(nome_asset, encryption_key, crypto)
 
     try:
         with get_db_connection() as con:
@@ -5329,10 +5366,24 @@ def aggiungi_investimento(id_conto, ticker, nome_asset, quantita, costo_unitario
         return None
 
 def modifica_investimento(id_asset, ticker, nome_asset, quantita, costo_unitario, data_acquisto, master_key_b64=None):
+    # Fetch id_conto to determine key
+    id_conto = None
+    try:
+         with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT id_conto FROM Asset WHERE id_asset = %s", (id_asset,))
+            res = cur.fetchone()
+            if res:
+                id_conto = res['id_conto']
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero conto per modifica asset: {e}")
+
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
-    encrypted_ticker = _encrypt_if_key(ticker.upper(), master_key, crypto)
-    encrypted_nome = _encrypt_if_key(nome_asset, master_key, crypto)
+    encryption_key = _get_key_for_transaction(id_conto, master_key, crypto)
+
+    encrypted_ticker = _encrypt_if_key(ticker.upper(), encryption_key, crypto)
+    encrypted_nome = _encrypt_if_key(nome_asset, encryption_key, crypto)
 
     try:
         with get_db_connection() as con:
@@ -5365,9 +5416,22 @@ def ottieni_investimenti(id_conto, master_key_b64=None):
             # Decrypt if key available
             crypto, master_key = _get_crypto_and_key(master_key_b64)
             if master_key:
+                # Determine encryption key (Family vs Master)
+                encryption_key = _get_key_for_transaction(id_conto, master_key, crypto)
+                
                 for asset in assets:
-                    asset['ticker'] = _decrypt_if_key(asset['ticker'], master_key, crypto)
-                    asset['nome_asset'] = _decrypt_if_key(asset['nome_asset'], master_key, crypto)
+                    asset['ticker'] = _decrypt_if_key(asset['ticker'], encryption_key, crypto, silent=True)
+                    asset['nome_asset'] = _decrypt_if_key(asset['nome_asset'], encryption_key, crypto, silent=True)
+                    
+                    # Fallback to master_key if failed
+                    if encryption_key != master_key:
+                        if asset['ticker'] == "[ENCRYPTED]" or asset['ticker'].startswith("gAAAAA"):
+                             decrypted = _decrypt_if_key(asset['ticker'], master_key, crypto, silent=True)
+                             if decrypted and decrypted != "[ENCRYPTED]": asset['ticker'] = decrypted
+                        
+                        if asset['nome_asset'] == "[ENCRYPTED]" or asset['nome_asset'].startswith("gAAAAA"):
+                             decrypted = _decrypt_if_key(asset['nome_asset'], master_key, crypto, silent=True)
+                             if decrypted and decrypted != "[ENCRYPTED]": asset['nome_asset'] = decrypted
             
             return assets
     except Exception as e:
@@ -5386,8 +5450,21 @@ def ottieni_dettaglio_asset(id_asset, master_key_b64=None):
             # Decrypt if key available
             crypto, master_key = _get_crypto_and_key(master_key_b64)
             if master_key:
-                asset['ticker'] = _decrypt_if_key(asset['ticker'], master_key, crypto)
-                asset['nome_asset'] = _decrypt_if_key(asset['nome_asset'], master_key, crypto)
+                # Determine encryption key (Family vs Master)
+                id_conto = asset.get('id_conto')
+                encryption_key = _get_key_for_transaction(id_conto, master_key, crypto)
+                
+                # Decrypt ticker
+                decrypted = _decrypt_if_key(asset['ticker'], encryption_key, crypto, silent=True)
+                if (decrypted == "[ENCRYPTED]" or decrypted == asset['ticker']) and encryption_key != master_key:
+                     decrypted = _decrypt_if_key(asset['ticker'], master_key, crypto, silent=True)
+                if decrypted and decrypted != "[ENCRYPTED]": asset['ticker'] = decrypted
+
+                # Decrypt nome_asset
+                decrypted = _decrypt_if_key(asset['nome_asset'], encryption_key, crypto, silent=True)
+                if (decrypted == "[ENCRYPTED]" or decrypted == asset['nome_asset']) and encryption_key != master_key:
+                     decrypted = _decrypt_if_key(asset['nome_asset'], master_key, crypto, silent=True)
+                if decrypted and decrypted != "[ENCRYPTED]": asset['nome_asset'] = decrypted
             
             return asset
     except Exception as e:
@@ -5494,12 +5571,13 @@ def ottieni_riepilogo_conti_famiglia(id_famiglia, master_key_b64=None, id_utente
                                              WHERE A.id_conto = C.id_conto)
                                    ELSE (SELECT COALESCE(SUM(T.importo), 0.0)
                                          FROM Transazioni T
-                                         WHERE T.id_conto = C.id_conto)
+                                         WHERE T.id_conto = C.id_conto) + COALESCE(CAST(NULLIF(CAST(C.rettifica_saldo AS TEXT), '') AS NUMERIC), 0.0)
                                    END                                          AS saldo_calcolato
                         FROM Conti C
                                  JOIN Utenti U ON C.id_utente = U.id_utente
                                  JOIN Appartenenza_Famiglia AF ON U.id_utente = AF.id_utente
                         WHERE AF.id_famiglia = %s
+                          AND (C.nascosto IS NOT TRUE)
             """
             
             # --- Shared Accounts ---
@@ -5516,7 +5594,7 @@ def ottieni_riepilogo_conti_famiglia(id_famiglia, master_key_b64=None, id_utente
                                              WHERE 0=1) -- Shared Asset support missing in current schema
                                    ELSE (SELECT COALESCE(SUM(TC.importo), 0.0)
                                          FROM TransazioniCondivise TC
-                                         WHERE TC.id_conto_condiviso = CC.id_conto_condiviso)
+                                         WHERE TC.id_conto_condiviso = CC.id_conto_condiviso) + COALESCE(CAST(NULLIF(CAST(CC.rettifica_saldo AS TEXT), '') AS NUMERIC), 0.0)
                                    END                                          AS saldo_calcolato
                         FROM ContiCondivisi CC
                         WHERE CC.id_famiglia = %s
@@ -5547,14 +5625,15 @@ def ottieni_riepilogo_conti_famiglia(id_famiglia, master_key_b64=None, id_utente
                 # Decrypt Account Name
                 if row.get('nome_conto'):
                     decrypted_conto = _decrypt_if_key(row['nome_conto'], family_key, crypto, silent=True)
-                    if not decrypted_conto and family_key != master_key:
+                    # Check if decryption failed (None, [ENCRYPTED], or returned original encrypted value)
+                    if (not decrypted_conto or decrypted_conto == "[ENCRYPTED]" or decrypted_conto == row['nome_conto']) and family_key != master_key:
                         decrypted_conto = _decrypt_if_key(row['nome_conto'], master_key, crypto, silent=True)
                     row['nome_conto'] = decrypted_conto or row['nome_conto']
                 
                 # Decrypt IBAN
                 if row.get('iban'):
                      decrypted_iban = _decrypt_if_key(row['iban'], family_key, crypto, silent=True)
-                     if not decrypted_iban and family_key != master_key:
+                     if (not decrypted_iban or decrypted_iban == "[ENCRYPTED]" or decrypted_iban == row['iban']) and family_key != master_key:
                          decrypted_iban = _decrypt_if_key(row['iban'], master_key, crypto, silent=True)
                      row['iban'] = decrypted_iban or row['iban']
 
@@ -5623,7 +5702,8 @@ def ottieni_dettaglio_portafogli_famiglia(id_famiglia, master_key_b64=None, id_u
                     val = row.get(field)
                     if val:
                         decrypted = _decrypt_if_key(val, family_key, crypto, silent=True)
-                        if not decrypted and family_key != master_key:
+                        # Check if decryption failed (None, [ENCRYPTED], or returned original encrypted value)
+                        if (not decrypted or decrypted == "[ENCRYPTED]" or decrypted == val) and family_key != master_key:
                             decrypted = _decrypt_if_key(val, master_key, crypto, silent=True)
                         row[field] = decrypted or val
                 

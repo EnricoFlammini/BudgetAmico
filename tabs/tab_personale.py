@@ -10,6 +10,9 @@ from db.gestione_db import (
 import datetime
 from utils.async_task import AsyncTask
 from utils.styles import AppStyles, AppColors, PageConstants
+from utils.logger import setup_logger
+
+logger = setup_logger("PersonaleTab")
 
 
 class PersonaleTab(ft.Container):
@@ -67,6 +70,19 @@ class PersonaleTab(ft.Container):
             self.loading_view
         ], expand=True)
 
+    def _safe_update(self):
+        """Esegue l'update della pagina gestendo errori di loop chiuso."""
+        if not self.page: return
+        try:
+            self.page.update()
+        except RuntimeError as e:
+            if "Event loop is closed" in str(e):
+                logger.debug("Tentativo di update a loop chiuso ignorato.")
+            else:
+                logger.error(f"Errore update UI: {e}")
+        except Exception as e:
+            logger.debug(f"Update fallito: {e}")
+
     def update_view_data(self, is_initial_load=False):
         # Popola il filtro sempre per aggiornare i mesi disponibili (sync is fast enough usually, or could be async too)
         self._popola_filtro_mese()
@@ -84,7 +100,7 @@ class PersonaleTab(ft.Container):
         self.main_view.visible = False
         self.loading_view.visible = True
         if self.page:
-            self.page.update()
+            self._safe_update()
 
         # Ottieni anno e mese dal dropdown, o usa il mese corrente come default
         anno, mese = self._get_anno_mese_selezionato()
@@ -128,7 +144,7 @@ class PersonaleTab(ft.Container):
         self.loading_view.visible = False
         self.main_view.visible = True
         if self.page:
-            self.page.update()
+            self._safe_update()
 
     def _on_error(self, e):
         print(f"Errore PersonaleTab: {e}")
@@ -136,7 +152,7 @@ class PersonaleTab(ft.Container):
         self.main_view.controls = [AppStyles.body_text(f"Errore caricamento: {e}", color=AppColors.ERROR)]
         self.main_view.visible = True
         if self.page:
-            self.page.update()
+            self._safe_update()
 
     def _costruisci_vista_compatta(self, utente, riepilogo, loc):
         """Costruisce la vista compatta con riepilogo e solo 4 transazioni."""

@@ -67,6 +67,19 @@ class DashboardView:
             visible=False
         )
 
+    def _safe_update(self, control):
+        """Esegue l'update di un controllo gestendo eventuali errori di loop chiuso."""
+        if not self.page: return
+        try:
+            control.update()
+        except RuntimeError as e:
+            if "Event loop is closed" in str(e):
+                logger.debug("Tentativo di update a loop chiuso ignorato.")
+            else:
+                logger.error(f"Errore update UI: {e}")
+        except Exception as e:
+            logger.debug(f"Update fallito (app in chiusura?): {e}")
+
     def _create_sidebar_item(self, icon, selected_icon, label, view_instance, index):
         """Crea un elemento della sidebar personalizzata."""
         is_selected = (index == self.selected_index)
@@ -107,7 +120,9 @@ class DashboardView:
         
         # Ricostruisci la sidebar per aggiornare la selezione
         self.update_sidebar()
-        self.page.update()
+        # Ricostruisci la sidebar per aggiornare la selezione
+        self.update_sidebar()
+        self._safe_update(self.page)
 
     def build_view(self) -> ft.View:
         """
@@ -183,7 +198,7 @@ class DashboardView:
         self.update_banner_container.content = banner
         self.update_banner_container.visible = True
         if self.page:
-            self.page.update()
+            self._safe_update(self.page)
 
     def _close_app(self, e):
         """Chiude l'applicazione."""
@@ -220,7 +235,8 @@ class DashboardView:
             open=True,
         )
         self.page.overlay.append(bs)
-        self.page.update()
+        self.page.overlay.append(bs)
+        self._safe_update(self.page)
 
     def update_sidebar(self):
         """
@@ -368,7 +384,7 @@ class DashboardView:
             self.selected_index = 0
             
         if self.sidebar_listview.page:
-            self.sidebar_listview.update()
+            self._safe_update(self.sidebar_listview)
 
     def _refresh_all_data(self, e=None):
         """
@@ -429,4 +445,4 @@ class DashboardView:
                 self.tab_admin.update_all_admin_tabs_data(is_initial_load)
 
         if self.page:
-            self.page.update()
+            self._safe_update(self.page)
