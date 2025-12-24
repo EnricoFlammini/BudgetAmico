@@ -62,7 +62,22 @@ def decrypt_system_data(value_enc):
 
 
 
-# --- Helper Functions for Encryption ---
+def ottieni_ruolo_utente(id_famiglia: str, id_utente: str) -> Optional[str]:
+    """
+    Recupera il ruolo dell'utente nella famiglia.
+    Restituisce: 'admin', 'livello1', 'livello2', 'livello3' o None.
+    """
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT ruolo FROM Appartenenza_Famiglia WHERE id_famiglia = %s AND id_utente = %s", (id_famiglia, id_utente))
+            row = cur.fetchone()
+            return row['ruolo'] if row else None
+    except Exception as e:
+        print(f"[ERRORE] ottieni_ruolo_utente: {e}")
+        return None
+
+
 def _get_crypto_and_key(master_key_b64=None):
     """
     Returns CryptoManager instance and master_key.
@@ -5719,7 +5734,9 @@ def ottieni_dettaglio_portafogli_famiglia(id_famiglia, master_key_b64=None, id_u
         return []
 
 
-def ottieni_transazioni_famiglia_per_export(id_famiglia, data_inizio, data_fine, master_key_b64=None, id_utente=None):
+
+
+def ottieni_transazioni_famiglia_per_export(id_famiglia, data_inizio, data_fine, master_key_b64=None, id_utente=None, filtra_utente_id=None):
     try:
         # Decryption setup
         crypto, master_key = _get_crypto_and_key(master_key_b64)
@@ -5732,7 +5749,15 @@ def ottieni_transazioni_famiglia_per_export(id_famiglia, data_inizio, data_fine,
             
             # --- Personal Transactions ---
             # Transazioni joins Sottocategorie joins Categorie
-            query_personali = """
+            # If filtra_utente_id is set, restrict to that user only
+            sql_filtro_utente = ""
+            params_personali = [id_famiglia, data_inizio, data_fine]
+            
+            if filtra_utente_id:
+                sql_filtro_utente = "AND U.id_utente = %s"
+                params_personali.append(filtra_utente_id)
+
+            query_personali = f"""
                         SELECT T.data,
                                U.nome_enc_server, U.cognome_enc_server, U.username,
                                C.nome_conto,
@@ -5748,6 +5773,7 @@ def ottieni_transazioni_famiglia_per_export(id_famiglia, data_inizio, data_fine,
                         WHERE AF.id_famiglia = %s
                           AND T.data BETWEEN %s AND %s
                           AND C.tipo != 'Fondo Pensione'
+                          {sql_filtro_utente}
             """
             
             # --- Shared Transactions ---
@@ -5767,7 +5793,7 @@ def ottieni_transazioni_famiglia_per_export(id_famiglia, data_inizio, data_fine,
             """
             
             # Exec Personal
-            cur.execute(query_personali, (id_famiglia, data_inizio, data_fine))
+            cur.execute(query_personali, tuple(params_personali))
             personali = [dict(row) for row in cur.fetchall()]
             
             # Exec Shared
@@ -5775,7 +5801,6 @@ def ottieni_transazioni_famiglia_per_export(id_famiglia, data_inizio, data_fine,
             condivise = [dict(row) for row in cur.fetchall()]
             
             # Combine
-            # Order explicitly later if needed, but Python sort is fine.
             results = personali + condivise
             
             # Decrypt loop & Filter
@@ -5814,7 +5839,6 @@ def ottieni_transazioni_famiglia_per_export(id_famiglia, data_inizio, data_fine,
                     continue
 
                 # USER REQ: Rename encrypted giroconti
-                # If description is still encrypted (raw gAAAA... OR explicitly [ENCRYPTED])
                 desc = row.get('descrizione', '')
                 if isinstance(desc, str):
                     if desc.startswith('gAAAA') or desc == "[ENCRYPTED]":
@@ -5831,8 +5855,9 @@ def ottieni_transazioni_famiglia_per_export(id_famiglia, data_inizio, data_fine,
             final_results.sort(key=lambda x: x['data'], reverse=False)
             
             return final_results
+
     except Exception as e:
-        print(f"[ERRORE] Errore generico durante il recupero transazioni per export: {e}")
+        print(f"[ERRORE] Errore generico durante il recupero transazioni famiglia per export: {e}")
         return []
 
 def ottieni_dati_immobili_famiglia_per_export(id_famiglia, master_key_b64=None, id_utente=None):

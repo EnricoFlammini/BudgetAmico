@@ -10,7 +10,8 @@ from db.gestione_db import (
     ottieni_transazioni_famiglia_per_export,
     ottieni_storico_budget_per_export,
     ottieni_riepilogo_conti_famiglia,
-    ottieni_dettaglio_portafogli_famiglia
+    ottieni_dettaglio_portafogli_famiglia,
+    ottieni_ruolo_utente
 )
 
 
@@ -135,7 +136,22 @@ class ExportView:
         now = datetime.datetime.now()
         primo_giorno = now.replace(day=1).strftime('%Y-%m-%d')
         self.txt_export_data_inizio.value = primo_giorno
+        self.txt_export_data_inizio.value = primo_giorno
         self.txt_export_data_fine.value = now.strftime('%Y-%m-%d')
+        
+        # --- Applica Restrizioni per Ruolo ---
+        ruolo = self.controller.get_user_role()
+        
+        # Livello 3: Accesso Negato (Security Fallback)
+        if ruolo == 'livello3':
+            self.controller.show_snack_bar("Accesso negato: Funzione riservata.", success=False)
+            self.page.go("/dashboard")
+            return
+
+        # Livello 2: Solo Transazioni Personali
+        if ruolo == 'livello2':
+            self.chk_export_transazioni.label = "Esporta Le Mie Transazioni"
+            self.chk_export_transazioni.update()
 
     def _toggle_selezione_periodi(self, e):
         for chk in self.lv_export_periodi.controls:
@@ -180,8 +196,14 @@ class ExportView:
                 self.txt_export_data_fine.error_text = None
                 self.txt_export_data_inizio.update()
                 self.txt_export_data_fine.update()
+                
+                # Setup filtro utente per Livello 2
+                ruolo = self.controller.get_user_role()
+                filtra_utente_id = user_id if ruolo == 'livello2' else None
+                
                 dati_transazioni = ottieni_transazioni_famiglia_per_export(
-                    famiglia_id, data_inizio, data_fine, master_key_b64, user_id
+                    famiglia_id, data_inizio, data_fine, master_key_b64, user_id, 
+                    filtra_utente_id=filtra_utente_id
                 )
 
             # 2. Prepara Dati Budget

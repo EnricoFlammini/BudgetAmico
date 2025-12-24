@@ -33,6 +33,8 @@ TABLES = {
             id_conto_condiviso_default INTEGER REFERENCES ContiCondivisi(id_conto_condiviso) ON DELETE SET NULL,
             forza_cambio_password BOOLEAN DEFAULT 0
         );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_utenti_username_bindex ON Utenti(username_bindex);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_utenti_email_bindex ON Utenti(email_bindex);
     """,
     "Famiglie": """
         CREATE TABLE Famiglie (

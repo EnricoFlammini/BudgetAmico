@@ -127,8 +127,26 @@ def migra_asset_utente():
             for conto in conti:
                 id_conto = conto['id_conto']
                 nome_conto = conto['nome_conto']
-                print(f"    Elaborazione conto: {nome_conto} (ID: {id_conto})")
                 
+                # --- UPDATE NOME CONTO (NEW) ---
+                # Check decryption of nome_conto with Master Key
+                nome_conto_dec = _decrypt_if_key(nome_conto, master_key, crypto, silent=True)
+                
+                if nome_conto_dec == "[ENCRYPTED]":
+                    # Check if already Family Key encrypted
+                    nome_conto_check = _decrypt_if_key(nome_conto, family_key, crypto, silent=True)
+                    if nome_conto_check != "[ENCRYPTED]":
+                        print(f"    [INFO] Conto '{nome_conto_check}' è GIÀ aggiornato.")
+                        nome_conto_dec = nome_conto_check # Use decrypted name for logs
+                    else:
+                        print(f"    [WARN] Impossibile decriptare nome conto ID {id_conto}.")
+                else: 
+                     # It was Master Key encrypted (or plaintext?), so re-encrypt with Family Key
+                    print(f"    Aggiornamento nome conto: {nome_conto_dec}...")
+                    nome_conto_enc_new = _encrypt_if_key(nome_conto_dec, family_key, crypto)
+                    cur.execute("UPDATE Conti SET nome_conto = %s WHERE id_conto = %s", (nome_conto_enc_new, id_conto))
+                    totale_aggiornati += 1
+
                 # Fetch Assets
                 cur.execute("SELECT id_asset, ticker, nome_asset FROM Asset WHERE id_conto = %s", (id_conto,))
                 assets = cur.fetchall()

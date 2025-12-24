@@ -67,6 +67,13 @@ class DashboardView:
             visible=False
         )
 
+        self.btn_export = ft.IconButton(
+            icon=ft.Icons.DOWNLOAD,
+            tooltip="Esporta Dati",
+            on_click=lambda _: self.page.go("/export"),
+            visible=True # Default visible, managed by role
+        )
+
     def _safe_update(self, control):
         """Esegue l'update di un controllo gestendo eventuali errori di loop chiuso."""
         if not self.page: return
@@ -168,11 +175,7 @@ class DashboardView:
                         on_click=self.controller.open_info_dialog
                     ),
                     self.sync_status_icon,
-                    ft.IconButton(
-                        icon=ft.Icons.DOWNLOAD,
-                        tooltip=loc.get("export_data"),
-                        on_click=lambda _: self.page.go("/export")
-                    ),
+                    self.btn_export,
                     ft.IconButton(
                         icon=ft.Icons.LOGOUT,
                         tooltip=loc.get("logout"),
@@ -443,6 +446,11 @@ class DashboardView:
 
             if self.controller.get_user_role() == 'admin':
                 self.tab_admin.update_all_admin_tabs_data(is_initial_load)
+            
+            # Manage Export Button Visibility
+            ruolo = self.controller.get_user_role()
+            self.btn_export.visible = (ruolo != 'livello3')
+            self.btn_export.update()
 
         if self.page:
             self._safe_update(self.page)
