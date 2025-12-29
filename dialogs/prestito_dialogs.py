@@ -8,8 +8,11 @@ from db.gestione_db import (
     ottieni_categorie_e_sottocategorie,
     effettua_pagamento_rata,
     ottieni_membri_famiglia,
-    ottieni_quote_prestito
+    ottieni_quote_prestito,
+    aggiungi_rata_piano_ammortamento,
+    ottieni_piano_ammortamento
 )
+from dialogs.piano_ammortamento_dialog import PianoAmmortamentoDialog
 
 
 class PrestitoDialogs:
@@ -41,9 +44,25 @@ class PrestitoDialogs:
         self.dd_sottocategoria_default = ft.Dropdown()
         self.cb_addebito_automatico = ft.Checkbox()
 
+        # Button per Piano Ammortamento (visibile sempre, ma con logica diversa in creazione)
+        self.btn_piano_ammortamento = ft.ElevatedButton(
+            "Gestisci Piano Ammortamento", 
+            icon=ft.Icons.TABLE_CHART, 
+            on_click=self._apri_piano_ammortamento_click,
+            visible=False
+        )
+        
+        self.temp_piano_ammortamento = [] # Lista temporanea per creazione nuovi prestiti
+
+        # Dialogo Piano Ammortamento
+        self.piano_ammortamento_dialog = PianoAmmortamentoDialog(controller)
+
         # Sezione Quote
         self.container_quote = ft.Column(spacing=5)
         self.quote_inputs = {} # Mappa id_utente -> TextField
+
+        # Progress bar per operazioni lunghe
+        self.progress_bar = ft.ProgressBar(width=400, color="blue", bgcolor="#eeeeee", visible=False)
 
 
         self.dialog_prestito = ft.AlertDialog(
@@ -51,7 +70,10 @@ class PrestitoDialogs:
             title=ft.Text(),
             content=ft.Column(
                 [
-                    self.txt_nome, self.dd_tipo, self.txt_descrizione, self.txt_data_inizio,
+                    self.progress_bar, # Spostata in alto per visibilità
+                    self.txt_nome, self.dd_tipo, self.txt_descrizione,
+                    self.btn_piano_ammortamento, # Spostato in alto come richiesto
+                    self.txt_data_inizio,
                     self.txt_numero_rate, self.txt_rate_residue, self.txt_importo_finanziato, self.txt_importo_interessi,
                     self.txt_importo_rata, self.dd_giorno_scadenza, self.dd_conto_default,
                     self.dd_sottocategoria_default, self.cb_addebito_automatico,
@@ -155,16 +177,36 @@ class PrestitoDialogs:
             self.cb_addebito_automatico.value = bool(prestito_data.get('addebito_automatico', False))
 
             # Calcola e imposta le rate residue visualizzate
-            if prestito_data['importo_rata'] > 0:
-                rate_residue_calc = int(prestito_data['importo_residuo'] / prestito_data['importo_rata'])
-                self.txt_rate_residue.value = str(rate_residue_calc)
+            # Calcola e imposta le rate residue visualizzate
+            if prestito_data.get('importo_rata') and float(prestito_data['importo_rata']) > 0:
+                rate_residue_calc = int(float(prestito_data['importo_residuo']) / float(prestito_data['importo_rata']))
             else:
-                self.txt_rate_residue.value = ""
+                rate_residue_calc = 0
+            
+            self.txt_rate_residue.value = str(rate_residue_calc)
+            # Fine calcolo rate residue
+            
+            # Mostra bottone piano ammortamento
+            self.btn_piano_ammortamento.visible = True
+
+            # CHECK PIANO AMMORTAMENTO e Blocca campi se esiste
+            try:
+                piano = ottieni_piano_ammortamento(prestito_data['id_prestito'])
+                has_piano = len(piano) > 0
+                self._set_fields_locked(has_piano)
+            except Exception as e:
+                print(f"Errore check piano in apri_dialog: {e}")
+                
         else:
             self.dialog_prestito.title.value = self.loc.get("add_loan")
             self.prestito_in_modifica = None
             if tipo_default:
                 self.dd_tipo.value = tipo_default
+            
+            # Nascondi bottone in creazione -> ORA VISIBILE SEMPRE
+            self.temp_piano_ammortamento = [] # Reset lista temporanea
+            self.btn_piano_ammortamento.visible = True
+            self._set_fields_locked(False) # Sblocca default in creazione
 
         if self.dialog_prestito not in self.controller.page.overlay:
             self.controller.page.overlay.append(self.dialog_prestito)
@@ -276,6 +318,11 @@ class PrestitoDialogs:
     def _salva_prestito_cliccato(self, e):
         self.controller.show_loading("Attendere...")
         try:
+            # Blocca UI
+            self.progress_bar.visible = True
+            self.dialog_prestito.actions[0].disabled = True
+            self.dialog_prestito.actions[1].disabled = True
+            self.controller.page.update()
             if not self._valida_campi_prestito():
                 self.controller.hide_loading()
                 return
@@ -365,13 +412,35 @@ class PrestitoDialogs:
                     importo_residuo=importo_residuo, addebito_automatico=addebito_automatico,
                     master_key_b64=master_key_b64, id_utente=id_utente, lista_quote=lista_quote
                 )
+                print(f"[DEBUG] Risultato aggiunta prestito: {success}")
 
             if success:
+                # Se nuovo prestito (success è l'ID) e abbiamo un piano temporaneo, salviamolo ora
+                if not self.prestito_in_modifica and self.temp_piano_ammortamento:
+                    try:
+                        id_new_prestito = success
+                        count_rate = 0
+                        for rata in self.temp_piano_ammortamento:
+                            aggiungi_rata_piano_ammortamento(
+                                id_new_prestito, 
+                                rata['numero_rata'], 
+                                rata['data_scadenza'], 
+                                rata['importo_rata'], 
+                                rata['quota_capitale'], 
+                                rata['quota_interessi'], 
+                                rata['spese_fisse'],
+                                stato=rata.get('stato', 'da_pagare')
+                            )
+                            count_rate += 1
+                        print(f"Salvate {count_rate} rate del piano ammortamento per prestito {id_new_prestito}")
+                    except Exception as e_rata:
+                        print(f"Errore salvataggio piano ammortamento differito: {e_rata}")
+
                 self.controller.show_snack_bar("Prestito salvato con successo!", success=True)
                 self.dialog_prestito.open = False
                 self.controller.db_write_operation()
             else:
-                self.controller.show_snack_bar("Errore durante il salvataggio del prestito.", success=False)
+                self.controller.show_snack_bar("Errore durante il salvataggio del prestito (DB returned False).", success=False)
 
         except Exception as ex:
             print(f"Errore salvataggio prestito: {ex}")
@@ -379,8 +448,11 @@ class PrestitoDialogs:
             self.controller.show_error_dialog(f"Errore inaspettato: {ex}")
         finally:
             self.controller.hide_loading()
-
-        self.controller.page.update()
+            # Sblocca UI
+            self.progress_bar.visible = False
+            self.dialog_prestito.actions[0].disabled = False
+            self.dialog_prestito.actions[1].disabled = False
+            self.controller.page.update()
 
     def _valida_campi_prestito(self):
         is_valid = True
@@ -516,3 +588,122 @@ class PrestitoDialogs:
         if self.controller.date_picker.value:
             target_field.value = self.controller.date_picker.value.strftime('%Y-%m-%d')
             self.controller.page.update()
+
+    def _apri_piano_ammortamento_click(self, e):
+        # Nascondiamo temporaneamente il dialog principale per evitare conflitti di sovrapposizione
+        self.dialog_prestito.open = False
+        self.controller.page.update()
+
+        if self.prestito_in_modifica:
+            # Se siamo in modifica, usiamo una callback che riapre semplicemente il dialog
+            self.piano_ammortamento_dialog.apri(
+                id_prestito=self.prestito_in_modifica['id_prestito'],
+                on_save=lambda: self._on_return_from_piano_modifica() 
+            )
+        else:
+            # Modalità creazione: passa la lista temporanea e callback aggiornamento
+            self.piano_ammortamento_dialog.apri(
+                id_prestito=None, 
+                temp_list=self.temp_piano_ammortamento,
+                on_save=self._aggiorna_dati_da_piano
+            )
+
+    def _aggiorna_dati_da_piano(self):
+        """Aggiorna i campi del prestito in base al piano di ammortamento temporaneo."""
+    def _aggiorna_dati_da_piano(self):
+        """Aggiorna i campi del prestito in base al piano di ammortamento temporaneo."""
+        try:
+            if self.temp_piano_ammortamento:
+                num_rate = len(self.temp_piano_ammortamento)
+                tot_capitale = sum(r['quota_capitale'] for r in self.temp_piano_ammortamento)
+                tot_interessi = sum(r['quota_interessi'] for r in self.temp_piano_ammortamento)
+                
+                # Importo rata: prendiamo il primo per semplicità, l'utente può correggere
+                importo_rata = self.temp_piano_ammortamento[0]['importo_rata'] if num_rate > 0 else 0.0
+
+                # Data Inizio: prendiamo la data più vecchia nel piano
+                date_list = [r['data_scadenza'] for r in self.temp_piano_ammortamento]
+                if date_list:
+                    min_data = min(date_list)
+                    self.txt_data_inizio.value = min_data
+                    # print(f"[DEBUG] Data inizio impostata da piano: {min_data}")
+                
+                # Calcolo rate residue (quelle NON pagate)
+                # OCCHIO: 'stato' potrebbe mancare se manuale e non settato default? nel dialog init manuale mettiamo 'da_pagare'.
+                num_residue = sum(1 for r in self.temp_piano_ammortamento if r.get('stato', 'da_pagare') == 'da_pagare')
+
+                self.txt_numero_rate.value = str(num_rate)
+                self.txt_rate_residue.value = str(num_residue)
+                self.txt_importo_finanziato.value = f"{tot_capitale:.2f}"
+                self.txt_importo_interessi.value = f"{tot_interessi:.2f}"
+                self.txt_importo_rata.value = f"{importo_rata:.2f}"
+                
+                # Blocca campi
+                self._set_fields_locked(True)
+                
+                self.controller.show_snack_bar("Dati importati dal piano. Clicca su SALVA per confermare.", success=True)
+            else:
+                self.controller.show_snack_bar("Nessun piano inserito.", success=False)
+                # Sblocca campi se piano rimosso/vuoto
+                self._set_fields_locked(False)
+                
+        except Exception as ex:
+            print(f"Errore calcolo totali da piano: {ex}")
+            self.controller.show_snack_bar(f"Errore importazione dati piano: {ex}", success=False)
+        finally:
+            # Forziamo il dialog open SEMPRE
+            self.dialog_prestito.open = True
+            self.controller.page.update()
+
+    def _on_return_from_piano_modifica(self):
+        # Al ritorno da modifica, ricarichiamo (e riblocchiamo se serve)
+        # Controllo se esiste piano
+        if self.prestito_in_modifica:
+            from db.gestione_db import ottieni_piano_ammortamento
+            piano = ottieni_piano_ammortamento(self.prestito_in_modifica['id_prestito'])
+            has_piano = len(piano) > 0
+            self._set_fields_locked(has_piano)
+            
+            # TODO: Ricalcolare i totali/residui visualizzati nel dialog padre in base al piano aggiornato?
+            # Per ora l'utente vede quello che c'era, se vuole refresh deve chiudere e riaprire o facciamo refresh qui.
+            # Facciamo refresh campi:
+            if has_piano:
+               # Ricalcolo rapido valori visualizzati per coerenza
+                tot_cap = sum(r['quota_capitale'] for r in piano)
+                tot_int = sum(r['quota_interessi'] for r in piano)
+                importo_rata = piano[0]['importo_rata']
+                
+                self.txt_numero_rate.value = str(len(piano))
+                # num_residue = sum(1 for r in piano if r['stato']=='da_pagare') # Calcolato da db spesso
+                self.txt_importo_finanziato.value = f"{tot_cap:.2f}"
+                self.txt_importo_interessi.value = f"{tot_int:.2f}"
+                self.txt_importo_rata.value = f"{importo_rata:.2f}"
+        
+        self.dialog_prestito.open = True
+        self.controller.page.update()
+
+    def _set_fields_locked(self, locked):
+        bg = ft.Colors.GREY_100 if locked else None
+        
+        self.txt_numero_rate.read_only = locked
+        self.txt_numero_rate.bgcolor = bg
+        
+        self.txt_rate_residue.read_only = locked
+        self.txt_rate_residue.bgcolor = bg
+        
+        self.txt_importo_finanziato.read_only = locked
+        self.txt_importo_finanziato.bgcolor = bg
+        
+        self.txt_importo_interessi.read_only = locked
+        self.txt_importo_interessi.bgcolor = bg
+        
+        self.txt_importo_rata.read_only = locked
+        self.txt_importo_rata.bgcolor = bg
+        
+        # Data inizio
+        # self.txt_data_inizio.read_only = True # Già readonly di base
+        if self.txt_data_inizio.suffix:
+            self.txt_data_inizio.suffix.disabled = locked
+            self.txt_data_inizio.suffix.icon_color = ft.Colors.GREY if locked else None
+            
+        self.dialog_prestito.update()

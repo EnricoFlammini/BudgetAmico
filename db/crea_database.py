@@ -14,8 +14,8 @@ if not os.path.exists(APP_DATA_DIR):
 DB_FILE = os.path.join(APP_DATA_DIR, 'budget_amico.db')
 
 # --- SCHEMA DATABASE ---
-# Versione 9: Aggiunta rettifica_saldo a ContiCondivisi e data_aggiornamento a Asset
-SCHEMA_VERSION = 9
+# Versione 10: Aggiunta tabella PianoAmmortamento
+SCHEMA_VERSION = 10
 
 TABLES = {
     "Utenti": """
@@ -258,6 +258,20 @@ TABLES = {
             id_utente INTEGER NOT NULL REFERENCES Utenti(id_utente) ON DELETE CASCADE,
             percentuale REAL NOT NULL CHECK(percentuale > 0 AND percentuale <= 100),
             UNIQUE(id_prestito, id_utente)
+        );
+    """,
+    "PianoAmmortamento": """
+        CREATE TABLE PianoAmmortamento (
+            id_rata INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_prestito INTEGER NOT NULL REFERENCES Prestiti(id_prestito) ON DELETE CASCADE,
+            numero_rata INTEGER NOT NULL,
+            data_scadenza TEXT NOT NULL,
+            importo_rata REAL NOT NULL,
+            quota_capitale REAL NOT NULL,
+            quota_interessi REAL NOT NULL,
+            spese_fisse REAL DEFAULT 0,
+            stato TEXT DEFAULT 'da_pagare',
+            UNIQUE(id_prestito, numero_rata)
         );
     """
 }

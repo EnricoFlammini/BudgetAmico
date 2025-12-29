@@ -161,63 +161,63 @@ class PersonaleTab(ft.Container):
         val_investimenti = riepilogo.get('investimenti', 0)
         val_fondi_pensione = riepilogo.get('fondi_pensione', 0)
         val_risparmio = riepilogo.get('risparmio', 0)
-        val_patrimonio_immobile = riepilogo.get('patrimonio_immobile', 0)
+        # Recupera nuove chiavi con fallback
+        val_patrimonio_immobile = riepilogo.get('patrimonio_immobile_lordo', 0)
+        val_prestiti = riepilogo.get('prestiti_totali', 0)
         
-        # Costruisci il riepilogo schematico
+        # Costruisci righe dettaglio
         righe_dettaglio = []
-        
-        # Liquidità (sempre visibile)
         righe_dettaglio.append(ft.Row([
-            AppStyles.body_text(loc.get("liquidity")),
-            AppStyles.currency_text(loc.format_currency(val_liquidita))
+            AppStyles.body_text(self.controller.loc.get("liquidity")),
+            AppStyles.currency_text(self.controller.loc.format_currency(val_liquidita))
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
         
-        # Risparmio (se presente)
-        if val_risparmio > 0:
-            righe_dettaglio.append(ft.Row([
-                AppStyles.body_text(loc.get("savings")),
-                AppStyles.currency_text(loc.format_currency(val_risparmio))
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
-        
-        # Investimenti (se presenti)
         if val_investimenti > 0:
             righe_dettaglio.append(ft.Row([
-                AppStyles.body_text(loc.get("investments")),
-                AppStyles.currency_text(loc.format_currency(val_investimenti))
+                AppStyles.body_text(self.controller.loc.get("investments")),
+                AppStyles.currency_text(self.controller.loc.format_currency(val_investimenti))
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
         
-        # Fondi Pensione (se presenti)
         if val_fondi_pensione > 0:
             righe_dettaglio.append(ft.Row([
-                AppStyles.body_text(loc.get("pension_funds")),
-                AppStyles.currency_text(loc.format_currency(val_fondi_pensione))
+                AppStyles.body_text(self.controller.loc.get("pension_funds")),
+                AppStyles.currency_text(self.controller.loc.format_currency(val_fondi_pensione))
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+
+        if val_risparmio > 0:
+            righe_dettaglio.append(ft.Row([
+                AppStyles.body_text(self.controller.loc.get("savings")),
+                AppStyles.currency_text(self.controller.loc.format_currency(val_risparmio))
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
         
-        # Patrimonio Immobile (se presente)
         if val_patrimonio_immobile > 0:
             righe_dettaglio.append(ft.Row([
-                AppStyles.body_text(loc.get("real_estate_equity")),
-                AppStyles.currency_text(loc.format_currency(val_patrimonio_immobile))
+                AppStyles.body_text(self.controller.loc.get("real_estate_assets")),
+                AppStyles.currency_text(self.controller.loc.format_currency(val_patrimonio_immobile))
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+
+        if val_prestiti > 0:
+                righe_dettaglio.append(ft.Row([
+                AppStyles.body_text(self.controller.loc.get("loans")),
+                AppStyles.currency_text(self.controller.loc.format_currency(-val_prestiti), color=AppColors.ERROR)
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
         
-        # Usa il nome utente come titolo
-        nome_utente = utente.get('nome', 'Utente')
-        self.txt_bentornato.value = nome_utente
-        
-        # Costruisci la card del riepilogo
+        # Card riepilogo patrimonio
         card_riepilogo = AppStyles.card_container(
             content=ft.Row([
-                # Colonna sinistra: Patrimonio Netto grande
                 ft.Column([
-                    AppStyles.caption_text(loc.get("net_worth")),
-                    AppStyles.big_currency_text(loc.format_currency(val_patrimonio),
+                    AppStyles.caption_text(self.controller.loc.get("net_worth")),
+                    AppStyles.big_currency_text(self.controller.loc.format_currency(val_patrimonio),
                         color=AppColors.SUCCESS if val_patrimonio >= 0 else AppColors.ERROR)
                 ], expand=1),
-                # Colonna destra: dettagli in righe
                 ft.Column(righe_dettaglio, spacing=8, expand=2, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.START),
             padding=20
         )
+        
+        # Usa il nome utente come titolo
+        nome_utente = utente.get('nome', 'Utente')
+        self.txt_bentornato.value = nome_utente
         
         # Ricostruisce l'interfaccia
         self.dd_mese_filtro.label = loc.get("filter_by_month")

@@ -157,7 +157,7 @@ Per creare un eseguibile standalone usando PyInstaller:
 pyinstaller --name "Budget Amico" --windowed --onedir --clean --noconfirm --add-data "assets;assets" --icon "assets/icon.ico" --hidden-import=yfinance --hidden-import=python_dotenv main.py
 ```
 
-L'eseguibile sarà disponibile in `dist\Budget Amico\Budget Amico.exe`.
+L'eseguibile sarà disponibile in `dist\Budget Amico_0.26.00.exe`.
 **Importante**: Assicurati che il file `.env` sia presente nella stessa cartella dell'eseguibile o configurato nel sistema target.
 
 ### Build per Mobile (Android/iOS)
@@ -211,6 +211,33 @@ BudgetAmico/
     - `python-dotenv` - Gestione configurazione
     - `pandas` e `openpyxl` - Esportazione dati
     - `cryptography` - Crittografia dati sensibili (Fernet)
+
+---
+
+## 📊 Novità Versione 0.26
+
+### Piani Ammortamento Personalizzati
+-   **Importazione CSV / Inserimento Manuale**: È ora possibile caricare un piano di ammortamento personalizzato (o inserirlo manualmente) per ogni prestito.
+-   **Calcoli Precisi**: Il debito residuo, la quota capitale e la quota interessi vengono calcolati direttamente dal piano caricato senza approssimazioni.
+-   **Interfaccia Intelligente**:
+    -   Pulsante rapido "Gestisci Piano Ammortamento" nel dialog del prestito.
+    -   Protezione campi automatici: quando è attivo un piano, importi e date sono bloccati per garantire la coerenza dei dati.
+    -   Visualizzazione dettagliata del residuo (Capitale + Interessi) in tutte le schede.
+
+### Pagamenti Automatici Potenziati
+-   **Rispetto del Piano**: L'addebito automatico mensile ora verifica se esiste una rata specifica in scadenza nel piano di ammortamento e utilizza l'importo esatto previsto.
+-   **Aggiornamento Stato**: Il pagamento automatico segna automaticamente la rata come "Pagata" nel piano.
+
+### Coerenza Patrimoniale
+-   **Patrimonio Netto Reale**: I calcoli del patrimonio netto (Personale e Famiglia) ora integrano il debito residuo esatto derivante dai piani di ammortamento personalizzati.
+
+### Export Livellato
+-   **Permessi Export Differenziati**: 
+    -   Gli utenti **Livello 2** possono esportare solo i propri dati personali e quelli condivisi.
+    -   Gli utenti **Livello 3** non hanno accesso all'export.
+
+### Gestione Utenti
+-   **Pulizia Database**: Rimozione automatizzata di utenti di test e duplicati per mantenere l'integrità dei dati.
 
 ---
 

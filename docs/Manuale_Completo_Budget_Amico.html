@@ -688,6 +688,27 @@
   <h3 id="addebito-automatico">10.4 Addebito Automatico</h3>
   <p>Se attivi <strong>“Addebito automatico”</strong>, la rata viene
     registrata automaticamente alla scadenza.</p>
+  <p>Se è presente un piano di ammortamento personalizzato (vedi 10.5), il sistema utilizzerà l'importo esatto previsto
+    per quella specifica scadenza e aggiornerà lo stato della rata nel piano.</p>
+
+  <h3 id="piano-ammortamento">10.5 Piano di Ammortamento Personalizzato</h3>
+  <p>Puoi caricare o gestire manualmente il piano di ammortamento per avere calcoli precisi su quota capitale e
+    interessi.</p>
+  <ol type="1">
+    <li>Apri il dettaglio del prestito (Modifica).</li>
+    <li>Clicca su <strong>“Gestisci Piano Ammortamento”</strong> (visibile subito sotto la descrizione).</li>
+    <li>Nel dialog che si apre:
+      <ul>
+        <li><strong>Importa CSV</strong>: Carica un file CSV con le colonne (Numero, Scadenza, Importo Rata, Quota
+          Capitale, Quota Interessi, Debito Residuo).</li>
+        <li><strong>Aggiungi Rata</strong>: Inserisci manualmente le singole rate.</li>
+        <li><strong>Modifica/Elimina</strong>: Gestisci le rate esistenti.</li>
+      </ul>
+    </li>
+    <li>Quando un piano è attivo, i campi riepilogativi del prestito (Rate residue, Importi) vengono calcolati
+      automaticamente dal piano e “bloccati” per garantire coerenza.</li>
+    <li>Il sistema userà questi dati per il calcolo preciso del Patrimonio Netto personale e familiare.</li>
+  </ol>
   <hr />
   <h2 id="immobili">11. Immobili</h2>
   <h3 id="aggiungere-un-immobile">11.1 Aggiungere un Immobile</h3>
@@ -866,7 +887,7 @@
       per problemi di accesso</li>
   </ul>
   <hr />
-  <p><em>Budget Amico - Versione 0.24</em> <em>Sviluppato con ❤️ da
+  <p><em>Budget Amico - Versione 0.26</em> <em>Sviluppato con ❤️ da
       Iscavar79</em></p>
 </body>
 

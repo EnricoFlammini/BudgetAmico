@@ -227,7 +227,10 @@ class FamigliaTab(ft.Container):
             val_patrimonio = riepilogo.get('patrimonio_netto', 0)
             val_liquidita = riepilogo.get('liquidita', 0)
             val_investimenti = riepilogo.get('investimenti', 0)
-            val_patrimonio_immobile = riepilogo.get('patrimonio_immobile', 0)
+            val_fondi_pensione = riepilogo.get('fondi_pensione', 0)
+            val_risparmio = riepilogo.get('risparmio', 0)
+            val_patrimonio_immobile = riepilogo.get('patrimonio_immobile_lordo', 0)
+            val_prestiti = riepilogo.get('prestiti_totali', 0)
             
             # Costruisci righe dettaglio
             righe_dettaglio = []
@@ -242,10 +245,28 @@ class FamigliaTab(ft.Container):
                     AppStyles.currency_text(loc.format_currency(val_investimenti))
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
             
+            if val_fondi_pensione > 0:
+                righe_dettaglio.append(ft.Row([
+                    AppStyles.body_text(loc.get("pension_funds")),
+                    AppStyles.currency_text(loc.format_currency(val_fondi_pensione))
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+
+            if val_risparmio > 0:
+                righe_dettaglio.append(ft.Row([
+                    AppStyles.body_text(loc.get("savings")),
+                    AppStyles.currency_text(loc.format_currency(val_risparmio))
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+            
             if val_patrimonio_immobile > 0:
                 righe_dettaglio.append(ft.Row([
-                    AppStyles.body_text(loc.get("real_estate_equity")),
+                    AppStyles.body_text(loc.get("real_estate_assets")),
                     AppStyles.currency_text(loc.format_currency(val_patrimonio_immobile))
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+
+            if val_prestiti > 0:
+                righe_dettaglio.append(ft.Row([
+                    AppStyles.body_text(loc.get("loans")),
+                    AppStyles.currency_text(loc.format_currency(-val_prestiti), color=AppColors.ERROR)
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
             
             # Card riepilogo patrimonio famiglia

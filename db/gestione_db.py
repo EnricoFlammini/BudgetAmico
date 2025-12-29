@@ -3364,28 +3364,70 @@ def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese, master_key_b64=No
             """, (id_utente, data_limite_str))
             risparmio = cur.fetchone()['val'] or 0.0
             
-            # 5. Patrimonio Immobiliare (quota personale dell'utente)
-            # Somma il valore attuale * percentuale quota, meno mutuo residuo * percentuale quota mutuo
-            # Esclude immobili con nuda_proprieta = true
-            # Gli immobili hanno id_prestito_collegato che punta a Prestiti
+            # 5. Patrimonio Immobiliare Lordo (quota personale dell'utente)
+            # Somma il valore attuale ponderato
             cur.execute("""
                 SELECT 
                     COALESCE(SUM(
-                        (CAST(I.valore_attuale AS NUMERIC) * COALESCE(QI.percentuale, 100.0) / 100.0) -
-                        (COALESCE(CAST(P.importo_residuo AS NUMERIC), 0.0) * COALESCE(QP.percentuale, COALESCE(QI.percentuale, 100.0)) / 100.0)
+                        CAST(I.valore_attuale AS NUMERIC) * COALESCE(QI.percentuale, 100.0) / 100.0
                     ), 0.0) as val
                 FROM Immobili I
                 LEFT JOIN QuoteImmobili QI ON I.id_immobile = QI.id_immobile AND QI.id_utente = %s
-                LEFT JOIN Prestiti P ON I.id_prestito_collegato = P.id_prestito
-                LEFT JOIN QuotePrestiti QP ON P.id_prestito = QP.id_prestito AND QP.id_utente = %s
                 WHERE I.id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s)
                   AND (I.nuda_proprieta = FALSE OR I.nuda_proprieta IS NULL)
                   AND (QI.id_utente = %s OR QI.id_utente IS NULL)
-            """, (id_utente, id_utente, id_utente, id_utente))
+            """, (id_utente, id_utente, id_utente))
             result = cur.fetchone()['val']
-            patrimonio_immobile = float(result) if result else 0.0
+            patrimonio_immobile_lordo = float(result) if result else 0.0
+
+            # 6. Prestiti Totali (quota personale dell'utente) - Calcolo avanzato con Piano Ammortamento
+            cur.execute("""
+                SELECT id_prestito, CAST(importo_residuo AS NUMERIC) as res_db 
+                FROM Prestiti 
+                WHERE id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s)
+            """, (id_utente,))
+            loans = cur.fetchall()
+            prestiti_totali = 0.0
             
-            patrimonio_netto = liquidita + investimenti + fondi_pensione
+            if loans:
+                l_ids = [l['id_prestito'] for l in loans]
+                
+                # Quotes
+                ph = ','.join(['%s'] * len(l_ids))
+                cur.execute(f"SELECT id_prestito, id_utente, percentuale FROM QuotePrestiti WHERE id_prestito IN ({ph})", tuple(l_ids))
+                quotes_rows = cur.fetchall()
+                quotes_map = {} # pid -> {uid: perc}
+                for q in quotes_rows:
+                    if q['id_prestito'] not in quotes_map: quotes_map[q['id_prestito']] = {}
+                    quotes_map[q['id_prestito']][q['id_utente']] = float(q['percentuale'])
+                
+                # Schedules (Residuo da Piano)
+                cur.execute(f"SELECT id_prestito, SUM(importo_rata) as val FROM PianoAmmortamento WHERE id_prestito IN ({ph}) AND stato='da_pagare' GROUP BY id_prestito", tuple(l_ids))
+                sched_map = {r['id_prestito']: float(r['val']) for r in cur.fetchall()}
+                
+                # Check esistenza piano
+                cur.execute(f"SELECT DISTINCT id_prestito FROM PianoAmmortamento WHERE id_prestito IN ({ph})", tuple(l_ids))
+                has_sched = {r['id_prestito']: True for r in cur.fetchall()}
+
+                for l in loans:
+                     pid = l['id_prestito']
+                     
+                     # 1. Determina Residuo Base
+                     if has_sched.get(pid):
+                         residuo = sched_map.get(pid, 0.0)
+                     else:
+                         residuo = float(l['res_db'] or 0.0)
+                     
+                     # 2. Determina Quota Utente
+                     if pid in quotes_map:
+                         share = quotes_map[pid].get(id_utente, 0.0)
+                     else:
+                         share = 100.0 # Default se non ci sono quote esplicite
+                     
+                     prestiti_totali += residuo * (share / 100.0)
+            
+            # Calcolo Patrimonio Netto: Asset - Passività
+            patrimonio_netto = liquidita + investimenti + fondi_pensione + risparmio + patrimonio_immobile_lordo - prestiti_totali
             
             return {
                 'patrimonio_netto': patrimonio_netto,
@@ -3393,11 +3435,24 @@ def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese, master_key_b64=No
                 'investimenti': investimenti,
                 'fondi_pensione': fondi_pensione,
                 'risparmio': risparmio,
-                'patrimonio_immobile': patrimonio_immobile
+                'patrimonio_immobile': patrimonio_immobile_lordo, # Chiave cambiata semanticamente a Lordo, ma mantengo nome per compatibilità o cambio?
+                # Meglio aggiungere chiavi specifiche e lasciare patrimonio_immobile come lordo per chi lo usa?
+                # Per chiarezza nel frontend useremo 'patrimonio_immobile_lordo' e 'prestiti_totali'
+                'patrimonio_immobile_lordo': patrimonio_immobile_lordo,
+                'prestiti_totali': prestiti_totali,
+                # Mantengo 'patrimonio_immobile' per compatibilità se qualcuno lo usa, mappandolo al lordo?
+                # O meglio: tab_personale usa `riepilogo.get('patrimonio_immobile', 0)`.
+                # Se cambio qui, tab_personale mostrerà il lordo al posto del netto "vecchio calcolo".
+                # Ma tab_personale sarà aggiornato per usare le nuove chiavi.
+                'patrimonio_immobile': patrimonio_immobile_lordo, # Backward compat: ora è il lordo.
             }
     except Exception as e:
         print(f"[ERRORE] Errore in ottieni_riepilogo_patrimonio_utente: {e}")
-        return {'patrimonio_netto': 0.0, 'liquidita': 0.0, 'investimenti': 0.0, 'fondi_pensione': 0.0, 'risparmio': 0.0, 'patrimonio_immobile': 0.0}
+        return {
+            'patrimonio_netto': 0.0, 'liquidita': 0.0, 'investimenti': 0.0, 
+            'fondi_pensione': 0.0, 'risparmio': 0.0, 
+            'patrimonio_immobile': 0.0, 'patrimonio_immobile_lordo': 0.0, 'prestiti_totali': 0.0
+        }
 
 
 def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese, master_key_b64=None):
@@ -3478,23 +3533,77 @@ def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese, mas
             """, (id_famiglia, data_limite_str))
             risparmio = float(cur.fetchone()['val'] or 0.0)
             
-            # 5. Patrimonio Immobiliare (totale famiglia)
-            # Somma (valore_attuale - mutuo_residuo) per tutti gli immobili della famiglia
-            # Esclude immobili con nuda_proprieta = true
-            # Gli immobili hanno id_prestito_collegato che punta a Prestiti
+            # 5. Patrimonio Immobiliare Lordo (totale famiglia)
+            # Somma valore_attuale per tutti gli immobili della famiglia
             cur.execute("""
-                SELECT COALESCE(SUM(
-                    CAST(I.valore_attuale AS NUMERIC) - COALESCE(CAST(P.importo_residuo AS NUMERIC), 0.0)
-                ), 0.0) as val
+                SELECT COALESCE(SUM(CAST(I.valore_attuale AS NUMERIC)), 0.0) as val
                 FROM Immobili I
-                LEFT JOIN Prestiti P ON I.id_prestito_collegato = P.id_prestito
                 WHERE I.id_famiglia = %s
                   AND (I.nuda_proprieta = FALSE OR I.nuda_proprieta IS NULL)
             """, (id_famiglia,))
             result = cur.fetchone()['val']
-            patrimonio_immobile = float(result) if result else 0.0
+            patrimonio_immobile_lordo = float(result) if result else 0.0
             
-            patrimonio_netto = liquidita + investimenti + fondi_pensione
+            # 6. Prestiti Totali (totale famiglia) - Calcolo avanzato con Piano Ammortamento
+            # Recuperiamo i prestiti e verifichiamo se hanno un piano custom
+            cur.execute("""
+                SELECT id_prestito, CAST(importo_residuo AS NUMERIC) as residuo_db
+                FROM Prestiti
+                WHERE id_famiglia = %s
+            """, (id_famiglia,))
+            prestiti_rows = cur.fetchall()
+            
+            prestiti_totali = 0.0
+            if prestiti_rows:
+                ids = [r['id_prestito'] for r in prestiti_rows]
+                residui_db = {r['id_prestito']: float(r['residuo_db'] or 0.0) for r in prestiti_rows}
+                
+                # Check piani custom
+                if ids:
+                    placeholders = ','.join(['%s'] * len(ids))
+                    cur.execute(f"""
+                        SELECT id_prestito, SUM(importo_rata) as residuo_piano
+                        FROM PianoAmmortamento
+                        WHERE id_prestito IN ({placeholders}) AND stato = 'da_pagare'
+                        GROUP BY id_prestito
+                    """, tuple(ids))
+                    piani_rows = cur.fetchall()
+                    residui_piano = {r['id_prestito']: float(r['residuo_piano']) for r in piani_rows}
+                else:
+                    residui_piano = {}
+                
+                # Calcola totale unificando le fonti
+                for pid in ids:
+                    # Se esiste almeno una rata nel piano (o meglio se c'è entry nel group by), usiamo quella somma
+                    # OCCHIO: Se il piano esiste ma tutto pagato? residuo_piano non avrà entry (stato='da_pagare').
+                    # Dobbiamo distinguere "Piano inesistente" da "Piano finito".
+                    # Per semplicità, se c'è un piano ammortamento caricato per quel prestito, PRESUMIAMO che faccia fede.
+                    # Ma qui residui_piano ha solo 'da_pagare'.
+                    # Se non c'è entry in residui_piano, potrebbe essere: No Piano O Piano Finito.
+                    # Bisognerebbe controllare se esiste il piano.
+                    
+                    # Approccio più robusto: Count row piano per ID.
+                    pass 
+                
+                # --- FIX LOGICA MIGLIORATA ---
+                # Check esistenza piano globale per questi ID
+                has_piano_map = {}
+                if ids:
+                    ph = ','.join(['%s'] * len(ids))
+                    cur.execute(f"SELECT DISTINCT id_prestito FROM PianoAmmortamento WHERE id_prestito IN ({ph})", tuple(ids))
+                    rows_exist = cur.fetchall()
+                    for re in rows_exist:
+                        has_piano_map[re['id_prestito']] = True
+                
+                for pid in ids:
+                    if has_piano_map.get(pid):
+                        # Se ha un piano, usiamo la somma 'da_pagare' (che sarà 0 se tutto pagato, corretta)
+                        prestiti_totali += residui_piano.get(pid, 0.0)
+                    else:
+                        # Se NON ha piano, usiamo il residuo statico DB
+                        prestiti_totali += residui_db[pid]
+            
+            patrimonio_netto = liquidita + investimenti + fondi_pensione + risparmio + patrimonio_immobile_lordo - prestiti_totali
             
             return {
                 'patrimonio_netto': patrimonio_netto,
@@ -3502,11 +3611,17 @@ def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese, mas
                 'investimenti': investimenti,
                 'fondi_pensione': fondi_pensione,
                 'risparmio': risparmio,
-                'patrimonio_immobile': patrimonio_immobile
+                'patrimonio_immobile_lordo': patrimonio_immobile_lordo,
+                'prestiti_totali': prestiti_totali,
+                'patrimonio_immobile': patrimonio_immobile_lordo # Backward compat
             }
     except Exception as e:
         print(f"[ERRORE] Errore in ottieni_riepilogo_patrimonio_famiglia_aggregato: {e}")
-        return {'patrimonio_netto': 0.0, 'liquidita': 0.0, 'investimenti': 0.0, 'fondi_pensione': 0.0, 'risparmio': 0.0, 'patrimonio_immobile': 0.0}
+        return {
+            'patrimonio_netto': 0.0, 'liquidita': 0.0, 'investimenti': 0.0, 
+            'fondi_pensione': 0.0, 'risparmio': 0.0, 
+            'patrimonio_immobile': 0.0, 'patrimonio_immobile_lordo': 0.0, 'prestiti_totali': 0.0
+        }
 
 
 def ottieni_transazioni_utente(id_utente, anno, mese, master_key_b64=None):
@@ -4682,6 +4797,7 @@ def aggiungi_prestito(id_famiglia, nome, tipo, descrizione, data_inizio, numero_
     encrypted_descrizione = _encrypt_if_key(descrizione, family_key, crypto)
 
     try:
+        id_new = None
         with get_db_connection() as con:
             cur = con.cursor()
             # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
@@ -4696,9 +4812,13 @@ def aggiungi_prestito(id_famiglia, nome, tipo, descrizione, data_inizio, numero_
                               importo_interessi, importo_residuo, importo_rata, giorno_scadenza_rata, id_conto_default,
                               id_conto_condiviso_default, id_sottocategoria_default, bool(addebito_automatico)))
             id_new = cur.fetchone()['id_prestito']
-            if id_new and lista_quote:
-                gestisci_quote_prestito(id_new, lista_quote)
-            return id_new
+        
+        # Effettuiamo la gestione quote DOPO il commit della transazione principale
+        # altrimenti la nuova query in gestisci_quote_prestito (nuova connessione) non vedrebbe l'ID
+        if id_new and lista_quote:
+            gestisci_quote_prestito(id_new, lista_quote)
+            
+        return id_new
     except Exception as e:
         print(f"[ERRORE] Errore generico durante l'aggiunta del prestito: {e}")
         return None
@@ -4834,6 +4954,70 @@ def ottieni_prestiti_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
             
             for row in results:
                 row['lista_quote'] = quote_map.get(row['id_prestito'], [])
+
+            # --- OTTIMIZZAZIONE INIZIO: Batch Piano Ammortamento ---
+            # Se esiste un piano ammortamento, questo "vince" sui dati statici per:
+            # 1. Importo prossima rata
+            # 2. Numero rate pagate / totali
+            if ids_prestiti:
+                piano_map = {} # id_prestito -> { 'rate_pagate': 0, 'rate_totali': 0, 'next_rata_amount': None, 'next_rata_date': None }
+                
+                placeholders = ','.join(['%s'] * len(ids_prestiti))
+                query_piano = f"""
+                    SELECT id_prestito, importo_rata, quota_capitale, quota_interessi, data_scadenza, stato 
+                    FROM PianoAmmortamento 
+                    WHERE id_prestito IN ({placeholders})
+                    ORDER BY data_scadenza ASC
+                """
+                cur.execute(query_piano, tuple(ids_prestiti))
+                rows_piano = cur.fetchall()
+                
+                for r in rows_piano:
+                    pid = r['id_prestito']
+                    if pid not in piano_map:
+                        piano_map[pid] = {
+                            'rate_pagate': 0, 
+                            'rate_totali': 0, 
+                            'next_rata_found': False, 
+                            'next_rata_importo': 0.0,
+                            'residuo_totale': 0.0,
+                            'capitale_residuo': 0.0,
+                            'interessi_residui': 0.0
+                        }
+                    
+                    piano_map[pid]['rate_totali'] += 1
+                    
+                    if r['stato'] == 'pagata':
+                        piano_map[pid]['rate_pagate'] += 1
+                    elif r['stato'] == 'da_pagare':
+                        # Somma residuo
+                        piano_map[pid]['residuo_totale'] += float(r['importo_rata'])
+                        piano_map[pid]['capitale_residuo'] += float(r['quota_capitale'])
+                        piano_map[pid]['interessi_residui'] += float(r['quota_interessi'])
+                        
+                        if not piano_map[pid]['next_rata_found']:
+                            # La prima rata 'da_pagare' (ordinato data ASC) è quella corrente
+                            piano_map[pid]['next_rata_found'] = True
+                            piano_map[pid]['next_rata_importo'] = float(r['importo_rata'])
+                
+                # Applica override se dati presenti
+                for row in results:
+                    pid = row['id_prestito']
+                    if pid in piano_map:
+                        pm = piano_map[pid]
+                        # Aggiorniamo i conteggi reali da piano
+                        row['rate_pagate'] = pm['rate_pagate']
+                        row['numero_mesi_totali'] = pm['rate_totali'] # Opzionale, ma mantiene coerenza
+                        
+                        # Override Importo Residuo (calcolato come somma rate ancora da pagare)
+                        row['importo_residuo'] = pm['residuo_totale']
+                        row['capitale_residuo'] = pm['capitale_residuo']
+                        row['interessi_residui'] = pm['interessi_residui']
+                        
+                        # Se trovata una prossima rata, usiamo il suo importo specifico
+                        if pm['next_rata_found']:
+                           # print(f"[DEBUG] Override importo rata per {pid}: Old={row['importo_rata']} New={pm['next_rata_importo']}")
+                           row['importo_rata'] = pm['next_rata_importo']
             # --- OTTIMIZZAZIONE FINE ---
 
             return results
@@ -4850,16 +5034,84 @@ def check_e_paga_rate_scadute(id_famiglia):
         with get_db_connection() as con:
             cur = con.cursor()
             for p in prestiti_attivi:
-                if p['importo_residuo'] > 0 and p['id_conto_pagamento_default'] and p[
-                    'id_categoria_pagamento_default'] and oggi.day >= p['giorno_scadenza_rata']:
-                    cur.execute("SELECT 1 FROM StoricoPagamentiRate WHERE id_prestito = %s AND anno = %s AND mese = %s",
-                                (p['id_prestito'], oggi.year, oggi.month))
-                    if cur.fetchone() is None:
-                        importo_da_pagare = min(p['importo_rata'], p['importo_residuo'])
-                        effettua_pagamento_rata(p['id_prestito'], p['id_conto_pagamento_default'], importo_da_pagare,
-                                                oggi.strftime('%Y-%m-%d'), p['id_categoria_pagamento_default'],
-                                                p['nome'])
+                # 1. Verifica Addebito Automatico Attivo
+                if not p.get('addebito_automatico'):
+                    continue
+                    
+                # Validazione dati minimi
+                if p['importo_residuo'] <= 0 or not p.get('id_conto_pagamento_default'):
+                    continue
+
+                pay_data = None # (amount, id_rata_schedule)
+
+                # 2. Controllo Piano Ammortamento (Prioritario)
+                cur.execute("""
+                    SELECT id_rata, data_scadenza, importo_rata 
+                    FROM PianoAmmortamento 
+                    WHERE id_prestito = %s AND stato = 'da_pagare' 
+                    ORDER BY data_scadenza ASC LIMIT 1
+                """, (p['id_prestito'],))
+                sched = cur.fetchone()
+
+                from datetime import datetime as dt_class # Per parsing sicuro se non importato top-level
+
+                if sched:
+                    try:
+                        # Parsing data scadenza (YYYY-MM-DD)
+                        if isinstance(sched['data_scadenza'], str):
+                             due_dt = dt_class.strptime(sched['data_scadenza'], '%Y-%m-%d').date()
+                        else:
+                             due_dt = sched['data_scadenza'] # Se driver restituisce date object
+                        
+                        if oggi >= due_dt:
+                             pay_data = (float(sched['importo_rata']), sched['id_rata'])
+                    except Exception as ed:
+                        print(f"Errore parsing data rata id {sched['id_rata']}: {ed}")
+                else:
+                    # 3. Logica Legacy (Statico)
+                    day = p.get('giorno_scadenza_rata')
+                    if day and oggi.day >= day:
+                        # Verifica importo
+                        amount = min(float(p['importo_rata']), float(p['importo_residuo']))
+                        pay_data = (amount, None)
+
+                # 4. Esecuzione Pagamento
+                if pay_data:
+                    amount, sched_id = pay_data
+                    
+                    perform_payment = False
+                    
+                    if sched_id:
+                        # Se da schedina, 'da_pagare' fa da lock (se paghiamo ora, settiamo 'pagata')
+                        perform_payment = True
+                    else:
+                        # Se legacy, check Storico mensile per evitare doppi pagamenti
+                        cur.execute("SELECT 1 FROM StoricoPagamentiRate WHERE id_prestito = %s AND anno = %s AND mese = %s", 
+                                    (p['id_prestito'], oggi.year, oggi.month))
+                        if not cur.fetchone():
+                            perform_payment = True
+
+                    if perform_payment:
+                        # Usa categoria default o sottocategoria? Il vecchio codice usava id_categoria... 
+                        # Controlliamo la firma di effettua_pagamento_rata -> args: id_sottocategoria
+                        # Il vecchio codice passava id_categoria_pagamento_default... verifichiamo se p ha sottocategoria
+                        cat_id = p.get('id_sottocategoria_pagamento_default') or p.get('id_categoria_pagamento_default')
+                        
+                        effettua_pagamento_rata(
+                            p['id_prestito'], 
+                            p['id_conto_pagamento_default'], 
+                            amount, 
+                            oggi.strftime('%Y-%m-%d'), 
+                            cat_id, 
+                            p['nome']
+                        )
+                        
+                        if sched_id:
+                            # Aggiorna lo stato nel piano
+                            aggiorna_stato_rata_piano(sched_id, 'pagata')
+                        
                         pagamenti_eseguiti += 1
+
         return pagamenti_eseguiti
     except Exception as e:
         print(f"[ERRORE] Errore critico durante il controllo delle rate scadute: {e}")
@@ -4874,6 +5126,13 @@ def effettua_pagamento_rata(id_prestito, id_conto_pagamento, importo_pagato, dat
             cur.execute("BEGIN TRANSACTION;")
             cur.execute("UPDATE Prestiti SET importo_residuo = importo_residuo - %s WHERE id_prestito = %s",
                         (importo_pagato, id_prestito))
+            
+            # --- Aggiornamento Piano Ammortamento (se presente) ---
+            cur.execute("SELECT id_rata FROM PianoAmmortamento WHERE id_prestito = %s AND stato = 'da_pagare' ORDER BY numero_rata ASC LIMIT 1", (id_prestito,))
+            rata_row = cur.fetchone()
+            if rata_row:
+                cur.execute("UPDATE PianoAmmortamento SET stato = 'pagata' WHERE id_rata = %s", (rata_row['id_rata'],))
+            # ------------------------------------------------------
             descrizione = f"Pagamento rata {nome_prestito} (Prestito ID: {id_prestito})"
             cur.execute(
                 "INSERT INTO Transazioni (id_conto, id_sottocategoria, data, descrizione, importo) VALUES (%s, %s, %s, %s, %s)",
@@ -6553,9 +6812,77 @@ def aggiorna_storico_asset_se_necessario(ticker: str, anni: int = 5):
 # --- MAIN ---
 mimetypes.add_type("application/x-sqlite3", ".db")
 
+
 if __name__ == "__main__":
     print("--- 0. PULIZIA DATABASE (CANCELLAZIONE .db) ---")
     if os.path.exists(DB_FILE):
         os.remove(DB_FILE)
         print(f"File '{DB_FILE}' rimosso per un test pulito.")
+
+
+# --- GESTIONE PIANO AMMORTAMENTO ---
+
+def aggiungi_rata_piano_ammortamento(id_prestito, numero_rata, data_scadenza, importo_rata, quota_capitale, quota_interessi, spese_fisse=0, stato='da_pagare'):
+    """
+    Aggiunge una rata al piano di ammortamento di un prestito.
+    """
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("""
+                INSERT INTO PianoAmmortamento 
+                (id_prestito, numero_rata, data_scadenza, importo_rata, quota_capitale, quota_interessi, spese_fisse, stato)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (id_prestito, numero_rata, data_scadenza, importo_rata, quota_capitale, quota_interessi, spese_fisse, stato))
+            con.commit()
+            return True
+    except Exception as e:
+        print(f"[ERRORE] Errore aggiunta rata piano ammortamento: {e}")
+        return False
+
+def ottieni_piano_ammortamento(id_prestito):
+    """
+    Recupera il piano di ammortamento completo per un prestito, ordinato per numero rata.
+    """
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("""
+                SELECT * FROM PianoAmmortamento 
+                WHERE id_prestito = %s 
+                ORDER BY numero_rata ASC
+            """, (id_prestito,))
+            return [dict(row) for row in cur.fetchall()]
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero piano ammortamento: {e}")
+        return []
+
+def elimina_piano_ammortamento(id_prestito):
+    """
+    Elimina tutte le rate del piano di ammortamento per un prestito.
+    """
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("DELETE FROM PianoAmmortamento WHERE id_prestito = %s", (id_prestito,))
+            con.commit()
+            return True
+    except Exception as e:
+        print(f"[ERRORE] Errore eliminazione piano ammortamento: {e}")
+        return False
+
+def aggiorna_stato_rata_piano(id_rata, nuovo_stato):
+    """
+    Aggiorna lo stato di una rata (es. da 'da_pagare' a 'pagata').
+    """
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("UPDATE PianoAmmortamento SET stato = %s WHERE id_rata = %s", (nuovo_stato, id_rata))
+            con.commit()
+            return True
+    except Exception as e:
+        print(f"[ERRORE] Errore aggiornamento stato rata: {e}")
+        return False
+
 

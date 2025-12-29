@@ -339,6 +339,20 @@ Per registrare il pagamento di una rata:
 ### 10.4 Addebito Automatico
 
 Se attivi **"Addebito automatico"**, la rata viene registrata automaticamente alla scadenza.
+Se è presente un piano di ammortamento personalizzato (vedi 10.5), il sistema utilizzerà l'importo esatto previsto per quella specifica scadenza e aggiornerà lo stato della rata nel piano.
+
+### 10.5 Piano di Ammortamento Personalizzato
+
+Puoi caricare o gestire manualmente il piano di ammortamento per avere calcoli precisi su quota capitale e interessi.
+
+1.  Apri il dettaglio del prestito (Modifica).
+2.  Clicca su **"Gestisci Piano Ammortamento"** (visibile subito sotto la descrizione).
+3.  Nel dialog che si apre:
+    *   **Importa CSV**: Carica un file CSV con le colonne (Numero, Scadenza, Importo Rata, Quota Capitale, Quota Interessi, Debito Residuo).
+    *   **Aggiungi Rata**: Inserisci manualmente le singole rate.
+    *   **Modifica/Elimina**: Gestisci le rate esistenti.
+4.  Quando un piano è attivo, i campi riepilogativi del prestito (Rate residue, Importi) vengono calcolati automaticamente dal piano e "bloccati" per garantire coerenza.
+5.  Il sistema userà questi dati per il calcolo preciso del Patrimonio Netto personale e familiare.
 
 ---
 
@@ -507,5 +521,5 @@ La Recovery Key generata alla registrazione è l'unico modo per recuperare i tuo
 
 ---
 
-*Budget Amico - Versione 0.24*
+*Budget Amico - Versione 0.26*
 *Sviluppato con ❤️ da Iscavar79*

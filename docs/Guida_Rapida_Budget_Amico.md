@@ -115,6 +115,9 @@ Ora che hai completato i primi passi, ecco cosa puoi esplorare:
 ### Aggiungi Spese Fisse 📅
 Hai abbonamenti o bollette ricorrenti? Aggiungili in **"Spese Fisse"** per non dimenticarli mai!
 
+### Monitora Prestiti e Mutui 💳
+Tieni traccia dei tuoi finanziamenti caricando il **Piano di Ammortamento** per avere sempre sotto controllo il debito residuo reale.
+
 ### Invita la Famiglia 👨‍👩‍👧‍👦
 Se sei l'Admin della famiglia:
 1. Vai nel **Pannello Admin** → **"Gestione Membri"**
@@ -134,5 +137,5 @@ Personalizza lingua, valuta e altre preferenze nella sezione **"Impostazioni"**.
 
 ---
 
-*Budget Amico - Versione 0.24*
+*Budget Amico - Versione 0.26*
 *Sviluppato da Iscavar79*

@@ -162,12 +162,21 @@ class PrestitiTab(ft.Container):
                 self._crea_info_prestito(loc.get("financed_amount"),
                                          loc.format_currency(prestito['importo_finanziato']), theme),
                 self._crea_info_prestito(loc.get("remaining_amount"),
-                                         loc.format_currency(prestito['importo_residuo'] * (prestito['perc_famiglia'] / 100.0)),
+                                         loc.format_currency(float(prestito['importo_residuo']) * (prestito['perc_famiglia'] / 100.0)),
                                          theme, colore_valore=AppColors.ERROR),
             ]),
+            # Dettaglio Residuo (Capitale/Interessi) se disponibile da piano
+            ft.Row([
+                 self._crea_info_prestito("Residuo Capitale", 
+                                          loc.format_currency(float(prestito.get('capitale_residuo', 0)) * (prestito['perc_famiglia'] / 100.0)), 
+                                          theme, size_pk=12),
+                 self._crea_info_prestito("Residuo Interessi", 
+                                          loc.format_currency(float(prestito.get('interessi_residui', 0)) * (prestito['perc_famiglia'] / 100.0)), 
+                                          theme, size_pk=12)
+            ]) if prestito.get('capitale_residuo', 0) > 0 else ft.Container(),
             ft.Row([
                 self._crea_info_prestito(loc.get("monthly_installment"),
-                                         loc.format_currency(prestito['importo_rata'] * (prestito['perc_famiglia'] / 100.0)), theme),
+                                         loc.format_currency(float(prestito['importo_rata']) * (prestito['perc_famiglia'] / 100.0)), theme),
                 self._crea_info_prestito(loc.get("total_installments"), mesi_totali, theme),
             ]),
             ft.Column([
@@ -195,10 +204,10 @@ class PrestitiTab(ft.Container):
         
         return AppStyles.card_container(content, padding=15)
 
-    def _crea_info_prestito(self, etichetta, valore, theme, colore_valore=None):
+    def _crea_info_prestito(self, etichetta, valore, theme, colore_valore=None, size_pk=16):
         return ft.Column([
             AppStyles.caption_text(etichetta),
-            ft.Text(str(valore), size=16, weight=ft.FontWeight.BOLD, color=colore_valore)
+            ft.Text(str(valore), size=size_pk, weight=ft.FontWeight.BOLD, color=colore_valore)
         ], horizontal_alignment=ft.CrossAxisAlignment.START)
 
     def elimina_cliccato(self, e):
