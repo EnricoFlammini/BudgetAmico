@@ -58,6 +58,9 @@ class StoricoAssetSubTab(ft.Container):
                 ft.dropdown.Option("1y", "1 Anno"),
                 ft.dropdown.Option("2y", "2 Anni"),
                 ft.dropdown.Option("5y", "5 Anni"),
+                ft.dropdown.Option("10y", "10 Anni"),
+                ft.dropdown.Option("20y", "20 Anni"),
+                ft.dropdown.Option("25y", "25 Anni (Max)"),
             ],
             width=150,
             on_change=self._on_periodo_change
@@ -407,7 +410,8 @@ class StoricoAssetSubTab(ft.Container):
         # Mostra loading nel grafico
         self.grafico_container.content = ft.Column([
             ft.ProgressRing(),
-            ft.Text("Caricamento dati storici...", color=AppColors.TEXT_SECONDARY)
+            ft.Text("Caricamento dati storici (potrebbe richiedere qualche secondo)...", color=AppColors.TEXT_SECONDARY),
+            ft.Text("Sto scaricando 25 anni di storico per analisi avanzate.", size=12, color=AppColors.TEXT_SECONDARY, italic=True)
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER)
         
         if self.page:
@@ -458,8 +462,14 @@ class StoricoAssetSubTab(ft.Container):
             data_inizio = (oggi - timedelta(days=365)).strftime('%Y-%m-%d')
         elif self.periodo == "2y":
             data_inizio = (oggi - timedelta(days=730)).strftime('%Y-%m-%d')
-        else:  # 5y
+        elif self.periodo == "5y":
             data_inizio = (oggi - timedelta(days=1825)).strftime('%Y-%m-%d')
+        elif self.periodo == "10y":
+             data_inizio = (oggi - timedelta(days=3650)).strftime('%Y-%m-%d')
+        elif self.periodo == "20y":
+             data_inizio = (oggi - timedelta(days=7300)).strftime('%Y-%m-%d')
+        else:  # 25y or fallback
+            data_inizio = (oggi - timedelta(days=9125)).strftime('%Y-%m-%d')
         
         task = AsyncTask(
             target=self._genera_grafico_task,
@@ -568,7 +578,13 @@ class StoricoAssetSubTab(ft.Container):
         
         self.aggiornamento_in_corso = True
         self.btn_aggiorna.disabled = True
-        self.controller.show_snack_bar("Aggiornamento dati in corso...", success=True)
+        
+        # Mostra loading esplicito nel container del grafico
+        self.grafico_container.content = ft.Column([
+            ft.ProgressRing(),
+            ft.Text("Aggiornamento dati in corso...", color=AppColors.TEXT_SECONDARY, weight=ft.FontWeight.BOLD),
+            ft.Text("Download dello storico completo (fino a 25 anni). Attendere...", size=12, color=AppColors.TEXT_SECONDARY)
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER)
         
         if self.page:
             self.page.update()
@@ -585,7 +601,7 @@ class StoricoAssetSubTab(ft.Container):
         """Aggiorna dati in background."""
         aggiornati = 0
         for ticker in tickers:
-            if aggiorna_storico_asset_se_necessario(ticker, anni=5):
+            if aggiorna_storico_asset_se_necessario(ticker, anni=25):
                 aggiornati += 1
                 # Invalida la cache per questo ticker
                 if ticker in self._cache_storico:

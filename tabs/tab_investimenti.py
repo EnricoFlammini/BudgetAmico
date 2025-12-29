@@ -11,6 +11,7 @@ from utils.yfinance_manager import ottieni_prezzo_asset, ottieni_prezzi_multipli
 from dialogs.investimento_dialog import InvestimentoDialog
 from utils.async_task import AsyncTask
 from tabs.subtab_storico_asset import StoricoAssetSubTab
+from tabs.subtab_monte_carlo import MonteCarloSubTab
 import datetime
 
 
@@ -25,8 +26,9 @@ class InvestimentiTab(ft.Container):
         self.txt_gain_loss_totale = AppStyles.body_text("")
         self.lv_portafogli = ft.Column(expand=True, scroll=ft.ScrollMode.ADAPTIVE, spacing=15)
         
-        # Sotto-tab Storico
+        # Sotto-tab
         self.storico_subtab = StoricoAssetSubTab(controller)
+        self.monte_carlo_subtab = MonteCarloSubTab(controller)
         
         # Container per contenuto portafoglio
         self.portafoglio_content = ft.Column(expand=True, spacing=10)
@@ -46,6 +48,11 @@ class InvestimentiTab(ft.Container):
                     icon=ft.Icons.SHOW_CHART,
                     content=ft.Container(content=self.storico_subtab, padding=10, expand=True)
                 ),
+                ft.Tab(
+                    text="Analisi Monte Carlo",
+                    icon=ft.Icons.INSIGHTS,
+                    content=ft.Container(content=self.monte_carlo_subtab, padding=10, expand=True)
+                ),
             ],
             expand=True,
             on_change=self._on_tab_change
@@ -61,6 +68,9 @@ class InvestimentiTab(ft.Container):
         if e.control.selected_index == 1:
             # Carica dati storico quando si passa alla tab
             self.storico_subtab.update_view_data()
+        elif e.control.selected_index == 2:
+            # Carica dati Monte Carlo
+            self.monte_carlo_subtab.update_view_data()
 
     def update_view_data(self, is_initial_load=False):
         """

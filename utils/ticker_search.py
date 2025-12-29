@@ -21,7 +21,7 @@ class TickerSearchField(ft.Column):
         on_select: Callable[[dict], None],
         controller=None,  # Controller per riferimento stabile a page
         label: str = "Cerca ticker",
-        hint_text: str = "es. Apple, AAPL, Amazon...",
+        hint_text: str = "es. Apple, AAPL, ISIN (IT...)",
         width: int = 300,
         show_borsa: bool = True,
     ):

@@ -6556,8 +6556,14 @@ def check_e_processa_spese_fisse(id_famiglia, master_key_b64=None, id_utente=Non
 
 # --- FUNZIONI STORICO ASSET GLOBALE (cross-famiglia) ---
 
+_TABELLA_STORICO_CREATA = False
+
 def _crea_tabella_storico_asset_globale():
     """Crea la tabella StoricoAssetGlobale se non esiste."""
+    global _TABELLA_STORICO_CREATA
+    if _TABELLA_STORICO_CREATA:
+        return True
+        
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -6574,6 +6580,7 @@ def _crea_tabella_storico_asset_globale():
             cur.execute("CREATE INDEX IF NOT EXISTS idx_storico_ticker ON StoricoAssetGlobale(ticker);")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_storico_data ON StoricoAssetGlobale(data);")
             con.commit()
+            _TABELLA_STORICO_CREATA = True
             return True
     except Exception as e:
         print(f"[ERRORE] Errore creazione tabella StoricoAssetGlobale: {e}")
@@ -6582,22 +6589,39 @@ def _crea_tabella_storico_asset_globale():
 
 def _pulisci_storico_vecchio():
     """
-    Elimina i record più vecchi di 5 anni dalla tabella StoricoAssetGlobale.
-    Chiamata automaticamente ad ogni accesso per mantenere il DB leggero.
+    Ottimizza lo storico conservando:
+    - Ultimi 5 anni: dettaglio giornaliero
+    - Da 5 a 25 anni: dettaglio mensile (solo primo del mese)
+    - Oltre 25 anni: elimina
     """
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            # Calcola la data limite (5 anni fa)
-            data_limite = (datetime.date.today() - datetime.timedelta(days=1825)).strftime('%Y-%m-%d')
-            cur.execute("DELETE FROM StoricoAssetGlobale WHERE data < %s", (data_limite,))
+            
+            # 1. Elimina dati più vecchi di 25 anni (pulizia profonda)
+            data_limite_25y = (datetime.date.today() - datetime.timedelta(days=365*25)).strftime('%Y-%m-%d')
+            cur.execute("DELETE FROM StoricoAssetGlobale WHERE data < %s", (data_limite_25y,))
+            
+            # 2. Downsampling: per dati più vecchi di 5 anni, mantieni solo il 1° del mese
+            # Nota: SQLite strftime('%d', data) ritorna il giorno. Se != '01', eliminiamo.
+            data_limite_5y = (datetime.date.today() - datetime.timedelta(days=365*5)).strftime('%Y-%m-%d')
+            
+            # Query ottimizzata: elimina record vecchi che NON sono il primo del mese
+            # Postgres syntax: EXTRACT(DAY FROM data) returns numeric day (1-31)
+            cur.execute("""
+                DELETE FROM StoricoAssetGlobale 
+                WHERE data < %s 
+                  AND EXTRACT(DAY FROM data) != 1
+            """, (data_limite_5y,))
+            
             eliminati = cur.rowcount
             if eliminati > 0:
-                print(f"[INFO] Eliminati {eliminati} record storici più vecchi di 5 anni")
+                print(f"[INFO] Ottimizzazione storico: rimossi {eliminati} record giornalieri vecchi")
+            
             con.commit()
             return eliminati
     except Exception as e:
-        print(f"[ERRORE] Errore pulizia storico vecchio: {e}")
+        print(f"[ERRORE] Errore ottimizzazione storico vecchio: {e}")
         return 0
 
 
@@ -6685,12 +6709,6 @@ def ottieni_storico_asset_globale(ticker: str, data_inizio: str = None, data_fin
 def ultimo_aggiornamento_storico(ticker: str):
     """
     Restituisce la data dell'ultimo record per il ticker.
-    
-    Args:
-        ticker: Il ticker dell'asset
-    
-    Returns:
-        Data come stringa 'YYYY-MM-DD' o None se non esiste
     """
     # Assicurati che la tabella esista
     _crea_tabella_storico_asset_globale()
@@ -6698,9 +6716,7 @@ def ultimo_aggiornamento_storico(ticker: str):
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("""
-                SELECT MAX(data) as ultima_data FROM StoricoAssetGlobale WHERE ticker = %s
-            """, (ticker.upper(),))
+            cur.execute("SELECT MAX(data) as ultima_data FROM StoricoAssetGlobale WHERE ticker = %s", (ticker.upper(),))
             result = cur.fetchone()
             if result and result['ultima_data']:
                 return str(result['ultima_data'])
@@ -6709,44 +6725,110 @@ def ultimo_aggiornamento_storico(ticker: str):
         print(f"[ERRORE] Errore recupero ultimo aggiornamento storico: {e}")
         return None
 
+def _data_piu_vecchia_storico(ticker: str):
+    """
+    Restituisce la data del record più vecchio per il ticker.
+    """
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT MIN(data) as prima_data FROM StoricoAssetGlobale WHERE ticker = %s", (ticker.upper(),))
+            result = cur.fetchone()
+            if result and result['prima_data']:
+                return str(result['prima_data'])
+            return None
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero data più vecchia storico: {e}")
+        return None
 
-def aggiorna_storico_asset_se_necessario(ticker: str, anni: int = 5):
+
+def aggiorna_storico_asset_se_necessario(ticker: str, anni: int = 25):
     """
-    Aggiorna lo storico di un asset da yfinance se necessario.
-    Scarica SOLO i giorni mancanti per ottimizzare le chiamate.
-    
-    Args:
-        ticker: Il ticker dell'asset
-        anni: Numero di anni di storico (default 5)
-    
-    Returns:
-        True se è stato effettuato un aggiornamento, False altrimenti
+    Aggiorna lo storico di un asset da yfinance.
+    Strategia ibrida:
+    - Se nuovo: scarica 25 anni mensili + 5 anni giornalieri.
+    - Se esistente: aggiorna incrementalmente (giornaliero).
     """
-    from utils.yfinance_manager import ottieni_storico_asset
-    
-    # Prima pulisci i dati vecchi
+    # Prima ottimizza i dati vecchi (downsampling)
     _pulisci_storico_vecchio()
     
     ultima_data = ultimo_aggiornamento_storico(ticker)
-    oggi = datetime.date.today().strftime('%Y-%m-%d')
+    prima_data = _data_piu_vecchia_storico(ticker)
     
-    # Se non abbiamo dati, scarica tutto lo storico (5 anni)
-    if not ultima_data:
-        print(f"[INFO] Download completo storico per {ticker} (prima volta)...")
-        dati = ottieni_storico_asset(ticker, anni)
-        if dati:
-            inseriti = salva_storico_asset_globale(ticker, dati)
-            print(f"[INFO] Salvati {inseriti} record per {ticker}")
-            return True
+    oggi = datetime.date.today()
+    oggi_str = oggi.strftime('%Y-%m-%d')
+    
+    # Calcola data target di inizio
+    target_start_date = (oggi - datetime.timedelta(days=anni*365)).strftime('%Y-%m-%d')
+    
+    # Recupera data inizio trading effettiva dell'asset (inception date)
+    from utils.yfinance_manager import ottieni_data_inizio_trading
+    inception_date = ottieni_data_inizio_trading(ticker)
+    
+    # Se abbiamo una inception date, la data target non può essere precedente ad essa
+    if inception_date and inception_date > target_start_date:
+        target_start_date = inception_date
+        # Buffer di sicurezza: se inception è 2019-01-01, e noi abbiamo 2019-01-05, è ok.
+    
+    # Condizione per download completo:
+    # 1. Non abbiamo dati (ultima_data is None)
+    # 2. Oppure i dati che abbiamo sono troppo recenti RISPETTO AL POSSIBILE (target_start_date)
+    #    Questo significa che l'utente ha chiesto 25 anni ma noi ne abbiamo meno, ED ESISTONO DATI PIÙ VECCHI.
+    
+    manca_storico_profondo = False
+    if prima_data:
+        # Se la data più vecchia che abbiamo è POSTERIORE alla valid start date (con un margine di tolleranza di 30gg)
+        # Esempio A: Asset vecchio (es. MSFT inizia 1986). Target: 2000. PrimaData: 2020. -> 2020 > 2000 -> MANCA.
+        # Esempio B: Asset nuovo (es. VWCE inizia 2019). Target: 2019. PrimaData: 2019-07. -> 2019-07 > 2019-06 (presunto) -> Forse manca qualche mese.
+        # Se PrimaData è 2019-07-23 e Inception è 2019-07-23 -> OK (differenza < 30gg)
+        
+        limit_date_dt = datetime.datetime.strptime(target_start_date, '%Y-%m-%d') + datetime.timedelta(days=30)
+        limit_date = limit_date_dt.strftime('%Y-%m-%d')
+        
+        manca_storico_profondo = prima_data > limit_date
+    
+    # --- CASO 1: PRIMA IMPORTAZIONE O STORICO INSUFFICIENTE ---
+    if not ultima_data or manca_storico_profondo:
+        print(f"[INFO] Download completo storico {anni}y per {ticker} (Depth check: {manca_storico_profondo})...")
+        inseriti_tot = 0
+        
+        # 1. Scarica storico lungo (es. 25 anni) a risoluzione MENSILE
+        # Usiamo richiesta diretta per specificare l'intervallo '1mo'
+        try:
+            import requests
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            
+            # Scarica anni richiesti mensili
+            params_long = {'interval': '1mo', 'range': f'{anni}y'}
+            resp_long = requests.get(url, headers=headers, params=params_long, timeout=15)
+            if resp_long.status_code == 200:
+                dati_long = _estrai_dati_da_risposta_yf(resp_long.json())
+                if dati_long:
+                    inseriti_tot += salva_storico_asset_globale(ticker, dati_long)
+                    print(f"      - Salvati {len(dati_long)} punti mensili (base storica)")
+        
+            # 2. Scarica ultimi 5 anni a risoluzione GIORNALIERA (sovrascrive/dettaglia i recenti)
+            # Solo se anni > 5, altrimenti il range è quello richiesto
+            if anni >= 5:
+                params_short = {'interval': '1d', 'range': '5y'}
+                resp_short = requests.get(url, headers=headers, params=params_short, timeout=15)
+                if resp_short.status_code == 200:
+                    dati_short = _estrai_dati_da_risposta_yf(resp_short.json())
+                    if dati_short:
+                        inseriti_tot += salva_storico_asset_globale(ticker, dati_short)
+                        print(f"      - Salvati {len(dati_short)} punti giornalieri (dettaglio recente)")
+            
+            return inseriti_tot > 0
+            
+        except Exception as e:
+            print(f"[ERRORE] Errore download base {ticker}: {e}")
+            return False
+
+    # --- CASO 2: AGGIORNAMENTO INCREMENTALE (Solo se abbiamo già storico profondo) ---
+    if ultima_data >= oggi_str:
         return False
     
-    # Se l'ultimo dato è già di oggi, non serve aggiornare
-    if ultima_data >= oggi:
-        print(f"[INFO] Storico {ticker} già aggiornato")
-        return False
-    
-    # Altrimenti scarica solo i giorni mancanti (aggiornamento incrementale)
-    # Calcoliamo quanti giorni mancano
     from datetime import datetime as dt
     ultima_dt = dt.strptime(ultima_data, '%Y-%m-%d')
     oggi_dt = dt.strptime(oggi, '%Y-%m-%d')
@@ -6755,58 +6837,59 @@ def aggiorna_storico_asset_se_necessario(ticker: str, anni: int = 5):
     if giorni_mancanti <= 0:
         return False
     
-    # Scarica solo gli ultimi N giorni (usiamo un range più breve)
-    print(f"[INFO] Aggiornamento incrementale {ticker}: {giorni_mancanti} giorni mancanti...")
+    print(f"[INFO] Aggiornamento incrementale {ticker}: +{giorni_mancanti} giorni")
     
-    # yfinance accetta solo periodi standard, usiamo il più piccolo che copra i giorni
-    if giorni_mancanti <= 5:
-        range_yf = '5d'
-    elif giorni_mancanti <= 30:
-        range_yf = '1mo'
-    elif giorni_mancanti <= 90:
-        range_yf = '3mo'
-    else:
-        range_yf = '6mo'
+    # Determina range minimo per coprire il buco
+    if giorni_mancanti <= 5: range_yf = '5d'
+    elif giorni_mancanti <= 30: range_yf = '1mo'
+    elif giorni_mancanti <= 90: range_yf = '3mo'
+    elif giorni_mancanti <= 180: range_yf = '6mo'
+    elif giorni_mancanti <= 365: range_yf = '1y'
+    else: range_yf = '5y' # Se manca più di un anno, riscarica 5y
     
-    # Chiamata diretta all'API con range personalizzato
     try:
         import requests
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        headers = {'User-Agent': 'Mozilla/5.0'}
         params = {'interval': '1d', 'range': range_yf}
         
         response = requests.get(url, headers=headers, params=params, timeout=15)
-        response.raise_for_status()
-        data = response.json()
-        
-        dati_nuovi = []
+        if response.status_code == 200:
+            dati_raw = _estrai_dati_da_risposta_yf(response.json())
+            # Filtra solo i dati veramente nuovi (> ultima_data)
+            dati_nuovi = [d for d in dati_raw if d['data'] > ultima_data]
+            
+            if dati_nuovi:
+                salva_storico_asset_globale(ticker, dati_nuovi)
+                return True
+                
+        return False
+    except Exception as e:
+        print(f"[ERRORE] Errore update {ticker}: {e}")
+        return False
+
+def _estrai_dati_da_risposta_yf(data: dict) -> list:
+    """Helper per estrarre lista {data, prezzo} dal JSON grezzo di YF."""
+    results = []
+    try:
         if 'chart' in data and 'result' in data['chart'] and data['chart']['result']:
-            result = data['chart']['result'][0]
-            if 'timestamp' in result and 'indicators' in result:
-                timestamps = result['timestamp']
-                quotes = result['indicators']['quote'][0]
+            res = data['chart']['result'][0]
+            if 'timestamp' in res and 'indicators' in res:
+                timestamps = res['timestamp']
+                quotes = res['indicators']['quote'][0]
                 closes = quotes.get('close', [])
                 
+                from datetime import datetime as dt
                 for i, ts in enumerate(timestamps):
                     if i < len(closes) and closes[i] is not None:
                         data_str = dt.fromtimestamp(ts).strftime('%Y-%m-%d')
-                        # Filtra solo i nuovi dati
-                        if data_str > ultima_data:
-                            dati_nuovi.append({
-                                'data': data_str,
-                                'prezzo': float(closes[i])
-                            })
-        
-        if dati_nuovi:
-            inseriti = salva_storico_asset_globale(ticker, dati_nuovi)
-            print(f"[INFO] Aggiunti {inseriti} nuovi record per {ticker}")
-            return True
-        
-        return False
-        
-    except Exception as e:
-        print(f"[ERRORE] Errore aggiornamento incrementale {ticker}: {e}")
-        return False
+                        results.append({
+                            'data': data_str,
+                            'prezzo': float(closes[i])
+                        })
+    except Exception:
+        pass
+    return results
 
 
 # --- MAIN ---
