@@ -137,5 +137,5 @@ Personalizza lingua, valuta e altre preferenze nella sezione **"Impostazioni"**.
 
 ---
 
-*Budget Amico - Versione 0.26*
+*Budget Amico - Versione 0.27*
 *Sviluppato da Iscavar79*

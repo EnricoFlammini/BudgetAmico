@@ -214,6 +214,21 @@ BudgetAmico/
 
 ---
 
+## 📊 Novità Versione 0.27
+
+### Analisi Storica Avanzata
+-   **Storico Esteso a 25 Anni**: È ora possibile visualizzare l'andamento storico degli asset fino a 25 anni (con opzioni 10y, 20y, 25y).
+-   **Ottimizzazione Dati**: I dati salvati utilizzano una risoluzione ibrida (giornaliera recenti, mensile storici) per garantire velocità e leggerezza.
+-   **Download Intelligente**: Il sistema riconosce la data di inizio trading (inception date) di ogni asset, evitando tentativi inutili di scaricare dati storici inesistenti.
+
+### Ricerca Asset Potenziata
+-   **Supporto ISIN Migliorato**: La ricerca ticker ora gestisce correttamente gli ISIN con o senza suffissi di borsa (es. `IT...` o `IT....MI`), verificandoli direttamente su Yahoo Finance se la ricerca standard fallisce.
+
+### Analisi Monte Carlo
+-   **Robustezza Migliorata**: Le simulazioni Monte Carlo ora utilizzano dati ricampionati su base mensile per garantire coerenza statistica anche su periodi lunghi e misti.
+
+---
+
 ## 📊 Novità Versione 0.26
 
 ### Piani Ammortamento Personalizzati

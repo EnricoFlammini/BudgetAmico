@@ -305,6 +305,20 @@ Per ogni portafoglio puoi vedere:
 - Gain/Loss (guadagno o perdita)
 - Percentuale di rendimento
 
+### 9.6 Analisi Storica Avanzata
+
+Nel tab "Andamento Storico" puoi visualizzare il grafico dei prezzi degli asset selezionati:
+- **Periodi estesi**: Seleziona periodi fino a **25 anni** (10y, 20y, 25y) per analisi di lungo termine.
+- **Risoluzione mista**: Il sistema carica dati giornalieri per gli ultimi 5 anni e mensili per lo storico profondo, garantendo velocità.
+- **Download intelligente**: Se un asset è nato di recente (es. 2019), il sistema lo riconosce ed evita download inutili di dati inesistenti.
+
+### 9.7 Simulazione Monte Carlo
+
+Il tab "Monte Carlo" permette di proiettare l'andamento futuro del tuo portafoglio:
+- **Simulazione Statistica**: Esegue migliaia di simulazioni basate sulla volatilità e rendimento storico dei tuoi asset.
+- **Dati Mensili**: Utilizza rendimenti mensili per una maggiore robustezza statistica su lunghi periodi.
+- **Analisi del Rischio**: Visualizza i possibili scenari futuri (pessimistico, medio, ottimistico) per pianificare i tuoi obiettivi.
+
 ---
 
 ## 10. Prestiti e Mutui
@@ -521,5 +535,5 @@ La Recovery Key generata alla registrazione è l'unico modo per recuperare i tuo
 
 ---
 
-*Budget Amico - Versione 0.26*
+*Budget Amico - Versione 0.27*
 *Sviluppato con ❤️ da Iscavar79*
