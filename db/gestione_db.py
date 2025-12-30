@@ -5542,18 +5542,22 @@ def ottieni_portafoglio(id_conto_investimento, master_key_b64=None):
                 encryption_key = _get_key_for_transaction(id_conto_investimento, master_key, crypto)
                 
                 for row in results:
+                    # Preserve original encrypted values for fallback
+                    ticker_orig = row['ticker']
+                    nome_asset_orig = row['nome_asset']
+
                     # Try encryption_key first (could be Family key)
-                    row['ticker'] = _decrypt_if_key(row['ticker'], encryption_key, crypto, silent=True)
-                    row['nome_asset'] = _decrypt_if_key(row['nome_asset'], encryption_key, crypto, silent=True)
+                    row['ticker'] = _decrypt_if_key(ticker_orig, encryption_key, crypto, silent=True)
+                    row['nome_asset'] = _decrypt_if_key(nome_asset_orig, encryption_key, crypto, silent=True)
                     
                     # Fallback to master_key if failed (and keys are different)
                     if encryption_key != master_key:
                         if row['ticker'] == "[ENCRYPTED]" or row['ticker'].startswith("gAAAAA"):
-                             decrypted = _decrypt_if_key(row['ticker_orig'] if 'ticker_orig' in row else row['ticker'], master_key, crypto, silent=True)
+                             decrypted = _decrypt_if_key(ticker_orig, master_key, crypto, silent=True)
                              if decrypted and decrypted != "[ENCRYPTED]": row['ticker'] = decrypted
                         
                         if row['nome_asset'] == "[ENCRYPTED]" or row['nome_asset'].startswith("gAAAAA"):
-                             decrypted = _decrypt_if_key(row['nome_asset_orig'] if 'nome_asset_orig' in row else row['nome_asset'], master_key, crypto, silent=True)
+                             decrypted = _decrypt_if_key(nome_asset_orig, master_key, crypto, silent=True)
                              if decrypted and decrypted != "[ENCRYPTED]": row['nome_asset'] = decrypted
             
             # Sort by ticker (in Python because DB has encrypted data)
