@@ -214,6 +214,23 @@ BudgetAmico/
 
 ---
 
+## 📊 Novità Versione 0.28
+
+### Pagina Budget Ridisegnata
+-   **Nuova Logica Colori**: Semplificazione visiva con indicatori di stato più chiari (Verde: OK, Giallo: >100%, Rosso: >110%).
+-   **Riepilogo Totale**: Nuova card "Budget Totale" che aggrega limiti e spese di tutte le categorie.
+-   **Drilldown Categorie**: Cliccando su una categoria è ora possibile espandere/collassare la vista per mostrare le sottocategorie, mantenendo l'interfaccia pulita.
+
+### Sidebar Collassabile
+-   **Modalità Compatta**: La barra laterale è ora compressa di default per massimizzare lo spazio utile su schermo.
+-   **Menu Toggle**: Nuovo pulsante nell'AppBar per espandere temporaneamente il menu e visualizzare le etichette di testo.
+-   **Tooltip**: In modalità compatta, passando il mouse sulle icone viene mostrato il nome della sezione.
+
+### Ottimizzazione
+-   **Eseguibile Ottimizzato**: Riduzione significativa delle dimensioni del file `.exe` (~30-40%) grazie alla rimozione di librerie inutilizzate.
+
+---
+
 ## 📊 Novità Versione 0.27
 
 ### Analisi Storica Avanzata

@@ -1,4 +1,4 @@
-﻿# -*- mode: python ; coding: utf-8 -*-
+# -*- mode: python ; coding: utf-8 -*-
 
 VERSION = '0.28.00'
 
@@ -7,40 +7,25 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[('assets', 'assets'), ('docs', 'docs'), ('.env', '.')],
-    hiddenimports=[
-        'yfinance', 
-        'dotenv', 
-        'pg8000', 
-        'scramp', 
-        'matplotlib', 
-        'matplotlib.pyplot', 
-        'matplotlib.backends.backend_agg'
-    ],
+    hiddenimports=['yfinance', 'dotenv', 'pg8000', 'scramp', 'matplotlib', 'matplotlib.pyplot', 'matplotlib.backends.backend_agg'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # Test & Dev
-        'pytest', 'unittest', 'test', 'tests', 'pandas.tests', 'numpy.tests',
-        # UI non usata
+        # Moduli di test e sviluppo
+        'pytest', 'unittest', 'test', 'tests',
+        # Moduli non necessari
         'tkinter', 'tcl', 'tk',
-        # Scientific Heavyweights (se non usati)
-        'scipy', 
-        # Interactive / Notebooks
-        'IPython', 'jupyter', 'notebook', 'nbconvert', 'nbformat',
-        # Doc tools
+        'IPython', 'jupyter', 'notebook',
         'sphinx', 'docutils',
-        # Packaging
-        'setuptools', 'pip', 'wheel', 'pkg_resources',
-        # Linting
+        'setuptools', 'pip', 'wheel',
+        # Pre-commit e linting
         'pre_commit', 'black', 'flake8', 'pylint', 'mypy',
-        # Legacy DB
+        # psycopg2 non piu usato
         'psycopg2', 'psycopg2_binary',
-        # Altre potenziali
-        'curses', 'pyreadline'
     ],
     noarchive=False,
-    optimize=0, # Ottimizzazione bytecode (0 = mantieni docstrings per Numpy)
+    optimize=0,
 )
 pyz = PYZ(a.pure)
 

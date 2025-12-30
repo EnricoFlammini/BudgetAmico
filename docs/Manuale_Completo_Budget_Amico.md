@@ -1,4 +1,4 @@
-# Manuale Completo - Budget Amico
+# Manuale Completo - Budget Amico v0.28
 
 ## Indice
 
@@ -107,7 +107,8 @@ La dashboard è composta da:
 
 ### 3.3 Navigazione Sidebar
 
-La sidebar mostra le sezioni disponibili in base al tuo ruolo:
+La sidebar mostra le sezioni disponibili in base al tuo ruolo.
+*   **Novità v0.28**: La sidebar è **collassabile**. Per default è compatta (solo icone). Clicca sul pulsante **Menu** (☰) in alto a sinistra per espanderla e leggere le etichette.
 
 - **Tutti gli utenti**: Conti, Spese Fisse, Impostazioni
 - **Livello 2+**: Budget, Investimenti, Prestiti, Immobili, Famiglia
@@ -214,22 +215,32 @@ Il giroconto crea automaticamente due transazioni collegate.
 
 ## 7. Budget Mensile
 
-### 7.1 Impostare un Budget
+## 7. Budget Mensile
 
-1. Vai nella sezione **"Budget"**
-2. Per ogni sottocategoria, clicca sull'importo budget
-3. Inserisci il limite mensile desiderato
-4. Clicca fuori dal campo per salvare
+### 7.1 Nuova Interfaccia (v0.28)
+La pagina Budget è stata ridisegnata per offrirti una visione più chiara:
 
-### 7.2 Monitorare le Spese
+1.  **Riepilogo Totale**: In cima alla lista trovi una card "Budget Totale" che somma tutti i limiti e le spese del mese.
+2.  **Drilldown Categorie**: Le categorie sono inizialmente chiuse. Clicca su una categoria per **espanderla** e vedere le sottocategorie.
+3.  **Colori Intuitivi**:
+    *   🟢 **Verde**: Spesa OK (<= 100%).
+    *   🟡 **Giallo**: Attenzione (100% - 110%).
+    *   🔴 **Rosso**: Criticità (> 110%).
 
-La sezione Budget mostra:
-- **Barra di progresso**: colorata in base alla percentuale di utilizzo
-  - 🟢 Verde: < 75%
-  - 🟡 Giallo: 75-100%
-  - 🔴 Rosso: > 100%
-- **Importo speso** vs **Budget allocato**
-- **Riepilogo mensile**: totale entrate, spese, risparmio
+### 7.2 Impostare un Budget
+
+1.  Vai nella sezione **"Budget"**
+2.  Clicca sulla **Categoria** per espanderla
+3.  Clicca sull'importo "Budget" di una sottocategoria
+4.  Inserisci il nuovo limite e conferma
+
+### 7.3 Monitorare le Spese
+
+La sezione Budget mostra per ogni voce:
+- **Barra di progresso**: Colorata secondo la logica sopra descritta.
+- **Importo Speso / Budget**: Es. "€ 150 / € 200"
+- **Percentuale**: Es. "75%"
+- **Riepilogo mensile**: totale entrate, spese, risparmio (nella dashboard).
 
 ### 7.3 Analisi Annuale
 
@@ -535,5 +546,5 @@ La Recovery Key generata alla registrazione è l'unico modo per recuperare i tuo
 
 ---
 
-*Budget Amico - Versione 0.27*
+*Budget Amico - Versione 0.28*
 *Sviluppato con ❤️ da Iscavar79*

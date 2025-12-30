@@ -1,4 +1,4 @@
-# Guida Rapida - Budget Amico
+# Guida Rapida - Budget Amico v0.28
 
 ## Benvenuto in Budget Amico! 🎉
 
@@ -109,11 +109,9 @@ Ora che hai completato i primi passi, ecco cosa puoi esplorare:
 
 ### Imposta il tuo Budget 📊
 1. Vai nella sezione **"Budget"**
-2. Assegna un limite mensile a ogni categoria di spesa
-3. Monitora l'andamento con le barre di progresso
-
-### Aggiungi Spese Fisse 📅
-Hai abbonamenti o bollette ricorrenti? Aggiungili in **"Spese Fisse"** per non dimenticarli mai!
+2. Clicca su una categoria per **espanderla** (Drilldown)
+3. Assegna un limite mensile a ogni sottocategoria
+4. Monitora lo stato con i semafori: 🟢 Verde (OK), 🟡 Giallo (>100%), 🔴 Rosso (>110%)
 
 ### Monitora Prestiti e Mutui 💳
 Tieni traccia dei tuoi finanziamenti caricando il **Piano di Ammortamento** per avere sempre sotto controllo il debito residuo reale.
@@ -137,5 +135,5 @@ Personalizza lingua, valuta e altre preferenze nella sezione **"Impostazioni"**.
 
 ---
 
-*Budget Amico - Versione 0.27*
+*Budget Amico - Versione 0.28*
 *Sviluppato da Iscavar79*
