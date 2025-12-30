@@ -8,7 +8,7 @@ class PrestitiTab(ft.Container):
     def __init__(self, controller):
         super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
-        self.page = controller.page
+        self.controller.page = controller.page
 
         self.lv_prestiti = ft.Column(
             scroll=ft.ScrollMode.ADAPTIVE,
@@ -40,8 +40,8 @@ class PrestitiTab(ft.Container):
         self.lv_prestiti.controls.insert(0, header)
         self.lv_prestiti.controls.insert(1, AppStyles.page_divider())
 
-        if self.page:
-            self.page.update()
+        if self.controller.page:
+            self.controller.page.update()
 
         # 2. Prepara argomenti per il task
         id_famiglia = self.controller.get_family_id()
@@ -85,7 +85,7 @@ class PrestitiTab(ft.Container):
             if not prestiti:
                 self.lv_prestiti.controls.append(AppStyles.body_text(self.controller.loc.get("no_loans")))
             else:
-                theme = self.page.theme.color_scheme if self.page and self.page.theme else ft.ColorScheme()
+                theme = self.controller.page.theme.color_scheme if self.controller.page and self.controller.page.theme else ft.ColorScheme()
                 family_ids = [m['id_utente'] for m in membri]
 
                 for prestito in prestiti:
@@ -99,8 +99,8 @@ class PrestitiTab(ft.Container):
                     
                     self.lv_prestiti.controls.append(self._crea_widget_prestito(prestito, theme))
 
-            if self.page:
-                self.page.update()
+            if self.controller.page:
+                self.controller.page.update()
 
         except Exception as e:
             self._on_error(e)
@@ -110,8 +110,8 @@ class PrestitiTab(ft.Container):
         try:
             self.lv_prestiti.controls.clear()
             self.lv_prestiti.controls.append(AppStyles.body_text(f"Errore durante il caricamento: {e}", color=AppColors.ERROR))
-            if self.page:
-                self.page.update()
+            if self.controller.page:
+                self.controller.page.update()
         except:
             pass
 

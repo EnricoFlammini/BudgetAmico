@@ -23,7 +23,7 @@ class PersonaleTab(ft.Container):
         super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
 
         self.controller = controller
-        self.page = controller.page
+        self.controller.page = controller.page
         
         # Stato: True = vista compatta (riepilogo + 4 transazioni), False = vista espansa (tutte le transazioni)
         self.vista_compatta = True
@@ -72,9 +72,9 @@ class PersonaleTab(ft.Container):
 
     def _safe_update(self):
         """Esegue l'update della pagina gestendo errori di loop chiuso."""
-        if not self.page: return
+        if not self.controller.page: return
         try:
-            self.page.update()
+            self.controller.page.update()
         except RuntimeError as e:
             if "Event loop is closed" in str(e):
                 logger.debug("Tentativo di update a loop chiuso ignorato.")
@@ -99,7 +99,7 @@ class PersonaleTab(ft.Container):
         # Show loading
         self.main_view.visible = False
         self.loading_view.visible = True
-        if self.page:
+        if self.controller.page:
             self._safe_update()
 
         # Ottieni anno e mese dal dropdown, o usa il mese corrente come default
@@ -143,7 +143,7 @@ class PersonaleTab(ft.Container):
         # Hide loading
         self.loading_view.visible = False
         self.main_view.visible = True
-        if self.page:
+        if self.controller.page:
             self._safe_update()
 
     def _on_error(self, e):
@@ -151,7 +151,7 @@ class PersonaleTab(ft.Container):
         self.loading_view.visible = False
         self.main_view.controls = [AppStyles.body_text(f"Errore caricamento: {e}", color=AppColors.ERROR)]
         self.main_view.visible = True
-        if self.page:
+        if self.controller.page:
             self._safe_update()
 
     def _costruisci_vista_compatta(self, utente, riepilogo, loc):

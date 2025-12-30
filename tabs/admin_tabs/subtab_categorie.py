@@ -11,7 +11,7 @@ class AdminSubTabCategorie(ft.Column):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
-        self.page = controller.page
+        self.controller.page = controller.page
 
         # --- Controlli della Scheda ---
         self.txt_nuova_categoria = ft.TextField(label="Nome nuova categoria", expand=True)

@@ -14,7 +14,7 @@ class ContiTab(ft.Container):
     def __init__(self, controller):
         super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
-        self.page = controller.page
+        self.controller.page = controller.page
 
         # Controlli UI
         self.lv_conti_personali = ft.Column(expand=True, scroll=ft.ScrollMode.ADAPTIVE, spacing=10)
@@ -67,8 +67,8 @@ class ContiTab(ft.Container):
         # Show loading
         self.main_view.visible = False
         self.loading_view.visible = True
-        if self.page:
-            self.page.update()
+        if self.controller.page:
+            self.controller.page.update()
 
         # Async fetch
         task = AsyncTask(
@@ -97,16 +97,16 @@ class ContiTab(ft.Container):
         # Hide loading
         self.loading_view.visible = False
         self.main_view.visible = True
-        if self.page:
-            self.page.update()
+        if self.controller.page:
+            self.controller.page.update()
 
     def _on_error(self, e):
         print(f"Errore ContiTab: {e}")
         self.loading_view.visible = False
         self.main_view.controls = [AppStyles.body_text(f"Errore caricamento: {e}", color=AppColors.ERROR)]
         self.main_view.visible = True
-        if self.page:
-            self.page.update()
+        if self.controller.page:
+            self.controller.page.update()
 
     def build_controls(self, theme):
         # Deprecated

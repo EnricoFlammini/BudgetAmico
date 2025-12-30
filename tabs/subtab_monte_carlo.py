@@ -11,7 +11,7 @@ class MonteCarloSubTab(ft.Container):
     def __init__(self, controller):
         super().__init__(padding=10, expand=True)
         self.controller = controller
-        self.page = controller.page
+        self.controller.page = controller.page
         
         # Stato
         self.portfolio_assets = [] # Original data from DB: {ticker, nome, quantita, prezzo, is_favorite}
@@ -203,7 +203,7 @@ class MonteCarloSubTab(ft.Container):
         self.txt_info_storico.value = ""
         self.txt_valore_simulato.value = "Valore Iniziale: € 0,00"
         
-        if self.page: self.page.update()
+        if self.controller.page: self.controller.page.update()
         
         # Load Favorites from Client Storage
         self._load_favorites()
@@ -242,7 +242,7 @@ class MonteCarloSubTab(ft.Container):
     def _load_favorites(self):
         """Carica i preferiti dal local storage (condiviso con storico asset)."""
         try:
-            if self.page:
+            if self.controller.page:
                 utente_id = self.controller.get_user_id()
                 # Chiave unificata con StoricoAssetSubTab
                 key = f"storico_asset.preferiti.{utente_id}" if utente_id else "storico_asset.preferiti"

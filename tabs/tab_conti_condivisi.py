@@ -12,7 +12,7 @@ class ContiCondivisiTab(ft.Container):
     def __init__(self, controller):
         super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
-        self.page = controller.page
+        self.controller.page = controller.page
 
         self.lv_conti_condivisi = ft.Column(
             expand=True,
@@ -66,8 +66,8 @@ class ContiCondivisiTab(ft.Container):
         # Show loading
         self.main_view.visible = False
         self.loading_view.visible = True
-        if self.page:
-            self.page.update()
+        if self.controller.page:
+            self.controller.page.update()
 
         master_key_b64 = self.controller.page.session.get("master_key")
         
@@ -133,16 +133,16 @@ class ContiCondivisiTab(ft.Container):
         # Hide loading
         self.loading_view.visible = False
         self.main_view.visible = True
-        if self.page:
-            self.page.update()
+        if self.controller.page:
+            self.controller.page.update()
 
     def _on_error(self, e):
         print(f"Errore ContiCondivisiTab: {e}")
         self.loading_view.visible = False
         self.main_view.controls = [AppStyles.body_text(f"Errore caricamento: {e}", color=AppColors.ERROR)]
         self.main_view.visible = True
-        if self.page:
-            self.page.update()
+        if self.controller.page:
+            self.controller.page.update()
 
     def build_controls(self):
         """Deprecated."""

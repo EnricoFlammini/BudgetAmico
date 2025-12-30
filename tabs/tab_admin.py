@@ -20,7 +20,7 @@ class AdminTab(ft.Container):
     def __init__(self, controller):
         super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
-        self.page = controller.page
+        self.controller.page = controller.page
         
         self.tabs_admin = ft.Tabs(
             tabs=[],  # Verranno popolati dinamicamente

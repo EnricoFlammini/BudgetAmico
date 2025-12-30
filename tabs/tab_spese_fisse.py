@@ -17,7 +17,7 @@ class SpeseFisseTab(ft.Container):
     def __init__(self, controller):
         super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
-        self.page = controller.page
+        self.controller.page = controller.page
 
         # Controlli UI
         self.dt_spese_fisse = ft.DataTable(
@@ -70,8 +70,8 @@ class SpeseFisseTab(ft.Container):
         self.dt_spese_fisse.visible = False
         self.no_data_view.visible = False
         self.loading_view.visible = True
-        if self.page:
-            self.page.update()
+        if self.controller.page:
+            self.controller.page.update()
 
         master_key_b64 = self.controller.page.session.get("master_key")
         current_user_id = self.controller.get_user_id()

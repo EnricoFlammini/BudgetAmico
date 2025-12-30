@@ -19,7 +19,7 @@ class InvestimentiTab(ft.Container):
     def __init__(self, controller):
         super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
-        self.page = controller.page
+        self.controller.page = controller.page
 
         # Controlli UI Portafoglio
         self.txt_valore_totale = AppStyles.header_text("")
@@ -91,8 +91,8 @@ class InvestimentiTab(ft.Container):
                 padding=50
             )
         )
-        if self.page:
-            self.page.update()
+        if self.controller.page:
+            self.controller.page.update()
 
         utente_id = self.controller.get_user_id()
         if not utente_id:
@@ -171,8 +171,8 @@ class InvestimentiTab(ft.Container):
             self.txt_gain_loss_totale.value = f"{self.controller.loc.get('total_gain_loss')}: {self.controller.loc.format_currency(gain_loss_totale)}"
             self.txt_gain_loss_totale.color = AppColors.SUCCESS if gain_loss_totale >= 0 else AppColors.ERROR
 
-            if self.page:
-                self.page.update()
+            if self.controller.page:
+                self.controller.page.update()
 
         except Exception as e:
             self._on_error(e)
@@ -182,8 +182,8 @@ class InvestimentiTab(ft.Container):
         try:
             self.lv_portafogli.controls.clear()
             self.lv_portafogli.controls.append(AppStyles.body_text(f"Errore caricamento: {e}", color=AppColors.ERROR))
-            if self.page:
-                self.page.update()
+            if self.controller.page:
+                self.controller.page.update()
         except:
             pass
 
@@ -461,7 +461,7 @@ class InvestimentiTab(ft.Container):
             def on_save():
                 self.controller.db_write_operation()
                 
-            dialog = InvestimentoDialog(self.page, on_save)
+            dialog = InvestimentoDialog(self.controller.page, on_save)
             
             if hasattr(self.controller.page, "open"):
                 self.controller.page.open(dialog)
@@ -486,7 +486,7 @@ class InvestimentiTab(ft.Container):
             def on_save():
                 self.controller.db_write_operation()
                 
-            dialog = InvestimentoDialog(self.page, on_save, conto_da_modificare=conto_data)
+            dialog = InvestimentoDialog(self.controller.page, on_save, conto_da_modificare=conto_data)
             
             if hasattr(self.controller.page, "open"):
                 self.controller.page.open(dialog)

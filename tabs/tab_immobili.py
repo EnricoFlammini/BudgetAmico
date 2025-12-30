@@ -9,7 +9,7 @@ class ImmobiliTab(ft.Container):
     def __init__(self, controller):
         super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
-        self.page = controller.page
+        self.controller.page = controller.page
 
         self.lv_immobili = ft.Column(
             scroll=ft.ScrollMode.ADAPTIVE,
@@ -35,8 +35,8 @@ class ImmobiliTab(ft.Container):
             )
         )
         self.content.controls = [self.lv_immobili]
-        if self.page:
-            self.page.update()
+        if self.controller.page:
+            self.controller.page.update()
 
         # 2. Prepara argomenti per il task
         id_famiglia = self.controller.get_family_id()
@@ -76,7 +76,7 @@ class ImmobiliTab(ft.Container):
         # Poiché siamo in un thread separato, dobbiamo assicurarci di gestire eventuali errori di UI
         # Ma Flet gestisce page.update() thread-safe.
         try:
-            theme = self.page.theme.color_scheme if self.page and self.page.theme else ft.ColorScheme()
+            theme = self.controller.page.theme.color_scheme if self.controller.page and self.controller.page.theme else ft.ColorScheme()
             family_ids = [m['id_utente'] for m in membri]
 
             # Calcolo Totali

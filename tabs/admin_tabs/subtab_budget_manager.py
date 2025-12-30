@@ -27,7 +27,7 @@ class AdminSubTabBudgetManager(ft.Column):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
-        self.page = controller.page
+        self.controller.page = controller.page
         
         # --- Sezione 1: Entrate Mensili ---
         self.txt_entrate_mensili = ft.TextField(

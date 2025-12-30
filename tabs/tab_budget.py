@@ -13,7 +13,7 @@ class BudgetTab(ft.Container):
     def __init__(self, controller):
         super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
-        self.page = controller.page
+        self.controller.page = controller.page
         
         # --- Controlli di Navigazione ---
         self.seg_view_mode = ft.SegmentedButton(
@@ -108,8 +108,8 @@ class BudgetTab(ft.Container):
         mode = list(self.seg_view_mode.selected)[0]
         # Mostra il mese solo se non siamo in vista annuale
         self.dd_mese.visible = (mode != "annuale")
-        if self.page:
-            self.page.update()
+        if self.controller.page:
+            self.controller.page.update()
         self._aggiorna_contenuto()
 
     def _on_filter_change(self, e):
@@ -130,15 +130,15 @@ class BudgetTab(ft.Container):
                 padding=50
             )
         )
-        if self.page:
-            self.page.update()
+        if self.controller.page:
+            self.controller.page.update()
 
         id_famiglia = self.controller.get_family_id()
         if not id_famiglia:
             self.container_content.controls.clear()
             self.container_content.controls.append(ft.Text("Nessuna famiglia selezionata."))
-            if self.page:
-                self.page.update()
+            if self.controller.page:
+                self.controller.page.update()
             return
 
         master_key_b64 = self.controller.page.session.get("master_key")

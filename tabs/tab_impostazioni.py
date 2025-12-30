@@ -13,7 +13,7 @@ class ImpostazioniTab(ft.Container):
     def __init__(self, controller):
         super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
-        self.page = controller.page
+        self.controller.page = controller.page
         self.loc = controller.loc
 
         self.content = ft.Column(
@@ -96,8 +96,8 @@ class ImpostazioniTab(ft.Container):
             self.txt_nuova_password.value = ""
             self.txt_conferma_password.value = ""
             self.txt_conferma_password.error_text = None
-            if self.page:
-                self.page.update()
+            if self.controller.page:
+                self.controller.page.update()
         elif not successo_profilo:
             self.controller.show_snack_bar("Errore durante l'aggiornamento del profilo.", success=False)
 
@@ -219,8 +219,8 @@ class ImpostazioniTab(ft.Container):
                 padding=50
             )
         )
-        if self.page:
-            self.page.update()
+        if self.controller.page:
+            self.controller.page.update()
 
         utente_id = self.controller.get_user_id()
         master_key_b64 = self.controller.page.session.get("master_key")
@@ -279,8 +279,8 @@ class ImpostazioniTab(ft.Container):
                 self.txt_codice_fiscale.value = dati_utente.get("codice_fiscale", "")
                 self.txt_indirizzo.value = dati_utente.get("indirizzo", "")
 
-            if self.page:
-                self.page.update()
+            if self.controller.page:
+                self.controller.page.update()
         except Exception as e:
             self._on_error(e)
 
@@ -289,7 +289,7 @@ class ImpostazioniTab(ft.Container):
         try:
             self.content.controls.clear()
             self.content.controls.append(AppStyles.body_text(f"Errore durante il caricamento: {e}", color=AppColors.ERROR))
-            if self.page:
-                self.page.update()
+            if self.controller.page:
+                self.controller.page.update()
         except:
             pass

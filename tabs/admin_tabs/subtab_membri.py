@@ -10,7 +10,7 @@ class AdminSubTabMembri(ft.Column):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
-        self.page = controller.page
+        self.controller.page = controller.page
 
         # --- Controlli della Scheda ---
         self.lv_membri_famiglia = ft.Column(

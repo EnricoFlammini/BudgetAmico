@@ -24,7 +24,7 @@ class StoricoAssetSubTab(ft.Container):
     def __init__(self, controller):
         super().__init__(padding=10, expand=True)
         self.controller = controller
-        self.page = controller.page
+        self.controller.page = controller.page
         
         # Stato
         self.tutti_asset = []  # Lista di ticker disponibili

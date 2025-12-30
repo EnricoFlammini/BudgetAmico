@@ -13,7 +13,7 @@ class FamigliaTab(ft.Container):
     def __init__(self, controller):
         super().__init__(padding=PageConstants.PAGE_PADDING, expand=True)
         self.controller = controller
-        self.page = controller.page
+        self.controller.page = controller.page
 
         # Loading Indicator
         self.loading_view = ft.Container(
@@ -89,7 +89,7 @@ class FamigliaTab(ft.Container):
         # Show Loading
         self.main_content.visible = False
         self.loading_view.visible = True
-        if self.page: self.page.update()
+        if self.controller.page: self.controller.page.update()
         
         # Async Task
         from utils.async_task import AsyncTask
@@ -150,14 +150,14 @@ class FamigliaTab(ft.Container):
         # Hide Loading
         self.loading_view.visible = False
         self.main_content.visible = True
-        if self.page: self.page.update()
+        if self.controller.page: self.controller.page.update()
 
     def _on_error(self, e):
         print(f"Errore FamigliaTab: {e}")
         self.loading_view.visible = False
         self.main_content.controls = [AppStyles.body_text(f"Errore caricamento: {e}", color=AppColors.ERROR)]
         self.main_content.visible = True
-        if self.page: self.page.update()
+        if self.controller.page: self.controller.page.update()
 
     def _aggiorna_contenuto_per_ruolo(self, famiglia_id, ruolo, theme, data):
         if not famiglia_id:
