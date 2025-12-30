@@ -170,7 +170,7 @@ class AdminTab(ft.Container):
                     )
                 ], scroll=ft.ScrollMode.AUTO)
             )
-        )
+
         t_back.text = "Backup / Export"
         t_back.icon = ft.Icons.BACKUP
         tabs.append(t_back)
