@@ -48,9 +48,9 @@ class TickerSearchField(ft.Column):
         self.dd_risultati = ft.Dropdown(
             label="Seleziona ticker",
             width=width,
-            visible=False,
-            on_change=self._on_dropdown_change,
+            visible=False
         )
+        self.dd_risultati.on_change = self._on_dropdown_change
         
         self.controls = [
             self.txt_search,

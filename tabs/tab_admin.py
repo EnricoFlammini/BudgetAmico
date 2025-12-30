@@ -41,9 +41,9 @@ class AdminTab(ft.Container):
                 ft.dropdown.Option("icloud", "iCloud Mail"),
                 ft.dropdown.Option("custom", "Altro / Personalizzato"),
             ],
-            on_change=self._provider_email_cambiato,
             border_color=ft.Colors.OUTLINE
         )
+        self.dd_email_provider.on_change = self._provider_email_cambiato
         self.txt_smtp_server = ft.TextField(label="Server SMTP", border_color=ft.Colors.OUTLINE)
         self.txt_smtp_port = ft.TextField(label="Porta SMTP", border_color=ft.Colors.OUTLINE)
         self.txt_smtp_user = ft.TextField(label="Username / Email", border_color=ft.Colors.OUTLINE)

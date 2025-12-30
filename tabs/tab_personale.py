@@ -37,12 +37,11 @@ class PersonaleTab(ft.Container):
 
         # Filtro per mese
         self.dd_mese_filtro = ft.Dropdown(
-            on_change=self._filtro_mese_cambiato,
-            border_color=ft.Colors.OUTLINE,
-            text_size=14,
-            content_padding=10,
-            options=[]
+            options=[],
+            width=150,
+            label=self.controller.loc.get("month"),
         )
+        self.dd_mese_filtro.on_change = self._filtro_mese_cambiato
 
         self.lista_transazioni = ft.Column(
             scroll=ft.ScrollMode.ADAPTIVE,

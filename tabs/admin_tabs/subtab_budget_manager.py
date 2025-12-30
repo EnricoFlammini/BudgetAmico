@@ -47,9 +47,9 @@ class AdminSubTabBudgetManager(ft.Column):
                 ft.dropdown.Option("importo", "Importo Fisso (€)")
             ],
             value="percentuale",
-            width=200,
-            on_change=self._on_risparmio_tipo_change
+            width=200
         )
+        self.dd_risparmio_tipo.on_change = self._on_risparmio_tipo_change
         self.txt_risparmio_valore = ft.TextField(
             label="Valore Risparmio",
             keyboard_type=ft.KeyboardType.NUMBER,

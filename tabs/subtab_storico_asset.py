@@ -62,9 +62,9 @@ class StoricoAssetSubTab(ft.Container):
                 ft.dropdown.Option("20y", "20 Anni"),
                 ft.dropdown.Option("25y", "25 Anni (Max)"),
             ],
-            width=150,
-            on_change=self._on_periodo_change
+            width=150
         )
+        self.periodo_dropdown.on_change = self._on_periodo_change
         self.btn_genera = ft.ElevatedButton(
             "Genera Grafico",
             icon=ft.Icons.SHOW_CHART,

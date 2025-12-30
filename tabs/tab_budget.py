@@ -42,17 +42,17 @@ class BudgetTab(ft.Container):
         self.dd_mese = ft.Dropdown(
             label="Mese",
             width=150,
-            on_change=self._on_filter_change,
             text_size=14,
             options=[]
         )
+        self.dd_mese.on_change = self._on_filter_change
         self.dd_anno = ft.Dropdown(
             label="Anno",
             width=100,
-            on_change=self._on_filter_change,
             text_size=14,
             options=[]
         )
+        self.dd_anno.on_change = self._on_filter_change
         
         # --- Contenitore Principale ---
         self.container_content = ft.Column(expand=True, scroll=ft.ScrollMode.ADAPTIVE)

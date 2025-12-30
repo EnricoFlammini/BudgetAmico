@@ -32,11 +32,11 @@ class FamigliaTab(ft.Container):
         self.txt_investimenti_totali_famiglia = AppStyles.body_text("")
         
         self.dd_mese_filtro = ft.Dropdown(
-            on_change=self._filtro_mese_cambiato,
             border_color=ft.Colors.OUTLINE,
             text_size=14,
             content_padding=10
         )
+        self.dd_mese_filtro.on_change = self._filtro_mese_cambiato
         
         self.dt_transazioni_famiglia = ft.DataTable(
             columns=[ft.DataColumn(ft.Text("..."))],
