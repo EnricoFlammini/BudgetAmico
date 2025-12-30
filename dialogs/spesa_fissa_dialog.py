@@ -12,7 +12,7 @@ class SpesaFissaDialog(ft.AlertDialog):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
-        self.page = controller.page
+        # self.page = controller.page # Removed for Flet 0.80 compatibility
         self.loc = controller.loc
         self.modal = True
         self.title = ft.Text("Gestisci Spesa Fissa")

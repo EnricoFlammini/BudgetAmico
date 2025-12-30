@@ -20,7 +20,7 @@ from utils.email_sender import send_email
 class AdminDialogs:
     def __init__(self, controller):
         self.controller = controller
-        self.page = controller.page
+        # self.page = controller.page # Removed for Flet 0.80 compatibility
         self.loc = controller.loc
 
         # --- Dialogo Gestione Categoria ---

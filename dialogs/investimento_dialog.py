@@ -5,7 +5,7 @@ from db.gestione_db import aggiungi_conto, modifica_conto
 class InvestimentoDialog(ft.AlertDialog):
     def __init__(self, page, on_save, conto_da_modificare=None):
         super().__init__()
-        self.page = page
+        self.page_ref = page # Renamed to avoid read-only property conflict
         self.on_save = on_save
         self.conto_da_modificare = conto_da_modificare
         self.modal = True

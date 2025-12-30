@@ -12,7 +12,7 @@ from db.gestione_db import (
 class PianoAmmortamentoDialog:
     def __init__(self, controller):
         self.controller = controller
-        self.page = controller.page
+        # self.page = controller.page # Removed for Flet 0.80 compatibility
         self.loc = controller.loc
         self.id_prestito_corrente = None
         self.rate_correnti = []

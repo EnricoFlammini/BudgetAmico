@@ -20,7 +20,7 @@ class ContoDialog(ft.AlertDialog):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
-        self.page = controller.page
+        # self.page = controller.page # Removed for Flet 0.80 compatibility
         self.loc = controller.loc
         self.conto_id_in_modifica = None
         self.is_condiviso_in_modifica = False

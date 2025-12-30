@@ -18,7 +18,7 @@ from dialogs.piano_ammortamento_dialog import PianoAmmortamentoDialog
 class PrestitoDialogs:
     def __init__(self, controller):
         self.controller = controller
-        self.page = controller.page
+        # self.page = controller.page # Removed for Flet 0.80 compatibility
         self.loc = controller.loc
         self.prestito_in_modifica = None
         self.prestito_per_pagamento = None

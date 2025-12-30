@@ -17,7 +17,7 @@ from utils.ticker_search import TickerSearchField
 class PortafoglioDialogs:
     def __init__(self, controller):
         self.controller = controller
-        self.page = controller.page
+        # self.page = controller.page # Removed for Flet 0.80 compatibility
         self.loc = controller.loc
         self.conto_selezionato = None
 
