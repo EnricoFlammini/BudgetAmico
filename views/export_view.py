@@ -159,7 +159,7 @@ class ExportView:
                 chk.value = e.control.value
         self.lv_export_periodi.update()
 
-    def on_file_picker_result(self, e: ft.FilePickerResultEvent):
+    def on_file_picker_result(self, e):
         """ Callback gestito dall'AppController """
         pass
 

@@ -152,7 +152,7 @@ class AppController:
             # NOTE: info_dialog e loading_overlay sono gestiti dinamicamente
         ])
 
-    def on_file_picker_result(self, e: ft.FilePickerResultEvent):
+    def on_file_picker_result(self, e):
         try:
             file_data = self.page.session.get("excel_export_data")
             if e.path and file_data:
