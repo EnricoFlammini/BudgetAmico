@@ -39,18 +39,15 @@ class InvestimentiTab(ft.Container):
             animation_duration=300,
             tabs=[
                 ft.Tab(
-                    text="Portafoglio",
-                    icon=ft.Icons.ACCOUNT_BALANCE_WALLET,
+                    tab_content=ft.Row([ft.Icon(ft.Icons.ACCOUNT_BALANCE_WALLET), ft.Text("Portafoglio")]),
                     content=ft.Container(content=self.portafoglio_content, padding=10, expand=True)
                 ),
                 ft.Tab(
-                    text="Andamento Storico",
-                    icon=ft.Icons.SHOW_CHART,
+                    tab_content=ft.Row([ft.Icon(ft.Icons.SHOW_CHART), ft.Text("Andamento Storico")]),
                     content=ft.Container(content=self.storico_subtab, padding=10, expand=True)
                 ),
                 ft.Tab(
-                    text="Analisi Monte Carlo",
-                    icon=ft.Icons.INSIGHTS,
+                    tab_content=ft.Row([ft.Icon(ft.Icons.INSIGHTS), ft.Text("Analisi Monte Carlo")]),
                     content=ft.Container(content=self.monte_carlo_subtab, padding=10, expand=True)
                 ),
             ],

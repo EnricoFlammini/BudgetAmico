@@ -69,8 +69,7 @@ class AdminTab(ft.Container):
         loc = self.controller.loc
         return [
             ft.Tab(
-                text=loc.get("categories_management"),
-                icon=ft.Icons.CATEGORY,
+                tab_content=ft.Row([ft.Icon(ft.Icons.CATEGORY), ft.Text(loc.get("categories_management"))]),
                 content=ft.Column(expand=True, controls=[
                     ft.Row([
                         ft.Container(),  # Spacer
@@ -86,13 +85,11 @@ class AdminTab(ft.Container):
                 ])
             ),
             ft.Tab(
-                text="Gestione Budget",
-                icon=ft.Icons.ACCOUNT_BALANCE_WALLET,
+                tab_content=ft.Row([ft.Icon(ft.Icons.ACCOUNT_BALANCE_WALLET), ft.Text("Gestione Budget")]),
                 content=self.subtab_budget_manager
             ),
             ft.Tab(
-                text=loc.get("members_management"),
-                icon=ft.Icons.PEOPLE,
+                tab_content=ft.Row([ft.Icon(ft.Icons.PEOPLE), ft.Text(loc.get("members_management"))]),
                 content=ft.Column([
                     ft.Row([
                         ft.Container(),  # Spacer
@@ -108,8 +105,7 @@ class AdminTab(ft.Container):
                 ])
             ),
             ft.Tab(
-                text="Email / SMTP",
-                icon=ft.Icons.EMAIL,
+                tab_content=ft.Row([ft.Icon(ft.Icons.EMAIL), ft.Text("Email / SMTP")]),
                 content=ft.Column([
                     AppStyles.page_divider(),
                     self.dd_email_provider,
@@ -120,8 +116,7 @@ class AdminTab(ft.Container):
                 ], scroll=ft.ScrollMode.AUTO)
             ),
             ft.Tab(
-                text="Backup / Export",
-                icon=ft.Icons.BACKUP,
+                tab_content=ft.Row([ft.Icon(ft.Icons.BACKUP), ft.Text("Backup / Export")]),
                 content=ft.Column([
                     AppStyles.page_divider(),
                     ft.Container(
