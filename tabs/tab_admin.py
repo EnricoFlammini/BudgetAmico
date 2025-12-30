@@ -23,13 +23,13 @@ class AdminTab(ft.Container):
         self.controller.page = controller.page
         
         self.tabs_admin = ft.Tabs(
-            tabs=[],  # Verranno popolati dinamicamente
             expand=1,
             divider_color=ft.Colors.TRANSPARENT,
             indicator_color=AppColors.PRIMARY,
             label_color=AppColors.PRIMARY,
             unselected_label_color=AppColors.TEXT_SECONDARY
         )
+        self.tabs_admin.tabs = []
 
         # UI Controls for Email Settings
         self.dd_email_provider = ft.Dropdown(

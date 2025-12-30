@@ -53,10 +53,10 @@ class InvestimentiTab(ft.Container):
         self.tabs = ft.Tabs(
             selected_index=0,
             animation_duration=300,
-            tabs=[t_port, t_storico, t_mc],
             expand=True,
             on_change=self._on_tab_change
         )
+        self.tabs.tabs = [t_port, t_storico, t_mc]
         
         self.content = self.tabs
         
