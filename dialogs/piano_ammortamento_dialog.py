@@ -248,7 +248,7 @@ class PianoAmmortamentoDialog:
         self.page.session.set("excel_export_data", csv_data)
         self.controller.file_picker_salva_excel.save_file(file_name="template_piano_ammortamento.csv")
 
-    def _on_csv_picked(self, e: ft.FilePickerResultEvent):
+    def _on_csv_picked(self, e):
         if not e.files: return
         
         file_path = e.files[0].path

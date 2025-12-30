@@ -401,7 +401,7 @@ class AppController:
     def backup_dati_clicked(self):
         self.show_snack_bar("Funzionalità di backup non disponibile con PostgreSQL.", success=False)
 
-    def _on_backup_dati_result(self, e: ft.FilePickerResultEvent):
+    def _on_backup_dati_result(self, e):
         if not e.path:
             self.show_snack_bar("Operazione di backup annullata.", success=False)
             return
@@ -415,7 +415,7 @@ class AppController:
     def ripristina_dati_clicked(self):
         self.show_snack_bar("Funzionalità di ripristino non disponibile con PostgreSQL.", success=False)
 
-    def _on_ripristina_dati_result(self, e: ft.FilePickerResultEvent):
+    def _on_ripristina_dati_result(self, e):
         pass # Placeholder
 
     def _chiudi_dialog_conferma_ripristino(self, e):
