@@ -437,67 +437,131 @@ class BudgetTab(ft.Container):
             key=lambda x: x[1]['nome_categoria'].lower()
         )
         
+        # Calculate Totals
+        tot_limite = 0
+        tot_spesa = 0
+        
         lista_categorie = ft.Column(spacing=10)
+        
         for cat_id, cat_data in sorted_cats:
+            tot_limite += cat_data['importo_limite_totale']
+            tot_spesa += cat_data['spesa_totale_categoria']
             lista_categorie.controls.append(self._crea_widget_categoria(cat_data, theme))
             
+        # Add Global Summary Card
+        if tot_limite > 0: # Only show if there is a budget
+            global_data = {
+                'nome_categoria': "Budget Totale",
+                'importo_limite_totale': tot_limite,
+                'spesa_totale_categoria': tot_spesa,
+                'sottocategorie': []
+            }
+            # Insert at the top with a bit of separation
+            lista_categorie.controls.insert(0, ft.Column([
+                self._crea_widget_categoria(global_data, theme, is_global=True),
+                ft.Divider(height=20, color=ft.Colors.TRANSPARENT)
+            ]))
+
         self.container_content.controls.append(lista_categorie)
 
-    def _crea_widget_categoria(self, cat_data, theme):
+    def _crea_widget_categoria(self, cat_data, theme, is_global=False):
         loc = self.controller.loc
         limite_cat = cat_data['importo_limite_totale']
         spesa_cat = cat_data['spesa_totale_categoria']
-        rimanente_cat = (limite_cat - spesa_cat)
         percentuale_cat = (spesa_cat / limite_cat) if limite_cat > 0 else 0
-        if percentuale_cat > 1: percentuale_cat = 1
         
-        colore_cat = theme.primary
-        if percentuale_cat > 0.9:
-            colore_cat = AppColors.ERROR
-        elif percentuale_cat > 0.7:
-            colore_cat = AppColors.WARNING
+        # New Color Logic
+        if percentuale_cat <= 1.0:
+            colore_cat = AppColors.SUCCESS # Green
+        elif percentuale_cat <= 1.1:
+            colore_cat = AppColors.WARNING # Yellow
+        else:
+            colore_cat = AppColors.ERROR   # Red
 
-        sottocategorie_widgets = []
-        for sub_data in cat_data['sottocategorie']:
-            sottocategorie_widgets.append(self._crea_widget_sottocategoria(sub_data, theme))
+        # Clamp percentage for progress bar (max 1.0)
+        progress_value = min(percentuale_cat, 1.0)
 
-        content = ft.Column([
-            ft.Row([
-                AppStyles.subheader_text(cat_data['nome_categoria']),
-                ft.Text(
-                    f"Residuo: {loc.format_currency(rimanente_cat)}",
-                    size=16,
-                    weight=ft.FontWeight.BOLD,
-                    color=colore_cat
-                )
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            AppStyles.caption_text(
-                f"Speso {loc.format_currency(spesa_cat)} su {loc.format_currency(limite_cat)}"),
-            ft.ProgressBar(value=percentuale_cat, color=colore_cat, bgcolor=AppColors.SURFACE_VARIANT),
-            ft.Divider(height=10, color=ft.Colors.OUTLINE_VARIANT),
-            ft.Column(sottocategorie_widgets, spacing=8)
-        ])
+        sottocategorie_container = ft.Column(spacing=5, visible=False)
+        has_subcategories = len(cat_data.get('sottocategorie', [])) > 0
         
-        return AppStyles.card_container(content, padding=15)
+        for sub_data in cat_data.get('sottocategorie', []):
+            sottocategorie_container.controls.append(self._crea_widget_sottocategoria(sub_data, theme))
+
+        # Icon for expansion (only if subcategories exist)
+        icon_expand = ft.Icon(ft.Icons.KEYBOARD_ARROW_DOWN, size=24, opacity=1 if has_subcategories else 0)
+
+        def toggle_subcategory(e):
+            if not has_subcategories: return
+            sottocategorie_container.visible = not sottocategorie_container.visible
+            icon_expand.name = ft.Icons.KEYBOARD_ARROW_UP if sottocategorie_container.visible else ft.Icons.KEYBOARD_ARROW_DOWN
+            if self.page:
+                self.page.update()
+
+        # Header Content
+        name_size = 20 if is_global else 16
+        name_weight = ft.FontWeight.W_900 if is_global else ft.FontWeight.BOLD
+        
+        header_content = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Text(cat_data['nome_categoria'], size=name_size, weight=name_weight, expand=True),
+                    icon_expand
+                ]),
+                ft.Container(height=5),
+                ft.ProgressBar(value=progress_value, color=colore_cat, bgcolor=AppColors.SURFACE_VARIANT, height=10 if is_global else 8, border_radius=4),
+                ft.Container(height=5),
+                ft.Row([
+                    ft.Text(f"{loc.format_currency(spesa_cat)} / {loc.format_currency(limite_cat)}", size=14, color=AppColors.TEXT_SECONDARY),
+                    ft.Text(f"{percentuale_cat*100:.1f}%", size=14, weight=ft.FontWeight.BOLD, color=colore_cat)
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+            ]),
+            on_click=toggle_subcategory if has_subcategories else None,
+            padding=15 if is_global else 10,
+            border_radius=10,
+            ink=has_subcategories
+        )
+
+        card = AppStyles.card_container(
+            content=ft.Column([
+                header_content,
+                sottocategorie_container
+            ], spacing=0),
+            padding=0 
+        )
+        
+        if is_global:
+            # Highlight global card slightly
+            card.border = ft.border.all(2, colore_cat)
+            
+        return card
 
     def _crea_widget_sottocategoria(self, sub_data, theme):
         loc = self.controller.loc
         limite = sub_data['importo_limite']
         spesa = sub_data['spesa_totale']
-        rimanente = (limite - spesa)
         percentuale = (spesa / limite) if limite > 0 else 0
-        if percentuale > 1: percentuale = 1
-
-        colore_progress = theme.primary
-        if percentuale > 0.9:
-            colore_progress = AppColors.ERROR
-        elif percentuale > 0.7:
+        
+        # Same Color Logic
+        if percentuale <= 1.0:
+            colore_progress = AppColors.SUCCESS
+        elif percentuale <= 1.1:
             colore_progress = AppColors.WARNING
+        else:
+            colore_progress = AppColors.ERROR
 
-        return ft.Column([
-            ft.Row([
-                AppStyles.body_text(sub_data['nome_sottocategoria']),
-                ft.Text(f"{loc.format_currency(rimanente)}", color=colore_progress, size=14)
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            ft.ProgressBar(value=percentuale, color=colore_progress, bgcolor=AppColors.SURFACE_VARIANT, height=5)
-        ])
+        progress_value = min(percentuale, 1.0)
+
+        return ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Text(sub_data['nome_sottocategoria'], size=14, expand=True),
+                    ft.Text(f"{percentuale*100:.1f}%", size=12, color=colore_progress, weight=ft.FontWeight.BOLD)
+                ]),
+                ft.ProgressBar(value=progress_value, color=colore_progress, bgcolor=AppColors.SURFACE_VARIANT, height=4),
+                ft.Row([
+                    ft.Text(f"{loc.format_currency(spesa)} / {loc.format_currency(limite)}", size=12, color=AppColors.TEXT_SECONDARY)
+                ], alignment=ft.MainAxisAlignment.END)
+            ]),
+            padding=ft.padding.only(left=20, right=10, top=5, bottom=5),
+            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.BLACK) # Slight background for differentiation
+        )

@@ -39,12 +39,16 @@ class DashboardView:
         # 2. Sidebar personalizzata (sostituisce NavigationRail)
         self.selected_index = 0
         self.sidebar_items = []  # Lista di voci della sidebar
-        
+        self.is_sidebar_extended = False # Default collapsed
+
         # Container per la sidebar scrollabile
         self.sidebar_listview = ft.ListView(
             spacing=0,
             padding=ft.padding.symmetric(vertical=10),
         )
+        
+        # Container wrapper per la sidebar (riferimento per cambiarne la width)
+        self.sidebar_container = None
 
         # 3. Area Contenuti Principale
         self.content_area = ft.Container(
@@ -93,24 +97,38 @@ class DashboardView:
         except Exception as e:
             logger.debug(f"Update fallito (app in chiusura?): {e}")
 
+    def _toggle_sidebar(self, e):
+        """Espande o riduce la sidebar."""
+        self.is_sidebar_extended = not self.is_sidebar_extended
+        if self.sidebar_container:
+            self.sidebar_container.width = 220 if self.is_sidebar_extended else 65
+            self.update_sidebar() # Ricostruisci items per mostrare/nascondere testo
+            self.sidebar_container.update()
+            
     def _create_sidebar_item(self, icon, selected_icon, label, view_instance, index):
         """Crea un elemento della sidebar personalizzata."""
         is_selected = (index == self.selected_index)
         
-        return ft.Container(
-            content=ft.ListTile(
-                leading=ft.Icon(
-                    selected_icon if is_selected else icon,
-                    color=ft.Colors.PRIMARY if is_selected else None
-                ),
-                title=ft.Text(
-                    label,
-                    weight=ft.FontWeight.BOLD if is_selected else ft.FontWeight.NORMAL,
-                    color=ft.Colors.PRIMARY if is_selected else None
-                ),
-                selected=is_selected,
-                on_click=lambda e, idx=index, view=view_instance: self._sidebar_item_clicked(idx, view),
+        # Se ridotta, mostra solo icona e usa tooltip
+        content = ft.ListTile(
+            leading=ft.Icon(
+                selected_icon if is_selected else icon,
+                color=ft.Colors.PRIMARY if is_selected else None,
+                tooltip=label if not self.is_sidebar_extended else None
             ),
+            title=ft.Text(
+                label,
+                weight=ft.FontWeight.BOLD if is_selected else ft.FontWeight.NORMAL,
+                color=ft.Colors.PRIMARY if is_selected else None,
+                no_wrap=True
+            ) if self.is_sidebar_extended else ft.Container(),
+            selected=is_selected,
+            on_click=lambda e, idx=index, view=view_instance: self._sidebar_item_clicked(idx, view),
+            content_padding=ft.padding.only(left=10) if not self.is_sidebar_extended else None,
+        )
+
+        return ft.Container(
+            content=content,
             bgcolor=ft.Colors.PRIMARY_CONTAINER if is_selected else None,
             border_radius=10,
             padding=ft.padding.symmetric(horizontal=5),
@@ -144,18 +162,22 @@ class DashboardView:
         loc = self.controller.loc
         self.appbar_title.value = loc.get("app_title")
 
+        # Inizializza il container della sidebar
+        self.sidebar_container = ft.Container(
+            content=self.sidebar_listview,
+            width=65, # Default width (collapsed)
+            bgcolor=ft.Colors.SURFACE,
+            padding=5,
+            animate=ft.Animation(200, "easeOut"),
+        )
+
         # Area contenuto con banner opzionale sopra
         main_content = ft.Column([
             self.update_banner_container,  # Banner aggiornamenti (nascosto di default)
             ft.Row(
                 [
                     # Sidebar personalizzata scrollabile
-                    ft.Container(
-                        content=self.sidebar_listview,
-                        width=220,
-                        bgcolor=ft.Colors.SURFACE,
-                        padding=5,
-                    ),
+                    self.sidebar_container,
                     ft.VerticalDivider(width=1),
                     self.content_area
                 ],
@@ -167,6 +189,11 @@ class DashboardView:
             "/dashboard",
             [main_content],
             appbar=ft.AppBar(
+                leading=ft.IconButton(
+                    icon=ft.Icons.MENU,
+                    tooltip="Menu",
+                    on_click=self._toggle_sidebar
+                ),
                 title=self.appbar_title,
                 center_title=False,
                 actions=[
