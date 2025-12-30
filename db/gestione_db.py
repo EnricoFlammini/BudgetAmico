@@ -2498,17 +2498,17 @@ def ottieni_dettagli_conti_utente(id_utente, master_key_b64=None):
                     row['nome_conto'] = decrypted_nome
                 elif master_key:
                     # Fallback to master_key for legacy data
-                    row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
+                    row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto, silent=True)
                 
                 # IBAN always uses master_key (personal data)
                 if master_key:
-                    row['iban'] = _decrypt_if_key(row['iban'], master_key, crypto)
+                    row['iban'] = _decrypt_if_key(row['iban'], master_key, crypto, silent=True)
                 
                 # Handle saldo_calcolato
                 saldo_str = row['saldo_calcolato']
                 if row['tipo'] == 'Fondo Pensione':
                     if master_key:
-                        saldo_str = _decrypt_if_key(saldo_str, master_key, crypto)
+                        saldo_str = _decrypt_if_key(saldo_str, master_key, crypto, silent=True)
                 
                 try:
                     row['saldo_calcolato'] = float(saldo_str) if saldo_str else 0.0
@@ -6561,6 +6561,7 @@ def check_e_processa_spese_fisse(id_famiglia, master_key_b64=None, id_utente=Non
 # --- FUNZIONI STORICO ASSET GLOBALE (cross-famiglia) ---
 
 _TABELLA_STORICO_CREATA = False
+_LAST_UPDATE_CHECK_CACHE = {}  # Cache per throttling aggiornamenti (ticker -> datetime)
 
 def _crea_tabella_storico_asset_globale():
     """Crea la tabella StoricoAssetGlobale se non esiste."""
@@ -6756,6 +6757,18 @@ def aggiorna_storico_asset_se_necessario(ticker: str, anni: int = 25):
     # Prima ottimizza i dati vecchi (downsampling)
     _pulisci_storico_vecchio()
     
+    # Throttle check: se controllato meno di 1 ora fa, salta
+    from datetime import datetime as dt
+    ora = datetime.datetime.now()
+    if ticker in _LAST_UPDATE_CHECK_CACHE:
+        last_check = _LAST_UPDATE_CHECK_CACHE[ticker]
+        if (ora - last_check).total_seconds() < 3600:
+            # print(f"[DEBUG] Skip update {ticker} (throttled)")
+            return False
+    
+    # Aggiorna ultimo controllo a ORA (indipendentemente dall'esito)
+    _LAST_UPDATE_CHECK_CACHE[ticker] = ora
+    
     ultima_data = ultimo_aggiornamento_storico(ticker)
     prima_data = _data_piu_vecchia_storico(ticker)
     
@@ -6835,7 +6848,7 @@ def aggiorna_storico_asset_se_necessario(ticker: str, anni: int = 25):
     
     from datetime import datetime as dt
     ultima_dt = dt.strptime(ultima_data, '%Y-%m-%d')
-    oggi_dt = dt.strptime(oggi, '%Y-%m-%d')
+    oggi_dt = dt.strptime(oggi_str, '%Y-%m-%d')
     giorni_mancanti = (oggi_dt - ultima_dt).days
     
     if giorni_mancanti <= 0:

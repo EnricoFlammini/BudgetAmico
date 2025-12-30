@@ -74,6 +74,12 @@ class DashboardView:
             visible=True # Default visible, managed by role
         )
 
+    def reset_state(self):
+        """Resetta lo stato della vista (es. selezione sidebar) ai valori iniziali."""
+        self.selected_index = 0
+        self.content_area.content = self.tab_personale
+        logger.debug("DashboardView state reset to initial (Index 0).")
+
     def _safe_update(self, control):
         """Esegue l'update di un controllo gestendo eventuali errori di loop chiuso."""
         if not self.page: return

@@ -229,6 +229,11 @@ class AppController:
 
     def _carica_dashboard(self):
         self.page.views.clear()
+        
+        # RE-CREATE DASHBOARD VIEW TO ENSURE FRESH STATE (Fixes data leakage)
+        # Re-inizializza la vista e tutte le tab per garantire che non ci siano dati residui
+        self.dashboard_view = DashboardView(self)
+        
         self.page.views.append(self.dashboard_view.build_view())
         self.dashboard_view.update_sidebar()
         
