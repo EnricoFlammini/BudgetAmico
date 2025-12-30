@@ -165,52 +165,50 @@ class PersonaleTab(ft.Container):
         val_prestiti = riepilogo.get('prestiti_totali', 0)
         
         # Costruisci righe dettaglio
+        # Custom styles for responsive text
+        text_style_label = ft.TextStyle(size=14, color=AppColors.TEXT_SECONDARY)
+        text_style_val = ft.TextStyle(size=14, weight=ft.FontWeight.BOLD)
+
+        # Helper to create responsive detail row
+        def riga_resp(label, val_formatted, color=None):
+            return ft.ResponsiveRow([
+                ft.Column([ft.Text(label, style=text_style_label)], col={"xs": 6, "sm": 6}),
+                ft.Column([ft.Text(val_formatted, style=text_style_val, color=color, text_align=ft.TextAlign.RIGHT)], 
+                          col={"xs": 6, "sm": 6}, alignment=ft.MainAxisAlignment.END, horizontal_alignment=ft.CrossAxisAlignment.END)
+            ])
+
+        # Costruisci righe dettaglio responsive
         righe_dettaglio = []
-        righe_dettaglio.append(ft.Row([
-            AppStyles.body_text(self.controller.loc.get("liquidity")),
-            AppStyles.currency_text(self.controller.loc.format_currency(val_liquidita))
-        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+        righe_dettaglio.append(riga_resp(self.controller.loc.get("liquidity"), self.controller.loc.format_currency(val_liquidita)))
         
         if val_investimenti > 0:
-            righe_dettaglio.append(ft.Row([
-                AppStyles.body_text(self.controller.loc.get("investments")),
-                AppStyles.currency_text(self.controller.loc.format_currency(val_investimenti))
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+            righe_dettaglio.append(riga_resp(self.controller.loc.get("investments"), self.controller.loc.format_currency(val_investimenti)))
         
         if val_fondi_pensione > 0:
-            righe_dettaglio.append(ft.Row([
-                AppStyles.body_text(self.controller.loc.get("pension_funds")),
-                AppStyles.currency_text(self.controller.loc.format_currency(val_fondi_pensione))
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+             righe_dettaglio.append(riga_resp(self.controller.loc.get("pension_funds"), self.controller.loc.format_currency(val_fondi_pensione)))
 
         if val_risparmio > 0:
-            righe_dettaglio.append(ft.Row([
-                AppStyles.body_text(self.controller.loc.get("savings")),
-                AppStyles.currency_text(self.controller.loc.format_currency(val_risparmio))
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+            righe_dettaglio.append(riga_resp(self.controller.loc.get("savings"), self.controller.loc.format_currency(val_risparmio)))
         
         if val_patrimonio_immobile > 0:
-            righe_dettaglio.append(ft.Row([
-                AppStyles.body_text(self.controller.loc.get("real_estate_assets")),
-                AppStyles.currency_text(self.controller.loc.format_currency(val_patrimonio_immobile))
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+            righe_dettaglio.append(riga_resp(self.controller.loc.get("real_estate_assets"), self.controller.loc.format_currency(val_patrimonio_immobile)))
 
         if val_prestiti > 0:
-                righe_dettaglio.append(ft.Row([
-                AppStyles.body_text(self.controller.loc.get("loans")),
-                AppStyles.currency_text(self.controller.loc.format_currency(-val_prestiti), color=AppColors.ERROR)
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+            righe_dettaglio.append(riga_resp(self.controller.loc.get("loans"), self.controller.loc.format_currency(-val_prestiti), color=AppColors.ERROR))
         
-        # Card riepilogo patrimonio
+        # Card riepilogo patrimonio responsive - FORCE STACKING ON MOBILE/TABLET
         card_riepilogo = AppStyles.card_container(
-            content=ft.Row([
+            content=ft.ResponsiveRow([
+                # Colonna Totale: Full width on xs AND sm. Only side-by-side on md+
                 ft.Column([
                     AppStyles.caption_text(self.controller.loc.get("net_worth")),
                     AppStyles.big_currency_text(self.controller.loc.format_currency(val_patrimonio),
                         color=AppColors.SUCCESS if val_patrimonio >= 0 else AppColors.ERROR)
-                ], expand=1),
-                ft.Column(righe_dettaglio, spacing=8, expand=2, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.START),
+                ], col={"xs": 12, "sm": 12, "md": 5}),
+                
+                # Colonna Dettagli: Full width on xs AND sm.
+                ft.Column(righe_dettaglio, spacing=5, col={"xs": 12, "sm": 12, "md": 7})
+            ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
             padding=20
         )
         
@@ -228,11 +226,11 @@ class PersonaleTab(ft.Container):
             on_click=self._mostra_tutte_transazioni
         )
         
-        # Header delle transazioni con pulsante
-        header_transazioni = ft.Row([
-            AppStyles.subheader_text(loc.get("latest_transactions")),
-            btn_tutte_transazioni
-        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+        # Header delle transazioni Responsive
+        header_transazioni = ft.ResponsiveRow([
+            ft.Column([AppStyles.subheader_text(loc.get("latest_transactions"))], col={"xs": 12, "sm": 8}),
+            ft.Column([btn_tutte_transazioni], col={"xs": 12, "sm": 4}, horizontal_alignment=ft.CrossAxisAlignment.END)
+        ], vertical_alignment=ft.CrossAxisAlignment.CENTER)
         
         self.main_view.controls = [
             AppStyles.section_header(nome_utente),
@@ -308,20 +306,25 @@ class PersonaleTab(ft.Container):
                 except:
                     importo = 0
             
-            card_content = ft.Row(
+            card_content = ft.ResponsiveRow(
                 [
+                    # Col 1: Descrizione e Conto (tutto spazio su mobile, metà su tablet/pc)
                     ft.Column([
                         AppStyles.body_text(t['descrizione']),
                         AppStyles.caption_text(f"{t['data']} - {t['nome_conto']}"),
-                    ], expand=True),
+                    ], col={"xs": 12, "sm": 6}, spacing=2),
+                    
+                    # Col 2: Importo e Categoria 
                     ft.Column([
                         AppStyles.currency_text(
                             loc.format_currency(importo),
                             color=AppColors.SUCCESS if importo >= 0 else AppColors.ERROR
                         ),
                         AppStyles.caption_text(t.get('nome_sottocategoria') or loc.get("no_category"))
-                    ], horizontal_alignment=ft.CrossAxisAlignment.END),
-                    azioni
+                    ], col={"xs": 8, "sm": 4}, alignment=ft.MainAxisAlignment.END, horizontal_alignment=ft.CrossAxisAlignment.END, spacing=2),
+                    
+                    # Col 3: Azioni (piccolo spazio a destra su mobile)
+                    ft.Column([azioni], col={"xs": 4, "sm": 2}, alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.END)
                 ],
                 vertical_alignment=ft.CrossAxisAlignment.CENTER
             )

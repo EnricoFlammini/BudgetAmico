@@ -129,34 +129,44 @@ class ContiTab(ft.Container):
         else:
             colore_saldo = AppColors.SUCCESS if conto['saldo_calcolato'] >= 0 else AppColors.ERROR
 
-        content = ft.Row([
+        content = ft.ResponsiveRow([
+            # Col 1: Nome Conto e IBAN
             ft.Column([
                 AppStyles.subheader_text(conto['nome_conto']),
                 AppStyles.caption_text(f"{conto['tipo']}" + (f" - IBAN: {conto['iban']}" if conto['iban'] else ""))
-            ], expand=True),
+            ], col={"xs": 12, "sm": 6}, spacing=2),
+            
+            # Col 2: Saldo
             ft.Column([
                 AppStyles.caption_text(label_saldo),
                 AppStyles.currency_text(self.controller.loc.format_currency(conto['saldo_calcolato']), color=colore_saldo)
-            ], horizontal_alignment=ft.CrossAxisAlignment.END),
-            ft.IconButton(icon=ft.Icons.INSIGHTS, tooltip=self.controller.loc.get("manage_portfolio"),
-                          icon_color=theme.primary, data=conto,
-                          on_click=lambda e: self.controller.portafoglio_dialogs.apri_dialog_portafoglio(e,
-                                                                                                         e.control.data),
-                          visible=is_investimento),
-            ft.IconButton(icon=ft.Icons.MANAGE_ACCOUNTS, tooltip=self.controller.loc.get("manage_pension_fund"),
-                          icon_color=theme.secondary, data=conto,
-                          on_click=lambda e: self.controller.fondo_pensione_dialog.apri_dialog(e.control.data),
-                          visible=is_fondo_pensione),
-            ft.IconButton(icon=ft.Icons.EDIT_NOTE, tooltip="Rettifica Saldo (Admin)", data=conto,
-                          on_click=lambda e: self.controller.conto_dialog.apri_dialog_rettifica_saldo(
-                              e.control.data), visible=is_admin and is_corrente),
-            ft.IconButton(icon=ft.Icons.EDIT, tooltip=self.controller.loc.get("edit_account"), data=conto,
-                          on_click=lambda e: self.controller.conto_dialog.apri_dialog_conto(e, e.control.data, escludi_investimento=True),
-                          icon_color=AppColors.INFO),
-            ft.IconButton(icon=ft.Icons.DELETE, tooltip=self.controller.loc.get("delete_account"),
-                          icon_color=AppColors.ERROR, data=conto['id_conto'],
-                          on_click=lambda e: self.controller.open_confirm_delete_dialog(
-                              partial(self.elimina_conto_personale_cliccato, e))),
+            ], col={"xs": 6, "sm": 3}, alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.END if not is_investimento else ft.CrossAxisAlignment.START),
+            
+            # Col 3: Azioni
+            ft.Column([
+                ft.Row([
+                    ft.IconButton(icon=ft.Icons.INSIGHTS, tooltip=self.controller.loc.get("manage_portfolio"),
+                                  icon_color=theme.primary, data=conto,
+                                  on_click=lambda e: self.controller.portafoglio_dialogs.apri_dialog_portafoglio(e,
+                                                                                                                 e.control.data),
+                                  visible=is_investimento),
+                    ft.IconButton(icon=ft.Icons.MANAGE_ACCOUNTS, tooltip=self.controller.loc.get("manage_pension_fund"),
+                                  icon_color=theme.secondary, data=conto,
+                                  on_click=lambda e: self.controller.fondo_pensione_dialog.apri_dialog(e.control.data),
+                                  visible=is_fondo_pensione),
+                    ft.IconButton(icon=ft.Icons.EDIT_NOTE, tooltip="Rettifica Saldo (Admin)", data=conto,
+                                  on_click=lambda e: self.controller.conto_dialog.apri_dialog_rettifica_saldo(
+                                      e.control.data), visible=is_admin and is_corrente),
+                    ft.IconButton(icon=ft.Icons.EDIT, tooltip=self.controller.loc.get("edit_account"), data=conto,
+                                  on_click=lambda e: self.controller.conto_dialog.apri_dialog_conto(e, e.control.data, escludi_investimento=True),
+                                  icon_color=AppColors.INFO),
+                    ft.IconButton(icon=ft.Icons.DELETE, tooltip=self.controller.loc.get("delete_account"),
+                                  icon_color=AppColors.ERROR, data=conto['id_conto'],
+                                  on_click=lambda e: self.controller.open_confirm_delete_dialog(
+                                      partial(self.elimina_conto_personale_cliccato, e))),
+                ], alignment=ft.MainAxisAlignment.END, spacing=0)
+            ], col={"xs": 6, "sm": 3}, alignment=ft.MainAxisAlignment.CENTER)
+            
         ], vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
         return AppStyles.card_container(content, padding=15)

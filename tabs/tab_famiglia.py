@@ -232,53 +232,50 @@ class FamigliaTab(ft.Container):
             val_patrimonio_immobile = riepilogo.get('patrimonio_immobile_lordo', 0)
             val_prestiti = riepilogo.get('prestiti_totali', 0)
             
-            # Costruisci righe dettaglio
+            # Custom styles for responsive text
+            text_style_label = ft.TextStyle(size=14, color=AppColors.TEXT_SECONDARY)
+            text_style_val = ft.TextStyle(size=14, weight=ft.FontWeight.BOLD)
+
+            # Helper to create responsive detail row
+            def riga_resp(label, val_formatted, color=None):
+                return ft.ResponsiveRow([
+                    ft.Column([ft.Text(label, style=text_style_label)], col={"xs": 6, "sm": 6}),
+                    ft.Column([ft.Text(val_formatted, style=text_style_val, color=color, text_align=ft.TextAlign.RIGHT)], 
+                              col={"xs": 6, "sm": 6}, alignment=ft.MainAxisAlignment.END, horizontal_alignment=ft.CrossAxisAlignment.END)
+                ])
+
+            # Costruisci righe dettaglio responsive
             righe_dettaglio = []
-            righe_dettaglio.append(ft.Row([
-                AppStyles.body_text(loc.get("liquidity")),
-                AppStyles.currency_text(loc.format_currency(val_liquidita))
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+            righe_dettaglio.append(riga_resp(loc.get("liquidity"), loc.format_currency(val_liquidita)))
             
             if val_investimenti > 0:
-                righe_dettaglio.append(ft.Row([
-                    AppStyles.body_text(loc.get("investments")),
-                    AppStyles.currency_text(loc.format_currency(val_investimenti))
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+                righe_dettaglio.append(riga_resp(loc.get("investments"), loc.format_currency(val_investimenti)))
             
             if val_fondi_pensione > 0:
-                righe_dettaglio.append(ft.Row([
-                    AppStyles.body_text(loc.get("pension_funds")),
-                    AppStyles.currency_text(loc.format_currency(val_fondi_pensione))
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+                righe_dettaglio.append(riga_resp(loc.get("pension_funds"), loc.format_currency(val_fondi_pensione)))
 
             if val_risparmio > 0:
-                righe_dettaglio.append(ft.Row([
-                    AppStyles.body_text(loc.get("savings")),
-                    AppStyles.currency_text(loc.format_currency(val_risparmio))
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+                righe_dettaglio.append(riga_resp(loc.get("savings"), loc.format_currency(val_risparmio)))
             
             if val_patrimonio_immobile > 0:
-                righe_dettaglio.append(ft.Row([
-                    AppStyles.body_text(loc.get("real_estate_assets")),
-                    AppStyles.currency_text(loc.format_currency(val_patrimonio_immobile))
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+                righe_dettaglio.append(riga_resp(loc.get("real_estate_assets"), loc.format_currency(val_patrimonio_immobile)))
 
             if val_prestiti > 0:
-                righe_dettaglio.append(ft.Row([
-                    AppStyles.body_text(loc.get("loans")),
-                    AppStyles.currency_text(loc.format_currency(-val_prestiti), color=AppColors.ERROR)
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+                righe_dettaglio.append(riga_resp(loc.get("loans"), loc.format_currency(-val_prestiti), color=AppColors.ERROR))
             
-            # Card riepilogo patrimonio famiglia
+            # Card riepilogo patrimonio famiglia responsive - FORCE STACKING ON MOBILE/TABLET
             card_riepilogo = AppStyles.card_container(
-                content=ft.Row([
+                content=ft.ResponsiveRow([
+                    # Colonna Totale: Full width on xs AND sm. Only side-by-side on md+
                     ft.Column([
                         AppStyles.caption_text(loc.get("family_net_worth")),
                         AppStyles.big_currency_text(loc.format_currency(val_patrimonio),
                             color=AppColors.SUCCESS if val_patrimonio >= 0 else AppColors.ERROR)
-                    ], expand=1),
-                    ft.Column(righe_dettaglio, spacing=8, expand=2, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.START),
+                    ], col={"xs": 12, "sm": 12, "md": 5}),
+                    
+                    # Colonna Dettagli: Full width on xs AND sm.
+                    ft.Column(righe_dettaglio, spacing=5, col={"xs": 12, "sm": 12, "md": 7})
+                ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 padding=20
             )
             
