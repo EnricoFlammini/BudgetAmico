@@ -226,9 +226,6 @@ BudgetAmico/
 -   **Menu Toggle**: Nuovo pulsante nell'AppBar per espandere temporaneamente il menu e visualizzare le etichette di testo.
 -   **Tooltip**: In modalità compatta, passando il mouse sulle icone viene mostrato il nome della sezione.
 
-### Ottimizzazione
--   **Eseguibile Ottimizzato**: Riduzione significativa delle dimensioni del file `.exe` (~30-40%) grazie alla rimozione di librerie inutilizzate.
-
 ---
 
 ## 📊 Novità Versione 0.27
