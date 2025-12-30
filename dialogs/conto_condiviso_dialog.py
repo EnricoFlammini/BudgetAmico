@@ -23,7 +23,8 @@ class ContoCondivisoDialog(ft.AlertDialog):
 
         self.txt_nome_conto = ft.TextField(autofocus=True)
         self.dd_tipo_conto = ft.Dropdown()
-        self.dd_tipo_condivisione = ft.Dropdown(on_change=self._on_tipo_condivisione_change)
+        self.dd_tipo_condivisione = ft.Dropdown()
+        self.dd_tipo_condivisione.on_change = self._on_tipo_condivisione_change
 
         self.partecipanti_title = ft.Text(weight="bold")
         self.lv_partecipanti = ft.Column(scroll=ft.ScrollMode.ADAPTIVE, height=150)

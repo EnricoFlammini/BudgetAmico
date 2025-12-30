@@ -50,7 +50,8 @@ class PortafoglioDialogs:
         )
 
         # --- Dialogo per operazione (compra/vendi) ---
-        self.dd_asset_esistenti = ft.Dropdown(on_change=self._on_asset_selezionato)
+        self.dd_asset_esistenti = ft.Dropdown()
+        self.dd_asset_esistenti.on_change = self._on_asset_selezionato
         self.dd_conto_transazione = ft.Dropdown()
         
         # Campo ricerca ticker con autocomplete

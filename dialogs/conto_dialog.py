@@ -39,7 +39,8 @@ class ContoDialog(ft.AlertDialog):
 
         # Controlli del dialogo principale
         self.txt_conto_nome = ft.TextField()
-        self.dd_conto_tipo = ft.Dropdown(on_change=self._cambia_tipo_conto_in_dialog)
+        self.dd_conto_tipo = ft.Dropdown()
+        self.dd_conto_tipo.on_change = self._cambia_tipo_conto_in_dialog
         self.txt_conto_iban = ft.TextField()
         self.txt_conto_saldo_iniziale = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
 

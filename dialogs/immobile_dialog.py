@@ -19,7 +19,8 @@ class ImmobileDialog(ft.AlertDialog):
         self.txt_valore_acquisto = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.txt_valore_attuale = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.chk_nuda_proprieta = ft.Checkbox()
-        self.dd_prestito_collegato = ft.Dropdown(on_change=self._on_prestito_change)
+        self.dd_prestito_collegato = ft.Dropdown()
+        self.dd_prestito_collegato.on_change = self._on_prestito_change
         
         # Sezione Quote
         self.container_quote = ft.Column(spacing=5)
