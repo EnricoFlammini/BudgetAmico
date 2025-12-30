@@ -56,7 +56,7 @@ def main(page: ft.Page):
     page.on_route_change = app.route_change
 
     # Avvia l'app andando alla route iniziale
-    page.push_route(page.route)
+    page.go(page.route)
 
 
 # Avvio dell'applicazione in modalità WEB

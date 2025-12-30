@@ -35,28 +35,31 @@ class InvestimentiTab(ft.Container):
         
         # Tabs principali
         # Tabs principali
-        t_port = ft.Tab()
-        t_port.text = "Portafoglio"
-        t_port.icon = ft.Icons.ACCOUNT_BALANCE_WALLET
-        t_port.content = ft.Container(content=self.portafoglio_content, padding=10, expand=True)
+        t_port = ft.Tab(
+            text="Portafoglio",
+            icon=ft.Icons.ACCOUNT_BALANCE_WALLET,
+            content=ft.Container(content=self.portafoglio_content, padding=10, expand=True)
+        )
         
-        t_storico = ft.Tab()
-        t_storico.text = "Andamento Storico"
-        t_storico.icon = ft.Icons.SHOW_CHART
-        t_storico.content = ft.Container(content=self.storico_subtab, padding=10, expand=True)
+        t_storico = ft.Tab(
+            text="Andamento Storico",
+            icon=ft.Icons.SHOW_CHART,
+            content=ft.Container(content=self.storico_subtab, padding=10, expand=True)
+        )
         
-        t_mc = ft.Tab()
-        t_mc.text = "Analisi Monte Carlo"
-        t_mc.icon = ft.Icons.INSIGHTS
-        t_mc.content = ft.Container(content=self.monte_carlo_subtab, padding=10, expand=True)
+        t_mc = ft.Tab(
+            text="Analisi Monte Carlo",
+            icon=ft.Icons.INSIGHTS,
+            content=ft.Container(content=self.monte_carlo_subtab, padding=10, expand=True)
+        )
 
         self.tabs = ft.Tabs(
             selected_index=0,
             animation_duration=300,
+            tabs=[t_port, t_storico, t_mc],
             expand=True,
             on_change=self._on_tab_change
         )
-        self.tabs.tabs = [t_port, t_storico, t_mc]
         
         self.content = self.tabs
         

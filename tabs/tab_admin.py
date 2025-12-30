@@ -23,13 +23,13 @@ class AdminTab(ft.Container):
         self.controller.page = controller.page
         
         self.tabs_admin = ft.Tabs(
+            tabs=[],
             expand=1,
             divider_color=ft.Colors.TRANSPARENT,
             indicator_color=AppColors.PRIMARY,
             label_color=AppColors.PRIMARY,
             unselected_label_color=AppColors.TEXT_SECONDARY
         )
-        self.tabs_admin.tabs = []
 
         # UI Controls for Email Settings
         self.dd_email_provider = ft.Dropdown(
@@ -70,10 +70,10 @@ class AdminTab(ft.Container):
         tabs = []
         
         # 1. Categories
-        t_cat = ft.Tab()
-        t_cat.text = loc.get("categories_management")
-        t_cat.icon = ft.Icons.CATEGORY
-        t_cat.content = ft.Column(expand=True, controls=[
+        t_cat = ft.Tab(
+            text=loc.get("categories_management"),
+            icon=ft.Icons.CATEGORY,
+            content=ft.Column(expand=True, controls=[
                 ft.Row([
                     ft.Container(),  # Spacer
                     ft.IconButton(
@@ -86,20 +86,22 @@ class AdminTab(ft.Container):
                 AppStyles.page_divider(),
                 self.lv_categorie
             ])
+        )
         tabs.append(t_cat)
 
         # 2. Budget
-        t_bud = ft.Tab()
-        t_bud.text = "Gestione Budget"
-        t_bud.icon = ft.Icons.ACCOUNT_BALANCE_WALLET
-        t_bud.content = self.subtab_budget_manager
+        t_bud = ft.Tab(
+            text="Gestione Budget",
+            icon=ft.Icons.ACCOUNT_BALANCE_WALLET,
+            content=self.subtab_budget_manager
+        )
         tabs.append(t_bud)
 
         # 3. Members
-        t_mem = ft.Tab()
-        t_mem.text = loc.get("members_management")
-        t_mem.icon = ft.Icons.PEOPLE
-        t_mem.content = ft.Column([
+        t_mem = ft.Tab(
+            text=loc.get("members_management"),
+            icon=ft.Icons.PEOPLE,
+            content=ft.Column([
                 ft.Row([
                     ft.Container(),  # Spacer
                     ft.IconButton(
@@ -112,13 +114,14 @@ class AdminTab(ft.Container):
                 AppStyles.page_divider(),
                 self.lv_membri
             ])
+        )
         tabs.append(t_mem)
 
         # 4. Email
-        t_email = ft.Tab()
-        t_email.text = "Email / SMTP"
-        t_email.icon = ft.Icons.EMAIL
-        t_email.content = ft.Column([
+        t_email = ft.Tab(
+            text="Email / SMTP",
+            icon=ft.Icons.EMAIL,
+            content=ft.Column([
                 AppStyles.page_divider(),
                 self.dd_email_provider,
                 self.txt_gmail_hint,
@@ -126,13 +129,14 @@ class AdminTab(ft.Container):
                 ft.Row([self.txt_smtp_user, self.txt_smtp_password], spacing=10),
                 ft.Row([self.btn_test_email, self.btn_salva_email], spacing=10),
             ], scroll=ft.ScrollMode.AUTO)
+        )
         tabs.append(t_email)
         
         # 5. Backup
-        t_back = ft.Tab()
-        t_back.text = "Backup / Export"
-        t_back.icon = ft.Icons.BACKUP
-        t_back.content = ft.Column([
+        t_back = ft.Tab(
+            text="Backup / Export",
+            icon=ft.Icons.BACKUP,
+            content=ft.Column([
                 AppStyles.page_divider(),
                 ft.Container(
                     content=ft.ElevatedButton(
@@ -176,6 +180,7 @@ class AdminTab(ft.Container):
                     border_radius=10
                 )
             ], scroll=ft.ScrollMode.AUTO)
+        )
         tabs.append(t_back)
         
         return tabs
