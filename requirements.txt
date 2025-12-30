@@ -1,10 +1,10 @@
 # Budget Amico - Requirements
 # Framework GUI
-flet==0.28.0
-flet-desktop==0.28.0
-flet-core==0.28.0
-flet-runtime==0.28.0
-flet-web==0.28.0
+flet==0.28.1
+flet-desktop==0.28.1
+flet-core==0.28.1
+flet-runtime==0.28.1
+flet-web==0.28.1
 
 # Database
 pg8000>=1.30.0
