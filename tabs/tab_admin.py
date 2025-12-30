@@ -70,7 +70,10 @@ class AdminTab(ft.Container):
         tabs = []
         
         # 1. Categories
-        t_cat = ft.Tab(content=ft.Column(expand=True, controls=[
+        t_cat = ft.Tab()
+        t_cat.text = loc.get("categories_management")
+        t_cat.icon = ft.Icons.CATEGORY
+        t_cat.content = ft.Column(expand=True, controls=[
                 ft.Row([
                     ft.Container(),  # Spacer
                     ft.IconButton(
@@ -82,19 +85,21 @@ class AdminTab(ft.Container):
                 ], alignment=ft.MainAxisAlignment.END),
                 AppStyles.page_divider(),
                 self.lv_categorie
-            ]))
-        t_cat.text = loc.get("categories_management")
-        t_cat.icon = ft.Icons.CATEGORY
+            ])
         tabs.append(t_cat)
 
         # 2. Budget
-        t_bud = ft.Tab(content=self.subtab_budget_manager)
+        t_bud = ft.Tab()
         t_bud.text = "Gestione Budget"
         t_bud.icon = ft.Icons.ACCOUNT_BALANCE_WALLET
+        t_bud.content = self.subtab_budget_manager
         tabs.append(t_bud)
 
         # 3. Members
-        t_mem = ft.Tab(content=ft.Column([
+        t_mem = ft.Tab()
+        t_mem.text = loc.get("members_management")
+        t_mem.icon = ft.Icons.PEOPLE
+        t_mem.content = ft.Column([
                 ft.Row([
                     ft.Container(),  # Spacer
                     ft.IconButton(
@@ -106,73 +111,71 @@ class AdminTab(ft.Container):
                 ], alignment=ft.MainAxisAlignment.END),
                 AppStyles.page_divider(),
                 self.lv_membri
-            ]))
-        t_mem.text = loc.get("members_management")
-        t_mem.icon = ft.Icons.PEOPLE
+            ])
         tabs.append(t_mem)
 
         # 4. Email
-        t_email = ft.Tab(content=ft.Column([
+        t_email = ft.Tab()
+        t_email.text = "Email / SMTP"
+        t_email.icon = ft.Icons.EMAIL
+        t_email.content = ft.Column([
                 AppStyles.page_divider(),
                 self.dd_email_provider,
                 self.txt_gmail_hint,
                 ft.Row([self.txt_smtp_server, self.txt_smtp_port], spacing=10),
                 ft.Row([self.txt_smtp_user, self.txt_smtp_password], spacing=10),
                 ft.Row([self.btn_test_email, self.btn_salva_email], spacing=10),
-            ], scroll=ft.ScrollMode.AUTO))
-        t_email.text = "Email / SMTP"
-        t_email.icon = ft.Icons.EMAIL
+            ], scroll=ft.ScrollMode.AUTO)
         tabs.append(t_email)
         
         # 5. Backup
-        t_back = ft.Tab(content=ft.Column([
+        t_back = ft.Tab()
+        t_back.text = "Backup / Export"
+        t_back.icon = ft.Icons.BACKUP
+        t_back.content = ft.Column([
                 AppStyles.page_divider(),
                 ft.Container(
                     content=ft.ElevatedButton(
                         "Esporta Family Key e Configurazioni",
                         icon=ft.Icons.DOWNLOAD,
-                            on_click=self._esporta_dati_cliccato,
-                            bgcolor=AppColors.PRIMARY,
-                            color=AppColors.ON_PRIMARY
+                        on_click=self._esporta_dati_cliccato,
+                        bgcolor=AppColors.PRIMARY,
+                        color=AppColors.ON_PRIMARY
+                    ),
+                    padding=20
+                ),
+                ft.Container(
+                    content=ft.Column([
+                        ft.Icon(ft.Icons.WARNING_AMBER, color=AppColors.WARNING, size=32),
+                        AppStyles.body_text(
+                            "ATTENZIONE: Il file esportato contiene la chiave di crittografia della famiglia. "
+                            "Conservalo in un luogo sicuro e non condividerlo con persone non autorizzate.",
+                            color=AppColors.WARNING
                         ),
-                        padding=20
-                    ),
-                    ft.Container(
-                        content=ft.Column([
-                            ft.Icon(ft.Icons.WARNING_AMBER, color=AppColors.WARNING, size=32),
-                            AppStyles.body_text(
-                                "ATTENZIONE: Il file esportato contiene la chiave di crittografia della famiglia. "
-                                "Conservalo in un luogo sicuro e non condividerlo con persone non autorizzate.",
-                                color=AppColors.WARNING
-                            ),
-                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                        padding=20,
-                        border=ft.border.all(1, AppColors.WARNING),
-                        border_radius=10
-                    ),
-                    ft.Divider(height=30),
-                    AppStyles.subheader_text("Impostazioni Sistema"),
-                    ft.Container(
-                        content=ft.Row([
-                            ft.Column([
-                                ft.Text("Abilita Logging", weight=ft.FontWeight.W_500),
-                                ft.Text("Genera file di log per debug. Richiede riavvio app.", 
-                                       size=12, color=AppColors.TEXT_SECONDARY)
-                            ], expand=True),
-                            ft.Switch(
-                                value=self._get_logging_enabled(),
-                                on_change=self._toggle_logging
-                            )
-                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                        padding=15,
-                        border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
-                        border_radius=10
-                    )
-                ], scroll=ft.ScrollMode.AUTO)
-            )
-
-        t_back.text = "Backup / Export"
-        t_back.icon = ft.Icons.BACKUP
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    padding=20,
+                    border=ft.border.all(1, AppColors.WARNING),
+                    border_radius=10
+                ),
+                ft.Divider(height=30),
+                AppStyles.subheader_text("Impostazioni Sistema"),
+                ft.Container(
+                    content=ft.Row([
+                        ft.Column([
+                            ft.Text("Abilita Logging", weight=ft.FontWeight.W_500),
+                            ft.Text("Genera file di log per debug. Richiede riavvio app.", 
+                                   size=12, color=AppColors.TEXT_SECONDARY)
+                        ], expand=True),
+                        ft.Switch(
+                            value=self._get_logging_enabled(),
+                            on_change=self._toggle_logging
+                        )
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    padding=15,
+                    border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                    border_radius=10
+                )
+            ], scroll=ft.ScrollMode.AUTO)
         tabs.append(t_back)
         
         return tabs
