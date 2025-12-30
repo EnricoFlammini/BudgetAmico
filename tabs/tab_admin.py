@@ -67,62 +67,70 @@ class AdminTab(ft.Container):
 
     def build_tabs(self):
         loc = self.controller.loc
-        return [
-            ft.Tab(
-                tab_content=ft.Row([ft.Icon(ft.Icons.CATEGORY), ft.Text(loc.get("categories_management"))]),
-                content=ft.Column(expand=True, controls=[
-                    ft.Row([
-                        ft.Container(),  # Spacer
-                        ft.IconButton(
-                            icon=ft.Icons.ADD,
-                            tooltip=loc.get("add_category"),
-                            icon_color=AppColors.PRIMARY,
-                            on_click=lambda e: self.controller.admin_dialogs.apri_dialog_categoria()
-                        )
-                    ], alignment=ft.MainAxisAlignment.END),
-                    AppStyles.page_divider(),
-                    self.lv_categorie
-                ])
-            ),
-            ft.Tab(
-                tab_content=ft.Row([ft.Icon(ft.Icons.ACCOUNT_BALANCE_WALLET), ft.Text("Gestione Budget")]),
-                content=self.subtab_budget_manager
-            ),
-            ft.Tab(
-                tab_content=ft.Row([ft.Icon(ft.Icons.PEOPLE), ft.Text(loc.get("members_management"))]),
-                content=ft.Column([
-                    ft.Row([
-                        ft.Container(),  # Spacer
-                        ft.IconButton(
-                            icon=ft.Icons.PERSON_ADD,
-                            tooltip=loc.get("invite_member"),
-                            icon_color=AppColors.PRIMARY,
-                            on_click=lambda e: self.controller.admin_dialogs.apri_dialog_invito()
-                        )
-                    ], alignment=ft.MainAxisAlignment.END),
-                    AppStyles.page_divider(),
-                    self.lv_membri
-                ])
-            ),
-            ft.Tab(
-                tab_content=ft.Row([ft.Icon(ft.Icons.EMAIL), ft.Text("Email / SMTP")]),
-                content=ft.Column([
-                    AppStyles.page_divider(),
-                    self.dd_email_provider,
-                    self.txt_gmail_hint,
-                    ft.Row([self.txt_smtp_server, self.txt_smtp_port], spacing=10),
-                    ft.Row([self.txt_smtp_user, self.txt_smtp_password], spacing=10),
-                    ft.Row([self.btn_test_email, self.btn_salva_email], spacing=10),
-                ], scroll=ft.ScrollMode.AUTO)
-            ),
-            ft.Tab(
-                tab_content=ft.Row([ft.Icon(ft.Icons.BACKUP), ft.Text("Backup / Export")]),
-                content=ft.Column([
-                    AppStyles.page_divider(),
-                    ft.Container(
-                        content=ft.ElevatedButton(
-                            "Esporta Family Key e Configurazioni",
-                            icon=ft.Icons.DOWNLOAD,
+        tabs = []
+        
+        # 1. Categories
+        t_cat = ft.Tab(content=ft.Column(expand=True, controls=[
+                ft.Row([
+                    ft.Container(),  # Spacer
+                    ft.IconButton(
+                        icon=ft.Icons.ADD,
+                        tooltip=loc.get("add_category"),
+                        icon_color=AppColors.PRIMARY,
+                        on_click=lambda e: self.controller.admin_dialogs.apri_dialog_categoria()
+                    )
+                ], alignment=ft.MainAxisAlignment.END),
+                AppStyles.page_divider(),
+                self.lv_categorie
+            ]))
+        t_cat.text = loc.get("categories_management")
+        t_cat.icon = ft.Icons.CATEGORY
+        tabs.append(t_cat)
+
+        # 2. Budget
+        t_bud = ft.Tab(content=self.subtab_budget_manager)
+        t_bud.text = "Gestione Budget"
+        t_bud.icon = ft.Icons.ACCOUNT_BALANCE_WALLET
+        tabs.append(t_bud)
+
+        # 3. Members
+        t_mem = ft.Tab(content=ft.Column([
+                ft.Row([
+                    ft.Container(),  # Spacer
+                    ft.IconButton(
+                        icon=ft.Icons.PERSON_ADD,
+                        tooltip=loc.get("invite_member"),
+                        icon_color=AppColors.PRIMARY,
+                        on_click=lambda e: self.controller.admin_dialogs.apri_dialog_invito()
+                    )
+                ], alignment=ft.MainAxisAlignment.END),
+                AppStyles.page_divider(),
+                self.lv_membri
+            ]))
+        t_mem.text = loc.get("members_management")
+        t_mem.icon = ft.Icons.PEOPLE
+        tabs.append(t_mem)
+
+        # 4. Email
+        t_email = ft.Tab(content=ft.Column([
+                AppStyles.page_divider(),
+                self.dd_email_provider,
+                self.txt_gmail_hint,
+                ft.Row([self.txt_smtp_server, self.txt_smtp_port], spacing=10),
+                ft.Row([self.txt_smtp_user, self.txt_smtp_password], spacing=10),
+                ft.Row([self.btn_test_email, self.btn_salva_email], spacing=10),
+            ], scroll=ft.ScrollMode.AUTO))
+        t_email.text = "Email / SMTP"
+        t_email.icon = ft.Icons.EMAIL
+        tabs.append(t_email)
+        
+        # 5. Backup
+        t_back = ft.Tab(content=ft.Column([
+                AppStyles.page_divider(),
+                ft.Container(
+                    content=ft.ElevatedButton(
+                        "Esporta Family Key e Configurazioni",
+                        icon=ft.Icons.DOWNLOAD,
                             on_click=self._esporta_dati_cliccato,
                             bgcolor=AppColors.PRIMARY,
                             color=AppColors.ON_PRIMARY
@@ -162,7 +170,12 @@ class AdminTab(ft.Container):
                     )
                 ], scroll=ft.ScrollMode.AUTO)
             )
-        ]
+        )
+        t_back.text = "Backup / Export"
+        t_back.icon = ft.Icons.BACKUP
+        tabs.append(t_back)
+        
+        return tabs
 
     def update_all_admin_tabs_data(self, is_initial_load=False):
         """Avvia il caricamento asincrono di tutti i dati per le tab Admin."""

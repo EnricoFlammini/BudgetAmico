@@ -34,23 +34,23 @@ class InvestimentiTab(ft.Container):
         self.portafoglio_content = ft.Column(expand=True, spacing=10)
         
         # Tabs principali
+        # Tabs principali
+        t_port = ft.Tab(content=ft.Container(content=self.portafoglio_content, padding=10, expand=True))
+        t_port.text = "Portafoglio"
+        t_port.icon = ft.Icons.ACCOUNT_BALANCE_WALLET
+        
+        t_storico = ft.Tab(content=ft.Container(content=self.storico_subtab, padding=10, expand=True))
+        t_storico.text = "Andamento Storico"
+        t_storico.icon = ft.Icons.SHOW_CHART
+        
+        t_mc = ft.Tab(content=ft.Container(content=self.monte_carlo_subtab, padding=10, expand=True))
+        t_mc.text = "Analisi Monte Carlo"
+        t_mc.icon = ft.Icons.INSIGHTS
+
         self.tabs = ft.Tabs(
             selected_index=0,
             animation_duration=300,
-            tabs=[
-                ft.Tab(
-                    tab_content=ft.Row([ft.Icon(ft.Icons.ACCOUNT_BALANCE_WALLET), ft.Text("Portafoglio")]),
-                    content=ft.Container(content=self.portafoglio_content, padding=10, expand=True)
-                ),
-                ft.Tab(
-                    tab_content=ft.Row([ft.Icon(ft.Icons.SHOW_CHART), ft.Text("Andamento Storico")]),
-                    content=ft.Container(content=self.storico_subtab, padding=10, expand=True)
-                ),
-                ft.Tab(
-                    tab_content=ft.Row([ft.Icon(ft.Icons.INSIGHTS), ft.Text("Analisi Monte Carlo")]),
-                    content=ft.Container(content=self.monte_carlo_subtab, padding=10, expand=True)
-                ),
-            ],
+            tabs=[t_port, t_storico, t_mc],
             expand=True,
             on_change=self._on_tab_change
         )
