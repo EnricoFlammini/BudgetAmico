@@ -30,7 +30,7 @@ class ImmobiliTab(ft.Container):
                     ft.ProgressRing(color=AppColors.PRIMARY),
                     ft.Text("Caricamento immobili...", color=AppColors.TEXT_SECONDARY)
                 ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                alignment=ft.alignment.center,
+                alignment=ft.Alignment(0, 0),
                 padding=50
             )
         )

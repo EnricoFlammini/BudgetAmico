@@ -31,7 +31,7 @@ class SpeseFisseTab(ft.Container):
         
         self.no_data_view = ft.Container(
             content=AppStyles.body_text(self.controller.loc.get("no_fixed_expenses")),
-            alignment=ft.alignment.center,
+            alignment=ft.Alignment(0, 0),
             expand=True,
             visible=False
         )
@@ -42,7 +42,7 @@ class SpeseFisseTab(ft.Container):
                 ft.ProgressRing(color=AppColors.PRIMARY),
                 ft.Text("Caricamento spese fisse...", color=AppColors.TEXT_SECONDARY)
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            alignment=ft.alignment.center,
+            alignment=ft.Alignment(0, 0),
             expand=True,
             visible=False
         )

@@ -46,7 +46,7 @@ class StoricoAssetSubTab(ft.Container):
                 ft.ProgressRing(),
                 ft.Text("Seleziona asset e premi 'Genera Grafico'", color=AppColors.TEXT_SECONDARY)
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            alignment=ft.alignment.center,
+            alignment=ft.Alignment(0, 0),
             expand=True
         )
         self.periodo_dropdown = ft.Dropdown(

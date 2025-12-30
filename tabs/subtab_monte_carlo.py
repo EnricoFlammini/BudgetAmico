@@ -82,7 +82,7 @@ class MonteCarloSubTab(ft.Container):
             border_radius=10,
             padding=10,
             border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
-            alignment=ft.alignment.center
+            alignment=ft.Alignment(0, 0)
         )
         
         self.card_pessimistic = self._build_result_card("Pessimistico (10%)", AppColors.ERROR, ft.Icons.TRENDING_DOWN)
@@ -164,7 +164,7 @@ class MonteCarloSubTab(ft.Container):
         right_col = ft.Column([
             self.chart_container,
             results_row,
-            ft.Container(content=self.txt_info_storico, alignment=ft.alignment.center_right)
+            ft.Container(content=self.txt_info_storico, alignment=ft.Alignment(1, 0))
         ], expand=True, spacing=10)
         
         self.content = ft.Row([

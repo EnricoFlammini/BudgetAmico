@@ -21,7 +21,7 @@ class FamigliaTab(ft.Container):
                 ft.ProgressRing(color=AppColors.PRIMARY),
                 ft.Text(self.controller.loc.get("loading"), color=AppColors.TEXT_SECONDARY)
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            alignment=ft.alignment.center,
+            alignment=ft.Alignment(0, 0),
             expand=True,
             visible=False
         )
@@ -49,7 +49,7 @@ class FamigliaTab(ft.Container):
         
         self.no_data_view = ft.Container(
             content=AppStyles.body_text(self.controller.loc.get("no_transactions_found_family")),
-            alignment=ft.alignment.center,
+            alignment=ft.Alignment(0, 0),
             expand=True,
             visible=False
         )

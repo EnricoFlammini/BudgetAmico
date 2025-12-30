@@ -215,7 +215,7 @@ class ImpostazioniTab(ft.Container):
         self.content.controls.append(
             ft.Container(
                 content=ft.ProgressRing(color=AppColors.PRIMARY),
-                alignment=ft.alignment.center,
+                alignment=ft.Alignment(0, 0),
                 padding=50
             )
         )
