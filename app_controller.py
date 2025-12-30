@@ -38,7 +38,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 URL_BASE = os.environ.get("FLET_APP_URL", "http://localhost:8550")
-VERSION = "0.28.00"
+VERSION = "0.29.00"
 
 
 class AppController:
@@ -126,6 +126,20 @@ class AppController:
                     "📚 Manuale Completo",
                     icon=ft.Icons.LIBRARY_BOOKS,
                     on_click=lambda e: self._apri_manuale("manuale_completo")
+                ),
+            ], wrap=True, spacing=10),
+            ft.Divider(height=10),
+            ft.Text("🔗 Link Utili", weight=ft.FontWeight.BOLD),
+            ft.Row([
+                ft.ElevatedButton(
+                    "Versione Web",
+                    icon=ft.Icons.WEB,
+                    on_click=lambda e: self._apri_link("https://lexical-reindeer-enricoflammini-8aa2f727.koyeb.app/")
+                ),
+                ft.ElevatedButton(
+                    "GitHub",
+                    icon=ft.Icons.CODE,
+                    on_click=lambda e: self._apri_link("https://github.com/EnricoFlammini/BudgetAmico")
                 ),
             ], wrap=True, spacing=10),
         ], tight=True, spacing=10)
@@ -485,6 +499,15 @@ class AppController:
         except Exception as ex:
             logger.error(f"Errore apertura manuale: {ex}")
             self.show_snack_bar(f"Errore apertura manuale: {ex}", success=False)
+
+    def _apri_link(self, url):
+        import webbrowser
+        try:
+            webbrowser.open(url)
+            self.show_snack_bar(f"Apertura link...", success=True)
+        except Exception as e:
+            logger.error(f"Errore apertura link {url}: {e}")
+            self.show_snack_bar(f"Errore apertura link.", success=False)
 
     def _chiudi_info_dialog(self, e):
         logger.debug("[OVERLAY] _chiudi_info_dialog called.")

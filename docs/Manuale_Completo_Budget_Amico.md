@@ -1,4 +1,4 @@
-# Manuale Completo - Budget Amico v0.28
+# Manuale Completo - Budget Amico v0.29.00
 
 ## Indice
 
@@ -546,5 +546,5 @@ La Recovery Key generata alla registrazione è l'unico modo per recuperare i tuo
 
 ---
 
-*Budget Amico - Versione 0.28*
+*Budget Amico - *Versione documento: 0.29.00*
 *Sviluppato con ❤️ da Iscavar79*
