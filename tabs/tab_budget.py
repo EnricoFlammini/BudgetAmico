@@ -449,18 +449,19 @@ class BudgetTab(ft.Container):
             lista_categorie.controls.append(self._crea_widget_categoria(cat_data, theme))
             
         # Add Global Summary Card
-        if tot_limite > 0: # Only show if there is a budget
-            global_data = {
-                'nome_categoria': "Budget Totale",
-                'importo_limite_totale': tot_limite,
-                'spesa_totale_categoria': tot_spesa,
-                'sottocategorie': []
-            }
-            # Insert at the top with a bit of separation
-            lista_categorie.controls.insert(0, ft.Column([
-                self._crea_widget_categoria(global_data, theme, is_global=True),
-                ft.Divider(height=20, color=ft.Colors.TRANSPARENT)
-            ]))
+        # Removed condition to always show totals
+        # if tot_limite > 0: 
+        global_data = {
+            'nome_categoria': "Budget Totale",
+            'importo_limite_totale': tot_limite,
+            'spesa_totale_categoria': tot_spesa,
+            'sottocategorie': []
+        }
+        # Insert at the top with a bit of separation
+        lista_categorie.controls.insert(0, ft.Column([
+            self._crea_widget_categoria(global_data, theme, is_global=True),
+            ft.Divider(height=20, color=ft.Colors.TRANSPARENT)
+        ]))
 
         self.container_content.controls.append(lista_categorie)
 
@@ -468,7 +469,12 @@ class BudgetTab(ft.Container):
         loc = self.controller.loc
         limite_cat = cat_data['importo_limite_totale']
         spesa_cat = cat_data['spesa_totale_categoria']
-        percentuale_cat = (spesa_cat / limite_cat) if limite_cat > 0 else 0
+        if limite_cat > 0:
+            percentuale_cat = spesa_cat / limite_cat
+        else:
+            # Se non c'è budget ma c'è spesa, la consideriamo come "Fuori Budget" (Rosso)
+            # Impostiamo una percentuale alta (> 1.1) per far scattare il colore ERROR
+            percentuale_cat = 2.0 if spesa_cat > 0 else 0.0
         
         # New Color Logic
         if percentuale_cat <= 1.0:
@@ -480,6 +486,12 @@ class BudgetTab(ft.Container):
 
         # Clamp percentage for progress bar (max 1.0)
         progress_value = min(percentuale_cat, 1.0)
+        
+        # Determine Status Text
+        if limite_cat > 0:
+            status_text = f"{percentuale_cat*100:.1f}%"
+        else:
+            status_text = ">100%" if spesa_cat > 0 else "0.0%"
 
         sottocategorie_container = ft.Column(spacing=5, visible=False)
         has_subcategories = len(cat_data.get('sottocategorie', [])) > 0
@@ -512,7 +524,7 @@ class BudgetTab(ft.Container):
                 ft.Container(height=5),
                 ft.Row([
                     ft.Text(f"{loc.format_currency(spesa_cat)} / {loc.format_currency(limite_cat)}", size=14, color=AppColors.TEXT_SECONDARY),
-                    ft.Text(f"{percentuale_cat*100:.1f}%", size=14, weight=ft.FontWeight.BOLD, color=colore_cat)
+                    ft.Text(status_text, size=14, weight=ft.FontWeight.BOLD, color=colore_cat)
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
             ]),
             on_click=toggle_subcategory if has_subcategories else None,
@@ -539,7 +551,12 @@ class BudgetTab(ft.Container):
         loc = self.controller.loc
         limite = sub_data['importo_limite']
         spesa = sub_data['spesa_totale']
-        percentuale = (spesa / limite) if limite > 0 else 0
+        if limite > 0:
+            percentuale = spesa / limite
+            status_text = f"{percentuale*100:.1f}%"
+        else:
+            percentuale = 2.0 if spesa > 0 else 0.0
+            status_text = ">100%" if spesa > 0 else "0.0%"
         
         # Same Color Logic
         if percentuale <= 1.0:
@@ -555,7 +572,7 @@ class BudgetTab(ft.Container):
             content=ft.Column([
                 ft.Row([
                     ft.Text(sub_data['nome_sottocategoria'], size=14, expand=True),
-                    ft.Text(f"{percentuale*100:.1f}%", size=12, color=colore_progress, weight=ft.FontWeight.BOLD)
+                    ft.Text(status_text, size=12, color=colore_progress, weight=ft.FontWeight.BOLD)
                 ]),
                 ft.ProgressBar(value=progress_value, color=colore_progress, bgcolor=AppColors.SURFACE_VARIANT, height=4),
                 ft.Row([

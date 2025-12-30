@@ -1,4 +1,4 @@
-# Budget Amico v0.29.00
+# Budget Amico v0.29.01
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -10,6 +10,9 @@
 ---
 
 ## 📅 Changelog
+
+### v0.29.01 (30/12/2025)
+- **HOTFIX BUG**: Risolto problema critico che impediva il corretto salvataggio dello storico budget (errore "NotNullViolation"), causando la visualizzazione errata dei limiti (tutti a 0) nel mese corrente.
 
 ### v0.29.00 (30/12/2025)
 - **Web App**:

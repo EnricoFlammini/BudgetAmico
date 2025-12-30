@@ -38,7 +38,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 URL_BASE = os.environ.get("FLET_APP_URL", "http://localhost:8550")
-VERSION = "0.29.00"
+VERSION = "0.29.01"
 
 
 class AppController:

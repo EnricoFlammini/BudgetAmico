@@ -4310,7 +4310,8 @@ def imposta_budget(id_famiglia, id_sottocategoria, importo_limite, master_key_b6
             try:
                 import datetime
                 now = datetime.datetime.now()
-                trigger_budget_history_update(id_famiglia, now, master_key_b64, id_utente)
+                # Pass existing cursor to reuse connection
+                trigger_budget_history_update(id_famiglia, now, master_key_b64, id_utente, cursor=cur)
             except Exception as e:
                 print(f"[WARN] Failed auto-update in imposta_budget: {e}")
 
@@ -6986,3 +6987,79 @@ def aggiorna_stato_rata_piano(id_rata, nuovo_stato):
         return False
 
 
+
+# --- Funzioni Budget History Helpers ---
+
+def trigger_budget_history_update(id_famiglia, data_riferimento, master_key_b64=None, id_utente=None, cursor=None):
+    """
+    Allinea la tabella Budget_Storico con la tabella Budget per il mese/anno corrente.
+    Itera sui budget definiti, cripta nome e spesa (0), ed esegue UPSERT.
+    """
+    anno = data_riferimento.year
+    mese = data_riferimento.month
+    
+    # 1. Recupera chiavi per crittografia
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    family_key = None
+    if master_key and id_utente:
+        family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+    
+    if not family_key:
+        print(f"[WARN] trigger_budget_history_update: Cannot encrypt without family_key. id_utente={id_utente}")
+        return False
+
+    # 2. Definisci logica di update (inner function per riuso con/senza cursor esterno)
+    def _perform_update(cur):
+        # Fetch budget correnti con nomi in chiaro
+        sql_fetch = """
+        SELECT B.id_sottocategoria, B.importo_limite, S.nome_sottocategoria 
+        FROM Budget B
+        JOIN Sottocategorie S ON B.id_sottocategoria = S.id_sottocategoria
+        WHERE B.id_famiglia = %s AND B.periodo = 'Mensile'
+        """
+        cur.execute(sql_fetch, (id_famiglia,))
+        rows = cur.fetchall()
+        
+        # Prepare encrypted zero for new rows
+        zero_enc = _encrypt_if_key("0.0", family_key, crypto)
+        
+        for row in rows:
+            # Encrypt name
+            nome_enc = _encrypt_if_key(row['nome_sottocategoria'], family_key, crypto)
+            limit_val = row['importo_limite'] # Already encrypted in Budget table
+            
+            # Upsert
+            # ON CONFLICT: Update ONLY LIMIT. Preserve existing imported_speso and names.
+            sql_upsert = """
+            INSERT INTO Budget_Storico (id_famiglia, id_sottocategoria, anno, mese, importo_limite, nome_sottocategoria, importo_speso)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id_famiglia, id_sottocategoria, anno, mese)
+            DO UPDATE SET importo_limite = EXCLUDED.importo_limite;
+            """
+            cur.execute(sql_upsert, (
+                id_famiglia, 
+                row['id_sottocategoria'], 
+                anno, 
+                mese, 
+                limit_val, 
+                nome_enc, 
+                zero_enc
+            ))
+
+    if cursor:
+        try:
+            _perform_update(cursor)
+            return True
+        except Exception as e:
+             print(f"[ERRORE] Errore trigger_budget_history_update (shared cursor): {e}")
+             return False
+
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            _perform_update(cur)
+            con.commit()
+            return True
+    except Exception as e:
+        print(f"[ERRORE] Errore trigger_budget_history_update: {e}")
+        return False
