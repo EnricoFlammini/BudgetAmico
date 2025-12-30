@@ -12,7 +12,7 @@ class FondoPensioneDialog(ft.AlertDialog):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
-        # self.page = controller.page # Removed for Flet 0.80 compatibility
+        # self.controller.page = controller.page # Removed for Flet 0.80 compatibility
         self.loc = controller.loc
         self.modal = True
         self.title = ft.Text()
@@ -85,14 +85,14 @@ class FondoPensioneDialog(ft.AlertDialog):
         if self not in self.controller.page.overlay:
             self.controller.page.overlay.append(self)
         self.open = True
-        if self.page: self.page.update()
+        if self.controller.page: self.controller.page.update()
 
     def chiudi_dialog(self, e=None):
         self.open = False
-        if self.page: self.page.update()
+        if self.controller.page: self.controller.page.update()
         if self in self.controller.page.overlay:
             self.controller.page.overlay.remove(self)
-        if self.page: self.page.update()
+        if self.controller.page: self.controller.page.update()
 
     def _aggiorna_valore_cliccato(self, e):
         try:
@@ -106,7 +106,7 @@ class FondoPensioneDialog(ft.AlertDialog):
                 self.controller.show_snack_bar(self.loc.get("error_updating_value"), success=False)
         except (ValueError, TypeError):
             self.txt_valore_attuale.error_text = self.loc.get("invalid_amount")
-            if self.page: self.page.update()
+            if self.controller.page: self.controller.page.update()
 
     def _esegui_operazione(self, tipo_operazione):
         self.txt_importo_operazione.error_text = None
@@ -130,7 +130,7 @@ class FondoPensioneDialog(ft.AlertDialog):
                 is_valid = False
 
         if not is_valid:
-            if self.page: self.page.update()
+            if self.controller.page: self.controller.page.update()
             return
 
         data_operazione = datetime.date.today().strftime('%Y-%m-%d')

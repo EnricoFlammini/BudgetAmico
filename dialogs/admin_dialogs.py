@@ -20,7 +20,7 @@ from utils.email_sender import send_email
 class AdminDialogs:
     def __init__(self, controller):
         self.controller = controller
-        # self.page = controller.page # Removed for Flet 0.80 compatibility
+        # self.controller.page = controller.page # Removed for Flet 0.80 compatibility
         self.loc = controller.loc
 
         # --- Dialogo Gestione Categoria ---
@@ -231,13 +231,13 @@ class AdminDialogs:
         self.txt_username_o_email.error_text = None
         
         # Usa page.open() per gestire correttamente il dialog
-        self.page.open(self.dialog_invito_membri)
-        self.page.update()
+        self.controller.page.open(self.dialog_invito_membri)
+        self.controller.page.update()
 
     def _chiudi_dialog_invito(self, e=None):
         # Usa page.close() per chiudere correttamente il dialog
-        self.page.close(self.dialog_invito_membri)
-        self.page.update()
+        self.controller.page.close(self.dialog_invito_membri)
+        self.controller.page.update()
 
     def _invita_membro_cliccato(self, e):
         email = self.txt_username_o_email.value
@@ -372,13 +372,13 @@ class AdminDialogs:
         self.txt_budget_limite.prefix_text = loc.currencies[loc.currency]['symbol']
 
         # Use page.open instead of overlay manipulation
-        self.page.open(self.dialog_imposta_budget)
-        self.page.update()
+        self.controller.page.open(self.dialog_imposta_budget)
+        self.controller.page.update()
 
     def _chiudi_dialog_imposta_budget(self, e):
         # Use page.close
-        self.page.close(self.dialog_imposta_budget)
-        self.page.update()
+        self.controller.page.close(self.dialog_imposta_budget)
+        self.controller.page.update()
 
     def _salva_budget_cliccato(self, e):
         loc = self.loc
@@ -396,7 +396,7 @@ class AdminDialogs:
                 
                 imposta_budget(id_famiglia, id_sottocategoria, limite, master_key_b64, id_utente)
 
-                self.page.close(self.dialog_imposta_budget)
+                self.controller.page.close(self.dialog_imposta_budget)
                 self.controller.show_snack_bar(loc.get("budget_saved"), success=True)
 
                 # Aggiorna tutte le viste (così la scheda Budget si aggiorna)

@@ -15,7 +15,7 @@ class ContoCondivisoDialog(ft.AlertDialog):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
-        # self.page = controller.page # Removed for Flet 0.80 compatibility
+        # self.controller.page = controller.page # Removed for Flet 0.80 compatibility
         self.loc = controller.loc
 
         self.modal = True
@@ -89,8 +89,8 @@ class ContoCondivisoDialog(ft.AlertDialog):
             self.container_partecipanti.visible = False
             self.lv_partecipanti.controls.clear()
         # Solo aggiornare se il dialog è già nella pagina
-        if self.page:
-            self.page.update()
+        if self.controller.page:
+            self.controller.page.update()
 
     def _popola_lista_utenti(self, utenti_selezionati_ids=None):
         self.lv_partecipanti.controls.clear()
@@ -198,8 +198,8 @@ class ContoCondivisoDialog(ft.AlertDialog):
                     is_valid = False
 
             if not is_valid:
-                if self.page:
-                    self.page.update()
+                if self.controller.page:
+                    self.controller.page.update()
                 self.controller.hide_loading()
                 return
 

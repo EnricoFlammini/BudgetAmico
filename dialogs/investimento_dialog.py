@@ -50,8 +50,8 @@ class InvestimentoDialog(ft.AlertDialog):
 
     def chiudi(self, e=None):
         try:
-            self.page.close(self)
-            self.page.update()
+            self.page_ref.close(self)
+            self.page_ref.update()
         except Exception as ex:
             print(f"Errore chiusura dialog investimento: {ex}")
             import traceback
@@ -67,8 +67,8 @@ class InvestimentoDialog(ft.AlertDialog):
                 self.nome_broker.update()
                 return
 
-            master_key_b64 = self.page.session.get("master_key")
-            user_id = self.page.session.get("utente_loggato")['id']
+            master_key_b64 = self.page_ref.session.get("master_key")
+            user_id = self.page_ref.session.get("utente_loggato")['id']
 
             if self.conto_da_modificare:
                 successo, msg = modifica_conto(
@@ -93,21 +93,21 @@ class InvestimentoDialog(ft.AlertDialog):
                     self.on_save()
             else:
                 snack = ft.SnackBar(content=ft.Text(f"Errore: {msg}"))
-                if hasattr(self.page, "open"):
-                    self.page.open(snack)
+                if hasattr(self.page_ref, "open"):
+                    self.page_ref.open(snack)
                 else:
-                    self.page.snack_bar = snack
+                    self.page_ref.snack_bar = snack
                     snack.open = True
-                    self.page.update()
+                    self.page_ref.update()
         except Exception as ex:
             print(f"Errore salvataggio investimento: {ex}")
             import traceback
             traceback.print_exc()
             self.chiudi() # Chiudi comunque per evitare blocco
             snack = ft.SnackBar(content=ft.Text(f"Errore inaspettato: {ex}"))
-            if hasattr(self.page, "open"):
-                self.page.open(snack)
+            if hasattr(self.page_ref, "open"):
+                self.page_ref.open(snack)
             else:
-                self.page.snack_bar = snack
+                self.page_ref.snack_bar = snack
                 snack.open = True
-                self.page.update()
+                self.page_ref.update()

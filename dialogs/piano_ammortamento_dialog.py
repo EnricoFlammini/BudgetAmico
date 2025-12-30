@@ -12,7 +12,7 @@ from db.gestione_db import (
 class PianoAmmortamentoDialog:
     def __init__(self, controller):
         self.controller = controller
-        # self.page = controller.page # Removed for Flet 0.80 compatibility
+        # self.controller.page = controller.page # Removed for Flet 0.80 compatibility
         self.loc = controller.loc
         self.id_prestito_corrente = None
         self.rate_correnti = []
@@ -75,8 +75,8 @@ class PianoAmmortamentoDialog:
         # Userò un nuovo FilePicker e lo aggiungerò all'overlay.
         self.file_picker_csv = ft.FilePicker(on_result=self._on_csv_picked)
         # Il dialog deve gestire l'aggiunta del filepicker alla pagina quando si apre, o nel costruttore se la pagina è disponibile.
-        if self.page:
-            self.page.overlay.append(self.file_picker_csv)
+        if self.controller.page:
+            self.controller.page.overlay.append(self.file_picker_csv)
             # Riassegno il pulsante upload per usare questo picker
             self.dialog.content.controls[0].controls[1].on_click = lambda e: self.file_picker_csv.pick_files(allow_multiple=False, allowed_extensions=["csv"])
         
@@ -109,25 +109,25 @@ class PianoAmmortamentoDialog:
         self.txt_quota_interessi.value = ""
         self.txt_spese.value = "0"
 
-        if self.dialog not in self.page.overlay:
-            self.page.overlay.append(self.dialog)
+        if self.dialog not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog)
         
         # Assicura che il date picker sia in overlay e DOPO il dialog
-        if self.date_picker not in self.page.overlay:
-            self.page.overlay.append(self.date_picker)
+        if self.date_picker not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.date_picker)
         else:
             # Se c'è già, muovilo alla fine per sicurezza
-            self.page.overlay.remove(self.date_picker)
-            self.page.overlay.append(self.date_picker)
+            self.controller.page.overlay.remove(self.date_picker)
+            self.controller.page.overlay.append(self.date_picker)
 
         self.dialog.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _chiudi_dialog(self, e):
         # Chiudiamo esplicitamente il dialog e aggiorniamo per rimuoverlo visivamente
         # PRIMA di chiamare la callback che apre quello nuovo
         self.dialog.open = False
-        self.page.update()
+        self.controller.page.update()
         
         if hasattr(self, 'on_save_callback') and self.on_save_callback:
             self.on_save_callback()
@@ -180,7 +180,7 @@ class PianoAmmortamentoDialog:
                     )) 
                 ])
             )
-        self.page.update()
+        self.controller.page.update()
 
     def _aggiungi_rata_manuale(self, e):
         try:
@@ -216,7 +216,7 @@ class PianoAmmortamentoDialog:
                 self.controller.show_snack_bar("Rata aggiunta (in memoria)", success=True)
                 self._aggiorna_tabella()
                 self.txt_num_rata.value = str(num + 1)
-                self.page.update()
+                self.controller.page.update()
             else:
                 success = aggiungi_rata_piano_ammortamento(
                     self.id_prestito_corrente, num, data, imp, cap, int_, spese
@@ -226,7 +226,7 @@ class PianoAmmortamentoDialog:
                     self.rate_correnti = ottieni_piano_ammortamento(self.id_prestito_corrente)
                     self._aggiorna_tabella()
                     self.txt_num_rata.value = str(num + 1)
-                    self.page.update()
+                    self.controller.page.update()
                 else:
                     self.controller.show_snack_bar("Errore aggiunta rata.", success=False)
 
@@ -245,7 +245,7 @@ class PianoAmmortamentoDialog:
         
         # Usa il meccanismo di export file del controller o salva direttamente
         # Qui salvo in sessione e chiamo il file picker di salvataggio del controller se disponibile
-        self.page.session.set("excel_export_data", csv_data)
+        self.controller.page.session.set("excel_export_data", csv_data)
         self.controller.file_picker_salva_excel.save_file(file_name="template_piano_ammortamento.csv")
 
     def _on_csv_picked(self, e):
@@ -326,17 +326,17 @@ class PianoAmmortamentoDialog:
     def _apri_date_picker(self, e):
         # Callback already set in __init__
         self.date_picker.open = True
-        self.page.update()
+        self.controller.page.update()
 
     def _on_date_set(self, e):
         if self.date_picker.value:
             self.txt_data_scadenza.value = self.date_picker.value.strftime('%Y-%m-%d')
             self.date_picker.open = False
-            self.page.update()
+            self.controller.page.update()
 
     def _on_date_dismiss(self, e):
         self.date_picker.open = False
-        self.page.update()
+        self.controller.page.update()
 
     def _elimina_rata_click(self, e):
         if self.is_memory_mode:

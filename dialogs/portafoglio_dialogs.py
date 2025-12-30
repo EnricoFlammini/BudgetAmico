@@ -17,7 +17,7 @@ from utils.ticker_search import TickerSearchField
 class PortafoglioDialogs:
     def __init__(self, controller):
         self.controller = controller
-        # self.page = controller.page # Removed for Flet 0.80 compatibility
+        # self.controller.page = controller.page # Removed for Flet 0.80 compatibility
         self.loc = controller.loc
         self.conto_selezionato = None
 
@@ -231,7 +231,7 @@ class PortafoglioDialogs:
 
     def _aggiorna_tabella_portafoglio(self):
         loc = self.loc
-        master_key_b64 = self.page.session.get("master_key")
+        master_key_b64 = self.controller.page.session.get("master_key")
         portafoglio = ottieni_portafoglio(self.conto_selezionato['id_conto'], master_key_b64=master_key_b64)
         self.dt_portafoglio.rows.clear()
         valore_totale = 0
@@ -290,7 +290,7 @@ class PortafoglioDialogs:
         self.txt_prezzo_unitario.value = ""
         self.radio_operazione.value = "COMPRA"
 
-        master_key_b64 = self.page.session.get("master_key")
+        master_key_b64 = self.controller.page.session.get("master_key")
 
         # Popola il dropdown degli asset esistenti
         portafoglio_attuale = ottieni_portafoglio(self.conto_selezionato['id_conto'], master_key_b64=master_key_b64)
@@ -427,7 +427,7 @@ class PortafoglioDialogs:
             # Calcola l'importo totale della transazione
             importo_totale = quantita * prezzo
             data_oggi = datetime.date.today().strftime('%Y-%m-%d')
-            master_key_b64 = self.page.session.get("master_key")
+            master_key_b64 = self.controller.page.session.get("master_key")
 
             if tipo_op == "COMPRA":
                 # Acquisto: sottrai denaro dal conto (se non è cashback)
@@ -552,7 +552,7 @@ class PortafoglioDialogs:
         # Usa txt se settato (da autocomplete), altrimenti dal campo search
         nuovo_ticker = self.txt_modifica_ticker.value.strip().upper() or self.ticker_search_modifica.value.strip().upper()
         nuovo_nome = self.txt_modifica_nome.value.strip() or nuovo_ticker  # Se nome non settato, usa ticker
-        master_key_b64 = self.page.session.get("master_key")
+        master_key_b64 = self.controller.page.session.get("master_key")
         
         if nuovo_ticker and nuovo_nome:
             modifica_asset_dettagli(self.asset_da_modificare['id_asset'], nuovo_ticker, nuovo_nome, master_key_b64=master_key_b64)
@@ -628,7 +628,7 @@ class PortafoglioDialogs:
             self.controller.show_loading("Attendere...")
             
             try:
-                master_key_b64 = self.page.session.get("master_key")
+                master_key_b64 = self.controller.page.session.get("master_key")
 
                 # Usa compra_asset per aggiungere l'asset con il costo storico e il valore attuale
                 compra_asset(

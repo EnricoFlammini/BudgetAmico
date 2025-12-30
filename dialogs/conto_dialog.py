@@ -20,7 +20,7 @@ class ContoDialog(ft.AlertDialog):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
-        # self.page = controller.page # Removed for Flet 0.80 compatibility
+        # self.controller.page = controller.page # Removed for Flet 0.80 compatibility
         self.loc = controller.loc
         self.conto_id_in_modifica = None
         self.is_condiviso_in_modifica = False
@@ -181,7 +181,7 @@ class ContoDialog(ft.AlertDialog):
         self.controller.show_loading("Attendere...")
         try:
             self.open = False
-            self.page.update()
+            self.controller.page.update()
         finally:
             self.controller.hide_loading()
 
@@ -399,7 +399,7 @@ class ContoDialog(ft.AlertDialog):
             self.controller.show_error_dialog(f"Errore inaspettato: {ex}")
         finally:
             self.controller.hide_loading()
-            if self.page: self.page.update()
+            if self.controller.page: self.controller.page.update()
 
     # --- Logica per Rettifica Saldo (Admin) ---
 
