@@ -196,18 +196,52 @@ class PersonaleTab(ft.Container):
         if val_prestiti > 0:
             righe_dettaglio.append(riga_resp(self.controller.loc.get("loans"), self.controller.loc.format_currency(-val_prestiti), color=AppColors.ERROR))
         
-        # Card riepilogo patrimonio responsive - FORCE STACKING ON MOBILE/TABLET
+
+        
+        # --- Web Logic: Collapsible Details ---
+        is_web = False
+        try:
+            from controllers.web_app_controller import WebAppController
+            if isinstance(self.controller, WebAppController):
+                 is_web = True
+        except ImportError:
+            pass
+
+        content_dettagli = ft.Column(righe_dettaglio, spacing=5)
+        
+        icona_espandi = None
+        if is_web:
+            # Default hidden on web
+            content_dettagli.visible = False
+            
+            def toggle_dettagli(e):
+                content_dettagli.visible = not content_dettagli.visible
+                e.control.icon = ft.Icons.KEYBOARD_ARROW_UP if content_dettagli.visible else ft.Icons.KEYBOARD_ARROW_DOWN
+                self._safe_update()
+
+            icona_espandi = ft.IconButton(
+                icon=ft.Icons.KEYBOARD_ARROW_DOWN,
+                on_click=toggle_dettagli,
+                tooltip="Mostra/Nascondi Dettagli"
+            )
+
+        # Card riepilogo patrimonio responsive
+        header_patrimonio = ft.Column([
+            AppStyles.caption_text(self.controller.loc.get("net_worth")),
+            ft.Row([
+                AppStyles.big_currency_text(self.controller.loc.format_currency(val_patrimonio),
+                    color=AppColors.SUCCESS if val_patrimonio >= 0 else AppColors.ERROR),
+                icona_espandi if icona_espandi else ft.Container()
+            ], alignment=ft.MainAxisAlignment.START)
+        ])
+
         card_riepilogo = AppStyles.card_container(
             content=ft.ResponsiveRow([
-                # Colonna Totale: Full width on xs AND sm. Only side-by-side on md+
-                ft.Column([
-                    AppStyles.caption_text(self.controller.loc.get("net_worth")),
-                    AppStyles.big_currency_text(self.controller.loc.format_currency(val_patrimonio),
-                        color=AppColors.SUCCESS if val_patrimonio >= 0 else AppColors.ERROR)
-                ], col={"xs": 12, "sm": 12, "md": 5}),
+                # Colonna Totale
+                ft.Column([header_patrimonio], col={"xs": 12, "sm": 12, "md": 5}),
                 
-                # Colonna Dettagli: Full width on xs AND sm.
-                ft.Column(righe_dettaglio, spacing=5, col={"xs": 12, "sm": 12, "md": 7})
+                # Colonna Dettagli
+                ft.Column([content_dettagli], col={"xs": 12, "sm": 12, "md": 7})
             ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
             padding=20
         )
@@ -219,6 +253,29 @@ class PersonaleTab(ft.Container):
         # Ricostruisce l'interfaccia
         self.dd_mese_filtro.label = loc.get("filter_by_month")
         
+        container_mese = ft.Container(
+            content=self.dd_mese_filtro,
+            padding=ft.padding.only(left=10, right=10, top=10)
+        )
+
+        area_riepilogo = ft.Column([card_riepilogo, container_mese], spacing=0)
+
+        # Toggle Header for Web
+        icona_global_collapser = None
+        if is_web:
+            area_riepilogo.visible = False # Default hidden on web as requested
+            
+            def toggle_area_riepilogo(e):
+                area_riepilogo.visible = not area_riepilogo.visible
+                e.control.icon = ft.Icons.KEYBOARD_ARROW_UP if area_riepilogo.visible else ft.Icons.KEYBOARD_ARROW_DOWN
+                self._safe_update()
+            
+            icona_global_collapser = ft.IconButton(
+                icon=ft.Icons.KEYBOARD_ARROW_DOWN,
+                on_click=toggle_area_riepilogo,
+                tooltip="Espandi/Riduci Riepilogo"
+            )
+
         # Pulsante per vedere tutte le transazioni
         btn_tutte_transazioni = ft.TextButton(
             loc.get("all_transactions"),
@@ -232,13 +289,13 @@ class PersonaleTab(ft.Container):
             ft.Column([btn_tutte_transazioni], col={"xs": 12, "sm": 4}, horizontal_alignment=ft.CrossAxisAlignment.END)
         ], vertical_alignment=ft.CrossAxisAlignment.CENTER)
         
+        header_row_content = [ft.Container(AppStyles.section_header(nome_utente), expand=True)]
+        if icona_global_collapser:
+            header_row_content.append(icona_global_collapser)
+
         self.main_view.controls = [
-            AppStyles.section_header(nome_utente),
-            card_riepilogo,
-            ft.Container(
-                content=self.dd_mese_filtro,
-                padding=ft.padding.only(left=10, right=10, top=10)
-            ),
+            ft.Row(header_row_content, alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            area_riepilogo,
             AppStyles.page_divider(),
             ft.Container(
                 content=header_transazioni,

@@ -46,10 +46,7 @@ class WebDashboardView:
         self.nav_bar = ft.NavigationBar(
             destinations=[
                 ft.NavigationBarDestination(icon=ft.Icons.HOME, label="Home"),
-                ft.NavigationBarDestination(icon=ft.Icons.ACCOUNT_BALANCE_WALLET, label="Conti"),
-                # Investimenti removed as per request
                 ft.NavigationBarDestination(icon=ft.Icons.PIE_CHART, label="Budget"),
-                ft.NavigationBarDestination(icon=ft.Icons.PEOPLE, label="Famiglia"),
             ],
             on_change=self._on_nav_change,
             selected_index=0
@@ -80,16 +77,9 @@ class WebDashboardView:
         if idx == 0: # Home
             self.content_area.content = self.tab_personale
             self.tab_personale.update_view_data()
-        elif idx == 1: # Conti
-            self.content_area.content = self.tab_conti
-            self.tab_conti.update_view_data()
-        # idx 2 was Investimenti
-        elif idx == 2: # Budget (previously 3)
+        elif idx == 1: # Budget
             self.content_area.content = self.tab_budget
             self.tab_budget.update_view_data()
-        elif idx == 3: # Famiglia (previously 4)
-            self.content_area.content = self.tab_famiglia
-            self.tab_famiglia.update_view_data()
 
         self.page.update()
 
@@ -100,11 +90,7 @@ class WebDashboardView:
         if idx == 0:
             self.tab_personale.update_view_data(is_initial_load)
         elif idx == 1:
-            self.tab_conti.update_view_data(is_initial_load)
-        elif idx == 2:
             self.tab_budget.update_view_data(is_initial_load)
-        elif idx == 3:
-            self.tab_famiglia.update_view_data(is_initial_load)
         
     def update_sidebar(self):
         pass # No sidebar in web view

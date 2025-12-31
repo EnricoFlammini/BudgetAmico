@@ -1,4 +1,4 @@
-# Budget Amico v0.29.01
+# Budget Amico v0.30.00
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -10,6 +10,12 @@
 ---
 
 ## 📅 Changelog
+
+### v0.30.00 (31/12/2025)
+- **Web Layout**:
+    - **Navigazione Semplificata**: Rimossi "Conti" e "Famiglia" per una navigazione più pulita (solo Home e Budget).
+    - **Header Collassabile**: L'intera sezione superiore (Patrimonio Netto + Selezione Mese) è ora collassabile sulla versione Web per massimizzare lo spazio.
+    - **Info Patrimonio**: I dettagli del patrimonio (Liquidità, Investimenti, ecc.) sono collassabili e nascosti di default su Web.
 
 ### v0.29.01 (30/12/2025)
 - **HOTFIX BUG**: Risolto problema critico che impediva il corretto salvataggio dello storico budget (errore "NotNullViolation"), causando la visualizzazione errata dei limiti (tutti a 0) nel mese corrente.

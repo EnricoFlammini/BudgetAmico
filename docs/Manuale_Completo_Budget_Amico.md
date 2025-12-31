@@ -1,4 +1,4 @@
-# Manuale Completo - Budget Amico v0.29.01
+# Manuale Completo Budget Amico v0.30.00
 
 ## Indice
 

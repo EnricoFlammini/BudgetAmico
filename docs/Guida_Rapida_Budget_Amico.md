@@ -1,4 +1,4 @@
-# Guida Rapida - Budget Amico v0.29.01
+# Guida Rapida Budget Amico v0.30.00
 
 ## Benvenuto in Budget Amico! 🎉
 
