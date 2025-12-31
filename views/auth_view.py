@@ -83,7 +83,18 @@ class AuthView:
                                 ft.TextButton(loc.get("register_now"), on_click=self._vai_a_registrazione)
                             ],
                             alignment=ft.MainAxisAlignment.CENTER
-                        )
+                        ),
+                        ft.Container(height=20),
+                        ft.Column([
+                            ft.IconButton(
+                                icon=ft.Icons.CALCULATE_OUTLINED,
+                                icon_size=40,
+                                icon_color=ft.Colors.GREEN,
+                                tooltip="Divisore Pro (Free Tool)",
+                                on_click=lambda _: self.page.go("/divisore")
+                            ),
+                            ft.Text("Divisore Pro", size=10, color=ft.Colors.GREEN)
+                        ], spacing=0, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     alignment=ft.MainAxisAlignment.CENTER,

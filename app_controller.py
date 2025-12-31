@@ -222,6 +222,8 @@ class AppController:
                     self.page.go("/")
                     return
                 self.page.views.append(self.auth_view.get_force_change_password_view())
+            elif route_path == "/divisore":
+                self.page.views.append(self._build_public_divisore_view())
             else:
                 self.page.go("/")
             self.page.update()
@@ -660,6 +662,28 @@ class AppController:
                 ft.TextButton("Logout", icon=ft.Icons.LOGOUT, on_click=self.logout)
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER, expand=True, spacing=10)
         ], vertical_alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+
+    def _build_public_divisore_view(self) -> ft.View:
+        from tabs.tab_divisore_pro import DivisoreProTab
+        
+        # Create a standalone container for public access
+        # We dummy the controller interface if needed or just pass self as is. 
+        # DivisoreProTab relies on 'self.controller' for show_snack_bar mainly.
+        
+        tab = DivisoreProTab(self, show_back_button=True)
+        
+        return ft.View(
+            "/divisore",
+            controls=[
+                ft.Container(
+                    content=tab,
+                    alignment=ft.alignment.center,
+                    expand=True,
+                    padding=0 
+                )
+            ],
+            scroll=ft.ScrollMode.ADAPTIVE
+        )
 
     def logout(self, e=None):
         logger.info("User logged out")

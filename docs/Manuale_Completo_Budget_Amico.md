@@ -17,7 +17,8 @@
 13. [Pannello Admin](#13-pannello-admin)
 14. [Impostazioni](#14-impostazioni)
 15. [Backup e Sicurezza](#15-backup-e-sicurezza)
-16. [FAQ e Risoluzione Problemi](#16-faq-e-risoluzione-problemi)
+16. [Divisore Pro](#16-divisore-pro)
+17. [FAQ e Risoluzione Problemi](#17-faq-e-risoluzione-problemi)
 
 ---
 
@@ -513,7 +514,30 @@ La Recovery Key generata alla registrazione è l'unico modo per recuperare i tuo
 
 ---
 
-## 16. FAQ e Risoluzione Problemi
+## 16. Divisore Pro
+
+**Novità v0.30**: Uno strumento potente per gestire le spese di gruppo (viaggi, cene, regali), ispirato a Splitwise ma integrato e gratuito.
+
+### 16.1 Accesso
+Il Divisore Pro è accessibile in due modi:
+1.  **Dalla Dashboard**: Per gli utenti loggati, tramite l'icona della **Calcolatrice** nella barra di navigazione in basso.
+2.  **Accesso Pubblico**: Dalla pagina di login, cliccando sull'icona della **Calcolatrice Verde**. Utile per usare il tool "al volo" senza accedere ai dati personali.
+
+### 16.2 Come Funziona
+1.  **Aggiungi Spese**:
+    *   Inserisci **Chi ha pagato** (Nome).
+    *   Inserisci l'**Importo**.
+    *   Inserisci per **Quante Persone** è stata fatta la spesa (es. 3 se si divide in 3).
+    *   Clicca **"Aggiungi alla lista"**.
+2.  **Calcola i Debiti**:
+    *   Una volta inserite tutte le spese, clicca su **"Calcola i Debiti"**.
+    *   L'algoritmo minimizzerà il numero di transazioni necessarie per pareggiare i conti.
+3.  **Condividi**:
+    *   Clicca su **"Condividi su WhatsApp"** per inviare il riepilogo direttamente al gruppo.
+
+---
+
+## 17. FAQ e Risoluzione Problemi
 
 ### Non riesco ad accedere
 - Verifica username e password

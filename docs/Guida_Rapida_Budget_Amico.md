@@ -21,6 +21,10 @@ Budget Amico è la tua app per la gestione del budget personale e familiare. Que
 
 > ⚠️ **Importante**: Conserva la **Recovery Key** che ti verrà mostrata dopo la registrazione. È l'unico modo per recuperare i tuoi dati se dimentichi la password!
 
+### Accesso Rapido (Divisore Pro)
+Puoi accedere al tool **Divisore Pro** (calcolo spese condivise) direttamente dalla pagina di login cliccando sull'icona della **Calcolatrice Verde**, senza bisogno di registrarti.
+
+
 ### Primo login
 
 1. Inserisci il tuo **Username** (o Email)
@@ -43,6 +47,7 @@ La barra a sinistra ti permette di navigare tra le sezioni:
 | 💳 | **Conti Personali** | I tuoi conti bancari e contanti |
 | 👥 | **Conti Condivisi** | Conti in comune con familiari |
 | 📅 | **Spese Fisse** | Abbonamenti e pagamenti ricorrenti |
+| 🧮 | **Divisore Pro** | Calcolo divisione spese (Splitwise) |
 | 📈 | **Investimenti** | Portafogli di investimento |
 | 💳 | **Prestiti** | Mutui e finanziamenti |
 | 🏠 | **Immobili** | Proprietà immobiliari |
@@ -124,6 +129,10 @@ Se sei l'Admin della famiglia:
 
 ### Configura le Impostazioni ⚙️
 Personalizza lingua, valuta e altre preferenze nella sezione **"Impostazioni"**.
+
+### Dividi le Spese 🧮
+Usa **Divisore Pro** per calcolare rapidamente chi deve quanto a chi dopo una cena o un viaggio di gruppo! Disponibile anche senza login.
+
 
 ---
 
