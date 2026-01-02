@@ -19,7 +19,6 @@
     - **Storico Massimali**: Tracciamento delle variazioni del massimale nel tempo.
 - **Backup Database Supabase**:
     - **Script di Backup**: Nuovo strumento automatizzato per eseguire il backup completo del database Supabase.
-    - **Schedulazione**: Integrazione con lo Scheduler di Windows per backup giornalieri automatici.
     - **Sicurezza**: I dati sensibili rimangono crittografati anche nel backup.
 - **Interfaccia Utente**:
     - **Icone Sidebar**: Aggiornate icone per migliorare la distinzione tra sezioni (es. Prestiti vs Carte).
