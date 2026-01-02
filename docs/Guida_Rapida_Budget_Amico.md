@@ -1,4 +1,4 @@
-# Guida Rapida Budget Amico v0.30.00
+# Guida Rapida Budget Amico v0.31.00
 
 ## Benvenuto in Budget Amico! 🎉
 
@@ -130,9 +130,8 @@ Se sei l'Admin della famiglia:
 ### Configura le Impostazioni ⚙️
 Personalizza lingua, valuta e altre preferenze nella sezione **"Impostazioni"**.
 
-### Dividi le Spese 🧮
-Usa **Divisore Pro** per calcolare rapidamente chi deve quanto a chi dopo una cena o un viaggio di gruppo! Disponibile anche senza login.
-
+### Gestisci Carte di Credito 💳
+Utilizza il nuovo modulo **Carte** per tracciare le spese effettuate con carta di credito, monitorare il plafond e automatizzare i rimborsi.
 
 ---
 
@@ -144,5 +143,5 @@ Usa **Divisore Pro** per calcolare rapidamente chi deve quanto a chi dopo una ce
 
 ---
 
-*Budget Amico - *Versione documento: 0.29.00*
+*Budget Amico - *Versione documento: 0.31.00*
 *Sviluppato da Iscavar79*

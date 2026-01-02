@@ -1,4 +1,4 @@
-# Manuale Completo Budget Amico v0.30.00
+# Manuale Completo Budget Amico v0.31.00
 
 ## Indice
 
@@ -7,18 +7,19 @@
 3. [Dashboard e Navigazione](#3-dashboard-e-navigazione)
 4. [Conti Personali](#4-conti-personali)
 5. [Conti Condivisi](#5-conti-condivisi)
-6. [Transazioni e Categorie](#6-transazioni-e-categorie)
-7. [Budget Mensile](#7-budget-mensile)
-8. [Spese Fisse](#8-spese-fisse)
-9. [Investimenti e Portafogli](#9-investimenti-e-portafogli)
-10. [Prestiti e Mutui](#10-prestiti-e-mutui)
-11. [Immobili](#11-immobili)
-12. [Gestione Famiglia](#12-gestione-famiglia)
-13. [Pannello Admin](#13-pannello-admin)
-14. [Impostazioni](#14-impostazioni)
-15. [Backup e Sicurezza](#15-backup-e-sicurezza)
-16. [Divisore Pro](#16-divisore-pro)
-17. [FAQ e Risoluzione Problemi](#17-faq-e-risoluzione-problemi)
+6. [Carte](#6-carte)
+7. [Transazioni e Categorie](#7-transazioni-e-categorie)
+8. [Budget Mensile](#8-budget-mensile)
+9. [Spese Fisse](#9-spese-fisse)
+10. [Investimenti e Portafogli](#10-investimenti-e-portafogli)
+11. [Prestiti e Mutui](#11-prestiti-e-mutui)
+12. [Immobili](#12-immobili)
+13. [Gestione Famiglia](#13-gestione-famiglia)
+14. [Pannello Admin](#14-pannello-admin)
+15. [Impostazioni](#15-impostazioni)
+16. [Backup e Sicurezza](#16-backup-e-sicurezza)
+17. [Divisore Pro](#17-divisore-pro)
+18. [FAQ e Risoluzione Problemi](#18-faq-e-risoluzione-problemi)
 
 ---
 
@@ -137,7 +138,6 @@ La sidebar mostra le sezioni disponibili in base al tuo ruolo.
 | **Corrente** | Conto bancario principale |
 | **Risparmio** | Conti deposito o accumulo |
 | **Contanti** | Denaro fisico |
-| **Carta di Credito** | Carte con saldo negativo |
 
 > **Nota**: I conti di tipo "Investimento" e "Fondo Pensione" sono gestiti nelle rispettive sezioni dedicate.
 
@@ -174,12 +174,36 @@ I conti condivisi permettono a più membri della famiglia di registrare transazi
 Le quote determinano come vengono suddivise le spese:
 - Es. Coppia 50%/50%: le spese vengono divise equamente
 - Es. Famiglia: 40%/40%/20% per tre membri
+ 
+ ---
+ 
+ ## 6. Carte
+ 
+ ### 6.1 Aggiungere una Carta
+ 
+ Il nuovo modulo **Carte** permette di gestire carte di credito o debito in modo avanzato.
+ 
+ 1. Vai nella sezione **"Carte"** (icona 💳 barrata o simile, distinta da Prestiti)
+ 2. Clicca **"+ Aggiungi Carta"**
+ 3. Compila i dati richiesti:
+    - **Nome Carta**: es. "Amex Gold"
+    - **Tipo**: Credito, Debito
+    - **Circuito**: Visa, Mastercard, Amex
+    - **Massimale**: Limite di spesa mensile
+    - **Giorno Addebito**: Giorno del mese in cui viene saldato l'estratto conto (es. 15)
+    - **Conto di Appoggio**: Il conto corrente da cui verranno prelevati i fondi a fine mese
+ 
+ ### 6.2 Funzionamento
+ 
+ - **Spese**: Quando registri una spesa con la carta, questa viene accumulata come "da saldare".
+ - **Saldo Automatico**: Il giorno dell'addebito, il sistema crea automaticamente una transazione di rimborso dal conto di appoggio alla carta, azzerando il dovuto.
+ - **Storico Massimali**: Se cambi il massimale, il sistema tiene traccia della storia dei limiti per le analisi future.
+ 
+ ---
+ 
+ ## 7. Transazioni e Categorie
 
----
-
-## 6. Transazioni e Categorie
-
-### 6.1 Aggiungere una Transazione
+### 7.1 Aggiungere una Transazione
 
 **Metodo rapido:**
 1. Clicca il pulsante **"+"** (FAB)
@@ -214,11 +238,9 @@ Il giroconto crea automaticamente due transazioni collegate.
 
 ---
 
-## 7. Budget Mensile
+## 8. Budget Mensile
 
-## 7. Budget Mensile
-
-### 7.1 Nuova Interfaccia (v0.28)
+### 8.1 Nuova Interfaccia (v0.28)
 La pagina Budget è stata ridisegnata per offrirti una visione più chiara:
 
 1.  **Riepilogo Totale**: In cima alla lista trovi una card "Budget Totale" che somma tutti i limiti e le spese del mese.
@@ -228,14 +250,14 @@ La pagina Budget è stata ridisegnata per offrirti una visione più chiara:
     *   🟡 **Giallo**: Attenzione (100% - 110%).
     *   🔴 **Rosso**: Criticità (> 110%).
 
-### 7.2 Impostare un Budget
+### 8.2 Impostare un Budget
 
 1.  Vai nella sezione **"Budget"**
 2.  Clicca sulla **Categoria** per espanderla
 3.  Clicca sull'importo "Budget" di una sottocategoria
 4.  Inserisci il nuovo limite e conferma
 
-### 7.3 Monitorare le Spese
+### 8.3 Monitorare le Spese
 
 La sezione Budget mostra per ogni voce:
 - **Barra di progresso**: Colorata secondo la logica sopra descritta.
@@ -243,7 +265,7 @@ La sezione Budget mostra per ogni voce:
 - **Percentuale**: Es. "75%"
 - **Riepilogo mensile**: totale entrate, spese, risparmio (nella dashboard).
 
-### 7.3 Analisi Annuale
+### 8.3 Analisi Annuale
 
 Clicca su **"Vista Annuale"** per vedere:
 - Media mensile delle spese
@@ -252,11 +274,11 @@ Clicca su **"Vista Annuale"** per vedere:
 
 ---
 
-## 8. Spese Fisse
+## 9. Spese Fisse
 
 Le spese fisse sono pagamenti ricorrenti come affitto, bollette, abbonamenti.
 
-### 8.1 Aggiungere una Spesa Fissa
+### 9.1 Aggiungere una Spesa Fissa
 
 1. Vai in **"Spese Fisse"**
 2. Clicca **"+ Nuova Spesa Fissa"**
@@ -268,7 +290,7 @@ Le spese fisse sono pagamenti ricorrenti come affitto, bollette, abbonamenti.
    - **Categoria/Sottocategoria**: per classificazione
    - **Addebito automatico**: se attivo, la transazione viene creata automaticamente
 
-### 8.2 Gestione Automatica
+### 9.2 Gestione Automatica
 
 Se attivi **"Addebito automatico"**, Budget Amico:
 - Crea la transazione il giorno della scadenza
@@ -277,15 +299,15 @@ Se attivi **"Addebito automatico"**, Budget Amico:
 
 ---
 
-## 9. Investimenti e Portafogli
+## 10. Investimenti e Portafogli
 
-### 9.1 Creare un Conto Investimento
+### 10.1 Creare un Conto Investimento
 
 1. Vai in **"Investimenti"**
 2. Clicca **"+ Nuovo Conto"** nella sezione portafogli
 3. Compila nome e tipo (Investimento o Fondo Pensione)
 
-### 9.2 Aggiungere Asset
+### 10.2 Aggiungere Asset
 
 1. Espandi un portafoglio
 2. Clicca **"+ Aggiungi Asset"**
@@ -293,13 +315,13 @@ Se attivi **"Addebito automatico"**, Budget Amico:
 4. Inserisci: quantità, prezzo medio, data acquisto
 5. Il nome viene compilato automaticamente
 
-### 9.3 Sincronizzazione Prezzi
+### 10.3 Sincronizzazione Prezzi
 
 Budget Amico recupera i prezzi da Yahoo Finance:
 - **Automatico**: all'avvio dell'app
 - **Manuale**: clicca 🔄 accanto all'asset
 
-### 9.4 Suffissi di Mercato
+### 10.4 Suffissi di Mercato
 
 Per asset non americani, usa il suffisso corretto:
 
@@ -310,21 +332,21 @@ Per asset non americani, usa il suffisso corretto:
 | Francoforte | .DE | VWCE.DE |
 | Parigi | .PA | AIR.PA |
 
-### 9.5 Statistiche Portafoglio
+### 10.5 Statistiche Portafoglio
 
 Per ogni portafoglio puoi vedere:
 - Valore totale attuale
 - Gain/Loss (guadagno o perdita)
 - Percentuale di rendimento
 
-### 9.6 Analisi Storica Avanzata
+### 10.6 Analisi Storica Avanzata
 
 Nel tab "Andamento Storico" puoi visualizzare il grafico dei prezzi degli asset selezionati:
 - **Periodi estesi**: Seleziona periodi fino a **25 anni** (10y, 20y, 25y) per analisi di lungo termine.
 - **Risoluzione mista**: Il sistema carica dati giornalieri per gli ultimi 5 anni e mensili per lo storico profondo, garantendo velocità.
 - **Download intelligente**: Se un asset è nato di recente (es. 2019), il sistema lo riconosce ed evita download inutili di dati inesistenti.
 
-### 9.7 Simulazione Monte Carlo
+### 10.7 Simulazione Monte Carlo
 
 Il tab "Monte Carlo" permette di proiettare l'andamento futuro del tuo portafoglio:
 - **Simulazione Statistica**: Esegue migliaia di simulazioni basate sulla volatilità e rendimento storico dei tuoi asset.
@@ -333,9 +355,9 @@ Il tab "Monte Carlo" permette di proiettare l'andamento futuro del tuo portafogl
 
 ---
 
-## 10. Prestiti e Mutui
+## 11. Prestiti e Mutui
 
-### 10.1 Aggiungere un Prestito
+### 11.1 Aggiungere un Prestito
 
 1. Vai in **"Prestiti"**
 2. Clicca **"+ Aggiungi Prestito"** o **"+ Aggiungi Mutuo"**
@@ -348,26 +370,26 @@ Il tab "Monte Carlo" permette di proiettare l'andamento futuro del tuo portafogl
    - **Rate rimanenti**: quante ne mancano
    - **Giorno scadenza rata**: giorno del mese
 
-### 10.2 Ripartizione Quote
+### 11.2 Ripartizione Quote
 
 Per prestiti condivisi (es. mutuo cointestato):
 1. Nella sezione **"Ripartizione Quote"**
 2. Assegna la percentuale a ciascun membro
 3. Le quote devono sommare al 100%
 
-### 10.3 Pagamento Rata
+### 11.3 Pagamento Rata
 
 Per registrare il pagamento di una rata:
 1. Clicca **"Paga Rata"** accanto al prestito
 2. Conferma importo e data
 3. La transazione viene creata automaticamente
 
-### 10.4 Addebito Automatico
+### 11.4 Addebito Automatico
 
 Se attivi **"Addebito automatico"**, la rata viene registrata automaticamente alla scadenza.
 Se è presente un piano di ammortamento personalizzato (vedi 10.5), il sistema utilizzerà l'importo esatto previsto per quella specifica scadenza e aggiornerà lo stato della rata nel piano.
 
-### 10.5 Piano di Ammortamento Personalizzato
+### 11.5 Piano di Ammortamento Personalizzato
 
 Puoi caricare o gestire manualmente il piano di ammortamento per avere calcoli precisi su quota capitale e interessi.
 
@@ -382,9 +404,9 @@ Puoi caricare o gestire manualmente il piano di ammortamento per avere calcoli p
 
 ---
 
-## 11. Immobili
+## 12. Immobili
 
-### 11.1 Aggiungere un Immobile
+### 12.1 Aggiungere un Immobile
 
 1. Vai in **"Immobili"**
 2. Clicca **"+ Aggiungi Immobile"**
@@ -394,14 +416,14 @@ Puoi caricare o gestire manualmente il piano di ammortamento per avere calcoli p
    - **Valore stimato**: valore di mercato attuale
    - **Nuda proprietà**: se è solo nuda proprietà
 
-### 11.2 Nuda Proprietà
+### 12.2 Nuda Proprietà
 
 Gli immobili contrassegnati come **"Nuda proprietà"**:
 - Sono evidenziati con colore diverso
 - **Non** vengono inclusi nel patrimonio netto disponibile
 - Rimangono visibili nell'inventario
 
-### 11.3 Quote di Proprietà
+### 12.3 Quote di Proprietà
 
 Per immobili in comproprietà:
 1. Nella sezione quote, assegna la percentuale a ogni membro
@@ -409,9 +431,9 @@ Per immobili in comproprietà:
 
 ---
 
-## 12. Gestione Famiglia
+## 13. Gestione Famiglia
 
-### 12.1 Ruoli Utente
+### 13.1 Ruoli Utente
 
 | Ruolo | Accesso |
 |-------|---------|
@@ -420,7 +442,7 @@ Per immobili in comproprietà:
 | **Livello 1** | + Dettagli completi transazioni familiari |
 | **Admin** | + Pannello Admin, gestione membri |
 
-### 12.2 Visualizzazione Famiglia
+### 13.2 Visualizzazione Famiglia
 
 La sezione **"Famiglia"** mostra:
 - **Livello 1**: tutte le transazioni di tutti i membri
@@ -428,18 +450,18 @@ La sezione **"Famiglia"** mostra:
 
 ---
 
-## 13. Pannello Admin
+## 14. Pannello Admin
 
 Accessibile solo agli utenti con ruolo **Admin**.
 
-### 13.1 Gestione Categorie
+### 14.1 Gestione Categorie
 
 1. Vai in **Admin** → **"Categorie"**
 2. Per aggiungere: clicca **"+ Categoria"** o **"+ Sottocategoria"**
 3. Per modificare: clicca ✏️
 4. Per eliminare: clicca 🗑️
 
-### 13.2 Gestione Membri
+### 14.2 Gestione Membri
 
 1. Vai in **Admin** → **"Gestione Membri"**
 2. Visualizza tutti i membri della famiglia
@@ -447,7 +469,7 @@ Accessibile solo agli utenti con ruolo **Admin**.
 4. **Modifica ruolo**: clicca su un membro per cambiare livello
 5. **Rimanda credenziali**: per inviare nuove credenziali via email
 
-### 13.3 Configurazione SMTP
+### 14.3 Configurazione SMTP
 
 Per permettere l'invio email (inviti, recupero password):
 
@@ -461,50 +483,50 @@ Per permettere l'invio email (inviti, recupero password):
 
 > **Per Gmail**: usa una "Password per le app" generata nelle impostazioni sicurezza Google.
 
-### 13.4 Budget Manager
+### 14.4 Budget Manager
 
 Gestione avanzata dei budget per categoria/sottocategoria.
 
-### 13.5 Backup/Export
+### 14.5 Backup/Export
 
 - **Esporta dati**: scarica un file Excel con tutti i dati
 - **Logging**: abilita/disabilita i log di sistema
 
 ---
 
-## 14. Impostazioni
+## 15. Impostazioni
 
-### 14.1 Profilo Utente
+### 15.1 Profilo Utente
 
 Modifica i tuoi dati personali:
 - Nome e Cognome
 - Email
 - Password
 
-### 14.2 Conto Predefinito
+### 15.2 Conto Predefinito
 
 Imposta il conto che viene preselezionato nelle nuove transazioni.
 
-### 14.3 Lingua e Valuta
+### 15.3 Lingua e Valuta
 
 Cambia lingua dell'interfaccia e simbolo valuta.
 
 ---
 
-## 15. Backup e Sicurezza
+## 16. Backup e Sicurezza
 
-### 15.1 Crittografia
+### 16.1 Crittografia
 
 Budget Amico utilizza crittografia **End-to-End**:
 - I tuoi dati sono criptati prima di essere inviati al database
 - Solo tu (con la tua password) puoi decriptarli
 - Nemmeno gli amministratori del server possono leggere i tuoi dati
 
-### 15.2 Backup Manuale
+### 16.2 Backup Manuale
 
 Gli Admin possono esportare i dati dalla sezione **Admin** → **"Backup/Export"**.
 
-### 15.3 Recovery Key
+### 16.3 Recovery Key
 
 La Recovery Key generata alla registrazione è l'unico modo per recuperare i tuoi dati se:
 - Dimentichi la password
@@ -514,16 +536,16 @@ La Recovery Key generata alla registrazione è l'unico modo per recuperare i tuo
 
 ---
 
-## 16. Divisore Pro
+## 17. Divisore Pro
 
 **Novità v0.30**: Uno strumento potente per gestire le spese di gruppo (viaggi, cene, regali), ispirato a Splitwise ma integrato e gratuito.
 
-### 16.1 Accesso
+### 17.1 Accesso
 Il Divisore Pro è accessibile in due modi:
 1.  **Dalla Dashboard**: Per gli utenti loggati, tramite l'icona della **Calcolatrice** nella barra di navigazione in basso.
 2.  **Accesso Pubblico**: Dalla pagina di login, cliccando sull'icona della **Calcolatrice Verde**. Utile per usare il tool "al volo" senza accedere ai dati personali.
 
-### 16.2 Come Funziona
+### 17.2 Come Funziona
 1.  **Aggiungi Spese**:
     *   Inserisci **Chi ha pagato** (Nome).
     *   Inserisci l'**Importo**.
@@ -537,7 +559,7 @@ Il Divisore Pro è accessibile in due modi:
 
 ---
 
-## 17. FAQ e Risoluzione Problemi
+## 18. FAQ e Risoluzione Problemi
 
 ### Non riesco ad accedere
 - Verifica username e password
@@ -570,5 +592,5 @@ Il Divisore Pro è accessibile in due modi:
 
 ---
 
-*Budget Amico - *Versione documento: 0.29.00*
+*Budget Amico - *Versione documento: 0.31.00*
 *Sviluppato con ❤️ da Iscavar79*

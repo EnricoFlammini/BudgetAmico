@@ -1,4 +1,4 @@
-# Budget Amico v0.30.00
+# Budget Amico v0.31.00
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -10,6 +10,19 @@
 ---
 
 ## 📅 Changelog
+
+### v0.31.00 (02/01/2026)
+- **Gestione Carte di Credito/Debito**:
+    - **Nuovo Modulo Carte**: Supporto completo per la gestione di carte di credito e debito.
+    - **Aggiunta Carte**: Possibilità di aggiungere carte definendo massimale, giorno di addebito, costi di tenuta e altro.
+    - **Logica di Spesa**: Le spese con carta vengono tracciate separatamente e saldate automaticamente sul conto corrente collegato nel giorno stabilito.
+    - **Storico Massimali**: Tracciamento delle variazioni del massimale nel tempo.
+- **Backup Database Supabase**:
+    - **Script di Backup**: Nuovo strumento automatizzato per eseguire il backup completo del database Supabase.
+    - **Schedulazione**: Integrazione con lo Scheduler di Windows per backup giornalieri automatici.
+    - **Sicurezza**: I dati sensibili rimangono crittografati anche nel backup.
+- **Interfaccia Utente**:
+    - **Icone Sidebar**: Aggiornate icone per migliorare la distinzione tra sezioni (es. Prestiti vs Carte).
 
 ### v0.30.00 (31/12/2025)
 - **Web Layout**:
