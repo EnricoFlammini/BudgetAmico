@@ -14,8 +14,8 @@ if not os.path.exists(APP_DATA_DIR):
 DB_FILE = os.path.join(APP_DATA_DIR, 'budget_amico.db')
 
 # --- SCHEMA DATABASE ---
-# Versione 10: Aggiunta tabella PianoAmmortamento
-SCHEMA_VERSION = 10
+# Versione 11: Aggiunta tabella Carte e supporto transazioni con carte
+SCHEMA_VERSION = 16
 
 TABLES = {
     "Utenti": """
@@ -31,6 +31,7 @@ TABLES = {
             indirizzo TEXT,
             id_conto_default INTEGER REFERENCES Conti(id_conto) ON DELETE SET NULL,
             id_conto_condiviso_default INTEGER REFERENCES ContiCondivisi(id_conto_condiviso) ON DELETE SET NULL,
+            id_carta_default INTEGER REFERENCES Carte(id_carta) ON DELETE SET NULL,
             forza_cambio_password BOOLEAN DEFAULT 0
         );
         CREATE UNIQUE INDEX IF NOT EXISTS idx_utenti_username_bindex ON Utenti(username_bindex);
@@ -110,6 +111,7 @@ TABLES = {
             id_transazione INTEGER PRIMARY KEY AUTOINCREMENT,
             id_conto INTEGER NOT NULL REFERENCES Conti(id_conto) ON DELETE CASCADE,
             id_sottocategoria INTEGER REFERENCES Sottocategorie(id_sottocategoria) ON DELETE SET NULL,
+            id_carta INTEGER REFERENCES Carte(id_carta) ON DELETE SET NULL,
             data TEXT NOT NULL,
             descrizione TEXT NOT NULL,
             importo REAL NOT NULL
@@ -123,7 +125,9 @@ TABLES = {
             id_sottocategoria INTEGER REFERENCES Sottocategorie(id_sottocategoria) ON DELETE SET NULL,
             data TEXT NOT NULL,
             descrizione TEXT NOT NULL,
-            importo REAL NOT NULL
+            importo REAL NOT NULL,
+            id_carta INTEGER REFERENCES Carte(id_carta) ON DELETE SET NULL,
+            importo_nascosto BOOLEAN DEFAULT 0
         );
     """,
     "Budget": """
@@ -272,6 +276,36 @@ TABLES = {
             spese_fisse REAL DEFAULT 0,
             stato TEXT DEFAULT 'da_pagare',
             UNIQUE(id_prestito, numero_rata)
+        );
+    """,
+    "Carte": """
+        CREATE TABLE Carte (
+            id_carta INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_utente INTEGER NOT NULL REFERENCES Utenti(id_utente) ON DELETE CASCADE,
+            nome_carta TEXT NOT NULL,
+            tipo_carta TEXT NOT NULL CHECK(tipo_carta IN ('credito', 'debito')),
+            circuito TEXT NOT NULL,
+            id_conto_riferimento INTEGER REFERENCES Conti(id_conto) ON DELETE SET NULL,
+            id_conto_contabile INTEGER REFERENCES Conti(id_conto) ON DELETE SET NULL,
+            id_conto_riferimento_condiviso INTEGER REFERENCES ContiCondivisi(id_conto_condiviso) ON DELETE SET NULL,
+            id_conto_contabile_condiviso INTEGER REFERENCES ContiCondivisi(id_conto_condiviso) ON DELETE SET NULL,
+            massimale_encrypted TEXT,
+            giorno_addebito_encrypted TEXT,
+            spesa_tenuta_encrypted TEXT,
+            soglia_azzeramento_encrypted TEXT,
+            giorno_addebito_tenuta_encrypted TEXT,
+            addebito_automatico BOOLEAN DEFAULT 0,
+            data_creazione TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            attiva BOOLEAN DEFAULT 1
+        );
+    """,
+    "StoricoMassimaliCarte": """
+        CREATE TABLE StoricoMassimaliCarte (
+            id_storico INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_carta INTEGER NOT NULL REFERENCES Carte(id_carta) ON DELETE CASCADE,
+            data_inizio_validita TEXT NOT NULL,
+            massimale_encrypted TEXT NOT NULL,
+            UNIQUE(id_carta, data_inizio_validita)
         );
     """
 }

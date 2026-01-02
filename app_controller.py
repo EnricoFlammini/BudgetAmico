@@ -266,9 +266,9 @@ class AppController:
         if id_famiglia:
             # Note: These checks are still synchronous but usually fast. 
             # Could be moved to async if needed, but low priority.
-            pagamenti_fatti = check_e_paga_rate_scadute(id_famiglia)
             master_key_b64 = self.page.session.get("master_key")
             id_utente = self.get_user_id()
+            pagamenti_fatti = check_e_paga_rate_scadute(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
             spese_fisse_eseguite = check_e_processa_spese_fisse(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
             if pagamenti_fatti > 0: self.show_snack_bar(f"{pagamenti_fatti} pagamenti rata automatici eseguiti.", success=True)
             if spese_fisse_eseguite > 0: self.show_snack_bar(f"{spese_fisse_eseguite} spese fisse automatiche eseguite.", success=True)
@@ -310,7 +310,10 @@ class AppController:
                     return 0
                 
                 # Ottieni prezzi per tutti i ticker
-                tickers = list(set([asset['ticker'] for asset in tutti_asset]))
+                tickers = list(set([
+                    asset['ticker'] for asset in tutti_asset 
+                    if asset.get('ticker') and asset['ticker'] != "[ENCRYPTED]" and not asset['ticker'].startswith("gAAAAA")
+                ]))
                 logger.info(f"Aggiornamento automatico prezzi per {len(tickers)} ticker...")
                 prezzi = ottieni_prezzi_multipli(tickers)
                 
@@ -583,17 +586,30 @@ class AppController:
             self.page.session.set("id_famiglia", id_famiglia)
             self.page.session.set("ruolo_utente", ottieni_ruolo_utente(id_utente, id_famiglia))
             
-            # --- Auto-Update History Snapshot on Login ---
+            # --- Auto-Update History Snapshot & Credit Card Settlement on Login ---
             try:
                 from utils.async_task import AsyncTask
-                def _bg_budget_update():
+                from utils.card_processing import process_credit_card_settlements
+                
+                def _bg_tasks():
                     master_key_b64 = utente.get("master_key")
                     now = datetime.datetime.now()
-                    trigger_budget_history_update(id_famiglia, now, master_key_b64, id_utente)
+                    # 1. Update Budget History
+                    try:
+                        trigger_budget_history_update(id_famiglia, now, master_key_b64, id_utente)
+                    except Exception as e:
+                        logger.warning(f"History update failed: {e}")
+                    
+                    # 2. Process Credit Card Settlements
+                    try:
+                        n = process_credit_card_settlements(id_utente, master_key_b64)
+                        if n > 0: logger.info(f"Processed {n} credit card settlements.")
+                    except Exception as e:
+                        logger.warning(f"Card settlement processing failed: {e}")
                 
-                AsyncTask(target=_bg_budget_update).start()
+                AsyncTask(target=_bg_tasks).start()
             except Exception as e:
-                logger.warning(f"Failed background budget update on login: {e}")
+                logger.warning(f"Failed background tasks on login: {e}")
 
             self.page.go("/dashboard")
         else:

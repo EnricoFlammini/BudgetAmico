@@ -1293,7 +1293,15 @@ def cambia_password_e_username(id_utente: str, password_raw: str, nuovo_username
         # 1. Generate new keys
         salt = crypto.generate_salt()
         kek = crypto.derive_key(password_raw, salt)
-        master_key = crypto.generate_master_key()
+        
+        # PRESERVE OLD MASTER KEY IF AVAILABLE to avoid data loss
+        if old_master_key:
+            master_key = old_master_key
+            print(f"[INFO] PRESERVING Old Master Key for user {id_utente}")
+        else:
+            master_key = crypto.generate_master_key()
+            print(f"[INFO] GENERATING New Master Key for user {id_utente}")
+            
         encrypted_master_key = crypto.encrypt_master_key(master_key, kek)
         recovery_key = crypto.generate_recovery_key()
         recovery_key_hash = crypto.hash_recovery_key(recovery_key)
@@ -1980,25 +1988,30 @@ def ottieni_utente_da_email(email):
         return None
 
 
-def imposta_conto_default_utente(id_utente, id_conto_personale=None, id_conto_condiviso=None):
+def imposta_conto_default_utente(id_utente, id_conto_personale=None, id_conto_condiviso=None, id_carta_default=None):
     try:
         with get_db_connection() as con:
             cur = con.cursor()
             # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
 
-            if id_conto_personale:
-                # Imposta il conto personale e annulla quello condiviso
+            if id_carta_default:
+                # Imposta la carta e annulla i conti
                 cur.execute(
-                    "UPDATE Utenti SET id_conto_condiviso_default = NULL, id_conto_default = %s WHERE id_utente = %s",
+                    "UPDATE Utenti SET id_conto_default = NULL, id_conto_condiviso_default = NULL, id_carta_default = %s WHERE id_utente = %s",
+                    (id_carta_default, id_utente))
+            elif id_conto_personale:
+                # Imposta il conto personale e annulla gli altri
+                cur.execute(
+                    "UPDATE Utenti SET id_conto_condiviso_default = NULL, id_carta_default = NULL, id_conto_default = %s WHERE id_utente = %s",
                     (id_conto_personale, id_utente))
             elif id_conto_condiviso:
-                # Imposta il conto condiviso e annulla quello personale
+                # Imposta il conto condiviso e annulla gli altri
                 cur.execute(
-                    "UPDATE Utenti SET id_conto_default = NULL, id_conto_condiviso_default = %s WHERE id_utente = %s",
+                    "UPDATE Utenti SET id_conto_default = NULL, id_carta_default = NULL, id_conto_condiviso_default = %s WHERE id_utente = %s",
                     (id_conto_condiviso, id_utente))
-            else:  # Se entrambi sono None, annulla entrambi
+            else:  # Se tutti sono None, annulla tutto
                 cur.execute(
-                    "UPDATE Utenti SET id_conto_default = NULL, id_conto_condiviso_default = NULL WHERE id_utente = %s",
+                    "UPDATE Utenti SET id_conto_default = NULL, id_conto_condiviso_default = NULL, id_carta_default = NULL WHERE id_utente = %s",
                     (id_utente,))
 
             return cur.rowcount > 0
@@ -2012,14 +2025,16 @@ def ottieni_conto_default_utente(id_utente):
         with get_db_connection() as con:
             # con.row_factory = sqlite3.Row # Removed for Supabase
             cur = con.cursor()
-            cur.execute("SELECT id_conto_default, id_conto_condiviso_default FROM Utenti WHERE id_utente = %s",
+            cur.execute("SELECT id_conto_default, id_conto_condiviso_default, id_carta_default FROM Utenti WHERE id_utente = %s",
                         (id_utente,))
             result = cur.fetchone()
             if result:
-                if result['id_conto_default'] is not None:
+                if result.get('id_conto_default') is not None:
                     return {'id': result['id_conto_default'], 'tipo': 'personale'}
-                elif result['id_conto_condiviso_default'] is not None:
+                elif result.get('id_conto_condiviso_default') is not None:
                     return {'id': result['id_conto_condiviso_default'], 'tipo': 'condiviso'}
+                elif result.get('id_carta_default') is not None:
+                    return {'id': result['id_carta_default'], 'tipo': 'carta'}
             return None
     except Exception as e:
         print(f"[ERRORE] Errore durante il recupero del conto di default: {e}")
@@ -3150,7 +3165,7 @@ def _get_key_for_transaction(id_conto, master_key, crypto):
         
     return master_key
 
-def aggiungi_transazione(id_conto, data, descrizione, importo, id_sottocategoria=None, cursor=None, master_key_b64=None, importo_nascosto=False):
+def aggiungi_transazione(id_conto, data, descrizione, importo, id_sottocategoria=None, cursor=None, master_key_b64=None, importo_nascosto=False, id_carta=None):
     # Encrypt if key available using Family Key if possible (for shared visibility)
     crypto, master_key = _get_crypto_and_key(master_key_b64)
     encryption_key = _get_key_for_transaction(id_conto, master_key, crypto)
@@ -3159,16 +3174,16 @@ def aggiungi_transazione(id_conto, data, descrizione, importo, id_sottocategoria
     # Permette di passare un cursore esistente per le transazioni atomiche
     if cursor:
         cursor.execute(
-            "INSERT INTO Transazioni (id_conto, id_sottocategoria, data, descrizione, importo, importo_nascosto) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id_transazione",
-            (id_conto, id_sottocategoria, data, encrypted_descrizione, importo, importo_nascosto))
+            "INSERT INTO Transazioni (id_conto, id_sottocategoria, data, descrizione, importo, importo_nascosto, id_carta) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id_transazione",
+            (id_conto, id_sottocategoria, data, encrypted_descrizione, importo, importo_nascosto, id_carta))
         return cursor.fetchone()['id_transazione']
     else:
         try:
             with get_db_connection() as con:
                 cur = con.cursor()
                 cur.execute(
-                    "INSERT INTO Transazioni (id_conto, id_sottocategoria, data, descrizione, importo, importo_nascosto) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id_transazione",
-                    (id_conto, id_sottocategoria, data, encrypted_descrizione, importo, importo_nascosto))
+                    "INSERT INTO Transazioni (id_conto, id_sottocategoria, data, descrizione, importo, importo_nascosto, id_carta) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id_transazione",
+                    (id_conto, id_sottocategoria, data, encrypted_descrizione, importo, importo_nascosto, id_carta))
                 new_id = cur.fetchone()['id_transazione']
             
             # Auto-update History
@@ -3184,7 +3199,7 @@ def aggiungi_transazione(id_conto, data, descrizione, importo, id_sottocategoria
             return None
 
 
-def modifica_transazione(id_transazione, data, descrizione, importo, id_sottocategoria=None, id_conto=None, master_key_b64=None, importo_nascosto=False):
+def modifica_transazione(id_transazione, data, descrizione, importo, id_sottocategoria=None, id_conto=None, master_key_b64=None, importo_nascosto=False, id_carta=None):
     # Encrypt if key available using Family Key if possible (for shared visibility)
     crypto, master_key = _get_crypto_and_key(master_key_b64)
     encryption_key = _get_key_for_transaction(id_conto, master_key, crypto)
@@ -3195,12 +3210,12 @@ def modifica_transazione(id_transazione, data, descrizione, importo, id_sottocat
             cur = con.cursor()
             if id_conto is not None:
                 cur.execute(
-                    "UPDATE Transazioni SET data = %s, descrizione = %s, importo = %s, id_sottocategoria = %s, id_conto = %s, importo_nascosto = %s WHERE id_transazione = %s",
-                    (data, encrypted_descrizione, importo, id_sottocategoria, id_conto, importo_nascosto, id_transazione))
+                    "UPDATE Transazioni SET data = %s, descrizione = %s, importo = %s, id_sottocategoria = %s, id_conto = %s, importo_nascosto = %s, id_carta = %s WHERE id_transazione = %s",
+                    (data, encrypted_descrizione, importo, id_sottocategoria, id_conto, importo_nascosto, id_carta, id_transazione))
             else:
                 cur.execute(
-                    "UPDATE Transazioni SET data = %s, descrizione = %s, importo = %s, id_sottocategoria = %s, importo_nascosto = %s WHERE id_transazione = %s",
-                    (data, encrypted_descrizione, importo, id_sottocategoria, importo_nascosto, id_transazione))
+                    "UPDATE Transazioni SET data = %s, descrizione = %s, importo = %s, id_sottocategoria = %s, importo_nascosto = %s, id_carta = %s WHERE id_transazione = %s",
+                    (data, encrypted_descrizione, importo, id_sottocategoria, importo_nascosto, id_carta, id_transazione))
             
             success = cur.rowcount > 0
             
@@ -3216,11 +3231,16 @@ def modifica_transazione(id_transazione, data, descrizione, importo, id_sottocat
                         if res: target_account = res['id_conto']
                     
                     if target_account:
+                        # Assuming data is YYYY-MM-DD or datetime object. Ensure datetime for trigger
+                        dt_obj = data
+                        if isinstance(data, str):
+                            dt_obj = datetime.datetime.strptime(data[:10], '%Y-%m-%d')
+                            
                         idf, idu = _get_famiglia_and_utente_from_conto(target_account)
-                        trigger_budget_history_update(idf, data, master_key_b64, idu)
+                        trigger_budget_history_update(idf, dt_obj, master_key_b64, idu)
                  except Exception as e:
                      print(f"[WARN] Auto-history failed in edit: {e}")
-
+            con.commit()
             return success
     except Exception as e:
         print(f"[ERRORE] Errore generico durante la modifica: {e}")
@@ -3645,7 +3665,9 @@ def ottieni_transazioni_utente(id_utente, anno, mese, master_key_b64=None):
                                SCat.nome_sottocategoria,
                                SCat.id_sottocategoria,
                                'personale' AS tipo_transazione,
-                               0           AS id_transazione_condivisa -- Placeholder
+                               0           AS id_transazione_condivisa, -- Placeholder
+                               T.id_carta,
+                               T.importo_nascosto
                         FROM Transazioni T
                                  JOIN Conti C ON T.id_conto = C.id_conto
                                  LEFT JOIN Sottocategorie SCat ON T.id_sottocategoria = SCat.id_sottocategoria
@@ -3666,16 +3688,18 @@ def ottieni_transazioni_utente(id_utente, anno, mese, master_key_b64=None):
                                SCat.nome_sottocategoria,
                                SCat.id_sottocategoria,
                                'condivisa'           AS tipo_transazione,
-                               TC.id_transazione_condivisa
+                               TC.id_transazione_condivisa,
+                               TC.id_carta,
+                               TC.importo_nascosto
                         FROM TransazioniCondivise TC
                                  JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
                                  LEFT JOIN PartecipazioneContoCondiviso PCC
                                            ON CC.id_conto_condiviso = PCC.id_conto_condiviso
                                  LEFT JOIN Sottocategorie SCat ON TC.id_sottocategoria = SCat.id_sottocategoria
                                  LEFT JOIN Categorie Cat ON SCat.id_categoria = Cat.id_categoria
-                        WHERE (PCC.id_utente = %s AND CC.tipo_condivisione = 'utenti')
+                        WHERE ((PCC.id_utente = %s AND CC.tipo_condivisione = 'utenti')
                            OR (CC.id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s) AND
-                               CC.tipo_condivisione = 'famiglia') AND TC.data BETWEEN %s AND %s
+                               CC.tipo_condivisione = 'famiglia')) AND TC.data BETWEEN %s AND %s
 
                         ORDER BY data DESC, id_transazione DESC, id_transazione_condivisa DESC
                         """, (id_utente, data_inizio, data_fine, id_utente, id_utente, data_inizio, data_fine))
@@ -3749,7 +3773,7 @@ def ottieni_transazioni_utente(id_utente, anno, mese, master_key_b64=None):
         return []
 
 
-def aggiungi_transazione_condivisa(id_utente_autore, id_conto_condiviso, data, descrizione, importo, id_sottocategoria=None, cursor=None, master_key_b64=None, importo_nascosto=False):
+def aggiungi_transazione_condivisa(id_utente_autore, id_conto_condiviso, data, descrizione, importo, id_sottocategoria=None, cursor=None, master_key_b64=None, importo_nascosto=False, id_carta=None):
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
     
@@ -3778,23 +3802,23 @@ def aggiungi_transazione_condivisa(id_utente_autore, id_conto_condiviso, data, d
     # Permette di passare un cursore esistente per le transazioni atomiche
     if cursor:
         cursor.execute(
-            "INSERT INTO TransazioniCondivise (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, descrizione, importo, importo_nascosto) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id_transazione_condivisa",
-            (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, encrypted_descrizione, importo, importo_nascosto))
+            "INSERT INTO TransazioniCondivise (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, descrizione, importo, importo_nascosto, id_carta) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id_transazione_condivisa",
+            (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, encrypted_descrizione, importo, importo_nascosto, id_carta))
         return cursor.fetchone()['id_transazione_condivisa']
     else:
         try:
             with get_db_connection() as con:
                 cur = con.cursor()
                 cur.execute(
-                    "INSERT INTO TransazioniCondivise (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, descrizione, importo, importo_nascosto) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id_transazione_condivisa",
-                    (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, encrypted_descrizione, importo, importo_nascosto))
+                    "INSERT INTO TransazioniCondivise (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, descrizione, importo, importo_nascosto, id_carta) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id_transazione_condivisa",
+                    (id_utente_autore, id_conto_condiviso, id_sottocategoria, data, encrypted_descrizione, importo, importo_nascosto, id_carta))
                 return cur.fetchone()['id_transazione_condivisa']
         except Exception as e:
             print(f"[ERRORE] Errore generico durante l'aggiunta transazione condivisa: {e}")
             return None
 
 
-def modifica_transazione_condivisa(id_transazione_condivisa, data, descrizione, importo, id_sottocategoria=None, master_key_b64=None, id_utente=None, importo_nascosto=False):
+def modifica_transazione_condivisa(id_transazione_condivisa, data, descrizione, importo, id_sottocategoria=None, master_key_b64=None, id_utente=None, importo_nascosto=False, id_carta=None):
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
     
@@ -3831,9 +3855,10 @@ def modifica_transazione_condivisa(id_transazione_condivisa, data, descrizione, 
                             descrizione  = %s,
                             importo      = %s,
                             id_sottocategoria = %s,
-                            importo_nascosto = %s
+                            importo_nascosto = %s,
+                            id_carta = %s
                         WHERE id_transazione_condivisa = %s
-                        """, (data, encrypted_descrizione, importo, id_sottocategoria, importo_nascosto, id_transazione_condivisa))
+                        """, (data, encrypted_descrizione, importo, id_sottocategoria, importo_nascosto, id_carta, id_transazione_condivisa))
             return cur.rowcount > 0
     except Exception as e:
         print(f"[ERRORE] Errore generico durante la modifica transazione condivisa: {e}")
@@ -5027,11 +5052,11 @@ def ottieni_prestiti_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
         return []
 
 
-def check_e_paga_rate_scadute(id_famiglia):
+def check_e_paga_rate_scadute(id_famiglia, master_key_b64=None, id_utente=None):
     oggi = datetime.date.today()
     pagamenti_eseguiti = 0
     try:
-        prestiti_attivi = ottieni_prestiti_famiglia(id_famiglia)
+        prestiti_attivi = ottieni_prestiti_famiglia(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
         with get_db_connection() as con:
             cur = con.cursor()
             for p in prestiti_attivi:
@@ -5040,7 +5065,10 @@ def check_e_paga_rate_scadute(id_famiglia):
                     continue
                     
                 # Validazione dati minimi
-                if p['importo_residuo'] <= 0 or not p.get('id_conto_pagamento_default'):
+                id_conto_pers = p.get('id_conto_pagamento_default')
+                id_conto_cond = p.get('id_conto_condiviso_pagamento_default')
+                
+                if p['importo_residuo'] <= 0 or (not id_conto_pers and not id_conto_cond):
                     continue
 
                 pay_data = None # (amount, id_rata_schedule)
@@ -5100,11 +5128,13 @@ def check_e_paga_rate_scadute(id_famiglia):
                         
                         effettua_pagamento_rata(
                             p['id_prestito'], 
-                            p['id_conto_pagamento_default'], 
+                            id_conto_pers, 
                             amount, 
                             oggi.strftime('%Y-%m-%d'), 
                             cat_id, 
-                            p['nome']
+                            p['nome'],
+                            id_conto_condiviso=id_conto_cond,
+                            id_utente_autore=id_utente
                         )
                         
                         if sched_id:
@@ -5120,7 +5150,7 @@ def check_e_paga_rate_scadute(id_famiglia):
 
 
 def effettua_pagamento_rata(id_prestito, id_conto_pagamento, importo_pagato, data_pagamento, id_sottocategoria,
-                            nome_prestito=""):
+                            nome_prestito="", id_conto_condiviso=None, id_utente_autore=None):
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -5135,9 +5165,32 @@ def effettua_pagamento_rata(id_prestito, id_conto_pagamento, importo_pagato, dat
                 cur.execute("UPDATE PianoAmmortamento SET stato = 'pagata' WHERE id_rata = %s", (rata_row['id_rata'],))
             # ------------------------------------------------------
             descrizione = f"Pagamento rata {nome_prestito} (Prestito ID: {id_prestito})"
-            cur.execute(
-                "INSERT INTO Transazioni (id_conto, id_sottocategoria, data, descrizione, importo) VALUES (%s, %s, %s, %s, %s)",
-                (id_conto_pagamento, id_sottocategoria, data_pagamento, descrizione, -abs(importo_pagato)))
+            
+            if id_conto_condiviso:
+                # Transazione condivisa
+                if not id_utente_autore:
+                    # Fallback on some admin ID or safe default if automated
+                    # Better to print warning, but let's try to proceed if possible or error?
+                    # Automated tasks pass id_utente now.
+                    print("[WARNING] effettua_pagamento_rata called for shared account without id_utente_autore")
+                    pass 
+                
+                # Per le transazioni condivise, l'autore deve essere specificato. 
+                # Se è null, potrebbe fallire constraint NOT NULL su id_utente_autore.
+                cur.execute(
+                    "INSERT INTO TransazioniCondivise (id_conto_condiviso, id_utente_autore, id_sottocategoria, data, descrizione, importo) VALUES (%s, %s, %s, %s, %s, %s)",
+                    (id_conto_condiviso, id_utente_autore, id_sottocategoria, data_pagamento, descrizione, -abs(importo_pagato)))
+            
+            elif id_conto_pagamento:
+                # Transazione personale standard
+                cur.execute(
+                    "INSERT INTO Transazioni (id_conto, id_sottocategoria, data, descrizione, importo) VALUES (%s, %s, %s, %s, %s)",
+                    (id_conto_pagamento, id_sottocategoria, data_pagamento, descrizione, -abs(importo_pagato)))
+            else:
+                 print(f"[ERRORE] effettua_pagamento_rata: Nessun conto specificato per il pagamento.")
+                 con.rollback()
+                 return False
+
             data_dt = parse_date(data_pagamento)
             cur.execute(
                 "INSERT INTO StoricoPagamentiRate (id_prestito, anno, mese, data_pagamento, importo_pagato) VALUES (%s, %s, %s, %s, %s) ON CONFLICT(id_prestito, anno, mese) DO NOTHING",
@@ -7063,3 +7116,271 @@ def trigger_budget_history_update(id_famiglia, data_riferimento, master_key_b64=
     except Exception as e:
         print(f"[ERRORE] Errore trigger_budget_history_update: {e}")
         return False
+
+
+
+# --- GESTIONE CARTE ---
+
+def aggiungi_carta(id_utente, nome_carta, tipo_carta, circuito, 
+                   id_conto_riferimento=None, id_conto_contabile=None, 
+                   id_conto_riferimento_condiviso=None, id_conto_contabile_condiviso=None,
+                   massimale=None, giorno_addebito=None, spesa_tenuta=None, soglia_azzeramento=None, giorno_addebito_tenuta=None,
+                   addebito_automatico=False, master_key=None, crypto=None):
+    """
+    Aggiunge una nuova carta nel database. Cripta i dati sensibili.
+    Gestisce automaticamente la creazione/assegnazione del conto contabile e lo storico massimali.
+    Supporta conti personali e condivisi.
+    """
+    try:
+        crypto, master_key_bytes = _get_crypto_and_key(master_key)
+        
+        # 1. Gestione Conto Contabile
+        if tipo_carta == 'credito':
+            # Se conto contabile non specificato, creane uno automatico (Personale)
+            if not id_conto_contabile and not id_conto_contabile_condiviso:
+                nome_conto_contabile = f"Saldo {nome_carta}"
+                res_conto = aggiungi_conto(id_utente, nome_conto_contabile, "Carta di Credito", 0.0, master_key_b64=master_key)
+                if not res_conto or not res_conto[0]:
+                     print("[ERRORE] Impossibile creare conto contabile automatico")
+                     return False
+                id_conto_contabile = res_conto[0]
+        else:
+            # Debito: default al conto di riferimento
+            if not id_conto_contabile and not id_conto_contabile_condiviso:
+                id_conto_contabile = id_conto_riferimento
+                id_conto_contabile_condiviso = id_conto_riferimento_condiviso
+
+        massimale_enc = _encrypt_if_key(str(massimale) if massimale is not None else None, master_key_bytes, crypto)
+        giorno_addebito_enc = _encrypt_if_key(str(giorno_addebito) if giorno_addebito is not None else None, master_key_bytes, crypto)
+        spesa_tenuta_enc = _encrypt_if_key(str(spesa_tenuta) if spesa_tenuta is not None else None, master_key_bytes, crypto)
+        soglia_azzeramento_enc = _encrypt_if_key(str(soglia_azzeramento) if soglia_azzeramento is not None else None, master_key_bytes, crypto)
+        giorno_addebito_tenuta_enc = _encrypt_if_key(str(giorno_addebito_tenuta) if giorno_addebito_tenuta is not None else None, master_key_bytes, crypto)
+
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("""
+                INSERT INTO Carte (
+                    id_utente, nome_carta, tipo_carta, circuito, 
+                    id_conto_riferimento, id_conto_contabile,
+                    id_conto_riferimento_condiviso, id_conto_contabile_condiviso,
+                    massimale_encrypted, giorno_addebito_encrypted, spesa_tenuta_encrypted, 
+                    soglia_azzeramento_encrypted, giorno_addebito_tenuta_encrypted, addebito_automatico
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id_carta
+            """, (id_utente, nome_carta, tipo_carta, circuito, 
+                  id_conto_riferimento, id_conto_contabile,
+                  id_conto_riferimento_condiviso, id_conto_contabile_condiviso,
+                  massimale_enc, giorno_addebito_enc, spesa_tenuta_enc, soglia_azzeramento_enc, giorno_addebito_tenuta_enc, addebito_automatico))
+            
+            row = cur.fetchone()
+            id_carta = row.get('id_carta') if row else None
+            
+            if id_carta and massimale is not None:
+                data_validita = datetime.date.today().replace(day=1).strftime('%Y-%m-%d')
+                cur.execute("""
+                    INSERT INTO StoricoMassimaliCarte (id_carta, data_inizio_validita, massimale_encrypted)
+                    VALUES (%s, %s, %s)
+                """, (id_carta, data_validita, massimale_enc))
+
+            con.commit()
+            return True
+    except Exception as e:
+        print(f"[ERRORE] Errore aggiunta carta: {e}")
+        return False
+
+def ottieni_carte_utente(id_utente, master_key_b64=None):
+    """
+    Restituisce la lista delle carte attive dell'utente, decriptando i dati sensibili.
+    """
+    try:
+        crypto, master_key = _get_crypto_and_key(master_key_b64)
+        
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT * FROM Carte WHERE id_utente = %s AND attiva = TRUE", (id_utente,))
+            carte_raw = cur.fetchall()
+            
+            carte = []
+            for row in carte_raw:
+                try:
+                    c = dict(row)
+                    c['massimale'] = _decrypt_and_convert(c['massimale_encrypted'], float, master_key, crypto)
+                    c['giorno_addebito'] = _decrypt_and_convert(c['giorno_addebito_encrypted'], int, master_key, crypto)
+                    c['spesa_tenuta'] = _decrypt_and_convert(c['spesa_tenuta_encrypted'], float, master_key, crypto)
+                    c['soglia_azzeramento'] = _decrypt_and_convert(c['soglia_azzeramento_encrypted'], float, master_key, crypto)
+                    c['giorno_addebito_tenuta'] = _decrypt_and_convert(c['giorno_addebito_tenuta_encrypted'], int, master_key, crypto)
+                    carte.append(c)
+                except Exception as e:
+                     print(f"[WARN] Errore decriptazione carta {row.get('id_carta')}: {e}")
+            return carte
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero carte utente: {e}")
+        return []
+
+def _decrypt_and_convert(encrypted_val, type_func, master_key, crypto):
+    """Helper per decriptare e convertire. Ritorna None se vuoto o errore."""
+    if not encrypted_val: return None
+    val_str = _decrypt_if_key(encrypted_val, master_key, crypto, silent=True)
+    if not val_str or val_str == "[ENCRYPTED]": return None
+    try:
+        return type_func(val_str)
+    except:
+        return None
+
+def modifica_carta(id_carta, nome_carta=None, tipo_carta=None, circuito=None, 
+                   id_conto_riferimento=None, id_conto_contabile=None,
+                   id_conto_riferimento_condiviso=None, id_conto_contabile_condiviso=None,
+                   massimale=None, giorno_addebito=None, spesa_tenuta=None, soglia_azzeramento=None, giorno_addebito_tenuta=None,
+                   addebito_automatico=None, master_key_b64=None):
+    """
+    Modifica una carta esistente. Aggiorna solo i campi forniti.
+    Gestisce lo storico massimali e la logica esclusiva Conti Personali/Condivisi.
+    """
+    try:
+        crypto, master_key = _get_crypto_and_key(master_key_b64)
+        
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # 1. Verifica Cambio Massimale
+            should_update_history = False
+            massimale_enc_new = None
+            
+            if massimale is not None:
+                cur.execute("SELECT massimale_encrypted FROM Carte WHERE id_carta = %s", (id_carta,))
+                row = cur.fetchone()
+                curr_enc = row.get('massimale_encrypted') if row else None
+                curr_val = _decrypt_if_key(curr_enc, master_key, crypto)
+                
+                try:
+                    v1 = float(curr_val) if curr_val else 0.0
+                    v2 = float(massimale) if massimale else 0.0
+                    if abs(v1 - v2) > 0.001: 
+                        should_update_history = True
+                except:
+                    if str(curr_val) != str(massimale):
+                        should_update_history = True
+                
+                # Encrypt new value for global update
+                massimale_enc_new = _encrypt_if_key(str(massimale), master_key, crypto)
+
+            # 2. Costruzione Query Update
+            updates = []
+            params = []
+
+            if nome_carta is not None:
+                updates.append("nome_carta = %s")
+                params.append(nome_carta)
+            if tipo_carta is not None:
+                updates.append("tipo_carta = %s")
+                params.append(tipo_carta)
+            if circuito is not None:
+                updates.append("circuito = %s")
+                params.append(circuito)
+            if addebito_automatico is not None:
+                updates.append("addebito_automatico = %s")
+                params.append(addebito_automatico)
+            
+            # Handle Account Exclusivity: if one provided, set other to NULL
+            if id_conto_riferimento is not None: 
+                updates.append("id_conto_riferimento = %s")
+                params.append(id_conto_riferimento)
+                updates.append("id_conto_riferimento_condiviso = NULL")
+            elif id_conto_riferimento_condiviso is not None: # Only if personal not provided
+                updates.append("id_conto_riferimento_condiviso = %s")
+                params.append(id_conto_riferimento_condiviso)
+                updates.append("id_conto_riferimento = NULL")
+
+            if id_conto_contabile is not None:
+                updates.append("id_conto_contabile = %s")
+                params.append(id_conto_contabile)
+                updates.append("id_conto_contabile_condiviso = NULL")
+            elif id_conto_contabile_condiviso is not None: # Only if personal not provided
+                updates.append("id_conto_contabile_condiviso = %s")
+                params.append(id_conto_contabile_condiviso)
+                updates.append("id_conto_contabile = NULL")
+
+            if massimale is not None:
+                updates.append("massimale_encrypted = %s")
+                params.append(massimale_enc_new)
+            if giorno_addebito is not None:
+                updates.append("giorno_addebito_encrypted = %s")
+                params.append(_encrypt_if_key(str(giorno_addebito), master_key, crypto))
+            if spesa_tenuta is not None:
+                updates.append("spesa_tenuta_encrypted = %s")
+                params.append(_encrypt_if_key(str(spesa_tenuta), master_key, crypto))
+            if soglia_azzeramento is not None:
+                updates.append("soglia_azzeramento_encrypted = %s")
+                params.append(_encrypt_if_key(str(soglia_azzeramento), master_key, crypto))
+            if giorno_addebito_tenuta is not None:
+                updates.append("giorno_addebito_tenuta_encrypted = %s")
+                params.append(_encrypt_if_key(str(giorno_addebito_tenuta), master_key, crypto))
+
+            if updates:
+                params.append(id_carta)
+                query = f"UPDATE Carte SET {', '.join(updates)} WHERE id_carta = %s"
+                cur.execute(query, tuple(params))
+
+            # 3. Aggiornamento Storico
+            if should_update_history and massimale_enc_new:
+                 data_validita = datetime.date.today().replace(day=1).strftime('%Y-%m-%d')
+                 cur.execute("""
+                    INSERT INTO StoricoMassimaliCarte (id_carta, data_inizio_validita, massimale_encrypted)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (id_carta, data_inizio_validita) 
+                    DO UPDATE SET massimale_encrypted = EXCLUDED.massimale_encrypted
+                 """, (id_carta, data_validita, massimale_enc_new))
+            
+            con.commit()
+            return True
+            
+    except Exception as e:
+        print(f"[ERRORE] Errore modifica carta: {e}")
+        return False
+
+def elimina_carta(id_carta, soft_delete=True):
+    """
+    Elimina una carta (soft delete di default per preservare storico).
+    """
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            if soft_delete:
+                cur.execute("UPDATE Carte SET attiva = FALSE WHERE id_carta = %s", (id_carta,))
+            else:
+                cur.execute("DELETE FROM Carte WHERE id_carta = %s", (id_carta,))
+            con.commit()
+            return True
+    except Exception as e:
+        print(f"[ERRORE] Errore eliminazione carta: {e}")
+        return False
+
+
+def calcola_totale_speso_carta(id_carta: int, mese: int, anno: int) -> float:
+    try:
+        with get_db_connection() as conn:
+            start_date = f'{anno}-{mese:02d}-01'
+            if mese == 12:
+                end_date = f'{anno+1}-01-01'
+            else:
+                end_date = f'{anno}-{mese+1:02d}-01'
+            
+            cur = conn.cursor()
+            
+            # 1. Personal Transactions
+            q1 = "SELECT SUM(importo) as totale FROM Transazioni WHERE id_carta = %s AND data >= %s AND data < %s"
+            cur.execute(q1, (id_carta, start_date, end_date))
+            res1 = cur.fetchone()
+            val1 = float(res1.get('totale') or 0.0)
+            
+            # 2. Shared Transactions
+            q2 = "SELECT SUM(importo) as totale FROM TransazioniCondivise WHERE id_carta = %s AND data >= %s AND data < %s"
+            cur.execute(q2, (id_carta, start_date, end_date))
+            res2 = cur.fetchone()
+            val2 = float(res2.get('totale') or 0.0)
+            
+            return abs(val1 + val2)
+    except Exception as e:
+        print(f'Error calc speso carta: {e}')
+        return 0.0
+

@@ -12,6 +12,7 @@ from tabs.tab_immobili import ImmobiliTab
 from tabs.tab_impostazioni import ImpostazioniTab
 from tabs.tab_spese_fisse import SpeseFisseTab
 from tabs.tab_investimenti import InvestimentiTab
+from tabs.tab_carte import TabCarte
 from utils.logger import setup_logger
 from utils.cache_manager import cache_manager
 
@@ -35,6 +36,7 @@ class DashboardView:
         self.tab_impostazioni = ImpostazioniTab(controller)
         self.tab_spese_fisse = SpeseFisseTab(controller)
         self.tab_investimenti = InvestimentiTab(controller)
+        self.tab_carte = TabCarte(controller)
 
         # 2. Sidebar personalizzata (sostituisce NavigationRail)
         self.selected_index = 0
@@ -148,9 +150,9 @@ class DashboardView:
             view_instance.update_view_data()
         elif hasattr(view_instance, 'update_all_admin_tabs_data'):
             view_instance.update_all_admin_tabs_data()
+        elif hasattr(view_instance, 'load_cards'): # For TabCarte
+            view_instance.load_cards()
         
-        # Ricostruisci la sidebar per aggiornare la selezione
-        self.update_sidebar()
         # Ricostruisci la sidebar per aggiornare la selezione
         self.update_sidebar()
         self._safe_update(self.page)
@@ -271,7 +273,6 @@ class DashboardView:
             open=True,
         )
         self.page.overlay.append(bs)
-        self.page.overlay.append(bs)
         self._safe_update(self.page)
 
     def update_sidebar(self):
@@ -317,6 +318,16 @@ class DashboardView:
             'index': index
         })
         index += 1
+        
+        # 3b. Carte (Cards)
+        self.sidebar_items.append({
+            'icon': ft.Icons.CREDIT_CARD_OUTLINED,
+            'selected_icon': ft.Icons.CREDIT_CARD,
+            'label': "Carte", # Localization needed ideally
+            'view': self.tab_carte,
+            'index': index
+        })
+        index += 1
 
         # 4. Conti Condivisi
         self.sidebar_items.append({
@@ -352,8 +363,8 @@ class DashboardView:
         # 7. Prestiti (Livello 2+)
         if ruolo in ['admin', 'livello1', 'livello2']:
             self.sidebar_items.append({
-                'icon': ft.Icons.CREDIT_CARD_OUTLINED,
-                'selected_icon': ft.Icons.CREDIT_CARD,
+                'icon': ft.Icons.MONEY_OFF_OUTLINED,
+                'selected_icon': ft.Icons.MONEY_OFF,
                 'label': loc.get("loans"),
                 'view': self.tab_prestiti,
                 'index': index
@@ -476,6 +487,7 @@ class DashboardView:
             self.tab_prestiti.update_view_data(is_initial_load)
             self.tab_immobili.update_view_data(is_initial_load)
             self.tab_impostazioni.update_view_data(is_initial_load)
+            self.tab_carte.load_cards() # Refresh cards too
 
             if self.controller.get_user_role() == 'admin':
                 self.tab_admin.update_all_admin_tabs_data(is_initial_load)

@@ -366,6 +366,10 @@ class InvestimentiTab(ft.Container):
         
         # Ottieni prezzo da yfinance - Questo è bloccante, ma essendo su azione utente potrebbe essere OK o andrebbe reso async
         # Per ora lo lascio sincrono per non complicare troppo, ma ideally should be async
+        if not ticker or ticker == "[ENCRYPTED]" or ticker.startswith("gAAAAA"):
+             self.controller.show_snack_bar("Impossibile aggiornare prezzo: Ticker cifrato/non valido.", success=False)
+             return
+
         nuovo_prezzo = ottieni_prezzo_asset(ticker)
         
         if nuovo_prezzo:
@@ -423,7 +427,11 @@ class InvestimentiTab(ft.Container):
             return 0
         
         # Ottieni prezzi per tutti i ticker
-        tickers = list(set([asset['ticker'] for asset in tutti_asset]))
+        # Ottieni prezzi per tutti i ticker
+        tickers = list(set([
+            asset['ticker'] for asset in tutti_asset 
+            if asset.get('ticker') and asset['ticker'] != "[ENCRYPTED]" and not asset['ticker'].startswith("gAAAAA")
+        ]))
         prezzi = ottieni_prezzi_multipli(tickers)
         
         # Aggiorna i prezzi nel database

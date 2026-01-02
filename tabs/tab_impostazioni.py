@@ -2,7 +2,7 @@ import flet as ft
 from utils.styles import AppColors, AppStyles, PageConstants
 from db.gestione_db import (
     imposta_conto_default_utente, aggiorna_profilo_utente, cambia_password, hash_password,
-    ottieni_tutti_i_conti_utente, ottieni_conto_default_utente, ottieni_dettagli_utente
+    ottieni_tutti_i_conti_utente, ottieni_conto_default_utente, ottieni_dettagli_utente, ottieni_carte_utente
 )
 from utils.async_task import AsyncTask
 from utils.logger import setup_logger
@@ -51,6 +51,8 @@ class ImpostazioniTab(ft.Container):
             imposta_conto_default_utente(id_utente, id_conto_personale=id_conto)
         elif tipo_conto == 'C':
             imposta_conto_default_utente(id_utente, id_conto_condiviso=id_conto)
+        elif tipo_conto == 'K':
+            imposta_conto_default_utente(id_utente, id_carta_default=id_conto)
 
         self.controller.show_snack_bar("Conto predefinito salvato con successo!", success=True)
 
@@ -244,7 +246,10 @@ class ImpostazioniTab(ft.Container):
             # 2. Conto Default
             data['conto_default_info'] = ottieni_conto_default_utente(utente_id)
             
-            # 3. Dati Profilo
+            # 3. Carte
+            data['carte'] = ottieni_carte_utente(utente_id, master_key_b64)
+            
+            # 4. Dati Profilo
             data['dati_utente'] = ottieni_dettagli_utente(utente_id, master_key_b64)
         return data
 
@@ -258,15 +263,33 @@ class ImpostazioniTab(ft.Container):
             for c in conti_filtrati:
                 prefix = "C" if c['is_condiviso'] else "P"
                 opzioni_conto.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=c['nome_conto']))
+            
+            # Aggiungi Carte
+            carte = result.get('carte', [])
+            if carte:
+                opzioni_conto.append(ft.dropdown.Option(key="DIVIDER", text="-- Carte --", disabled=True))
+                for c in carte:
+                    opzioni_conto.append(ft.dropdown.Option(key=f"K{c['id_carta']}", text=f"💳 {c['nome_carta']}"))
+
             self.dd_conto_default.options = opzioni_conto
 
             # Imposta valore Default
             conto_default_info = result.get('conto_default_info')
             if conto_default_info:
-                val = f"{conto_default_info['tipo'][0].upper()}{conto_default_info['id']}"
-                # Verifica che il valore esista nelle opzioni (potrebbe essere stato cancellato)
-                if any(opt.key == val for opt in opzioni_conto):
-                    self.dd_conto_default.value = val
+                tipo = conto_default_info['tipo']
+                if tipo == 'personale':
+                    val = f"P{conto_default_info['id']}"
+                elif tipo == 'condiviso':
+                    val = f"C{conto_default_info['id']}"
+                elif tipo == 'carta':
+                    val = f"K{conto_default_info['id']}"
+                else:
+                    val = None
+                
+                if val:
+                    # Verifica che il valore esista nelle opzioni (potrebbe essere stato cancellato)
+                    if any(opt.key == val for opt in opzioni_conto):
+                        self.dd_conto_default.value = val
 
             # Popola Profilo
             dati_utente = result.get('dati_utente')

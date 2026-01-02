@@ -10,7 +10,8 @@ from db.gestione_db import (
     aggiungi_transazione_condivisa,
     modifica_transazione_condivisa,
     elimina_transazione,
-    elimina_transazione_condivisa
+    elimina_transazione_condivisa,
+    ottieni_carte_utente
 )
 from utils.logger import setup_logger
 
@@ -103,6 +104,7 @@ class TransactionDialog(ft.AlertDialog):
         famiglia_id = self.controller.get_family_id()
         master_key_b64 = self.controller.page.session.get("master_key")
 
+        # 1. Accounts
         tutti_i_conti = ottieni_tutti_i_conti_utente(utente_id, master_key_b64=master_key_b64)
         conti_filtrati = [c for c in tutti_i_conti if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
 
@@ -111,6 +113,31 @@ class TransactionDialog(ft.AlertDialog):
             suffix = " " + self.loc.get("shared_suffix") if c['is_condiviso'] else ""
             prefix = "C" if c['is_condiviso'] else "P"
             opzioni_conto.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}{suffix}"))
+        
+        # 2. Cards
+        carte = ottieni_carte_utente(utente_id, master_key_b64)
+        if carte:
+            opzioni_conto.append(ft.dropdown.Option(key="DIVIDER", text="-- Carte --", disabled=True))
+            for c in carte:
+                target_acc = c.get('id_conto_contabile')
+                is_shared_card = False
+                
+                if not target_acc:
+                     target_acc = c.get('id_conto_contabile_condiviso')
+                     if target_acc: is_shared_card = True
+                
+                if not target_acc:
+                     # Fallback for debit or missing accounting (should use reference)
+                     target_acc = c.get('id_conto_riferimento')
+                     if not target_acc:
+                         target_acc = c.get('id_conto_riferimento_condiviso')
+                         if target_acc: is_shared_card = True
+                     
+                if target_acc:
+                    flag = 'S' if is_shared_card else 'P'
+                    key = f"CARD_{c['id_carta']}_{target_acc}_{flag}"
+                    opzioni_conto.append(ft.dropdown.Option(key=key, text=f"💳 {c['nome_carta']}"))
+
         self.dd_conto_dialog.options = opzioni_conto
 
         self.dd_sottocategoria_dialog.options = [
@@ -148,8 +175,19 @@ class TransactionDialog(ft.AlertDialog):
             utente_id = self.controller.get_user_id()
             conto_default_info = ottieni_conto_default_utente(utente_id)
             if conto_default_info:
-                self.dd_conto_dialog.value = f"{conto_default_info['tipo'][0].upper()}{conto_default_info['id']}"
-
+                if conto_default_info['tipo'] == 'carta':
+                    # Find the option key for this card (CARD_{id_carta}_{acc}_{flag})
+                    card_id = conto_default_info['id']
+                    prefix = f"CARD_{card_id}_"
+                    for opt in self.dd_conto_dialog.options:
+                        if opt.key and str(opt.key).startswith(prefix):
+                            self.dd_conto_dialog.value = opt.key
+                            break
+                elif conto_default_info['tipo'] == 'condiviso': 
+                    self.dd_conto_dialog.value = f"C{conto_default_info['id']}"
+                else:
+                    self.dd_conto_dialog.value = f"P{conto_default_info['id']}"
+                
             if self not in self.controller.page.overlay:
                 self.controller.page.overlay.append(self)
             self.open = True
@@ -174,9 +212,15 @@ class TransactionDialog(ft.AlertDialog):
             self.radio_tipo_transazione.value = "Spesa" if is_spesa else "Incasso"
             self.txt_descrizione_dialog.value = transazione_dati['descrizione']
             self.txt_importo_dialog.value = f"{importo_assoluto:.2f}"
-
-            prefix = "C" if transazione_dati.get('id_transazione_condivisa', 0) > 0 else "P"
-            self.dd_conto_dialog.value = f"{prefix}{transazione_dati['id_conto']}"
+            
+            # Check if card transaction
+            if transazione_dati.get('id_carta'):
+                 is_shared = transazione_dati.get('id_transazione_condivisa', 0) > 0
+                 flag = 'S' if is_shared else 'P'
+                 self.dd_conto_dialog.value = f"CARD_{transazione_dati['id_carta']}_{transazione_dati['id_conto']}_{flag}"
+            else:
+                prefix = "C" if transazione_dati.get('id_transazione_condivisa', 0) > 0 else "P"
+                self.dd_conto_dialog.value = f"{prefix}{transazione_dati['id_conto']}"
 
             self.dd_sottocategoria_dialog.value = transazione_dati.get('id_sottocategoria')
             self.cb_importo_nascosto.value = transazione_dati.get('importo_nascosto', False)
@@ -237,12 +281,31 @@ class TransactionDialog(ft.AlertDialog):
                     importo = -importo
                 id_sottocategoria = id_sottocategoria_raw
 
+            # Extract Account and Card Logic
+            val = self.dd_conto_dialog.value
+            id_conto = 0
+            is_condiviso = False
+            id_carta = None
+            
+            if val.startswith("CARD_"):
+                parts = val.split("_")
+                id_carta = int(parts[1])
+                id_conto = int(parts[2])
+                if len(parts) > 3:
+                     is_condiviso = (parts[3] == 'S')
+                else:
+                     is_condiviso = False
+            else:
+                id_conto = int(val[1:])
+                is_condiviso = val.startswith('C')
+
             return {
                 "data": data, "descrizione": descrizione, "importo": importo,
                 "id_sottocategoria": id_sottocategoria,
-                "id_conto": int(self.dd_conto_dialog.value[1:]),
-                "is_nuovo_conto_condiviso": self.dd_conto_dialog.value.startswith('C'),
-                "importo_nascosto": self.cb_importo_nascosto.value
+                "id_conto": id_conto,
+                "is_nuovo_conto_condiviso": is_condiviso,
+                "importo_nascosto": self.cb_importo_nascosto.value,
+                "id_carta": id_carta
             }
         except Exception as ex:
             logger.error(f"Errore validazione dati transazione: {ex}")
@@ -257,14 +320,20 @@ class TransactionDialog(ft.AlertDialog):
         is_nuova_condivisa = dati_nuovi['is_nuovo_conto_condiviso']
 
         # Caso 1: Il tipo di conto non è cambiato (Personale -> Personale o Condiviso -> Condiviso)
+        # Caso 1: Il tipo di conto non è cambiato (Personale -> Personale o Condiviso -> Condiviso)
         if is_originale_condivisa == is_nuova_condivisa:
             if is_originale_condivisa:
                 id_trans = transazione_originale['id_transazione_condivisa']
                 id_utente = self.controller.get_user_id()
-                return modifica_transazione_condivisa(id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], dati_nuovi['id_sottocategoria'], master_key_b64=master_key_b64, id_utente=id_utente, importo_nascosto=dati_nuovi.get('importo_nascosto', False))
+                return modifica_transazione_condivisa(id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], dati_nuovi['id_sottocategoria'], master_key_b64=master_key_b64, id_utente=id_utente, importo_nascosto=dati_nuovi.get('importo_nascosto', False), id_carta=dati_nuovi.get('id_carta'))
             else:
                 id_trans = transazione_originale['id_transazione']
-                return modifica_transazione(id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], dati_nuovi['id_sottocategoria'], dati_nuovi['id_conto'], master_key_b64=master_key_b64, importo_nascosto=dati_nuovi.get('importo_nascosto', False))
+                return modifica_transazione(
+                    id_trans, dati_nuovi['data'], dati_nuovi['descrizione'], dati_nuovi['importo'], 
+                    dati_nuovi['id_sottocategoria'], dati_nuovi['id_conto'], 
+                    master_key_b64=master_key_b64, importo_nascosto=dati_nuovi.get('importo_nascosto', False),
+                    id_carta=dati_nuovi.get('id_carta')
+                )
         
         # Caso 2: Il tipo di conto è cambiato (es. da Personale a Condiviso)
         # Trattiamo come un'operazione di "elimina e crea"
@@ -288,13 +357,14 @@ class TransactionDialog(ft.AlertDialog):
                 id_utente_autore=id_utente_autore, id_conto_condiviso=dati['id_conto'],
                 data=dati['data'], descrizione=dati['descrizione'], importo=dati['importo'],
                 id_sottocategoria=dati['id_sottocategoria'], master_key_b64=master_key_b64,
-                importo_nascosto=dati.get('importo_nascosto', False)
+                importo_nascosto=dati.get('importo_nascosto', False), id_carta=dati.get('id_carta')
             ) is not None
         else:
             return aggiungi_transazione(
                 id_conto=dati['id_conto'], data=dati['data'], descrizione=dati['descrizione'],
                 importo=dati['importo'], id_sottocategoria=dati['id_sottocategoria'], 
-                master_key_b64=master_key_b64, importo_nascosto=dati.get('importo_nascosto', False)
+                master_key_b64=master_key_b64, importo_nascosto=dati.get('importo_nascosto', False),
+                id_carta=dati.get('id_carta')
             ) is not None
 
     def _salva_nuova_transazione(self, e):

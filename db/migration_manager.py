@@ -212,6 +212,34 @@ def _migra_da_v6_a_v7(con: sqlite3.Connection):
         con.rollback()
         return False
 
+def _migra_da_v15_a_v16(con: sqlite3.Connection):
+    """
+    Logica specifica per migrare un DB dalla versione 15 alla 16.
+    - Aggiunge la colonna id_carta_default alla tabella Utenti.
+    """
+    print("Esecuzione migrazione da v15 a v16...")
+    try:
+        cur = con.cursor()
+
+        print("  - Aggiunta colonna id_carta_default a Utenti...")
+        try:
+            # Riferimento alla tabella Carte
+            cur.execute("ALTER TABLE Utenti ADD COLUMN id_carta_default INTEGER REFERENCES Carte(id_carta) ON DELETE SET NULL")
+        except sqlite3.OperationalError:
+            print("    Colonna id_carta_default già esistente (ignorato).")
+
+        con.commit()
+        print("Migrazione a v16 completata con successo.")
+        return True
+
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v15 a v16: {e}")
+        try:
+            con.rollback()
+        except: 
+            pass
+        return False
+
 
 def _migra_da_v7_a_v8(con: sqlite3.Connection):
     """
@@ -284,11 +312,157 @@ def _migra_da_v8_a_v9(con: sqlite3.Connection):
         print("Migrazione a v9 completata con successo.")
         return True
 
+
     except Exception as e:
         print(f"❌ Errore critico durante la migrazione da v8 a v9: {e}")
         con.rollback()
         return False
 
+
+def _migra_da_v9_a_v10(con: sqlite3.Connection):
+    """
+    Logica specifica per migrare un DB dalla versione 9 alla 10.
+    - Crea la tabella Carte.
+    - Aggiunge id_carta alla tabella Transazioni.
+    """
+    print("Esecuzione migrazione da v9 a v10...")
+    try:
+        cur = con.cursor()
+
+        # 1. Crea la tabella Carte
+        print("  - Creazione tabella Carte...")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS Carte (
+                id_carta INTEGER PRIMARY KEY AUTOINCREMENT,
+                id_utente INTEGER NOT NULL REFERENCES Utenti(id_utente) ON DELETE CASCADE,
+                nome_carta TEXT NOT NULL,
+                tipo_carta TEXT NOT NULL CHECK(tipo_carta IN ('credito', 'debito')),
+                circuito TEXT NOT NULL,
+                id_conto_riferimento INTEGER REFERENCES Conti(id_conto) ON DELETE SET NULL,
+                id_conto_contabile INTEGER REFERENCES Conti(id_conto) ON DELETE SET NULL,
+                massimale_encrypted TEXT,
+                giorno_addebito_encrypted TEXT,
+                spesa_tenuta_encrypted TEXT,
+                soglia_azzeramento_encrypted TEXT,
+                giorno_addebito_tenuta_encrypted TEXT,
+                addebito_automatico BOOLEAN DEFAULT 0,
+                data_creazione TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                attiva BOOLEAN DEFAULT 1
+            );
+        """)
+
+        # 2. Aggiungi colonna id_carta a Transazioni
+        print("  - Aggiunta colonna id_carta a Transazioni...")
+        try:
+            cur.execute("ALTER TABLE Transazioni ADD COLUMN id_carta INTEGER REFERENCES Carte(id_carta) ON DELETE SET NULL")
+        except sqlite3.OperationalError:
+             print("    Colonna id_carta già esistente (ignorato).")
+
+        con.commit()
+        print("Migrazione a v10 completata con successo.")
+        return True
+
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v9 a v10: {e}")
+        con.rollback()
+        return False
+
+
+
+def _migra_da_v10_a_v11(con: sqlite3.Connection):
+    """
+    Placeholder migrazione v10 -> v11
+    """
+    print("Esecuzione migrazione da v10 a v11...")
+    return True
+
+def _migra_da_v11_a_v12(con: sqlite3.Connection):
+    """
+    Placeholder migrazione v11 -> v12
+    """
+    print("Esecuzione migrazione da v11 a v12...")
+    return True
+
+def _migra_da_v12_a_v13(con: sqlite3.Connection):
+    """
+    Logica specifica per migrare un DB dalla versione 12 alla 13.
+    - Crea la tabella StoricoMassimaliCarte.
+    """
+    print("Esecuzione migrazione da v12 a v13...")
+    try:
+        cur = con.cursor()
+        print("  - Creazione tabella StoricoMassimaliCarte...")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS StoricoMassimaliCarte (
+                id_storico INTEGER PRIMARY KEY AUTOINCREMENT,
+                id_carta INTEGER NOT NULL REFERENCES Carte(id_carta) ON DELETE CASCADE,
+                data_inizio_validita TEXT NOT NULL,
+                massimale_encrypted TEXT NOT NULL,
+                UNIQUE(id_carta, data_inizio_validita)
+            );
+        """)
+        con.commit()
+        print("Migrazione a v13 completata con successo.")
+        return True
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v12 a v13: {e}")
+        con.rollback()
+        return False
+
+def _migra_da_v13_a_v14(con: sqlite3.Connection):
+    """
+    Logica specifica per migrare un DB dalla versione 13 alla 14.
+    - Aggiunge colonne per supporto conti condivisi nella tabella Carte.
+    """
+    print("Esecuzione migrazione da v13 a v14...")
+    try:
+        cur = con.cursor()
+        print("  - Aggiunta colonne condivise a Carte...")
+        try:
+            cur.execute("ALTER TABLE Carte ADD COLUMN id_conto_riferimento_condiviso INTEGER REFERENCES ContiCondivisi(id_conto_condiviso) ON DELETE SET NULL")
+        except sqlite3.OperationalError:
+            print("    Colonna id_conto_riferimento_condiviso già esistente.")
+            
+        try:
+            cur.execute("ALTER TABLE Carte ADD COLUMN id_conto_contabile_condiviso INTEGER REFERENCES ContiCondivisi(id_conto_condiviso) ON DELETE SET NULL")
+        except sqlite3.OperationalError:
+            print("    Colonna id_conto_contabile_condiviso già esistente.")
+
+        con.commit()
+        print("Migrazione a v14 completata con successo.")
+        return True
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v13 a v14: {e}")
+        con.rollback()
+        return False
+
+def _migra_da_v14_a_v15(con: sqlite3.Connection):
+    """
+    Logica specifica per migrare un DB dalla versione 14 alla 15.
+    - Aggiunge colonna id_carta alla tabella TransazioniCondivise.
+    """
+    print("Esecuzione migrazione da v14 a v15...")
+    try:
+        cur = con.cursor()
+        print("  - Aggiunta colonna id_carta a TransazioniCondivise...")
+        try:
+            cur.execute("ALTER TABLE TransazioniCondivise ADD COLUMN id_carta INTEGER REFERENCES Carte(id_carta) ON DELETE SET NULL")
+        except sqlite3.OperationalError:
+            print("    Colonna id_carta già esistente.")
+        
+        # Ensure importo_nascosto exists (sanity check, as it was missing in crea_database def)
+        try:
+            cur.execute("ALTER TABLE TransazioniCondivise ADD COLUMN importo_nascosto BOOLEAN DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass 
+
+        con.commit()
+        print("Migrazione a v15 completata con successo.")
+        return True
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v14 a v15: {e}")
+        con.rollback()
+        return False
 
 def migra_database(db_path, versione_vecchia, versione_nuova):
     """
@@ -349,6 +523,40 @@ def migra_database(db_path, versione_vecchia, versione_nuova):
                     raise Exception("Migrazione da v8 a v9 fallita.")
                 versione_vecchia = 9
 
+            if versione_vecchia == 9 and versione_nuova >= 10:
+                if not _migra_da_v9_a_v10(con):
+                    raise Exception("Migrazione da v9 a v10 fallita.")
+                versione_vecchia = 10
+            
+            if versione_vecchia == 10 and versione_nuova >= 11:
+                if not _migra_da_v10_a_v11(con):
+                    raise Exception("Migrazione da v10 a v11 fallita.")
+                versione_vecchia = 11
+
+            if versione_vecchia == 11 and versione_nuova >= 12:
+                if not _migra_da_v11_a_v12(con):
+                    raise Exception("Migrazione da v11 a v12 fallita.")
+                versione_vecchia = 12
+
+            if versione_vecchia == 12 and versione_nuova >= 13:
+                if not _migra_da_v12_a_v13(con):
+                    raise Exception("Migrazione da v12 a v13 fallita.")
+                versione_vecchia = 13
+
+            if versione_vecchia == 13 and versione_nuova >= 14:
+                if not _migra_da_v13_a_v14(con):
+                    raise Exception("Migrazione da v13 a v14 fallita.")
+                versione_vecchia = 14
+
+                if not _migra_da_v14_a_v15(con):
+                    raise Exception("Migrazione da v14 a v15 fallita.")
+                versione_vecchia = 15
+
+            if versione_vecchia == 15 and versione_nuova >= 16:
+                if not _migra_da_v15_a_v16(con):
+                    raise Exception("Migrazione da v15 a v16 fallita.")
+                versione_vecchia = 16
+
             # Se tutto è andato bene, aggiorna la versione del DB
             cur.execute(f"PRAGMA user_version = {versione_nuova}")
             con.commit()
@@ -358,5 +566,7 @@ def migra_database(db_path, versione_vecchia, versione_nuova):
     except Exception as e:
         print(f"❌ Errore durante la migrazione: {e}. Ripristino dal backup.")
         # Ripristina dal backup in caso di errore
-        shutil.move(backup_path, db_path)
+        # ensure copy back only if something failed after backup
+        if os.path.exists(backup_path):
+             shutil.copyfile(backup_path, db_path) # Changed to copyfile to enable retry
         return False
