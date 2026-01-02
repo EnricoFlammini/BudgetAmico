@@ -28,3 +28,16 @@ dist/
 # Database (local backups only)
 *.db
 *.db-journal
+
+# Secrets
+credentials.json
+
+# Backups
+backups/
+
+# Logs
+logs/
+*.log
+
+# Local utilities
+debug_keys.py
