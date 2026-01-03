@@ -1,4 +1,4 @@
-# Manuale Completo Budget Amico v0.31.00
+# Manuale Completo Budget Amico v0.32.00
 
 ## Indice
 
@@ -297,6 +297,14 @@ Se attivi **"Addebito automatico"**, Budget Amico:
 - Aggiorna il saldo del conto
 - Registra la spesa nella categoria corretta
 
+### 9.3 Visibilità Spese Familiari (Novità v0.32)
+
+Per garantire la privacy ma permettere la comprensione delle spese comuni:
+- **I tuoi conti**: Vedi il nome completo (es. "Conto UniCredit", "Visa Gold").
+- **Conti di altri membri**: Se una spesa è addebitata su un conto di un altro familiare (di cui non possiedi le chiavi di decrittazione), vedrai **"Conto di [NomeUtente]"** o **"Carta di [NomeUtente]"**.
+- Questo ti permette di sapere chi sta pagando la spesa senza esporre i dettagli sensibili del loro conto.
+
+
 ---
 
 ## 10. Investimenti e Portafogli
@@ -592,5 +600,5 @@ Il Divisore Pro è accessibile in due modi:
 
 ---
 
-*Budget Amico - *Versione documento: 0.31.00*
+*Budget Amico - *Versione documento: 0.32.00*
 *Sviluppato con ❤️ da Iscavar79*

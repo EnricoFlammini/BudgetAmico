@@ -1,4 +1,4 @@
-# Budget Amico v0.31.00
+# Budget Amico v0.32.00
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -10,6 +10,13 @@
 ---
 
 ## 📅 Changelog
+
+### v0.32.00 (03/01/2026)
+- **Spese Fisse migliorate**:
+    - **Visualizzazione Carte**: Se una spesa fissa è collegata a una carta, ora viene mostrato il nome della carta (es. "Visa Gold") anziché il conto tecnico sottostante.
+    - **Visibilità Proprietari**: I conti e le carte di altri membri della famiglia, prima mostrati come `[ENCRYPTED]`, ora visualizzano "Conto di [Nome]" o "Carta di [Nome]" per una migliore identificazione.
+- **Interfaccia Transazioni**:
+    - **Ordinamento Conti**: Nei dropdown di selezione conto (Transazioni, Spese Fisse), le carte sono ora mostrate in cima alla lista per maggiore comodità, separate da una linea dai conti bancari.
 
 ### v0.31.00 (02/01/2026)
 - **Gestione Carte di Credito/Debito**:

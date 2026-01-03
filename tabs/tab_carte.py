@@ -3,6 +3,7 @@ import flet as ft
 import datetime
 from db.gestione_db import ottieni_carte_utente, elimina_carta, calcola_totale_speso_carta
 from dialogs.card_dialog import CardDialog
+from dialogs.card_transactions_dialog import CardTransactionsDialog
 
 class TabCarte(ft.Container):
     def __init__(self, page_ctrl):
@@ -133,6 +134,7 @@ class TabCarte(ft.Container):
         actions_row = ft.Row([
             ft.Container(), # Spacer
             ft.Row([
+                ft.IconButton(icon=ft.Icons.LIST_ALT, icon_color=ft.Colors.WHITE, tooltip="Lista Movimenti", on_click=lambda e: self._open_transactions_dialog(card_data)),
                 ft.IconButton(icon=ft.Icons.EDIT, icon_color=ft.Colors.WHITE, tooltip="Modifica", on_click=lambda e: self._open_edit_dialog(card_data)),
                 ft.IconButton(icon=ft.Icons.DELETE, icon_color=ft.Colors.WHITE, tooltip="Elimina", on_click=lambda e: self._delete_card(card_data['id_carta']))
             ])
@@ -202,3 +204,24 @@ class TabCarte(ft.Container):
     def _close_dlg(self, dlg):
         dlg.open = False
         self.page.update()
+
+    def _open_transactions_dialog(self, card_data):
+        try:
+            page = self.page or self.page_ctrl.page
+            if not page: return
+            
+            mk = page.session.get("master_key")
+            
+            dlg = CardTransactionsDialog(
+                page=page, 
+                id_carta=card_data['id_carta'], 
+                nome_carta=card_data['nome_carta'],
+                master_key_b64=mk,
+                controller=self.page_ctrl
+            )
+            # Use page.open() which is the modern Flet way and handles overlay automatically
+            page.open(dlg)
+        except Exception as ex:
+            print(f"Error opening transactions dialog: {ex}")
+            import traceback
+            traceback.print_exc()

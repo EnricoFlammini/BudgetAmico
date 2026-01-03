@@ -104,20 +104,12 @@ class TransactionDialog(ft.AlertDialog):
         famiglia_id = self.controller.get_family_id()
         master_key_b64 = self.controller.page.session.get("master_key")
 
-        # 1. Accounts
-        tutti_i_conti = ottieni_tutti_i_conti_utente(utente_id, master_key_b64=master_key_b64)
-        conti_filtrati = [c for c in tutti_i_conti if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
-
-        opzioni_conto = []
-        for c in conti_filtrati:
-            suffix = " " + self.loc.get("shared_suffix") if c['is_condiviso'] else ""
-            prefix = "C" if c['is_condiviso'] else "P"
-            opzioni_conto.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}{suffix}"))
-        
-        # 2. Cards
+        # 1. Cards (Caricate PRIMA dei conti)
         carte = ottieni_carte_utente(utente_id, master_key_b64)
+        opzioni_conto = []
+        
         if carte:
-            opzioni_conto.append(ft.dropdown.Option(key="DIVIDER", text="-- Carte --", disabled=True))
+            # Aggiungi Carte all'inizio
             for c in carte:
                 target_acc = c.get('id_conto_contabile')
                 is_shared_card = False
@@ -127,7 +119,7 @@ class TransactionDialog(ft.AlertDialog):
                      if target_acc: is_shared_card = True
                 
                 if not target_acc:
-                     # Fallback for debit or missing accounting (should use reference)
+                     # Fallback
                      target_acc = c.get('id_conto_riferimento')
                      if not target_acc:
                          target_acc = c.get('id_conto_riferimento_condiviso')
@@ -137,6 +129,18 @@ class TransactionDialog(ft.AlertDialog):
                     flag = 'S' if is_shared_card else 'P'
                     key = f"CARD_{c['id_carta']}_{target_acc}_{flag}"
                     opzioni_conto.append(ft.dropdown.Option(key=key, text=f"💳 {c['nome_carta']}"))
+            
+            # Aggiungi separatore DOPO le carte
+            opzioni_conto.append(ft.dropdown.Option(key="DIVIDER", text="-- Conti --", disabled=True))
+
+        # 2. Accounts (Caricati DOPO le carte)
+        tutti_i_conti = ottieni_tutti_i_conti_utente(utente_id, master_key_b64=master_key_b64)
+        conti_filtrati = [c for c in tutti_i_conti if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
+
+        for c in conti_filtrati:
+            suffix = " " + self.loc.get("shared_suffix") if c['is_condiviso'] else ""
+            prefix = "C" if c['is_condiviso'] else "P"
+            opzioni_conto.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}{suffix}"))
 
         self.dd_conto_dialog.options = opzioni_conto
 

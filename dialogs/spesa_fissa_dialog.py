@@ -4,7 +4,8 @@ from db.gestione_db import (
     ottieni_tutti_i_conti_utente,
     ottieni_categorie_e_sottocategorie,
     aggiungi_spesa_fissa,
-    modifica_spesa_fissa
+    modifica_spesa_fissa,
+    ottieni_carte_utente
 )
 
 
@@ -76,8 +77,19 @@ class SpesaFissaDialog(ft.AlertDialog):
             self.txt_nome.value = spesa_fissa_data['nome']
             self.txt_importo.value = str(abs(spesa_fissa_data['importo']))
 
-            conto_key = f"{'C' if spesa_fissa_data['id_conto_condiviso_addebito'] else 'P'}{spesa_fissa_data['id_conto_personale_addebito'] or spesa_fissa_data['id_conto_condiviso_addebito']}"
-            self.dd_conto_addebito.value = conto_key
+            if spesa_fissa_data.get('id_carta'):
+                 # Reconstruct key for card
+                 # Need to find the card in options to get the correct suffix/account if we want to be precise,
+                 # OR we just need to reconstruct the key logic used in popola_dropdowns
+                 # But we don't have the backing account info here easily unless we fetch it or iterate options.
+                 # Let's try to match by ID from options
+                 for opt in self.dd_conto_addebito.options:
+                     if str(opt.key).startswith(f"CARD_{spesa_fissa_data['id_carta']}_"):
+                         self.dd_conto_addebito.value = opt.key
+                         break
+            else:
+                conto_key = f"{'C' if spesa_fissa_data['id_conto_condiviso_addebito'] else 'P'}{spesa_fissa_data['id_conto_personale_addebito'] or spesa_fissa_data['id_conto_condiviso_addebito']}"
+                self.dd_conto_addebito.value = conto_key
 
             self.dd_sottocategoria.value = spesa_fissa_data.get('id_sottocategoria')
             self.dd_giorno_addebito.value = str(spesa_fissa_data['giorno_addebito'])
@@ -133,6 +145,32 @@ class SpesaFissaDialog(ft.AlertDialog):
         conti_filtrati = [c for c in conti if c.get('tipo') not in tipi_esclusi]
         
         options_conti = []
+        
+        # 1. Carte (Prima per consistenza)
+        carte = ottieni_carte_utente(user_id, master_key_b64=master_key)
+        if carte:
+            for c in carte:
+                target_acc = c.get('id_conto_contabile')
+                is_shared_card = False
+                
+                if not target_acc:
+                     target_acc = c.get('id_conto_contabile_condiviso')
+                     if target_acc: is_shared_card = True
+                
+                if not target_acc:
+                     # Fallback
+                     target_acc = c.get('id_conto_riferimento')
+                     if not target_acc:
+                         target_acc = c.get('id_conto_riferimento_condiviso')
+                         if target_acc: is_shared_card = True
+                     
+                if target_acc:
+                    flag = 'S' if is_shared_card else 'P'
+                    key = f"CARD_{c['id_carta']}_{target_acc}_{flag}"
+                    options_conti.append(ft.dropdown.Option(key, f"💳 {c['nome_carta']}"))
+
+            options_conti.append(ft.dropdown.Option(key="DIVIDER", text="-- Conti --", disabled=True))
+
         for conto in conti_filtrati:
             is_condiviso = conto.get('is_condiviso') or conto.get('condiviso')
             tipo_prefix = "C" if is_condiviso else "P"
@@ -164,11 +202,37 @@ class SpesaFissaDialog(ft.AlertDialog):
             importo = float(self.txt_importo.value.replace(",", "."))
             
             # Parsa conto
+            # Parsa conto
             conto_key = self.dd_conto_addebito.value
-            is_condiviso = conto_key.startswith("C")
-            id_conto = int(conto_key[1:])
-            id_conto_personale = None if is_condiviso else id_conto
-            id_conto_condiviso = id_conto if is_condiviso else None
+            id_conto_personale = None
+            id_conto_condiviso = None
+            id_carta = None
+
+            if conto_key.startswith("CARD_"):
+                parts = conto_key.split("_")
+                id_carta = int(parts[1])
+                # We also need the backing account for consistency, although DB layer might override if we pass id_carta
+                # But SpeseFisse table needs id_conto_X_addebito populated too for FK constraints usually?
+                # Actually, SpeseFisse schema allows NULLs if we changed it... 
+                # Wait, my migration just added id_carta. It didn't remove NOT NULL from id_conto if it was there.
+                # Let's check schema creation... SpeseFisse id_conto_personale_addebito is REFERENCES ... ON DELETE SET NULL.
+                # But is it NOT NULL? 
+                # Create script says: id_conto_personale_addebito INTEGER REFERENCES ... (doesn't say NOT NULL)
+                # So it's nullable.
+                # However, logic in gestion_db uses it.
+                # Let's extract it from key anyway.
+                id_conto = int(parts[2])
+                is_condiviso = (parts[3] == 'S')
+                if is_condiviso:
+                    id_conto_condiviso = id_conto
+                else:
+                    id_conto_personale = id_conto
+
+            else:
+                is_condiviso = conto_key.startswith("C")
+                id_conto = int(conto_key[1:])
+                id_conto_personale = None if is_condiviso else id_conto
+                id_conto_condiviso = id_conto if is_condiviso else None
 
             id_sottocategoria = int(self.dd_sottocategoria.value)
             giorno = int(self.dd_giorno_addebito.value)
@@ -191,7 +255,8 @@ class SpesaFissaDialog(ft.AlertDialog):
                     attiva=attiva,
                     addebito_automatico=auto,
                     master_key_b64=master_key_b64,
-                    id_utente=current_user_id
+                    id_utente=current_user_id,
+                    id_carta=id_carta
                 )
             else:
                 success = aggiungi_spesa_fissa(
@@ -205,7 +270,8 @@ class SpesaFissaDialog(ft.AlertDialog):
                     attiva=attiva,
                     addebito_automatico=auto,
                     master_key_b64=master_key_b64,
-                    id_utente=current_user_id
+                    id_utente=current_user_id,
+                    id_carta=id_carta
                 )
 
             if success:

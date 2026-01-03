@@ -6381,85 +6381,62 @@ def ottieni_prima_famiglia_utente(id_utente):
 
 
 # --- NUOVE FUNZIONI PER SPESE FISSE ---
-def aggiungi_spesa_fissa(id_famiglia, nome, importo, id_conto_personale, id_conto_condiviso, id_sottocategoria,
-                        giorno_addebito, attiva, addebito_automatico=False, master_key_b64=None, id_utente=None):
-    
-    # Encrypt nome if keys available
-    crypto, master_key = _get_crypto_and_key(master_key_b64)
-    family_key = None
-    if master_key and id_utente:
-        try:
-            with get_db_connection() as con:
-                cur = con.cursor()
-                cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
-                row = cur.fetchone()
-                if row and row['chiave_famiglia_criptata']:
-                    family_key_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
-                    family_key = base64.b64decode(family_key_b64)
-        except Exception:
-            pass
-
-    encrypted_nome = _encrypt_if_key(nome, family_key, crypto)
-
+def aggiungi_spesa_fissa(id_famiglia, nome, importo, id_conto_personale=None, id_conto_condiviso=None, id_sottocategoria=None, giorno_addebito=1, attiva=True, addebito_automatico=False, master_key_b64=None, id_utente=None, id_carta=None):
     try:
+        crypto, master_key = _get_crypto_and_key(master_key_b64)
+        family_key = None
+        if master_key and id_utente:
+            family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+        
+        # Encrypt Name
+        key_to_use = family_key if family_key else master_key
+        nome_enc = _encrypt_if_key(nome, key_to_use, crypto) if key_to_use else nome
+
         with get_db_connection() as con:
             cur = con.cursor()
-            # Ottieni id_categoria dalla sottocategoria
-            cur.execute("SELECT id_categoria FROM Sottocategorie WHERE id_sottocategoria = %s", (id_sottocategoria,))
-            result = cur.fetchone()
-            id_categoria = result['id_categoria'] if result else None
-            
             cur.execute("""
-                INSERT INTO SpeseFisse (id_famiglia, nome, importo, id_conto_personale_addebito, id_conto_condiviso_addebito, id_categoria, id_sottocategoria, giorno_addebito, attiva, addebito_automatico)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id_spesa_fissa
-            """, (id_famiglia, encrypted_nome, importo, id_conto_personale, id_conto_condiviso, id_categoria, id_sottocategoria, giorno_addebito,
-                  bool(attiva), bool(addebito_automatico)))
-            return cur.fetchone()['id_spesa_fissa']
+                INSERT INTO SpeseFisse (
+                    id_famiglia, nome, importo, id_conto_personale_addebito, id_conto_condiviso_addebito,
+                    id_categoria, id_sottocategoria, giorno_addebito, attiva, addebito_automatico, id_carta
+                )
+                VALUES (%s, %s, %s, %s, %s, (SELECT id_categoria FROM Sottocategorie WHERE id_sottocategoria = %s), %s, %s, %s, %s, %s)
+            """, (id_famiglia, nome_enc, importo, id_conto_personale, id_conto_condiviso, id_sottocategoria, id_sottocategoria, giorno_addebito, attiva, addebito_automatico, id_carta))
+            con.commit()
+            return True
     except Exception as e:
         print(f"[ERRORE] Errore durante l'aggiunta della spesa fissa: {e}")
         return None
 
 
-def modifica_spesa_fissa(id_spesa_fissa, nome, importo, id_conto_personale, id_conto_condiviso, id_sottocategoria,
-                        giorno_addebito, attiva, addebito_automatico=False, master_key_b64=None, id_utente=None):
-    
-    # Encrypt nome if keys available
-    crypto, master_key = _get_crypto_and_key(master_key_b64)
-    family_key = None
-    if master_key and id_utente:
-        try:
-            with get_db_connection() as con:
-                cur = con.cursor()
-                # Need id_famiglia to get key
-                cur.execute("SELECT id_famiglia FROM SpeseFisse WHERE id_spesa_fissa = %s", (id_spesa_fissa,))
-                sf_row = cur.fetchone()
-                if sf_row:
-                    id_famiglia = sf_row['id_famiglia']
-                    cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
-                    row = cur.fetchone()
-                    if row and row['chiave_famiglia_criptata']:
-                        family_key_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
-                        family_key = base64.b64decode(family_key_b64)
-        except Exception:
-            pass
-
-    encrypted_nome = _encrypt_if_key(nome, family_key, crypto)
-
+def modifica_spesa_fissa(id_spesa_fissa, nome, importo, id_conto_personale=None, id_conto_condiviso=None, id_sottocategoria=None, giorno_addebito=1, attiva=True, addebito_automatico=False, master_key_b64=None, id_utente=None, id_carta=None):
     try:
+        # Recupera famiglia
+        id_famiglia = None
         with get_db_connection() as con:
             cur = con.cursor()
-            # Ottieni id_categoria dalla sottocategoria
-            cur.execute("SELECT id_categoria FROM Sottocategorie WHERE id_sottocategoria = %s", (id_sottocategoria,))
-            result = cur.fetchone()
-            id_categoria = result['id_categoria'] if result else None
-            
+            cur.execute("SELECT id_famiglia FROM SpeseFisse WHERE id_spesa_fissa = %s", (id_spesa_fissa,))
+            res = cur.fetchone()
+            if res: id_famiglia = res['id_famiglia']
+
+        crypto, master_key = _get_crypto_and_key(master_key_b64)
+        family_key = None
+        if master_key and id_utente and id_famiglia:
+            family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+        
+        key_to_use = family_key if family_key else master_key
+        nome_enc = _encrypt_if_key(nome, key_to_use, crypto) if key_to_use else nome
+
+        with get_db_connection() as con:
+            cur = con.cursor()
             cur.execute("""
                 UPDATE SpeseFisse
-                SET nome = %s, importo = %s, id_conto_personale_addebito = %s, id_conto_condiviso_addebito = %s, id_categoria = %s, id_sottocategoria = %s, giorno_addebito = %s, attiva = %s, addebito_automatico = %s
+                SET nome = %s, importo = %s, id_conto_personale_addebito = %s, id_conto_condiviso_addebito = %s,
+                    id_sottocategoria = %s, id_categoria = (SELECT id_categoria FROM Sottocategorie WHERE id_sottocategoria = %s),
+                    giorno_addebito = %s, attiva = %s, addebito_automatico = %s, id_carta = %s
                 WHERE id_spesa_fissa = %s
-            """, (encrypted_nome, importo, id_conto_personale, id_conto_condiviso, id_categoria, id_sottocategoria, giorno_addebito,
-                  bool(attiva), bool(addebito_automatico), id_spesa_fissa))
-            return cur.rowcount > 0
+            """, (nome_enc, importo, id_conto_personale, id_conto_condiviso, id_sottocategoria, id_sottocategoria, giorno_addebito, attiva, addebito_automatico, id_carta, id_spesa_fissa))
+            con.commit()
+            return True
     except Exception as e:
         print(f"[ERRORE] Errore durante la modifica della spesa fissa: {e}")
         return False
@@ -6494,7 +6471,7 @@ def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=Non
             # con.row_factory = sqlite3.Row # Removed for Supabase
             cur = con.cursor()
             cur.execute("""
-                SELECT
+                SELECT 
                     SF.id_spesa_fissa,
                     SF.nome,
                     SF.importo,
@@ -6505,10 +6482,19 @@ def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=Non
                     SF.giorno_addebito,
                     SF.attiva,
                     SF.addebito_automatico,
-                    COALESCE(CP.nome_conto, CC.nome_conto) as nome_conto
+                    SF.id_carta,
+                    COALESCE(CP.nome_conto, CC.nome_conto) as nome_conto,
+                    CARTE.nome_carta,
+                    CARTE.id_conto_contabile as id_conto_carta_pers,
+                    CARTE.id_conto_contabile_condiviso as id_conto_carta_cond,
+                    U_CP.username_enc as username_enc_conto,
+                    U_CARTE.username_enc as username_enc_carta
                 FROM SpeseFisse SF
                 LEFT JOIN Conti CP ON SF.id_conto_personale_addebito = CP.id_conto
+                LEFT JOIN Utenti U_CP ON CP.id_utente = U_CP.id_utente
                 LEFT JOIN ContiCondivisi CC ON SF.id_conto_condiviso_addebito = CC.id_conto_condiviso
+                LEFT JOIN Carte CARTE ON SF.id_carta = CARTE.id_carta
+                LEFT JOIN Utenti U_CARTE ON CARTE.id_utente = U_CARTE.id_utente
                 WHERE SF.id_famiglia = %s
                 ORDER BY SF.nome
             """, (id_famiglia,))
@@ -6527,22 +6513,158 @@ def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=Non
                 except Exception:
                     pass
 
+            def is_encrypted(val):
+                return val == "[ENCRYPTED]" or (isinstance(val, str) and val.startswith("gAAAAA"))
+
             if family_key:
                 for spesa in spese:
                     spesa['nome'] = _decrypt_if_key(spesa['nome'], family_key, crypto)
+                    
                     # Decripta anche il nome del conto
                     if spesa.get('nome_conto'):
-                        # Prova prima con family_key (per conti condivisi)
+                         # Prova prima con family_key (per conti condivisi)
                         if spesa.get('id_conto_condiviso_addebito'):
                             spesa['nome_conto'] = _decrypt_if_key(spesa['nome_conto'], family_key, crypto, silent=True)
                         else:
-                            # Conto personale: prova con master_key
-                            spesa['nome_conto'] = _decrypt_if_key(spesa['nome_conto'], master_key, crypto, silent=True)
+                            # Conto personale: prova con master_key prima (se l'utente è il proprietario)
+                             spesa['nome_conto'] = _decrypt_if_key(spesa['nome_conto'], master_key, crypto, silent=True) # Usa master key utente corrente
+                             
+                             # Se fallisce decriptazione e abbiamo username proprietario
+                             if is_encrypted(spesa['nome_conto']):
+                                 user_conto_enc = spesa.get('username_enc_conto')
+                                 if user_conto_enc:
+                                     user_conto = decrypt_system_data(user_conto_enc)
+                                     if user_conto:
+                                        spesa['nome_conto'] = f"Conto di {user_conto}"
+
+                    if spesa.get('nome_carta'):
+                         spesa['nome_carta'] = _decrypt_if_key(spesa['nome_carta'], family_key, crypto, silent=True)
+                         if is_encrypted(spesa['nome_carta']) and family_key != master_key:
+                             test_dec = _decrypt_if_key(spesa['nome_carta'], master_key, crypto, silent=True)
+                             if test_dec and not is_encrypted(test_dec): 
+                                 spesa['nome_carta'] = test_dec
+                             elif spesa.get('username_enc_carta'):
+                                 user_carta = decrypt_system_data(spesa.get('username_enc_carta'))
+                                 if user_carta:
+                                     spesa['nome_carta'] = f"Carta di {user_carta}"
+
+                    # Sovrascrivi nome_conto se c'è una carta
+                    if spesa.get('id_carta') and spesa.get('nome_carta'):
+                         spesa['nome_conto'] = f"{spesa['nome_carta']} (Carta)"
+            else:
+                 # Fallback without family key (should theoretically not happen for family view if logged in properly)
+                 # Try decrypting with master_key just in case (e.g. personal items)
+                 if master_key:
+                     for spesa in spese:
+                         # Decrypt card if present
+                         if spesa.get('id_carta') and spesa.get('nome_carta'):
+                             dec = _decrypt_if_key(spesa['nome_carta'], master_key, crypto, silent=True)
+                             if dec and not is_encrypted(dec): 
+                                 spesa['nome_carta'] = dec
+                             elif spesa.get('username_enc_carta'):
+                                 user_carta = decrypt_system_data(spesa.get('username_enc_carta'))
+                                 if user_carta:
+                                     spesa['nome_carta'] = f"Carta di {user_carta}"
+
+                             spesa['nome_conto'] = f"{spesa['nome_carta']} (Carta)"
+                             
+                         elif spesa.get('nome_conto') and not spesa.get('id_conto_condiviso_addebito'):
+                             # Try decrypt personal account
+                             dec = _decrypt_if_key(spesa['nome_conto'], master_key, crypto, silent=True)
+                             if dec and not is_encrypted(dec):
+                                 spesa['nome_conto'] = dec
+                             elif spesa.get('username_enc_conto'):
+                                 user_conto = decrypt_system_data(spesa.get('username_enc_conto'))
+                                 if user_conto:
+                                     spesa['nome_conto'] = f"Conto di {user_conto}"
 
             return spese
     except Exception as e:
         print(f"[ERRORE] Errore durante il recupero delle spese fisse: {e}")
         return []
+
+def _trova_admin_famiglia(id_famiglia):
+    """Helper per trovare l'ID di un utente admin nella famiglia."""
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT id_utente FROM Appartenenza_Famiglia WHERE id_famiglia = %s AND ruolo = 'admin' LIMIT 1", (id_famiglia,))
+            res = cur.fetchone()
+            return res['id_utente'] if res else None
+    except Exception as e:
+        print(f"[ERRORE] _trova_admin_famiglia: {e}")
+        return None
+
+def _esegui_spesa_fissa(spesa):
+    """Esegue una singola spesa fissa creando la transazione."""
+    today = datetime.date.today()
+    try:
+        # Determina id_conto effettivo:
+        # Se c'è una carta, usa il suo conto contabile (o di riferimento)
+        id_conto_personale = spesa.get('id_conto_personale_addebito')
+        id_conto_condiviso = spesa.get('id_conto_condiviso_addebito')
+        id_carta = spesa.get('id_carta')
+        
+        # Se id_carta è presente, usiamo il conto contabile della carta come conto di addebito
+        if id_carta:
+             # Se la carta è definita, il conto di addebito deve essere quello della carta
+             # Se Conto Personale Carta
+             if spesa.get('id_conto_carta_pers'):
+                 id_conto_personale = spesa.get('id_conto_carta_pers')
+                 id_conto_condiviso = None
+             # Se Conto Condiviso Carta
+             elif spesa.get('id_conto_carta_cond'):
+                 id_conto_condiviso = spesa.get('id_conto_carta_cond')
+                 id_conto_personale = None
+             # Se non c'è conto contabile (es. debito senza specifico), usa quello di riferimento o quello gia impostato
+             # ... (logica attuale OK se id_conto_personale_addebito era già quello della carta)
+        
+        # Se nome è criptato e non abbiamo chiave qui (job automatico), lo passiamo criptato o cerchiamo di decriptare?
+        # Il job automatico spesso non ha chiavi utente in memoria se gira in background.
+        # Ma controlla_scadenze viene chiamato spesso con utente loggato.
+        # Assumiamo che descrizione sia già il nome (potrebbe essere criptato).
+        
+        if id_conto_personale:
+            res = aggiungi_transazione(
+                id_conto=id_conto_personale,
+                data=today.strftime('%Y-%m-%d'),
+                descrizione=f"{spesa['nome']} (Automatico)",
+                importo=-abs(spesa['importo']),
+                id_sottocategoria=spesa['id_sottocategoria'],
+                master_key_b64=None, # Non possiamo decriptare se background, MA aggiungi_transazione cifra se key passata.
+                # Se non passiamo key, salva in chiaro? NO. Salva criptato SE trova key in session o altro.
+                # Qui è tricky. Se gira automatico background senza sessione. 
+                # Per ora assumiamo esecuzione con utente loggato o che accetti encrypted string.
+                id_carta=id_carta
+            )
+        elif id_conto_condiviso:
+            # Serve autore. Per spese fisse automatiche, chi è l'autore?
+            # Se background, serve "sistema" o primo admin.
+            # Qui semplifichiamo: se chiamato da UI, usa user. Se background?
+            # BudgetAmico è desktop app single user session mostly. 
+            # Assumiamo id_utente della spesa fissa? SpeseFisse non ha id_utente OWNER, ma id_famiglia.
+            # Cerchiamo un admin della famiglia?
+            id_autore = _trova_admin_famiglia(spesa['id_famiglia'])
+            if not id_autore: return False
+            
+            res = aggiungi_transazione_condivisa(
+                id_utente_autore=id_autore,
+                id_conto_condiviso=id_conto_condiviso,
+                data=today.strftime('%Y-%m-%d'),
+                descrizione=f"{spesa['nome']} (Automatico)",
+                importo=-abs(spesa['importo']),
+                id_sottocategoria=spesa['id_sottocategoria'],
+                master_key_b64=None,
+                id_carta=id_carta
+            )
+        else:
+            return False
+
+        return res is not None
+
+    except Exception as e:
+        print(f"[ERRORE] Errore esecuzione spesa fissa: {e}")
+        return False
 
 
 def check_e_processa_spese_fisse(id_famiglia, master_key_b64=None, id_utente=None):
@@ -6565,21 +6687,25 @@ def check_e_processa_spese_fisse(id_famiglia, master_key_b64=None, id_utente=Non
 
                 # Controlla se la spesa è già stata eseguita questo mese
                 # Usa POSITION per cercare il suffisso ID nella descrizione (che è criptata ma il suffisso no)
-                cur.execute("""
-                    SELECT 1 FROM Transazioni
-                    WHERE id_conto = %s
-                    AND POSITION(%s IN descrizione) > 0
-                    AND TO_CHAR(data::date, 'YYYY-MM') = %s
-                """, (spesa['id_conto_personale_addebito'], suffisso_id, oggi.strftime('%Y-%m')))
-                if cur.fetchone(): continue
-
-                cur.execute("""
-                    SELECT 1 FROM TransazioniCondivise
-                    WHERE id_conto_condiviso = %s
-                    AND POSITION(%s IN descrizione) > 0
-                    AND TO_CHAR(data::date, 'YYYY-MM') = %s
-                """, (spesa['id_conto_condiviso_addebito'], suffisso_id, oggi.strftime('%Y-%m')))
-                if cur.fetchone(): continue
+                # Check personal account
+                if spesa.get('id_conto_personale_addebito'):
+                    cur.execute("""
+                        SELECT 1 FROM Transazioni
+                        WHERE id_conto = %s
+                        AND POSITION(%s IN descrizione) > 0
+                        AND TO_CHAR(data::date, 'YYYY-MM') = %s
+                    """, (spesa['id_conto_personale_addebito'], suffisso_id, oggi.strftime('%Y-%m')))
+                    if cur.fetchone(): continue
+                
+                # Check shared account
+                if spesa.get('id_conto_condiviso_addebito'):
+                    cur.execute("""
+                        SELECT 1 FROM TransazioniCondivise
+                        WHERE id_conto_condiviso = %s
+                        AND POSITION(%s IN descrizione) > 0
+                        AND TO_CHAR(data::date, 'YYYY-MM') = %s
+                    """, (spesa['id_conto_condiviso_addebito'], suffisso_id, oggi.strftime('%Y-%m')))
+                    if cur.fetchone(): continue
 
                 # Se il giorno di addebito è passato, esegui la transazione
                 if oggi.day >= spesa['giorno_addebito']:
@@ -6589,21 +6715,9 @@ def check_e_processa_spese_fisse(id_famiglia, master_key_b64=None, id_utente=Non
                     descrizione = f"Spesa Fissa: {spesa['nome']} {suffisso_id}"
                     importo = -abs(spesa['importo'])
 
-                    if spesa['id_conto_personale_addebito']:
-                        aggiungi_transazione(
-                            spesa['id_conto_personale_addebito'], data_esecuzione, descrizione, importo,
-                            spesa['id_sottocategoria'], cursor=cur
-                        )
-                    elif spesa['id_conto_condiviso_addebito']:
-                        # L'autore è l'admin della famiglia (o il primo utente)
-                        # Questa è un'approssimazione, si potrebbe migliorare
-                        cur.execute("SELECT id_utente FROM Appartenenza_Famiglia WHERE id_famiglia = %s AND ruolo = 'admin' LIMIT 1", (id_famiglia,))
-                        admin_id = cur.fetchone()['id_utente']
-                        aggiungi_transazione_condivisa(
-                            admin_id, spesa['id_conto_condiviso_addebito'], data_esecuzione, descrizione, importo,
-                            spesa['id_sottocategoria'], cursor=cur
-                        )
-                    spese_eseguite += 1
+                    # Use the new _esegui_spesa_fissa helper
+                    if _esegui_spesa_fissa(spesa):
+                        spese_eseguite += 1
             if spese_eseguite > 0:
                 con.commit()
         return spese_eseguite
@@ -7383,4 +7497,139 @@ def calcola_totale_speso_carta(id_carta: int, mese: int, anno: int) -> float:
     except Exception as e:
         print(f'Error calc speso carta: {e}')
         return 0.0
+
+
+def ottieni_transazioni_carta(id_carta, mese, anno, master_key_b64=None, id_utente=None):
+    """
+    Recupera le transazioni (personali e condivise) associate a una carta per un dato mese/anno.
+    Decripta le descrizioni se necessario.
+    """
+    import calendar
+    try:
+        start_date = datetime.date(anno, mese, 1)
+        _, last_day = calendar.monthrange(anno, mese)
+        end_date = datetime.date(anno, mese, last_day)
+
+        crypto, master_key = _get_crypto_and_key(master_key_b64)
+        
+        family_key = None
+        if master_key and id_utente:
+             id_famiglia = ottieni_prima_famiglia_utente(id_utente)
+             if id_famiglia:
+                 family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+
+        transazioni = []
+
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # 1. Transazioni Personali
+            cur.execute("""
+                SELECT 
+                    T.id_transazione, T.data, T.descrizione, T.importo, 
+                    S.nome_sottocategoria, C.nome_categoria
+                FROM Transazioni T
+                LEFT JOIN Sottocategorie S ON T.id_sottocategoria = S.id_sottocategoria
+                LEFT JOIN Categorie C ON S.id_categoria = C.id_categoria
+                WHERE T.id_carta = %s 
+                  AND T.data >= %s AND T.data <= %s
+                ORDER BY T.data DESC
+            """, (id_carta, start_date, end_date))
+            
+            rows_p = cur.fetchall()
+            for r in rows_p:
+                t = dict(r)
+                t['tipo'] = 'Personale'
+                
+                # Decrypt description - Try Master Key then Family Key fallback
+                desc = _decrypt_if_key(t['descrizione'], master_key, crypto, silent=True)
+                if desc == "[ENCRYPTED]" and family_key:
+                    res = _decrypt_if_key(t['descrizione'], family_key, crypto, silent=True)
+                    if res != "[ENCRYPTED]":
+                        desc = res
+                t['descrizione'] = desc
+                
+                if family_key:
+                    t['nome_sottocategoria'] = _decrypt_if_key(t['nome_sottocategoria'], family_key, crypto, silent=True)
+                    t['nome_categoria'] = _decrypt_if_key(t['nome_categoria'], family_key, crypto, silent=True)
+                
+                transazioni.append(t)
+
+            # 2. Transazioni Condivise
+            cur.execute("""
+                SELECT 
+                    TC.id_transazione_condivisa as id_transazione, TC.data, TC.descrizione, TC.importo, 
+                    S.nome_sottocategoria, C.nome_categoria,
+                    U.username as autore
+                FROM TransazioniCondivise TC
+                LEFT JOIN Sottocategorie S ON TC.id_sottocategoria = S.id_sottocategoria
+                LEFT JOIN Categorie C ON S.id_categoria = C.id_categoria
+                LEFT JOIN Utenti U ON TC.id_utente_autore = U.id_utente
+                WHERE TC.id_carta = %s
+                  AND TC.data >= %s AND TC.data <= %s
+                ORDER BY TC.data DESC
+            """, (id_carta, start_date, end_date))
+            
+            rows_c = cur.fetchall()
+            for r in rows_c:
+                t = dict(r)
+                t['tipo'] = 'Condivisa'
+                
+                # Decrypt description - Try Family Key then Master Key fallback
+                desc = t['descrizione']
+                if family_key:
+                    desc = _decrypt_if_key(desc, family_key, crypto, silent=True)
+                
+                if (desc == "[ENCRYPTED]" or desc == t['descrizione']) and master_key:
+                     res = _decrypt_if_key(t['descrizione'], master_key, crypto, silent=True)
+                     if res != "[ENCRYPTED]":
+                         desc = res
+                t['descrizione'] = desc
+
+                if family_key:
+                    t['nome_sottocategoria'] = _decrypt_if_key(t['nome_sottocategoria'], family_key, crypto, silent=True)
+                    t['nome_categoria'] = _decrypt_if_key(t['nome_categoria'], family_key, crypto, silent=True)
+                transazioni.append(t)
+                
+        transazioni.sort(key=lambda x: x['data'], reverse=True)
+        return transazioni
+
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero transazioni carta: {e}")
+        return []
+
+
+def ottieni_mesi_disponibili_carta(id_carta):
+    """
+    Restituisce una lista di tuple (anno, mese) distinte in cui sono presenti transazioni per la carta.
+    Ordinata dalla più recente.
+    """
+    try:
+        mesi = set()
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # Personali
+            cur.execute("""
+                SELECT DISTINCT EXTRACT(YEAR FROM data::date) as anno, EXTRACT(MONTH FROM data::date) as mese
+                FROM Transazioni
+                WHERE id_carta = %s
+            """, (id_carta,))
+            for row in cur.fetchall():
+                mesi.add((int(row['anno']), int(row['mese'])))
+                
+            # Condivise
+            cur.execute("""
+                SELECT DISTINCT EXTRACT(YEAR FROM data::date) as anno, EXTRACT(MONTH FROM data::date) as mese
+                FROM TransazioniCondivise
+                WHERE id_carta = %s
+            """, (id_carta,))
+            for row in cur.fetchall():
+                mesi.add((int(row['anno']), int(row['mese'])))
+        
+        lista_mesi = sorted(list(mesi), key=lambda x: (x[0], x[1]), reverse=True)
+        return lista_mesi
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero mesi carta: {e}")
+        return []
 

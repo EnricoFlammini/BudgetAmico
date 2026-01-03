@@ -81,8 +81,8 @@ class ContiTab(ft.Container):
 
     def _fetch_data(self, utente_id, master_key_b64):
         conti = ottieni_dettagli_conti_utente(utente_id, master_key_b64=master_key_b64)
-        # Filtra i conti di investimento - questi vengono gestiti nel tab Investimenti
-        return [c for c in conti if c['tipo'] != 'Investimento']
+        # Filtra i conti di investimento e le carte di credito (gestite separatamente)
+        return [c for c in conti if c['tipo'] not in ['Investimento', 'Carta di Credito']]
 
     def _on_data_loaded(self, theme, conti_personali):
         loc = self.controller.loc
