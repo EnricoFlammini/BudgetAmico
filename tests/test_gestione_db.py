@@ -149,12 +149,13 @@ class TestGestioneDB(unittest.TestCase):
     @patch('db.gestione_db.get_db_connection')
     @patch('db.gestione_db.ottieni_impostazioni_budget_storico')
     @patch('db.gestione_db.get_impostazioni_budget_famiglia')
+    @patch('db.gestione_db.ottieni_totale_budget_storico')
     @patch('db.gestione_db.ottieni_totale_budget_allocato')
     @patch('db.gestione_db.ottieni_dati_analisi_annuale')
     @patch('db.gestione_db._get_crypto_and_key')
     @patch('db.gestione_db._get_family_key_for_user')
     @patch('db.gestione_db._decrypt_if_key')
-    def test_ottieni_dati_analisi_mensile_workflow(self, mock_dec, mock_fam, mock_cry, mock_annuale, mock_budget, mock_curr_imp, mock_hist_imp, mock_conn):
+    def test_ottieni_dati_analisi_mensile_workflow(self, mock_dec, mock_fam, mock_cry, mock_annuale, mock_budget, mock_budget_storico, mock_curr_imp, mock_hist_imp, mock_conn):
         """
         Testa il flusso di ottieni_dati_analisi_mensile.
         Verifica che vengano chiamate le funzioni giuste e ritornata la struttura corretta.
@@ -165,6 +166,7 @@ class TestGestioneDB(unittest.TestCase):
         
         # 2. Mock Budget Totale
         mock_budget.return_value = 2500.0
+        mock_budget_storico.return_value = 2500.0
         
         # 3. Mock Analisi Annuale (ritorna un dict vuoto per semplicita)
         mock_annuale.return_value = {}
