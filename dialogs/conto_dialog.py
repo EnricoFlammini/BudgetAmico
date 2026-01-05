@@ -1,6 +1,7 @@
 import flet as ft
 import datetime
 import traceback
+from utils.styles import AppStyles
 from db.gestione_db import (
     aggiungi_conto,
     modifica_conto,
@@ -19,7 +20,13 @@ from db.gestione_db import (
     crea_conto_condiviso,
     modifica_conto_condiviso,
     ottieni_utenti_famiglia,
-    ottieni_dettagli_conto_condiviso
+    ottieni_utenti_famiglia,
+    ottieni_dettagli_conto_condiviso,
+    # PB Imports
+    ottieni_salvadanai_conto,
+    admin_rettifica_salvadanaio,
+    elimina_salvadanaio,
+    ottieni_prima_famiglia_utente
 )
 
 
@@ -35,14 +42,26 @@ class ContoDialog(ft.AlertDialog):
         self.is_shared_mode = False # Toggle state
 
         # Dialogo Rettifica Saldo (Admin)
-        self.txt_nuovo_saldo = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
+        self.txt_nuovo_saldo = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER, label="Nuovo Saldo Reale")
+        self.container_pb_rettifica = ft.Column(spacing=5, scroll=ft.ScrollMode.AUTO, height=200) # Container for PBs
+        
         self.dialog_rettifica_saldo = ft.AlertDialog(
             modal=True,
             title=ft.Text("Rettifica Saldo Conto"),
-            content=self.txt_nuovo_saldo,
+            content=ft.Container(
+                content=ft.Column([
+                    AppStyles.subheader_text("Saldo Conto"),
+                    self.txt_nuovo_saldo,
+                    ft.Divider(),
+                    AppStyles.subheader_text("Salvadanai Associati"),
+                    self.container_pb_rettifica
+                ], tight=True),
+                width=400,
+                height=400
+            ),
             actions=[
                 ft.TextButton("Annulla", on_click=self._chiudi_dialog_rettifica),
-                ft.TextButton("Salva", on_click=self._salva_rettifica_saldo)
+                ft.TextButton("Salva e Rettifica", on_click=self._salva_rettifica_saldo)
             ]
         )
 
@@ -620,9 +639,63 @@ class ContoDialog(ft.AlertDialog):
         self.conto_id_in_modifica = conto_data['id_conto']
         self.is_condiviso_in_modifica = is_condiviso
         self.dialog_rettifica_saldo.title.value = f"Rettifica: {conto_data['nome_conto']}"
-        self.txt_nuovo_saldo.label = "Nuovo Saldo Reale"
+        self.txt_nuovo_saldo.label = "Nuovo Saldo Reale (Liquidità)" # Clarify what this is
         self.txt_nuovo_saldo.value = f"{conto_data['saldo_calcolato']:.2f}"
         self.txt_nuovo_saldo.error_text = None
+        
+        # Populate PBs
+        self.container_pb_rettifica.controls.clear()
+        
+        # Determine Family/Master keys
+        id_utente = self.controller.get_user_id()
+        master_key_b64 = self.controller.page.session.get("master_key")
+        id_famiglia = ottieni_prima_famiglia_utente(id_utente) # Or from controller
+        
+        # Fetch PBs
+        salvadanai = ottieni_salvadanai_conto(
+            conto_data['id_conto'], 
+            id_famiglia, 
+            master_key_b64, 
+            id_utente, 
+            is_condiviso=is_condiviso
+        )
+        
+        if not salvadanai:
+            self.container_pb_rettifica.controls.append(ft.Text("Nessun salvadanaio.", color="grey", size=12))
+        else:
+             for s in salvadanai:
+                 # Row: Icon | Name | Amount Field | Delete Icon
+                 tf_amount = ft.TextField(
+                     value=str(s['importo']), 
+                     keyboard_type=ft.KeyboardType.NUMBER, 
+                     width=100, 
+                     text_size=12,
+                     data=s # Store PB data in textfield
+                 )
+                 
+                 # Delete state tracking: use a boolean flag in data or a visual Indicator? 
+                 # Let's simple use a distinct button that asks confirmation or toggles 'deleted' state visually.
+                 # Simple approach: "Mark for delete" button turns red.
+                 btn_delete = ft.IconButton(
+                     icon=ft.Icons.DELETE_OUTLINE, 
+                     icon_color="red", 
+                     tooltip="Elimina Salvadanaio",
+                     data={'s': s, 'deleted': False}, # Store state
+                     on_click=self._toggle_delete_pb
+                 )
+                 
+                 row = ft.Row([
+                     ft.Icon(ft.Icons.SAVINGS, size=16, color=ft.Colors.PINK_400),
+                     ft.Text(s['nome'], expand=True, size=12, weight="bold"),
+                     tf_amount,
+                     btn_delete
+                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+                 
+                 # Link row to button for visual updates
+                 btn_delete.data['row'] = row 
+                 btn_delete.data['tf'] = tf_amount
+                 
+                 self.container_pb_rettifica.controls.append(row)
 
         if self.dialog_rettifica_saldo not in self.controller.page.overlay:
             self.controller.page.overlay.append(self.dialog_rettifica_saldo)
@@ -636,6 +709,27 @@ class ContoDialog(ft.AlertDialog):
             self.controller.page.update()
         finally:
             self.controller.hide_loading()
+
+    def _toggle_delete_pb(self, e):
+        # Toggle 'deleted' state
+        current_state = e.control.data.get('deleted', False)
+        new_state = not current_state
+        e.control.data['deleted'] = new_state
+        
+        if new_state:
+            e.control.icon = ft.Icons.RESTORE_FROM_TRASH
+            e.control.icon_color = "green"
+            e.control.tooltip = "Annulla eliminazione"
+            e.control.data['row'].opacity = 0.5
+            e.control.data['tf'].disabled = True
+        else:
+            e.control.icon = ft.Icons.DELETE_OUTLINE
+            e.control.icon_color = "red"
+            e.control.tooltip = "Elimina Salvadanaio"
+            e.control.data['row'].opacity = 1.0
+            e.control.data['tf'].disabled = False
+            
+        self.dialog_rettifica_saldo.update()
 
     def _salva_rettifica_saldo(self, e):
         try:
@@ -652,6 +746,41 @@ class ContoDialog(ft.AlertDialog):
                 success = admin_imposta_saldo_conto_condiviso(id_conto, nuovo_saldo)
             else:
                 success = admin_imposta_saldo_conto_corrente(id_conto, nuovo_saldo)
+            
+            # --- Piggy Bank Rectification ---
+            master_key_b64 = self.controller.page.session.get("master_key")
+            id_utente = self.controller.get_user_id()
+            id_famiglia = ottieni_prima_famiglia_utente(id_utente)
+            
+            pb_changes_count = 0
+            
+            for row in self.container_pb_rettifica.controls:
+                 if isinstance(row, ft.Row) and len(row.controls) >= 4:
+                     tf_amount = row.controls[2]
+                     btn_delete = row.controls[3]
+                     pb_data = tf_amount.data
+                     
+                     # Check Delete
+                     if btn_delete.data.get('deleted', False):
+                         elimina_salvadanaio(pb_data['id'], id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
+                         pb_changes_count += 1
+                         continue
+                     
+                     # Check Amount Change
+                     try:
+                         new_amt = float(tf_amount.value.replace(",", "."))
+                         if new_amt != pb_data['importo']:
+                             admin_rettifica_salvadanaio(
+                                 pb_data['id'], 
+                                 new_amt, 
+                                 master_key_b64, 
+                                 id_utente, 
+                                 is_shared=self.is_condiviso_in_modifica
+                             )
+                             pb_changes_count += 1
+                     except: pass
+            
+            # -------------------------------
 
             if success:
                 self.controller.show_snack_bar("Saldo rettificato con successo!", success=True)

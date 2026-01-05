@@ -87,12 +87,10 @@ class CryptoManager:
                 
             # Fernet.decrypt expects bytes (the token)
             return f.decrypt(encrypted_data.encode()).decode()
-            # Fernet.decrypt expects bytes (the token)
-            return f.decrypt(encrypted_data.encode()).decode()
         except Exception as e:
             if not silent:
                 # SECURITY: Do NOT log the master_key or the full encrypted data if it might leak info.
-                logger.error(f"Decryption failed. Error: {e}")
+                logger.error(f"Decryption failed. Error: {repr(e)}")
             return "[ENCRYPTED]"
 
     def generate_recovery_key(self) -> str:

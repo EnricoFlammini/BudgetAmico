@@ -13,6 +13,7 @@ from tabs.tab_impostazioni import ImpostazioniTab
 from tabs.tab_spese_fisse import SpeseFisseTab
 from tabs.tab_investimenti import InvestimentiTab
 from tabs.tab_carte import TabCarte
+from tabs.tab_calcolatrice import CalcolatriceTab
 from utils.logger import setup_logger
 from utils.cache_manager import cache_manager
 
@@ -36,7 +37,9 @@ class DashboardView:
         self.tab_impostazioni = ImpostazioniTab(controller)
         self.tab_spese_fisse = SpeseFisseTab(controller)
         self.tab_investimenti = InvestimentiTab(controller)
+        self.tab_investimenti = InvestimentiTab(controller)
         self.tab_carte = TabCarte(controller)
+        self.tab_calcolatrice = CalcolatriceTab(controller)
 
         # 2. Sidebar personalizzata (sostituisce NavigationRail)
         self.selected_index = 0
@@ -390,6 +393,19 @@ class DashboardView:
                 'selected_icon': ft.Icons.ADMIN_PANEL_SETTINGS,
                 'label': loc.get("admin_panel_title"),
                 'view': self.tab_admin,
+                'index': index
+            })
+            index += 1
+
+
+
+        # 12. Calcolatrice (Solo Utente1)
+        if utente and utente.get('username') == 'Utente1':
+            self.sidebar_items.append({
+                'icon': ft.Icons.CALCULATE_OUTLINED,
+                'selected_icon': ft.Icons.CALCULATE,
+                'label': "Calcolatrice",
+                'view': self.tab_calcolatrice,
                 'index': index
             })
             index += 1

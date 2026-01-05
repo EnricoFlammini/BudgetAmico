@@ -4,7 +4,9 @@ import traceback
 from db.gestione_db import (
     ottieni_tutti_i_conti_famiglia,
     ottieni_tutti_i_conti_utente,
-    esegui_giroconto
+    esegui_giroconto,
+    ottieni_salvadanai_conto,
+    esegui_giroconto_salvadanaio
 )
 
 
@@ -105,16 +107,29 @@ class GirocontoDialog(ft.AlertDialog):
         master_key_b64 = self.controller.page.session.get("master_key")
 
         # Popola conti SORGENTE (solo i miei conti personali e condivisi)
+        # Include Salvadanai per ogni conto
         conti_utente = ottieni_tutti_i_conti_utente(id_utente, master_key_b64=master_key_b64)
         conti_sorgente_filtrati = [c for c in conti_utente if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
         opzioni_sorgente = []
+        
         for c in conti_sorgente_filtrati:
             prefix = "C" if c['is_condiviso'] else "P"
             suffix = " (Condiviso)" if c['is_condiviso'] else ""
             opzioni_sorgente.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}{suffix}"))
+            
+            # Add Salvadanai for this account
+            salvadanai = ottieni_salvadanai_conto(c['id_conto'], id_famiglia, master_key_b64, id_utente, is_condiviso=c['is_condiviso'])
+            for s in salvadanai:
+                 # Key format: S<id_sb>_<parent_key>
+                 parent_key = f"{prefix}{c['id_conto']}"
+                 opzioni_sorgente.append(ft.dropdown.Option(
+                     key=f"S{s['id']}_{parent_key}", 
+                     text=f"  ↳ 🐷 {s['nome']} ({self.controller.loc.format_currency(s['importo'])})"
+                 ))
+                 
         self.dd_conto_sorgente.options = opzioni_sorgente
 
-        # Popola conti DESTINAZIONE (tutti i conti della famiglia)
+        # Popola conti DESTINAZIONE (tutti i conti della famiglia, più salvadanai)
         conti_famiglia = ottieni_tutti_i_conti_famiglia(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
         conti_destinazione_filtrati = [c for c in conti_famiglia if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
         opzioni_destinazione = []
@@ -126,7 +141,18 @@ class GirocontoDialog(ft.AlertDialog):
             else:
                 proprietario = c.get('proprietario', '')
                 suffix = f" ({proprietario})" if proprietario and proprietario != "Sconosciuto" else ""
+            
             opzioni_destinazione.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}{suffix}"))
+            
+            # Add Salvadanai for this account
+            salvadanai = ottieni_salvadanai_conto(c['id_conto'], id_famiglia, master_key_b64, id_utente, is_condiviso=c['is_condiviso'])
+            for s in salvadanai:
+                 parent_key = f"{prefix}{c['id_conto']}"
+                 opzioni_destinazione.append(ft.dropdown.Option(
+                     key=f"S{s['id']}_{parent_key}", 
+                     text=f"  ↳ 🐷 {s['nome']} ({self.controller.loc.format_currency(s['importo'])})"
+                 ))
+
         self.dd_conto_destinazione.options = opzioni_destinazione
 
     def _salva_giroconto(self, e):
@@ -166,26 +192,94 @@ class GirocontoDialog(ft.AlertDialog):
                 self.controller.hide_loading()
                 return
 
-            # Esegui giroconto
-            id_conto_sorgente = int(sorgente_key[1:])
-            tipo_sorgente = "personale" if sorgente_key.startswith("P") else "condiviso"
-            id_conto_destinazione = int(destinazione_key[1:])
-            tipo_destinazione = "personale" if destinazione_key.startswith("P") else "condiviso"
+            # Check if using Salvadanai
+            is_source_sb = sorgente_key.startswith("S")
+            is_dest_sb = destinazione_key.startswith("S")
             
             master_key_b64 = self.controller.page.session.get("master_key")
             id_utente = self.controller.get_user_id()
             id_famiglia = self.controller.get_family_id()
+
+            if is_source_sb and is_dest_sb:
+                self.controller.show_error_dialog("Trasferimento diretto tra salvadanai non ancora supportato.\nPassare prima dal conto principale.")
+                self.controller.page.update()
+                self.controller.hide_loading()
+                return
             
-            success = esegui_giroconto(
-                id_conto_sorgente, id_conto_destinazione,
-                importo, self.txt_data_selezionata.value,
-                self.txt_descrizione.value,
-                master_key_b64=master_key_b64,
-                tipo_origine=tipo_sorgente,
-                tipo_destinazione=tipo_destinazione,
-                id_utente_autore=id_utente,
-                id_famiglia=id_famiglia
-            )
+            if is_source_sb:
+                # PB -> Account
+                # Key format: S<id_sb>_<parent_key>
+                sb_part, parent_key_check = sorgente_key.split('_')
+                id_salvadanaio = int(sb_part[1:])
+                
+                # Validation: Can only transfer to OWN parent account
+                if destinazione_key != parent_key_check:
+                    self.controller.show_error_dialog("Puoi trasferire dai salvadanai SOLO verso il loro conto di origine.")
+                    self.controller.page.update()
+                    self.controller.hide_loading()
+                    return
+                
+                id_conto = int(destinazione_key[1:])
+                is_shared_parent = destinazione_key.startswith("C")
+                
+                success = esegui_giroconto_salvadanaio(
+                    id_conto=id_conto,
+                    id_salvadanaio=id_salvadanaio,
+                    direzione='da_salvadanaio',
+                    importo=importo,
+                    data=self.txt_data_selezionata.value,
+                    descrizione=self.txt_descrizione.value,
+                    master_key_b64=master_key_b64,
+                    id_utente=id_utente,
+                    id_famiglia=id_famiglia,
+                    parent_is_shared=is_shared_parent
+                )
+
+            elif is_dest_sb:
+                # Account -> PB
+                sb_part, parent_key_check = destinazione_key.split('_')
+                id_salvadanaio = int(sb_part[1:])
+                
+                # Validation: Can only transfer FROM own parent account
+                if sorgente_key != parent_key_check:
+                    self.controller.show_error_dialog("Puoi trasferire nei salvadanai SOLO dal loro conto di origine.")
+                    self.controller.page.update()
+                    self.controller.hide_loading()
+                    return
+                
+                id_conto = int(sorgente_key[1:])
+                is_shared_parent = sorgente_key.startswith("C")
+                
+                success = esegui_giroconto_salvadanaio(
+                    id_conto=id_conto,
+                    id_salvadanaio=id_salvadanaio,
+                    direzione='verso_salvadanaio',
+                    importo=importo,
+                    data=self.txt_data_selezionata.value,
+                    descrizione=self.txt_descrizione.value,
+                    master_key_b64=master_key_b64,
+                    id_utente=id_utente,
+                    id_famiglia=id_famiglia,
+                    parent_is_shared=is_shared_parent
+                )
+            
+            else:
+                # Standard Account -> Account
+                id_conto_sorgente = int(sorgente_key[1:])
+                tipo_sorgente = "personale" if sorgente_key.startswith("P") else "condiviso"
+                id_conto_destinazione = int(destinazione_key[1:])
+                tipo_destinazione = "personale" if destinazione_key.startswith("P") else "condiviso"
+                
+                success = esegui_giroconto(
+                    id_conto_sorgente, id_conto_destinazione,
+                    importo, self.txt_data_selezionata.value,
+                    self.txt_descrizione.value,
+                    master_key_b64=master_key_b64,
+                    tipo_origine=tipo_sorgente,
+                    tipo_destinazione=tipo_destinazione,
+                    id_utente_autore=id_utente,
+                    id_famiglia=id_famiglia
+                )
 
             if success:
                 self.controller.show_snack_bar("Giroconto eseguito con successo!", success=True)

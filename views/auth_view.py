@@ -55,6 +55,8 @@ class AuthView:
         self.txt_password.label = "Password"
         self.txt_username.value = ""
         self.txt_password.value = ""
+        self.txt_username.disabled = False
+        self.txt_password.disabled = False
         self.txt_errore_login.visible = False
 
         return ft.View(
