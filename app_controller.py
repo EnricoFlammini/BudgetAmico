@@ -414,8 +414,7 @@ class AppController:
             self.dashboard_view.set_update_banner(banner)
             self.page.update()
 
-    def _download_confirmato(self, e): pass
-    def _download_rifiutato(self, e): pass
+
 
     def backup_dati_clicked(self):
         self.show_snack_bar("Funzionalità di backup non disponibile con PostgreSQL.", success=False)
@@ -437,11 +436,7 @@ class AppController:
     def _on_ripristina_dati_result(self, e):
         pass # Placeholder
 
-    def _chiudi_dialog_conferma_ripristino(self, e):
-        pass # Placeholder
 
-    def _ripristino_confermato(self, e):
-        pass # Placeholder
 
     def open_info_dialog(self, e):
         logger.debug(f"[OVERLAY] open_info_dialog called.")
