@@ -432,6 +432,45 @@ def ottieni_totale_budget_allocato(id_famiglia: str, master_key_b64: Optional[st
         print(f"[ERRORE] Errore calcolo totale budget allocato: {e}")
         return 0.0
 
+def ottieni_totale_budget_storico(id_famiglia: str, anno: int, mese: int, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> float:
+    """
+    Ritorna il totale dei budget assegnati per un mese specifico dallo storico.
+    """
+    try:
+        crypto, master_key = _get_crypto_and_key(master_key_b64)
+        family_key = None
+        if master_key and id_utente:
+            family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+            
+        key_to_use = family_key if family_key else master_key
+
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("""
+                SELECT importo_limite 
+                FROM Budget_Storico 
+                WHERE id_famiglia = %s AND anno = %s AND mese = %s
+            """, (id_famiglia, anno, mese))
+            
+            rows = cur.fetchall()
+            if not rows:
+                return 0.0
+                
+            totale = 0.0
+            for row in rows:
+                enc_limite = row['importo_limite']
+                try:
+                    limite_str = _decrypt_if_key(enc_limite, key_to_use, crypto)
+                    totale += float(limite_str)
+                except Exception as e:
+                    # print(f"Errore decrypt budget storico row: {e}")
+                    pass
+            return totale
+            
+    except Exception as e:
+        print(f"[ERRORE] Errore calcolo totale budget storico: {e}")
+        return 0.0
+
 def salva_impostazioni_budget_storico(id_famiglia: str, anno: int, mese: int, entrate_mensili: float, risparmio_tipo: str, risparmio_valore: float) -> bool:
     """
     Salva le impostazioni budget nello storico per un mese specifico.
@@ -558,7 +597,19 @@ def ottieni_dati_analisi_mensile(id_famiglia: str, anno: int, mese: int, master_
             item['percentuale'] = (item['importo'] / spese_totali * 100) if spese_totali > 0 else 0
 
         # 3. Budget Totale
-        budget_totale = ottieni_totale_budget_allocato(id_famiglia, master_key_b64, id_utente)
+        today = datetime.date.today()
+        # Se stiamo guardando il mese corrente o futuro, prendiamo il budget allocato ATTUALE
+        if anno > today.year or (anno == today.year and mese >= today.month):
+             budget_totale = ottieni_totale_budget_allocato(id_famiglia, master_key_b64, id_utente)
+        else:
+             # Per i mesi passati, prendiamo lo storico
+             budget_totale = ottieni_totale_budget_storico(id_famiglia, anno, mese, master_key_b64, id_utente)
+             
+             # Fallback opzionale: se lo storico è vuoto (es. non ancora salvato), proviamo a prendere quello corrente?
+             # Per ora lasciamo 0 o quello che trova, per coerenza storica.
+             if budget_totale == 0 and anno == today.year and mese == today.month:
+                 # Caso limite: siamo nel mese corrente ma lo storico non c'è ancora.
+                 budget_totale = ottieni_totale_budget_allocato(id_famiglia, master_key_b64, id_utente)
 
         risparmio = entrate - spese_totali
         delta = budget_totale - spese_totali
@@ -719,7 +770,20 @@ def ottieni_dati_analisi_annuale(id_famiglia: str, anno: int, master_key_b64: st
             else:
                 entrate_totali_periodo += entrate_std
             
-            budget_totale_periodo += budget_mensile_corrente 
+            # BUDGET: Use historical if available
+            today = datetime.date.today()
+            if anno > today.year or (anno == today.year and m > today.month):
+                 # Future: use current
+                 budget_totale_periodo += budget_mensile_corrente
+            elif anno == today.year and m == today.month:
+                 # Current month: try historical, else current
+                 b_storico = ottieni_totale_budget_storico(id_famiglia, anno, m, master_key_b64, id_utente)
+                 if b_storico == 0:
+                     b_storico = budget_mensile_corrente
+                 budget_totale_periodo += b_storico
+            else:
+                 # Past month: use historical
+                 budget_totale_periodo += ottieni_totale_budget_storico(id_famiglia, anno, m, master_key_b64, id_utente) 
 
         media_spese_mensili = totale_spese_annuali / divisor
         media_budget_mensile = budget_totale_periodo / divisor
