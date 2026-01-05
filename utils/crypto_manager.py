@@ -4,6 +4,9 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
+from utils.logger import setup_logger
+
+logger = setup_logger("CryptoManager")
 
 class CryptoManager:
     def __init__(self):
@@ -55,7 +58,7 @@ class CryptoManager:
         try:
             f = Fernet(master_key)
         except Exception as e:
-            print(f"[CRYPTO ERROR] Invalid Master Key in encrypt_data: {master_key}")
+            logger.error(f"Invalid Master Key in encrypt_data: {e}")
             raise e
             
         # Fernet.encrypt returns bytes that are already base64 encoded
@@ -79,20 +82,17 @@ class CryptoManager:
                 f = Fernet(master_key)
             except Exception as e:
                 if not silent:
-                    print(f"[CRYPTO ERROR] Invalid Master Key in decrypt_data: {master_key}")
+                    logger.error(f"Invalid Master Key in decrypt_data: {e}")
                 raise e
                 
             # Fernet.decrypt expects bytes (the token)
             return f.decrypt(encrypted_data.encode()).decode()
+            # Fernet.decrypt expects bytes (the token)
+            return f.decrypt(encrypted_data.encode()).decode()
         except Exception as e:
             if not silent:
-                print(f"[CRYPTO ERROR] Decryption failed. Type: {type(e)}")
-                print(f"[CRYPTO ERROR] Key (repr): {repr(master_key)}")
-                print(f"[CRYPTO ERROR] Data (repr): {repr(encrypted_data)}")
-            return "[ENCRYPTED]"
-        except Exception as e:
-            if not silent:
-                print(f"[CRYPTO ERROR] Decryption failed: {e}")
+                # SECURITY: Do NOT log the master_key or the full encrypted data if it might leak info.
+                logger.error(f"Decryption failed. Error: {e}")
             return "[ENCRYPTED]"
 
     def generate_recovery_key(self) -> str:

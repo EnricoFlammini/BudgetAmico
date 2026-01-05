@@ -246,7 +246,7 @@ class AuthView:
             self.page.update()
             return
 
-        print("[DEBUG] Chiamata a registra_utente...")
+        logger.debug("Chiamata a registra_utente...")
         
         # Mostra spinner durante la registrazione
         self.controller.show_loading("Registrazione in corso...")
@@ -257,7 +257,7 @@ class AuthView:
             self.controller.hide_loading()
 
         if result:
-            print(f"[DEBUG] Registrazione OK. Result keys: {result.keys()}")
+            logger.debug(f"Registrazione OK. Result keys: {result.keys()}")
             id_nuovo_utente = result.get("id_utente")
             recovery_key = result.get("recovery_key")
             
@@ -270,7 +270,7 @@ class AuthView:
 
             # Show recovery key dialog
             def close_dialog(e):
-                print("[DEBUG] Dialog chiuso. Redirect a login.")
+                logger.debug("Dialog chiuso. Redirect a login.")
                 dialog.open = False
                 self.controller.hide_loading()  # Safety: nasconde loading se visibile
                 if dialog in self.page.overlay:
@@ -279,7 +279,7 @@ class AuthView:
                 self.controller.show_snack_bar("Registrazione completata! Effettua il login.", success=True)
                 self.page.go("/")
             
-            print("[DEBUG] Apertura dialog recovery key...")
+            logger.debug("Apertura dialog recovery key...")
             dialog = ft.AlertDialog(
                 modal=True,
                 title=ft.Text("⚠️ SALVA LA TUA CHIAVE DI RECUPERO", weight=ft.FontWeight.BOLD, size=18),
