@@ -1,4 +1,4 @@
-# Budget Amico v0.33.00
+# Budget Amico v0.33.04
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -11,7 +11,8 @@
 
 ## 📅 Changelog
 
-### v0.33.00 (05/01/2026)
+### v0.33.04 (05/01/2026)
+- **Login Rapido**: È ora possibile effettuare l'accesso premendo semplicemente il tasto **Invio** nei campi Username o Password.
 - **Standardizzazione UI & Font**:
     - **Font Global**: Adozione globale del font **Roboto** per un'interfaccia più moderna e leggibile.
     - **Refactoring Stili**: Standardizzazione di tutti i testi (Titoli, Sottotitoli, Corpo) attraverso l'intera applicazione per garantire coerenza visiva.
@@ -19,8 +20,6 @@
 - **Bug Fix**:
     - Risolto crash critico nella scheda Famiglia (`AttributeError`).
     - Aggiornata gestione stili per supportare proprietà estese Flet (es. `expand`, `opacity`).
-
-### v0.33.00 (05/01/2026)
 - **Gestione Conti Unificata**:
     - **Lista Unica**: I conti personali e condivisi sono ora visualizzati in un'unica lista scrollabile per una gestione più semplice e immediata.
     - **Conti Condivisi**: Chiara distinzione visiva per i conti condivisi, con etichetta "Conto Condiviso".

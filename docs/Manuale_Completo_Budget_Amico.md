@@ -1,4 +1,4 @@
-# Manuale Completo Budget Amico v0.33.00
+# Manuale Completo Budget Amico v0.33.04
 
 ## Indice
 
@@ -68,7 +68,7 @@ Dopo la registrazione, ti verrà mostrata una **Recovery Key** di 24 caratteri.
 
 1. Inserisci **Username** (o Email)
 2. Inserisci **Password**
-3. Clicca **"Accedi"**
+3. Clicca **"Accedi"** oppure premi **Invio** sulla tastiera
 
 ### 2.4 Recupero Password
 

@@ -1,4 +1,4 @@
-# Guida Rapida Budget Amico v0.33.00
+# Guida Rapida Budget Amico v0.33.04
 
 ## Benvenuto in Budget Amico! 🎉
 
@@ -29,7 +29,7 @@ Puoi accedere al tool **Divisore Pro** (calcolo spese condivise) direttamente da
 
 1. Inserisci il tuo **Username** (o Email)
 2. Inserisci la tua **Password**
-3. Clicca su **"Accedi"**
+3. Clicca su **"Accedi"** oppure premi **Invio** sulla tastiera
 
 ---
 

@@ -20,8 +20,8 @@ class AuthView:
         self.URL_BASE = os.environ.get("FLET_APP_URL", "http://localhost:8550")
 
         # Controlli per il Login
-        self.txt_username = ft.TextField(autofocus=True)
-        self.txt_password = ft.TextField(password=True, can_reveal_password=True)
+        self.txt_username = ft.TextField(autofocus=True, on_submit=self._login_cliccato)
+        self.txt_password = ft.TextField(password=True, can_reveal_password=True, on_submit=self._login_cliccato)
         self.txt_errore_login = ft.Text(value="", color=ft.Colors.RED_500, visible=False)
 
         # Controlli per la Registrazione
