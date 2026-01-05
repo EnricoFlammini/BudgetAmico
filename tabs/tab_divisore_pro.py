@@ -14,7 +14,7 @@ class DivisoreProTab(ft.Container):
         # --- UI Components ---
         
         # Header
-        self.txt_header = AppStyles.header_text("⚖️ Divisore Pro")
+        self.txt_header = AppStyles.title_text("⚖️ Divisore Pro")
         # removed version text
         
         # Nuova Spesa Card

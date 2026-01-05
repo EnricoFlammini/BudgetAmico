@@ -157,6 +157,9 @@ class ImpostazioniTab(ft.Container):
         )
 
         return [
+            # Titolo Pagina
+            AppStyles.title_text(loc.get("settings")),
+            
             # Sezione Lingua e Valuta
             AppStyles.section_header(loc.get("language_and_currency")),
             AppStyles.page_divider(),

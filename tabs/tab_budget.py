@@ -59,7 +59,7 @@ class BudgetTab(ft.Container):
         
         self.content = ft.Column(
             controls=[
-                AppStyles.section_header("Budget & Analisi"),
+                AppStyles.title_text("Budget & Analisi"),
                 ft.Container(
                     content=ft.Row([
                         self.seg_view_mode,

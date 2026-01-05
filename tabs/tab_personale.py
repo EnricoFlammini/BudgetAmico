@@ -291,7 +291,7 @@ class PersonaleTab(ft.Container):
             ft.Column([btn_tutte_transazioni], col={"xs": 12, "sm": 4}, horizontal_alignment=ft.CrossAxisAlignment.END)
         ], vertical_alignment=ft.CrossAxisAlignment.CENTER)
         
-        header_row_content = [ft.Container(AppStyles.section_header(nome_utente), expand=True)]
+        header_row_content = [ft.Container(AppStyles.title_text(nome_utente), expand=True)]
         if icona_global_collapser:
             header_row_content.append(icona_global_collapser)
 
