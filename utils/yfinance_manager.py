@@ -5,6 +5,9 @@ Usa solo 'requests' per massima compatibilità con PyInstaller.
 from typing import Optional, Dict, List
 import requests
 import json
+from utils.logger import setup_logger
+
+logger = setup_logger("YFinanceManager")
 
 
 def ottieni_prezzo_asset(ticker: str) -> Optional[float]:
@@ -55,7 +58,7 @@ def ottieni_prezzo_asset(ticker: str) -> Optional[float]:
         return None
         
     except Exception as e:
-        print(f"Errore nel recupero del prezzo per {ticker}: {e}")
+        logger.warning(f"Errore nel recupero del prezzo per {ticker}: {e}")
         return None
 
 
@@ -120,7 +123,7 @@ def ottieni_info_asset(ticker: str) -> Optional[Dict]:
         return None
         
     except Exception as e:
-        print(f"Errore nel recupero delle info per {ticker}: {e}")
+        logger.warning(f"Errore nel recupero delle info per {ticker}: {e}")
         return None
 
 
@@ -239,7 +242,7 @@ def ottieni_storico_asset(ticker: str, anni: int = 5) -> List[Dict]:
         return risultato
         
     except Exception as e:
-        print(f"Errore nel recupero dello storico per {ticker}: {e}")
+        logger.error(f"Errore nel recupero dello storico per {ticker}: {e}")
         return []
 
 
@@ -397,5 +400,5 @@ def cerca_ticker(query: str, limit: int = 10) -> List[Dict]:
         return risultati
         
     except Exception as e:
-        print(f"Errore nella ricerca ticker per '{query}': {e}")
+        logger.error(f"Errore nella ricerca ticker per '{query}': {e}")
         return []

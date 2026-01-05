@@ -12,6 +12,7 @@ import string
 import base64
 from utils.crypto_manager import CryptoManager
 from utils.cache_manager import cache_manager
+from utils.logger import setup_logger
 
 # --- BLOCCO DI CODICE PER CORREGGERE IL PERCORSO ---
 script_dir = os.path.dirname(__file__)
@@ -22,10 +23,12 @@ if parent_dir not in sys.path:
 
 from db.crea_database import setup_database
 
+logger = setup_logger("GestioneDB")
+
 # Load Server Key
 SERVER_SECRET_KEY = os.getenv("SERVER_SECRET_KEY")
 if not SERVER_SECRET_KEY:
-    print("[WARNING] SERVER_SECRET_KEY not found in .env. Password recovery via email will not work for new encrypted data.")
+    logger.warning("SERVER_SECRET_KEY not found in .env. Password recovery via email will not work for new encrypted data.")
 
 # --- System Key Helpers ---
 def _get_system_keys():
@@ -74,7 +77,7 @@ def ottieni_ruolo_utente(id_famiglia: str, id_utente: str) -> Optional[str]:
             row = cur.fetchone()
             return row['ruolo'] if row else None
     except Exception as e:
-        print(f"[ERRORE] ottieni_ruolo_utente: {e}")
+        logger.error(f"ottieni_ruolo_utente: {e}")
         return None
 
 
@@ -91,7 +94,7 @@ def _get_crypto_and_key(master_key_b64=None):
             master_key = master_key_b64.encode()
             return crypto, master_key
         except Exception as e:
-            print(f"[ERRORE] Errore decodifica master_key: {e}")
+            logger.error(f"Errore decodifica master_key: {e}")
             return crypto, None
     return crypto, None
 
@@ -143,7 +146,7 @@ def ottieni_versione_db():
             res = cur.fetchone()
             return int(res['valore']) if res else 0
     except Exception as e:
-        print(f"[ERRORE] Errore durante la lettura della versione del DB: {repr(e)}")
+        logger.error(f"Errore durante la lettura della versione del DB: {repr(e)}")
         return 0
 
 
@@ -160,7 +163,7 @@ def get_user_count():
             cur.execute("SELECT COUNT(*) as count FROM Utenti")
             return cur.fetchone()['count']
     except Exception as e:
-        print(f"[ERRORE] Errore in get_user_count: {e}")
+        logger.error(f"Errore in get_user_count: {e}")
         return -1
 
 
@@ -216,11 +219,11 @@ def get_configurazione(chiave: str, id_famiglia: Optional[str] = None, master_ke
                     if decrypted:
                         valore = decrypted
                 except Exception as e:
-                    print(f"[WARN] Failed to system-decrypt {chiave}: {e}")
+                    logger.warning(f"Failed to system-decrypt {chiave}: {e}")
             
             return valore
     except Exception as e:
-        print(f"[ERRORE] Errore recupero configurazione {chiave}: {e}")
+        logger.error(f"Errore recupero configurazione {chiave}: {e}")
         return None
 
 def set_configurazione(chiave: str, valore: str, id_famiglia: Optional[str] = None, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> bool:
@@ -248,7 +251,7 @@ def set_configurazione(chiave: str, valore: str, id_famiglia: Optional[str] = No
             try:
                 encrypted_valore = encrypt_system_data(valore)
             except Exception as e:
-                print(f"[WARN] Failed to system-encrypt {chiave}: {e}")
+                logger.warning(f"Failed to system-encrypt {chiave}: {e}")
         
         with get_db_connection() as con:
             cur = con.cursor()
@@ -269,7 +272,7 @@ def set_configurazione(chiave: str, valore: str, id_famiglia: Optional[str] = No
             con.commit()
             return True
     except Exception as e:
-        print(f"[ERRORE] Errore salvataggio configurazione {chiave}: {e}")
+        logger.error(f"Errore salvataggio configurazione {chiave}: {e}")
         return False
 
 def get_smtp_config(id_famiglia: Optional[str] = None, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> Dict[str, Optional[str]]:
@@ -279,7 +282,7 @@ def get_smtp_config(id_famiglia: Optional[str] = None, master_key_b64: Optional[
     Returns:
         Un dizionario contenente 'server', 'port', 'user', 'password', 'provider'.
     """
-    print(f"[DEBUG] get_smtp_config called with id_famiglia={id_famiglia}, id_utente={id_utente}, master_key_present={bool(master_key_b64)}")
+    logger.debug(f"get_smtp_config called with id_famiglia={id_famiglia}, id_utente={id_utente}, master_key_present={bool(master_key_b64)}")
     return {
         'server': get_configurazione('smtp_server', id_famiglia, master_key_b64, id_utente),
         'port': get_configurazione('smtp_port', id_famiglia, master_key_b64, id_utente),
@@ -304,7 +307,7 @@ def save_smtp_config(settings: Dict[str, Any], id_famiglia: Optional[str] = None
         set_configurazione('smtp_provider', settings.get('provider'), id_famiglia)  # provider is not sensitive
         return True
     except Exception as e:
-        print(f"[ERRORE] Errore salvataggio SMTP config: {e}")
+        logger.error(f"Errore salvataggio SMTP config: {e}")
         return False
 
 
@@ -336,7 +339,7 @@ def set_impostazioni_budget_famiglia(id_famiglia: str, entrate_mensili: float, r
         set_configurazione('budget_risparmio_valore', str(risparmio_valore), id_famiglia)
         return True
     except Exception as e:
-        print(f"[ERRORE] Errore salvataggio impostazioni budget: {e}")
+        logger.error(f"Errore salvataggio impostazioni budget: {e}")
         return False
 
 def calcola_entrate_mensili_famiglia(id_famiglia: str, anno: int, mese: int, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> float:
@@ -418,7 +421,7 @@ def calcola_entrate_mensili_famiglia(id_famiglia: str, anno: int, mese: int, mas
             return totale_personali + totale_condivise
             
     except Exception as e:
-        print(f"[ERRORE] Errore calcolo entrate mensili: {e}")
+        logger.error(f"Errore calcolo entrate mensili: {e}")
         return 0.0
 
 def ottieni_totale_budget_allocato(id_famiglia: str, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> float:
@@ -429,7 +432,7 @@ def ottieni_totale_budget_allocato(id_famiglia: str, master_key_b64: Optional[st
         budget_list = ottieni_budget_famiglia(id_famiglia, master_key_b64, id_utente)
         return sum(b.get('importo_limite', 0) for b in budget_list)
     except Exception as e:
-        print(f"[ERRORE] Errore calcolo totale budget allocato: {e}")
+        logger.error(f"Errore calcolo totale budget allocato: {e}")
         return 0.0
 
 def ottieni_totale_budget_storico(id_famiglia: str, anno: int, mese: int, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> float:
@@ -468,7 +471,7 @@ def ottieni_totale_budget_storico(id_famiglia: str, anno: int, mese: int, master
             return totale
             
     except Exception as e:
-        print(f"[ERRORE] Errore calcolo totale budget storico: {e}")
+        logger.error(f"Errore calcolo totale budget storico: {e}")
         return 0.0
 
 def salva_impostazioni_budget_storico(id_famiglia: str, anno: int, mese: int, entrate_mensili: float, risparmio_tipo: str, risparmio_valore: float) -> bool:
@@ -483,7 +486,7 @@ def salva_impostazioni_budget_storico(id_famiglia: str, anno: int, mese: int, en
         set_configurazione(f"{chiave_base}_risparmio_valore", str(risparmio_valore), id_famiglia)
         return True
     except Exception as e:
-        print(f"[ERRORE] Errore salvataggio storico impostazioni budget: {e}")
+        logger.error(f"Errore salvataggio storico impostazioni budget: {e}")
         return False
 
 def ottieni_impostazioni_budget_storico(id_famiglia: str, anno: int, mese: int) -> Optional[Dict[str, Union[float, str]]]:
@@ -628,7 +631,7 @@ def ottieni_dati_analisi_mensile(id_famiglia: str, anno: int, mese: int, master_
         }
 
     except Exception as e:
-        print(f"[ERRORE] ottieni_dati_analisi_mensile: {e}")
+        logger.error(f"ottieni_dati_analisi_mensile: {e}")
         return None
 
 

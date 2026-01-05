@@ -8,6 +8,9 @@ from dotenv import load_dotenv
 import threading
 import queue
 from urllib.parse import urlparse
+from utils.logger import setup_logger
+
+logger = setup_logger("SupabaseManager")
 
 # --- ADAPTERS PER COMPATIBILITÀ CON CODICE ESISTENTE (RealDictCursor) ---
 
@@ -112,7 +115,7 @@ class CustomConnectionPool:
                     self.current_connections += 1
                     return conn
                 except Exception as e:
-                    print(f"[POOL ERROR] Impossibile creare nuova connessione: {e}")
+                    logger.error(f"Impossibile creare nuova connessione: {e}")
                     raise
             else:
                 return None
@@ -139,7 +142,7 @@ class CustomConnectionPool:
                 return new_conn
             
             # Se raggiunto limite max, aspetta che se ne liberi una
-            print("[POOL WARNING] Pool esausto, attesa connessione...")
+            logger.warning("Pool esausto, attesa connessione...")
             return self.pool.get(block=True, timeout=10) # Timeout 10s
 
     def putconn(self, conn):
@@ -215,9 +218,9 @@ class SupabaseManager:
                         port=port,
                         database=database
                     )
-                    print("[OK] Connection pool Supabase (pg8000) inizializzato con successo")
+                    logger.info("Connection pool Supabase (pg8000) inizializzato con successo")
         except Exception as e:
-            print(f"[ERRORE] Errore durante l'inizializzazione del connection pool: {e}")
+            logger.error(f"Errore durante l'inizializzazione del connection pool: {e}")
             raise
     
     @classmethod
@@ -296,7 +299,7 @@ class SupabaseManager:
                 cls._connection_pool.closeall()
                 cls._connection_pool = None
                 cls._current_user_id = None
-                print("[OK] Connection pool chiuso")
+                logger.info("Connection pool chiuso")
 
     @classmethod
     def test_connection(cls):
@@ -304,10 +307,10 @@ class SupabaseManager:
             conn = cls.get_connection()
             conn.run("SELECT 1")
             cls.release_connection(conn)
-            print("[OK] Test connessione Supabase riuscito")
+            logger.info("Test connessione Supabase riuscito")
             return True
         except Exception as e:
-            print(f"[ERRORE] Test connessione Supabase fallito: {e}")
+            logger.error(f"Test connessione Supabase fallito: {e}")
             return False
 
 # --- RE-IMPLEMENTAZIONE COMPLETA CON PG8000 DBAPI (NON NATIVE) ---
@@ -358,7 +361,7 @@ class SupabaseManager:
             try:
                 raw_conn = cls._create_conn()
             except Exception as e:
-                print(f"Pool vuoto e impossibile creare conn: {e}")
+                logger.error(f"Pool vuoto e impossibile creare conn: {e}")
                 raw_conn = cls._pool_queue.get(timeout=10)
 
         # Ping check usando cursor (pg8000.dbapi non ha execute diretto)
@@ -412,7 +415,9 @@ class SupabaseManager:
             conn = cls.get_connection()
             cls.release_connection(conn)
             return True
-        except: return False
+        except Exception as e:
+            logger.error(f"Test connessione fallback fallito: {e}")
+            return False
 
     @classmethod
     def get_current_user_id(cls):
