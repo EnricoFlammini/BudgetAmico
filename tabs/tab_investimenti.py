@@ -22,7 +22,7 @@ class InvestimentiTab(ft.Container):
         self.controller.page = controller.page
 
         # Controlli UI Portafoglio
-        self.txt_valore_totale = AppStyles.header_text("")
+        self.txt_valore_totale = AppStyles.title_text("")
         self.txt_gain_loss_totale = AppStyles.body_text("")
         self.lv_portafogli = ft.Column(expand=True, scroll=ft.ScrollMode.ADAPTIVE, spacing=15)
         
@@ -61,7 +61,13 @@ class InvestimentiTab(ft.Container):
             on_change=self._on_tab_change
         )
         
-        self.content = self.tabs
+        # Page Title
+        self.txt_titolo_pagina = AppStyles.title_text(self.controller.loc.get("investments"))
+
+        self.content = ft.Column([
+            self.txt_titolo_pagina,
+            self.tabs
+        ], expand=True)
         
         # Stato per sincronizzazione
         self.sincronizzazione_in_corso = False
@@ -88,7 +94,7 @@ class InvestimentiTab(ft.Container):
             ft.Container(
                 content=ft.Column([
                     ft.ProgressRing(color=AppColors.PRIMARY),
-                    ft.Text("Caricamento portafoglio...", color=AppColors.TEXT_SECONDARY)
+                    AppStyles.body_text("Caricamento portafoglio...", color=AppColors.TEXT_SECONDARY)
                 ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                 alignment=ft.Alignment(0, 0),
                 padding=50
@@ -246,10 +252,9 @@ class InvestimentiTab(ft.Container):
                 AppStyles.caption_text(f"{loc.get('value')}: {loc.format_currency(valore_totale)}")
             ], expand=True),
             ft.Column([
-                ft.Text(
+                AppStyles.data_text(
                     f"G/L: {loc.format_currency(gain_loss_totale)}",
                     size=14,
-                    weight=ft.FontWeight.BOLD,
                     color=AppColors.SUCCESS if gain_loss_totale >= 0 else AppColors.ERROR
                 )
             ], horizontal_alignment=ft.CrossAxisAlignment.END)
@@ -311,33 +316,26 @@ class InvestimentiTab(ft.Container):
             content=ft.Row([
                 # Info asset
                 ft.Column([
-                    ft.Text(f"{asset['ticker']} - {asset['nome_asset']}", 
-                           size=14, weight=ft.FontWeight.BOLD),
-                    ft.Text(f"{loc.get('quantity')}: {asset['quantita']:.4f}", 
-                           size=12, color=AppColors.TEXT_SECONDARY)
+                    AppStyles.data_text(f"{asset['ticker']} - {asset['nome_asset']}"),
+                    AppStyles.small_text(f"{loc.get('quantity')}: {asset['quantita']:.4f}", color=AppColors.TEXT_SECONDARY)
                 ], expand=True),
                 
                 # Prezzo e valore
                 ft.Column([
-                    ft.Text(f"{loc.format_currency(asset['prezzo_attuale_manuale'])}", 
-                           size=13),
-                    ft.Text(f"{loc.get('value')}: {loc.format_currency(valore_totale)}", 
-                           size=12, color=AppColors.TEXT_SECONDARY),
-                    ft.Text(f"Agg: {asset['data_aggiornamento']}" if asset['data_aggiornamento'] else "",
-                            size=10, color=ft.Colors.GREY_500)
+                    AppStyles.body_text(f"{loc.format_currency(asset['prezzo_attuale_manuale'])}", size=13),
+                    AppStyles.small_text(f"{loc.get('value')}: {loc.format_currency(valore_totale)}", color=AppColors.TEXT_SECONDARY),
+                    AppStyles.small_text(f"Agg: {asset['data_aggiornamento']}" if asset['data_aggiornamento'] else "", color=ft.Colors.GREY_500)
                 ], horizontal_alignment=ft.CrossAxisAlignment.END),
                 
                 # Gain/Loss
                 ft.Column([
-                    ft.Text(
+                    AppStyles.data_text(
                         f"{loc.format_currency(asset['gain_loss_totale'])}",
                         size=13,
-                        weight=ft.FontWeight.BOLD,
                         color=AppColors.SUCCESS if asset['gain_loss_totale'] >= 0 else AppColors.ERROR
                     ),
-                    ft.Text(
+                    AppStyles.small_text(
                         f"{loc.format_currency(asset['gain_loss_unitario'])}/u",
-                        size=11,
                         color=AppColors.SUCCESS if asset['gain_loss_unitario'] >= 0 else AppColors.ERROR
                     )
                 ], horizontal_alignment=ft.CrossAxisAlignment.END, spacing=2),

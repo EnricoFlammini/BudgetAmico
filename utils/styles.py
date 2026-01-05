@@ -66,23 +66,44 @@ class AppStyles:
         )
 
     @staticmethod
-    def header_text(text: str) -> ft.Text:
-        return ft.Text(text, size=24, weight=ft.FontWeight.BOLD)
+    def title_text(text: str, color: str = None, **kwargs) -> ft.Text:
+        """Titoli principali delle pagine (es. 'Budget & Analisi')."""
+        return ft.Text(text, size=24, weight=ft.FontWeight.BOLD, color=color, font_family="Roboto", **kwargs)
 
     @staticmethod
-    def subheader_text(text: str, color: str = None) -> ft.Text:
-        return ft.Text(text, size=18, weight=ft.FontWeight.W_600, color=color)
+    def section_header_text(text: str, color: str = None, **kwargs) -> ft.Text:
+        """Intestazioni di sezione (es. 'Ultime Transazioni')."""
+        return ft.Text(text, size=20, weight=ft.FontWeight.BOLD, color=color, font_family="Roboto", **kwargs)
 
     @staticmethod
-    def body_text(text: str, color: str = None) -> ft.Text:
-        return ft.Text(text, size=14, color=color)
+    def subheader_text(text: str, color: str = None, **kwargs) -> ft.Text:
+        """Sottotitoli o titoli di card."""
+        return ft.Text(text, size=16, weight=ft.FontWeight.W_600, color=color, font_family="Roboto", **kwargs)
 
     @staticmethod
-    def caption_text(text: str) -> ft.Text:
-        return ft.Text(text, size=12, color=AppColors.TEXT_SECONDARY)
+    def body_text(text: str, color: str = None, weight: ft.FontWeight = ft.FontWeight.NORMAL, size: int = 14, **kwargs) -> ft.Text:
+        """Testo normale del corpo."""
+        return ft.Text(text, size=size, color=color, weight=weight, font_family="Roboto", **kwargs)
+
+    @staticmethod
+    def small_text(text: str, color: str = None, **kwargs) -> ft.Text:
+        """Testo piccolo per didascalie o note secondarie."""
+        if color is None:
+            color = AppColors.TEXT_SECONDARY
+        return ft.Text(text, size=12, color=color, font_family="Roboto", **kwargs)
+
+    @staticmethod
+    def data_text(text: str, color: str = None, size: int = 14, **kwargs) -> ft.Text:
+        """Testo per visualizzare dati/valori (es. importi in tabella)."""
+        return ft.Text(text, size=size, weight=ft.FontWeight.BOLD, color=color, font_family="Roboto", **kwargs)
     
     @staticmethod
-    def currency_text(text: str, color: str = None, size: int = 16) -> ft.Text:
+    def caption_text(text: str) -> ft.Text:
+         # Deprecato: usa small_text, mantenuto per compatibilità
+        return AppStyles.small_text(text)
+    
+    @staticmethod
+    def currency_text(text: str, color: str = None, size: int = 16, **kwargs) -> ft.Text:
         """Restituisce un testo formattato come valuta con stile bold.
         
         Args:
@@ -96,11 +117,13 @@ class AppStyles:
             text,
             size=size,
             weight=ft.FontWeight.BOLD,
-            color=color
+            color=color,
+            font_family="Roboto",
+            **kwargs
         )
     
     @staticmethod
-    def big_currency_text(text: str, color: str = None) -> ft.Text:
+    def big_currency_text(text: str, color: str = None, **kwargs) -> ft.Text:
         """Restituisce un testo grande per patrimonio netto con stile bold.
         
         Args:
@@ -111,11 +134,13 @@ class AppStyles:
             color = AppColors.SUCCESS
         return ft.Text(
             text,
-            size=28,
+            size=36, # Aumentato per maggiore impatto
             weight=ft.FontWeight.BOLD,
-            color=color
+            color=color,
+            font_family="Roboto",
+            **kwargs
         )
-
+    
     @staticmethod
     def section_header(title: str, action_button: ft.Control = None, title_color: str = None) -> ft.Row:
         """Crea header di sezione con titolo e pulsante azione opzionale.
@@ -125,7 +150,7 @@ class AppStyles:
             action_button: Pulsante opzionale (es. IconButton per aggiungere)
             title_color: Colore opzionale per il titolo
         """
-        controls = [AppStyles.subheader_text(title, color=title_color)]
+        controls = [AppStyles.section_header_text(title, color=title_color)]
         if action_button:
             controls.append(action_button)
         return ft.Row(controls, alignment=ft.MainAxisAlignment.SPACE_BETWEEN)

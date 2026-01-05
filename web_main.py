@@ -29,7 +29,7 @@ def main(page: ft.Page):
     page.title = "Budget Amico Web"
     # Mobile-first settings
     page.theme_mode = ft.ThemeMode.SYSTEM
-    page.theme = ft.Theme(color_scheme_seed="blue")
+    page.theme = ft.Theme(color_scheme_seed="blue", font_family="Roboto")
     
     # Enable scrolling generally
     page.scroll = ft.ScrollMode.ADAPTIVE

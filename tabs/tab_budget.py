@@ -22,17 +22,17 @@ class BudgetTab(ft.Container):
             segments=[
                 ft.Segment(
                     value="dettaglio",
-                    label=ft.Text("Gestione Budget"),
+                    label=AppStyles.body_text("Gestione Budget"),
                     icon=ft.Icon(ft.Icons.LIST)
                 ),
                 ft.Segment(
                     value="mensile",
-                    label=ft.Text("Analisi Mensile"),
+                    label=AppStyles.body_text("Analisi Mensile"),
                     icon=ft.Icon(ft.Icons.PIE_CHART)
                 ),
                 ft.Segment(
                     value="annuale",
-                    label=ft.Text("Analisi Annuale"),
+                    label=AppStyles.body_text("Analisi Annuale"),
                     icon=ft.Icon(ft.Icons.BAR_CHART)
                 ),
             ]
@@ -124,7 +124,7 @@ class BudgetTab(ft.Container):
             ft.Container(
                 content=ft.Column([
                     ft.ProgressRing(color=AppColors.PRIMARY),
-                    ft.Text("Elaborazione budget...", color=AppColors.TEXT_SECONDARY)
+                    AppStyles.body_text("Elaborazione budget...", color=AppColors.TEXT_SECONDARY)
                 ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                 alignment=ft.Alignment(0, 0),
                 padding=50
@@ -136,7 +136,7 @@ class BudgetTab(ft.Container):
         id_famiglia = self.controller.get_family_id()
         if not id_famiglia:
             self.container_content.controls.clear()
-            self.container_content.controls.append(ft.Text("Nessuna famiglia selezionata."))
+            self.container_content.controls.append(AppStyles.body_text("Nessuna famiglia selezionata."))
             if self.controller.page:
                 self.controller.page.update()
             return
@@ -195,7 +195,7 @@ class BudgetTab(ft.Container):
 
     def _costruisci_vista_mensile(self, dati):
         if not dati:
-            self.container_content.controls.append(ft.Text("Errore nel caricamento dati mensili.", color=AppColors.ERROR))
+            self.container_content.controls.append(AppStyles.body_text("Errore nel caricamento dati mensili.", color=AppColors.ERROR))
             return
 
         loc = self.controller.loc
@@ -259,7 +259,7 @@ class BudgetTab(ft.Container):
             ft.ResponsiveRow([
                  ft.Column([chart_container], col={"sm": 12, "md": 6}),
                  ft.Column([
-                     ft.Text("Dettaglio Categorie", size=18, weight=ft.FontWeight.BOLD),
+                     AppStyles.subheader_text("Dettaglio Categorie"),
                      lista_dettagli
                  ], col={"sm": 12, "md": 6})
             ])
@@ -267,7 +267,7 @@ class BudgetTab(ft.Container):
 
     def _costruisci_vista_annuale(self, dati, anno):
         if not dati:
-             self.container_content.controls.append(ft.Text("Errore nel caricamento dati annuali.", color=AppColors.ERROR))
+             self.container_content.controls.append(AppStyles.body_text("Errore nel caricamento dati annuali.", color=AppColors.ERROR))
              return
         
         delta_color = AppColors.SUCCESS if dati['media_delta_budget_spese'] >= 0 else AppColors.ERROR
@@ -338,7 +338,7 @@ class BudgetTab(ft.Container):
             ft.ResponsiveRow([
                  ft.Column([chart_container], col={"sm": 12, "md": 6}),
                  ft.Column([
-                     ft.Text(f"Dettaglio Media {anno}", size=18, weight=ft.FontWeight.BOLD),
+                     AppStyles.subheader_text(f"Dettaglio Media {anno}"),
                      lista_dettagli
                  ], col={"sm": 12, "md": 6})
             ])
@@ -352,8 +352,8 @@ class BudgetTab(ft.Container):
              
         content_list = [
             ft.Icon(icona, color=colore_icona, size=30),
-            ft.Text(titolo, size=12, color=AppColors.TEXT_SECONDARY, text_align=ft.TextAlign.CENTER),
-            ft.Text(valore_str, size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_SURFACE)
+            AppStyles.small_text(titolo, color=AppColors.TEXT_SECONDARY),
+            AppStyles.currency_text(valore_str, size=18, color=ft.Colors.ON_SURFACE)
         ]
         
         if confronto:
@@ -361,7 +361,7 @@ class BudgetTab(ft.Container):
             confronto_label = confronto.get('label', '')
             confronto_str = loc.format_currency(confronto_valore)
             content_list.append(
-                ft.Text(f"{confronto_label}: {confronto_str}", size=11, color=AppColors.TEXT_SECONDARY)
+                AppStyles.small_text(f"{confronto_label}: {confronto_str}", color=AppColors.TEXT_SECONDARY)
             )
 
         return AppStyles.card_container(
@@ -372,7 +372,7 @@ class BudgetTab(ft.Container):
 
     def _crea_grafico_torta(self, dati_categorie, titolo):
         if not dati_categorie:
-            return ft.Container(content=ft.Text("Nessun dato da visualizzare"), padding=20)
+            return ft.Container(content=AppStyles.body_text("Nessun dato da visualizzare"), padding=20)
             
         sections = []
         colors = [
@@ -394,7 +394,7 @@ class BudgetTab(ft.Container):
                     radius=100,
                     title_style=ft.TextStyle(size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
                     badge=ft.Container(
-                        ft.Text(cat['nome_categoria'], size=10, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), 
+                        ft.Text(cat['nome_categoria'], size=10, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, font_family="Roboto"), 
                         bgcolor=ft.Colors.with_opacity(0.7, ft.Colors.BLACK), 
                         padding=5, 
                         border_radius=5
@@ -411,16 +411,16 @@ class BudgetTab(ft.Container):
         )
         
         return ft.Column([
-            ft.Text(titolo, size=16, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
+            AppStyles.subheader_text(titolo),
             ft.Container(content=chart, height=300)
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
     def _crea_riga_dettaglio_categoria(self, cat):
         loc = self.controller.loc
         return ft.Row([
-            ft.Text(cat['nome_categoria'], expand=True),
-            ft.Text(f"{cat['percentuale']:.1f}%", width=50, color=AppColors.TEXT_SECONDARY),
-            ft.Text(loc.format_currency(cat['importo']), width=100, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.RIGHT)
+            AppStyles.body_text(cat['nome_categoria']),
+            AppStyles.small_text(f"{cat['percentuale']:.1f}%", color=AppColors.TEXT_SECONDARY),
+            AppStyles.data_text(loc.format_currency(cat['importo']))
         ])
 
     def _costruisci_vista_dettaglio(self, budget_data):
@@ -515,16 +515,16 @@ class BudgetTab(ft.Container):
         
         header_content = ft.Container(
             content=ft.Column([
-                ft.Row([
-                    ft.Text(cat_data['nome_categoria'], size=name_size, weight=name_weight, expand=True),
+            ft.Row([
+                    ft.Text(cat_data['nome_categoria'], size=name_size, weight=name_weight, expand=True, font_family="Roboto"),
                     icon_expand
                 ]),
                 ft.Container(height=5),
                 ft.ProgressBar(value=progress_value, color=colore_cat, bgcolor=AppColors.SURFACE_VARIANT, height=10 if is_global else 8, border_radius=4),
                 ft.Container(height=5),
                 ft.Row([
-                    ft.Text(f"{loc.format_currency(spesa_cat)} / {loc.format_currency(limite_cat)}", size=14, color=AppColors.TEXT_SECONDARY),
-                    ft.Text(status_text, size=14, weight=ft.FontWeight.BOLD, color=colore_cat)
+                    AppStyles.body_text(f"{loc.format_currency(spesa_cat)} / {loc.format_currency(limite_cat)}", color=AppColors.TEXT_SECONDARY),
+                    AppStyles.data_text(status_text, color=colore_cat)
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
             ]),
             on_click=toggle_subcategory if has_subcategories else None,
@@ -571,12 +571,12 @@ class BudgetTab(ft.Container):
         return ft.Container(
             content=ft.Column([
                 ft.Row([
-                    ft.Text(sub_data['nome_sottocategoria'], size=14, expand=True),
-                    ft.Text(status_text, size=12, color=colore_progress, weight=ft.FontWeight.BOLD)
+                    AppStyles.body_text(sub_data['nome_sottocategoria'], expand=True),
+                    AppStyles.data_text(status_text, color=colore_progress, size=12)
                 ]),
                 ft.ProgressBar(value=progress_value, color=colore_progress, bgcolor=AppColors.SURFACE_VARIANT, height=4),
                 ft.Row([
-                    ft.Text(f"{loc.format_currency(spesa)} / {loc.format_currency(limite)}", size=12, color=AppColors.TEXT_SECONDARY)
+                    AppStyles.small_text(f"{loc.format_currency(spesa)} / {loc.format_currency(limite)}", color=AppColors.TEXT_SECONDARY)
                 ], alignment=ft.MainAxisAlignment.END)
             ]),
             padding=ft.padding.only(left=20, right=10, top=5, bottom=5),

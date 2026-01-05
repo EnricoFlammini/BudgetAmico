@@ -39,8 +39,8 @@ def main(page: ft.Page):
 
     # Imposta il tema
     page.theme_mode = ft.ThemeMode.SYSTEM
-    page.theme = ft.Theme(color_scheme_seed="blue")
-    page.dark_theme = ft.Theme(color_scheme_seed="blue")
+    page.theme = ft.Theme(color_scheme_seed="blue", font_family="Roboto")
+    page.dark_theme = ft.Theme(color_scheme_seed="blue", font_family="Roboto")
 
     # --- Logica di Connessione Database (PostgreSQL/Supabase) ---
     print("Verifica connessione al database...")

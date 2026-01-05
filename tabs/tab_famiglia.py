@@ -27,7 +27,7 @@ class FamigliaTab(ft.Container):
         )
 
         # Controlli UI e Main Content
-        self.txt_patrimonio_totale_famiglia = AppStyles.header_text("")
+        self.txt_patrimonio_totale_famiglia = AppStyles.title_text("")
         self.txt_liquidita_totale_famiglia = AppStyles.body_text("")
         self.txt_investimenti_totali_famiglia = AppStyles.body_text("")
         

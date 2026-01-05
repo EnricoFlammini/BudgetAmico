@@ -32,7 +32,7 @@ class PersonaleTab(ft.Container):
         self.transazioni_correnti = []
 
         self.txt_bentornato = AppStyles.subheader_text("")
-        self.txt_patrimonio = AppStyles.header_text("")
+        self.txt_patrimonio = AppStyles.title_text("")
         self.txt_liquidita = AppStyles.caption_text("")
 
         # Filtro per mese
@@ -53,7 +53,7 @@ class PersonaleTab(ft.Container):
         self.loading_view = ft.Container(
             content=ft.Column([
                 ft.ProgressRing(color=AppColors.PRIMARY),
-                ft.Text(self.controller.loc.get("loading"), color=AppColors.TEXT_SECONDARY)
+                AppStyles.body_text(self.controller.loc.get("loading"), color=AppColors.TEXT_SECONDARY)
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             alignment=ft.Alignment(0, 0),
             expand=True,
@@ -172,9 +172,10 @@ class PersonaleTab(ft.Container):
         # Helper to create responsive detail row
         def riga_resp(label, val_formatted, color=None):
             return ft.ResponsiveRow([
-                ft.Column([ft.Text(label, style=text_style_label)], col={"xs": 6, "sm": 6}),
-                ft.Column([ft.Text(val_formatted, style=text_style_val, color=color, text_align=ft.TextAlign.RIGHT)], 
-                          col={"xs": 6, "sm": 6}, alignment=ft.MainAxisAlignment.END, horizontal_alignment=ft.CrossAxisAlignment.END)
+                ft.Column([AppStyles.body_text(label, color=AppColors.TEXT_SECONDARY)], col={"xs": 6, "sm": 6}),
+                ft.Column([
+                    AppStyles.data_text(val_formatted, color=color)
+                ], col={"xs": 6, "sm": 6}, alignment=ft.MainAxisAlignment.END, horizontal_alignment=ft.CrossAxisAlignment.END)
             ])
 
         # Costruisci righe dettaglio responsive
@@ -276,7 +277,8 @@ class PersonaleTab(ft.Container):
                 tooltip="Espandi/Riduci Riepilogo"
             )
 
-        # Pulsante per vedere tutte le transazioni
+        # Pulsante per vedere tutte le transazioni (custom button with text style handling is complex, keeping TextButton but maybe style the text?)
+        # For simplicity, keeping TextButton but ensure it picks up theme font which it should if theme is set globally
         btn_tutte_transazioni = ft.TextButton(
             loc.get("all_transactions"),
             icon=ft.Icons.LIST,

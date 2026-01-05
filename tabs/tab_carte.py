@@ -4,6 +4,7 @@ import datetime
 from db.gestione_db import ottieni_carte_utente, elimina_carta, calcola_totale_speso_carta
 from dialogs.card_dialog import CardDialog
 from dialogs.card_transactions_dialog import CardTransactionsDialog
+from utils.styles import AppStyles
 
 class TabCarte(ft.Container):
     def __init__(self, page_ctrl):
@@ -14,7 +15,7 @@ class TabCarte(ft.Container):
         
         self.content = ft.Column([
             ft.Row([
-                ft.Text("Gestione Carte", size=24, weight=ft.FontWeight.BOLD),
+                AppStyles.title_text("Gestione Carte"),
                 ft.IconButton(
                     icon=ft.Icons.ADD_CARD,
                     icon_color="primary", # Uses theme primary color
@@ -47,7 +48,7 @@ class TabCarte(ft.Container):
         carte = ottieni_carte_utente(user['id'], mk)
         
         if not carte:
-            self.cards_view.controls.append(ft.Text("Nessuna carta trovata. Aggiungine una!"))
+            self.cards_view.controls.append(AppStyles.body_text("Nessuna carta trovata. Aggiungine una!"))
         else:
             grid = ft.GridView(
                 expand=1,
@@ -94,8 +95,8 @@ class TabCarte(ft.Container):
         content_col = [
             ft.ListTile(
                 leading=ft.Icon(icon, color=ft.Colors.WHITE, size=30),
-                title=ft.Text(card_data['nome_carta'], weight="bold", color=ft.Colors.WHITE),
-                subtitle=ft.Text(f"{card_data['circuito'].upper()} - {card_data['tipo_carta'].capitalize()}", color=ft.Colors.WHITE70),
+                title=AppStyles.subheader_text(card_data['nome_carta'], color=ft.Colors.WHITE),
+                subtitle=AppStyles.small_text(f"{card_data['circuito'].upper()} - {card_data['tipo_carta'].capitalize()}", color=ft.Colors.WHITE70),
             )
         ]
         
@@ -115,20 +116,20 @@ class TabCarte(ft.Container):
                 extra_info = "Addebito immediato"
 
             content_col.append(ft.Container(padding=10, content=ft.Column([
-                ft.Text(f"Speso questo mese: € {speso:.2f} / € {massimale:.2f}", color=ft.Colors.WHITE, size=12),
+                AppStyles.small_text(f"Speso questo mese: € {speso:.2f} / € {massimale:.2f}", color=ft.Colors.WHITE),
                 ft.ProgressBar(value=percent, color=ft.Colors.ORANGE if percent > 0.8 else ft.Colors.GREEN, bgcolor=ft.Colors.WHITE24),
-                ft.Text(extra_info, color=ft.Colors.WHITE70, size=12)
+                AppStyles.small_text(extra_info, color=ft.Colors.WHITE70)
             ])))
         else:
             # No limit set
             if is_credit:
-                 content_col.append(ft.Container(padding=10, content=ft.Text("Nessun massimale impostato", color=ft.Colors.WHITE70)))
+                 content_col.append(ft.Container(padding=10, content=AppStyles.small_text("Nessun massimale impostato", color=ft.Colors.WHITE70)))
             else:
-                 # Debit without limit - just show spending
-                 content_col.append(ft.Container(padding=10, content=ft.Column([
-                    ft.Text(f"Speso questo mese: € {speso:.2f}", color=ft.Colors.WHITE, size=12),
-                    ft.Text("Addebito immediato", color=ft.Colors.WHITE70, size=12)
-                 ])))
+                  # Debit without limit - just show spending
+                  content_col.append(ft.Container(padding=10, content=ft.Column([
+                     AppStyles.small_text(f"Speso questo mese: € {speso:.2f}", color=ft.Colors.WHITE),
+                     AppStyles.small_text("Addebito immediato", color=ft.Colors.WHITE70)
+                  ])))
 
         # Azioni Modifica/Elimina
         actions_row = ft.Row([
@@ -190,8 +191,8 @@ class TabCarte(ft.Container):
         # app_controller has show_confirm_dialog? Check headers.
         
         dlg = ft.AlertDialog(
-            title=ft.Text("Conferma Eliminazione"),
-            content=ft.Text("Vuoi davvero eliminare questa carta?"),
+            title=AppStyles.section_header_text("Conferma Eliminazione"),
+            content=AppStyles.body_text("Vuoi davvero eliminare questa carta?"),
             actions=[
                 ft.TextButton("Annulla", on_click=lambda e: self._close_dlg(dlg)),
                 ft.TextButton("Elimina", on_click=lambda e: [self._close_dlg(dlg), confirm_delete(e)], style=ft.ButtonStyle(color=ft.Colors.RED))

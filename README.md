@@ -12,6 +12,15 @@
 ## 📅 Changelog
 
 ### v0.33.00 (05/01/2026)
+- **Standardizzazione UI & Font**:
+    - **Font Global**: Adozione globale del font **Roboto** per un'interfaccia più moderna e leggibile.
+    - **Refactoring Stili**: Standardizzazione di tutti i testi (Titoli, Sottotitoli, Corpo) attraverso l'intera applicazione per garantire coerenza visiva.
+    - **Investimenti**: Aggiunto titolo pagina per allineamento con il layout standard.
+- **Bug Fix**:
+    - Risolto crash critico nella scheda Famiglia (`AttributeError`).
+    - Aggiornata gestione stili per supportare proprietà estese Flet (es. `expand`, `opacity`).
+
+### v0.33.00 (05/01/2026)
 - **Gestione Conti Unificata**:
     - **Lista Unica**: I conti personali e condivisi sono ora visualizzati in un'unica lista scrollabile per una gestione più semplice e immediata.
     - **Conti Condivisi**: Chiara distinzione visiva per i conti condivisi, con etichetta "Conto Condiviso".

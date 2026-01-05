@@ -27,7 +27,7 @@ class ContiTab(ft.Container):
         self.loading_view = ft.Container(
             content=ft.Column([
                 ft.ProgressRing(color=AppColors.PRIMARY),
-                ft.Text(self.controller.loc.get("loading"), color=AppColors.TEXT_SECONDARY)
+                AppStyles.body_text(self.controller.loc.get("loading"), color=AppColors.TEXT_SECONDARY)
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             alignment=ft.Alignment(0, 0),
             expand=True,
@@ -125,7 +125,7 @@ class ContiTab(ft.Container):
             has_accounts = True
 
         if not has_accounts:
-             self.lv_conti.controls.append(ft.Text(loc.get("no_accounts_yet")))
+             self.lv_conti.controls.append(AppStyles.body_text(loc.get("no_accounts_yet")))
 
         # Hide loading
         self.loading_view.visible = False

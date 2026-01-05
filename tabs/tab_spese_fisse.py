@@ -40,7 +40,7 @@ class SpeseFisseTab(ft.Container):
         self.loading_view = ft.Container(
             content=ft.Column([
                 ft.ProgressRing(color=AppColors.PRIMARY),
-                ft.Text("Caricamento spese fisse...", color=AppColors.TEXT_SECONDARY)
+                AppStyles.body_text("Caricamento spese fisse...", color=AppColors.TEXT_SECONDARY)
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             alignment=ft.Alignment(0, 0),
             expand=True,
@@ -122,10 +122,10 @@ class SpeseFisseTab(ft.Container):
                 
                 self.dt_spese_fisse.rows.append(
                     ft.DataRow(cells=[
-                        ft.DataCell(ft.Text(spesa['nome'], weight=ft.FontWeight.BOLD)),
-                        ft.DataCell(ft.Text(self.controller.loc.format_currency(spesa['importo']))),
-                        ft.DataCell(ft.Text(spesa['nome_conto'])),
-                        ft.DataCell(ft.Text(str(spesa['giorno_addebito']))),
+                        ft.DataCell(AppStyles.data_text(spesa['nome'])),
+                        ft.DataCell(AppStyles.body_text(self.controller.loc.format_currency(spesa['importo']))),
+                        ft.DataCell(AppStyles.body_text(spesa['nome_conto'])),
+                        ft.DataCell(AppStyles.body_text(str(spesa['giorno_addebito']))),
                         ft.DataCell(ft.Switch(
                             value=bool(spesa['attiva']), 
                             data=spesa['id_spesa_fissa'], 
@@ -172,7 +172,7 @@ class SpeseFisseTab(ft.Container):
     def _on_error(self, e):
         print(f"Errore caricamento spese fisse: {e}")
         self.loading_view.visible = False
-        self.no_data_view.content = ft.Text(f"Errore: {e}", color=AppColors.ERROR)
+        self.no_data_view.content = AppStyles.body_text(f"Errore: {e}", color=AppColors.ERROR)
         self.no_data_view.visible = True
         if self.page:
             self.page.update()
@@ -185,12 +185,12 @@ class SpeseFisseTab(ft.Container):
         self.dt_spese_fisse.border = ft.border.all(1, ft.Colors.OUTLINE_VARIANT)
         
         self.dt_spese_fisse.columns = [
-            ft.DataColumn(ft.Text(loc.get("name"), weight=ft.FontWeight.BOLD)),
-            ft.DataColumn(ft.Text(loc.get("amount"), weight=ft.FontWeight.BOLD), numeric=True),
-            ft.DataColumn(ft.Text(loc.get("account"), weight=ft.FontWeight.BOLD)),
-            ft.DataColumn(ft.Text(loc.get("debit_day"), weight=ft.FontWeight.BOLD)),
-            ft.DataColumn(ft.Text(loc.get("active"), weight=ft.FontWeight.BOLD)),
-            ft.DataColumn(ft.Text(loc.get("actions"), weight=ft.FontWeight.BOLD)),
+            ft.DataColumn(AppStyles.data_text(loc.get("name"))),
+            ft.DataColumn(AppStyles.data_text(loc.get("amount")), numeric=True),
+            ft.DataColumn(AppStyles.data_text(loc.get("account"))),
+            ft.DataColumn(AppStyles.data_text(loc.get("debit_day"))),
+            ft.DataColumn(AppStyles.data_text(loc.get("active"))),
+            ft.DataColumn(AppStyles.data_text(loc.get("actions"))),
         ]
 
         return [
