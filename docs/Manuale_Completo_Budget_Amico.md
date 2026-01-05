@@ -1,25 +1,24 @@
-# Manuale Completo Budget Amico v0.32.00
+# Manuale Completo Budget Amico v0.33.00
 
 ## Indice
 
 1. [Introduzione](#1-introduzione)
 2. [Registrazione e Accesso](#2-registrazione-e-accesso)
 3. [Dashboard e Navigazione](#3-dashboard-e-navigazione)
-4. [Conti Personali](#4-conti-personali)
-5. [Conti Condivisi](#5-conti-condivisi)
-6. [Carte](#6-carte)
-7. [Transazioni e Categorie](#7-transazioni-e-categorie)
-8. [Budget Mensile](#8-budget-mensile)
-9. [Spese Fisse](#9-spese-fisse)
-10. [Investimenti e Portafogli](#10-investimenti-e-portafogli)
-11. [Prestiti e Mutui](#11-prestiti-e-mutui)
-12. [Immobili](#12-immobili)
-13. [Gestione Famiglia](#13-gestione-famiglia)
-14. [Pannello Admin](#14-pannello-admin)
-15. [Impostazioni](#15-impostazioni)
-16. [Backup e Sicurezza](#16-backup-e-sicurezza)
-17. [Divisore Pro](#17-divisore-pro)
-18. [FAQ e Risoluzione Problemi](#18-faq-e-risoluzione-problemi)
+4. [Gestione Conti (Personali e Condivisi)](#4-gestione-conti-personali-e-condivisi)
+5. [Carte](#5-carte)
+6. [Transazioni e Categorie](#6-transazioni-e-categorie)
+7. [Budget Mensile](#7-budget-mensile)
+8. [Spese Fisse](#8-spese-fisse)
+9. [Investimenti e Portafogli](#9-investimenti-e-portafogli)
+10. [Prestiti e Mutui](#10-prestiti-e-mutui)
+11. [Immobili](#11-immobili)
+12. [Gestione Famiglia](#12-gestione-famiglia)
+13. [Pannello Admin](#13-pannello-admin)
+14. [Impostazioni](#14-impostazioni)
+15. [Backup e Sicurezza](#15-backup-e-sicurezza)
+16. [Divisore Pro](#16-divisore-pro)
+17. [FAQ e Risoluzione Problemi](#17-faq-e-risoluzione-problemi)
 
 ---
 
@@ -112,26 +111,38 @@ La dashboard è composta da:
 La sidebar mostra le sezioni disponibili in base al tuo ruolo.
 *   **Novità v0.28**: La sidebar è **collassabile**. Per default è compatta (solo icone). Clicca sul pulsante **Menu** (☰) in alto a sinistra per espanderla e leggere le etichette.
 
-- **Tutti gli utenti**: Conti, Spese Fisse, Impostazioni
+- **Tutti gli utenti**: I Miei Conti, Spese Fisse, Impostazioni
 - **Livello 2+**: Budget, Investimenti, Prestiti, Immobili, Famiglia
 - **Solo Admin**: Pannello Admin
 
 ---
 
-## 4. Conti Personali
+## 4. Gestione Conti (Personali e Condivisi)
+
+**Novità v0.33.00**: La gestione dei conti è stata unificata. Ora trovi sia i tuoi conti personali che quelli condivisi in un'unica lista sotto la sezione **"I Miei Conti"**.
 
 ### 4.1 Creare un Conto
 
-1. Vai in **"Conti Personali"**
-2. Clicca **"+ Nuovo Conto"**
-3. Compila:
-   - **Nome conto**: nome descrittivo
-   - **Tipo**: Corrente, Risparmio, Contanti, Carta di Credito
-   - **Saldo iniziale**: saldo attuale
-   - **Data saldo**: data di riferimento
-4. Clicca **"Salva"**
+1. Vai in **"I Miei Conti"**
+2. Clicca sul pulsante **"+ Aggiungi Conto"**
+3. Un unico pannello ti permette di creare entrambi i tipi di conto:
+   - **Tipo di Conto**: Seleziona dal menu a tendina in alto:
+     - **Personale**: Per un conto visibile solo a te (o agli admin in base ai permessi).
+     - **Condiviso**: Per un conto su cui possono operare più membri della famiglia.
+   - **Nome conto**: nome descrittivo.
+   - **Tipo**: Corrente, Risparmio, Contanti, Carta di Credito.
+   - **Saldo iniziale**: saldo attuale.
+   - **Partecipanti** (solo se Condiviso): Seleziona i membri della famiglia e definisci le quote di partecipazione.
 
-### 4.2 Tipi di Conto
+4. Clicca su **"Salva"**.
+
+### 4.2 Visualizzazione Unificata
+
+Nella lista conti vedrai:
+- **Conti Personali**: Visualizzazione standard.
+- **Conti Condivisi**: Contrassegnati dall'icona di gruppo 👥 e dall'etichetta "Conto Condiviso".
+
+### 4.3 Tipi di Conto
 
 | Tipo | Descrizione |
 |------|-------------|
@@ -141,13 +152,13 @@ La sidebar mostra le sezioni disponibili in base al tuo ruolo.
 
 > **Nota**: I conti di tipo "Investimento" e "Fondo Pensione" sono gestiti nelle rispettive sezioni dedicate.
 
-### 4.3 Visualizzare le Transazioni
+### 4.4 Visualizzare le Transazioni
 
 1. Clicca su un conto per espandere i dettagli
 2. Usa il selettore mese per filtrare le transazioni
 3. Ogni transazione mostra: data, descrizione, categoria, importo
 
-### 4.4 Modificare/Eliminare un Conto
+### 4.5 Modificare/Eliminare un Conto
 
 - **Modifica**: clicca sull'icona ✏️ accanto al conto
 - **Elimina**: clicca sull'icona 🗑️
@@ -156,28 +167,7 @@ La sidebar mostra le sezioni disponibili in base al tuo ruolo.
 
 ---
 
-## 5. Conti Condivisi
-
-I conti condivisi permettono a più membri della famiglia di registrare transazioni sullo stesso conto.
-
-### 5.1 Creare un Conto Condiviso
-
-1. Vai in **"Conti Condivisi"**
-2. Clicca **"+ Nuovo Conto Condiviso"**
-3. Compila i dati del conto
-4. Seleziona i **partecipanti** (membri della famiglia)
-5. Definisci le **quote di partecipazione** (percentuali)
-6. Clicca **"Salva"**
-
-### 5.2 Quote di Partecipazione
-
-Le quote determinano come vengono suddivise le spese:
-- Es. Coppia 50%/50%: le spese vengono divise equamente
-- Es. Famiglia: 40%/40%/20% per tre membri
- 
- ---
- 
- ## 6. Carte
+## 5. Carte
  
  ### 6.1 Aggiungere una Carta
  
@@ -600,5 +590,5 @@ Il Divisore Pro è accessibile in due modi:
 
 ---
 
-*Budget Amico - *Versione documento: 0.32.00*
+*Budget Amico - *Versione documento: 0.33.00*
 *Sviluppato con ❤️ da Iscavar79*

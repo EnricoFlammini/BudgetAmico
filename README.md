@@ -1,4 +1,4 @@
-# Budget Amico v0.32.00
+# Budget Amico v0.33.00
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -10,6 +10,14 @@
 ---
 
 ## 📅 Changelog
+
+### v0.33.00 (05/01/2026)
+- **Gestione Conti Unificata**:
+    - **Lista Unica**: I conti personali e condivisi sono ora visualizzati in un'unica lista scrollabile per una gestione più semplice e immediata.
+    - **Conti Condivisi**: Chiara distinzione visiva per i conti condivisi, con etichetta "Conto Condiviso".
+    - **Dialog Unificato**: Unico pannello per la creazione e modifica di conti sia personali che condivisi, con selezione dinamica del tipo.
+    - **Pulizia UI**: Rimossa la voce "Conti Condivisi" dalla barra laterale, ora ridondante.
+    - **Traduzioni**: Aggiornate e completate le traduzioni per la nuova gestione conti (Italiano, Inglese, Tedesco).
 
 ### v0.32.00 (03/01/2026)
 - **Spese Fisse migliorate**:

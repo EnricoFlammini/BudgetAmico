@@ -12,7 +12,14 @@ from db.gestione_db import (
     ottieni_conti_utente,  # Importa per popolare il dropdown
     ottieni_saldo_iniziale_conto,
     aggiorna_saldo_iniziale_conto,
-    admin_imposta_saldo_conto_condiviso
+    ottieni_saldo_iniziale_conto,
+    aggiorna_saldo_iniziale_conto,
+    admin_imposta_saldo_conto_condiviso,
+    # Shared Account Imports
+    crea_conto_condiviso,
+    modifica_conto_condiviso,
+    ottieni_utenti_famiglia,
+    ottieni_dettagli_conto_condiviso
 )
 
 
@@ -23,7 +30,9 @@ class ContoDialog(ft.AlertDialog):
         # self.controller.page = controller.page # Removed for Flet 0.80 compatibility
         self.loc = controller.loc
         self.conto_id_in_modifica = None
+        self.conto_id_in_modifica = None
         self.is_condiviso_in_modifica = False
+        self.is_shared_mode = False # Toggle state
 
         # Dialogo Rettifica Saldo (Admin)
         self.txt_nuovo_saldo = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
@@ -38,6 +47,15 @@ class ContoDialog(ft.AlertDialog):
         )
 
         # Controlli del dialogo principale
+        self.dd_scope_conto = ft.Dropdown(
+            options=[
+                ft.dropdown.Option("personale", "Conto Personale"),
+                ft.dropdown.Option("condiviso", "Conto Condiviso"),
+            ],
+            value="personale",
+            on_change=self._cambia_scope_conto
+        )
+        
         self.txt_conto_nome = ft.TextField()
         self.dd_conto_tipo = ft.Dropdown()
         self.dd_conto_tipo.on_change = self._cambia_tipo_conto_in_dialog
@@ -67,13 +85,36 @@ class ContoDialog(ft.AlertDialog):
 
         self.chk_conto_default = ft.Checkbox(value=False)
 
+        # Shared Account Specific Fields
+        self.dd_tipo_condivisione = ft.Dropdown(
+            options=[
+                ft.dropdown.Option("famiglia", "Condividi con Famiglia"),
+                ft.dropdown.Option("utenti", "Seleziona Utenti")
+            ],
+            value="famiglia",
+            on_change=self._on_tipo_condivisione_change,
+            visible=False
+        )
+        self.partecipanti_title = ft.Text("Seleziona Partecipanti", weight="bold", visible=False)
+        self.lv_partecipanti = ft.Column(scroll=ft.ScrollMode.ADAPTIVE, height=150, visible=False)
+        self.container_partecipanti = ft.Container(
+            content=ft.Column([
+                self.partecipanti_title,
+                self.lv_partecipanti
+            ]),
+            visible=False
+        )
+
         # Struttura del dialogo
         self.modal = True
         self.title = ft.Text()
         self.content = ft.Column(
             [
+                self.dd_scope_conto,
                 self.txt_conto_nome,
                 self.dd_conto_tipo,
+                self.dd_tipo_condivisione,
+                self.container_partecipanti,
                 self.txt_conto_iban,
                 ft.Divider(),
                 self.container_saldo_iniziale,
@@ -98,6 +139,10 @@ class ContoDialog(ft.AlertDialog):
         self.title.value = loc.get("manage_account")
         self.txt_conto_nome.label = loc.get("account_name_placeholder")
         self.dd_conto_tipo.label = loc.get("account_type")
+        self.dd_scope_conto.label = "Tipo di Conto (Personale/Condiviso)" # TODO: Add to loc
+        self.dd_scope_conto.options[0].text = loc.get("personal_account") if loc.get("personal_account") else "Conto Personale"
+        self.dd_scope_conto.options[1].text = loc.get("shared_account") if loc.get("shared_account") else "Conto Condiviso"
+        
         self.dd_conto_tipo.options = [
             ft.dropdown.Option("Corrente"), ft.dropdown.Option("Risparmio"),
             ft.dropdown.Option("Investimento"), ft.dropdown.Option("Fondo Pensione"),
@@ -116,6 +161,12 @@ class ContoDialog(ft.AlertDialog):
 
         self.actions[0].text = loc.get("cancel")
         self.actions[1].text = loc.get("save")
+        
+        # Shared fields texts
+        self.dd_tipo_condivisione.label = loc.get("sharing_type")
+        self.dd_tipo_condivisione.options[0].text = loc.get("sharing_type_family")
+        self.dd_tipo_condivisione.options[1].text = loc.get("sharing_type_users")
+        self.partecipanti_title.value = loc.get("select_participants")
 
     def _aggiungi_riga_asset_iniziale(self, e=None):
         loc = self.loc
@@ -162,8 +213,19 @@ class ContoDialog(ft.AlertDialog):
 
     def _cambia_tipo_conto_in_dialog(self, e):
         tipo = self.dd_conto_tipo.value
-        self.chk_conto_default.visible = (tipo not in ['Investimento', 'Fondo Pensione'])
-        if tipo == 'Investimento':
+        is_shared = self.dd_scope_conto.value == 'condiviso'
+        
+        self.chk_conto_default.visible = (tipo not in ['Investimento', 'Fondo Pensione']) and not is_shared
+        
+        if is_shared:
+             # Shared account logic for visibility
+             self.txt_conto_iban.visible = True # Or False if we want to simplify shared accounts
+             self.container_saldo_iniziale.visible = True # Use simple initial balance for shared
+             self.container_asset_iniziali.visible = False # No assets for shared yet
+             
+             # Adjust type options if needed? For now keep same types.
+             
+        elif tipo == 'Investimento':
             self.txt_conto_iban.visible = True
             self.container_saldo_iniziale.visible = False
             self.container_asset_iniziali.visible = True
@@ -175,8 +237,64 @@ class ContoDialog(ft.AlertDialog):
             self.txt_conto_iban.visible = True
             self.container_saldo_iniziale.visible = True
             self.container_asset_iniziali.visible = False
+            
         if self.open:
             self.content.update()
+
+    def _cambia_scope_conto(self, e):
+        self.is_shared_mode = self.dd_scope_conto.value == 'condiviso'
+        is_shared = self.is_shared_mode
+        
+        # Visibilità campi condivisi
+        self.dd_tipo_condivisione.visible = is_shared
+        self.container_partecipanti.visible = is_shared and self.dd_tipo_condivisione.value == 'utenti'
+        
+        # Visibilità campi personali
+        # Asset solo se personale. Default solo se personale.
+        self._cambia_tipo_conto_in_dialog(None) # Ricalcola visibilità basata su tipo e scope
+        
+        if is_shared:
+             # Refresh user list if needed
+             if self.dd_tipo_condivisione.value == 'utenti':
+                 self._popola_lista_utenti()
+        
+        if self.open:
+            self.content.update()
+
+    def _on_tipo_condivisione_change(self, e):
+        if self.dd_tipo_condivisione.value == 'utenti':
+            self.container_partecipanti.visible = True
+            self._popola_lista_utenti()
+        else:
+            self.container_partecipanti.visible = False
+            # self.lv_partecipanti.controls.clear() # Keep them in memory maybe?
+            
+        self.content.update()
+
+    def _popola_lista_utenti(self, utenti_selezionati_ids=None):
+        self.lv_partecipanti.controls.clear()
+        famiglia_id = self.controller.get_family_id()
+        if not famiglia_id:
+            self.lv_partecipanti.controls.append(ft.Text("Nessuna famiglia associata."))
+            return
+
+        utenti_famiglia = ottieni_utenti_famiglia(famiglia_id)
+        current_user_id = self.controller.get_user_id()
+        
+        for user in utenti_famiglia:
+            # Exclude current user from selection (always included implicitly or by logic)
+            if str(user['id_utente']) == str(current_user_id):
+                 continue
+                 
+            self.lv_partecipanti.controls.append(
+                ft.Checkbox(
+                    label=user['nome_visualizzato'],
+                    value=user['id_utente'] in (utenti_selezionati_ids if utenti_selezionati_ids else []),
+                    data=user['id_utente']
+                )
+            )
+        self.lv_partecipanti.visible = True
+
 
     def _chiudi_dialog_conto(self, e):
         self.controller.show_loading("Attendere...")
@@ -186,7 +304,7 @@ class ContoDialog(ft.AlertDialog):
         finally:
             self.controller.hide_loading()
 
-    def apri_dialog_conto(self, e, conto_data=None, escludi_investimento=False):
+    def apri_dialog_conto(self, e, conto_data=None, escludi_investimento=False, is_shared_edit=False, shared_default=False):
         self._update_texts()
         
         if escludi_investimento:
@@ -206,23 +324,55 @@ class ContoDialog(ft.AlertDialog):
             # --- MODALITÀ MODIFICA ---
             self.title.value = self.loc.get("edit_account")
             self.conto_id_in_modifica = conto_data['id_conto']
+            
+            # Determine if it's shared based on passed flag or data
+            is_shared = is_shared_edit or conto_data.get('condiviso', False)
+            self.dd_scope_conto.value = "condiviso" if is_shared else "personale"
+            self.dd_scope_conto.disabled = True # Cannot change scope in edit mode
+            self.is_shared_mode = is_shared
+            if is_shared:
+                self.is_condiviso_in_modifica = True # Used for admin saldo fix, but let's reuse
+                # Fetch details if not full
+                master_key_b64 = self.controller.page.session.get("master_key")
+                dettagli = ottieni_dettagli_conto_condiviso(self.conto_id_in_modifica, master_key_b64=master_key_b64, id_utente=id_utente)
+                if dettagli:
+                    conto_data = dettagli # Override with full details including participants
+            
             self.txt_conto_nome.value = conto_data['nome_conto']
             self.dd_conto_tipo.value = conto_data['tipo']
-            self.dd_conto_tipo.disabled = False  # Ora si può cambiare il tipo
-            self.txt_conto_iban.value = conto_data['iban']
+            self.dd_conto_tipo.disabled = False
+            self.txt_conto_iban.value = conto_data.get('iban', "")
 
             # Gestione visibilità in base al tipo
             # Saldo iniziale NON modificabile in edit mode (solo tramite rettifica admin)
             self.container_saldo_iniziale.visible = False
-            self.container_asset_iniziali.visible = (conto_data['tipo'] == 'Investimento')
+            self.container_asset_iniziali.visible = (conto_data['tipo'] == 'Investimento' and not is_shared)
             
-            self.chk_conto_default.visible = (conto_data['tipo'] not in ['Investimento', 'Fondo Pensione'])
+            self.chk_conto_default.visible = (conto_data['tipo'] not in ['Investimento', 'Fondo Pensione']) and not is_shared
             self.txt_conto_iban.visible = (conto_data['tipo'] != 'Contanti')
             self.chk_conto_default.value = (conto_data['id_conto'] == conto_default_id)
+            
+            if is_shared:
+                 self.dd_tipo_condivisione.value = conto_data.get('tipo_condivisione', 'famiglia')
+                 self.dd_tipo_condivisione.visible = True
+                 if self.dd_tipo_condivisione.value == 'utenti':
+                     self.container_partecipanti.visible = True
+                     partecipanti_ids = [p['id_utente'] for p in conto_data.get('partecipanti', [])]
+                     self._popola_lista_utenti(partecipanti_ids)
+                 else:
+                     self.container_partecipanti.visible = False
+            else:
+                 self.dd_tipo_condivisione.visible = False
+                 self.container_partecipanti.visible = False
+                 
         else:
             # --- MODALITÀ CREAZIONE ---
             self.title.value = self.loc.get("add_account")
             self.conto_id_in_modifica = None
+            self.dd_scope_conto.value = "condiviso" if shared_default else "personale"
+            self.dd_scope_conto.disabled = False
+            self.is_shared_mode = shared_default
+            
             self.txt_conto_nome.value = ""
             self.dd_conto_tipo.value = "Corrente"
             self.dd_conto_tipo.disabled = False
@@ -231,9 +381,21 @@ class ContoDialog(ft.AlertDialog):
             self.txt_conto_saldo_iniziale.value = ""
             self.container_saldo_iniziale.visible = True
             self.container_asset_iniziali.visible = False
-            self.chk_conto_default.visible = True
+            
+            self.chk_conto_default.visible = not shared_default
             self.chk_conto_default.value = False
-            self._aggiungi_riga_asset_iniziale()  # Aggiungi una riga vuota per gli asset
+            self._aggiungi_riga_asset_iniziale()
+            
+            # Shared defaults
+            self.dd_tipo_condivisione.value = "famiglia"
+            self.dd_tipo_condivisione.visible = shared_default
+            self.container_partecipanti.visible = False
+            if shared_default:
+                self._popola_lista_utenti() # Prepare just in case switch to users
+
+        # Trigger visibility update based on initial/edit state
+        self._cambia_tipo_conto_in_dialog(None)
+        self._cambia_scope_conto(None) # Ensure consistency
 
         # self.controller.page.dialog = self # Deprecated/Conflict with overlay
         if self not in self.controller.page.overlay:
@@ -255,10 +417,21 @@ class ContoDialog(ft.AlertDialog):
             nome = self.txt_conto_nome.value
             tipo = self.dd_conto_tipo.value
             iban = self.txt_conto_iban.value if self.txt_conto_iban.visible else None
+            is_shared = self.dd_scope_conto.value == 'condiviso'
 
             if not nome:
                 self.txt_conto_nome.error_text = self.loc.get("fill_all_fields")
                 is_valid = False
+
+            # Validate Shared Specifics
+            lista_utenti_selezionati = []
+            if is_shared and self.dd_tipo_condivisione.value == 'utenti':
+                for checkbox in self.lv_partecipanti.controls:
+                    if isinstance(checkbox, ft.Checkbox) and checkbox.value:
+                        lista_utenti_selezionati.append(checkbox.data)
+                if not lista_utenti_selezionati:
+                    self.controller.show_snack_bar(self.loc.get("select_at_least_one_participant"), success=False)
+                    is_valid = False
 
             saldo_iniziale = 0.0
             lista_asset_iniziali = []
@@ -266,7 +439,7 @@ class ContoDialog(ft.AlertDialog):
             # La validazione del saldo iniziale e degli asset avviene sempre (creazione e modifica)
             # Ma per modifica, solo se il tipo lo richiede
             if True: # Rimosso check if not self.conto_id_in_modifica
-                if tipo == 'Investimento':
+                if tipo == 'Investimento' and not is_shared:
                     for riga_asset_widget in self.lv_asset_iniziali.controls:
                         # Estrai i campi di testo dalla riga
                         fields_list = [c for c in
@@ -330,49 +503,88 @@ class ContoDialog(ft.AlertDialog):
             messaggio = ""
             new_conto_id = None
 
-            if self.conto_id_in_modifica:
-                # Passa il saldo_iniziale come valore_manuale solo se il tipo è 'Fondo Pensione'
-                valore_manuale_modifica = saldo_iniziale if tipo == 'Fondo Pensione' else None
-                
-                success, msg = modifica_conto(self.conto_id_in_modifica, utente_id, nome, tipo, iban, valore_manuale=valore_manuale_modifica, master_key_b64=master_key_b64, id_famiglia=id_famiglia)
-                messaggio = "modificato" if success else "errore modifica"
-                new_conto_id = self.conto_id_in_modifica
-                
-                if success and tipo != 'Fondo Pensione' and tipo != 'Investimento':
-                    # In modifica NON aggiorniamo più il saldo iniziale da qui.
-                    pass
-
+            # --- SALVATAGGIO ---
+            if is_shared:
+                # -- SHARED ACCOUNT LOGIC --
+                if self.conto_id_in_modifica:
+                    # Modify Shared
+                     success = modifica_conto_condiviso(
+                        self.conto_id_in_modifica,
+                        nome,
+                        tipo,
+                        lista_utenti_selezionati if self.dd_tipo_condivisione.value == 'utenti' else None,
+                        id_utente=utente_id,
+                        master_key_b64=master_key_b64
+                    )
+                     messaggio = "modificato" if success else "errore modifica"
+                     new_conto_id = self.conto_id_in_modifica
+                else:
+                    # Create Shared
+                    new_conto_id = crea_conto_condiviso(
+                        id_famiglia,
+                        nome,
+                        tipo,
+                        self.dd_tipo_condivisione.value,
+                        lista_utenti_selezionati if self.dd_tipo_condivisione.value == 'utenti' else None,
+                        id_utente=utente_id,
+                        master_key_b64=master_key_b64
+                    )
+                    success = new_conto_id is not None
+                    messaggio = "aggiunto" if success else "errore aggiunta"
+                    
+                    # Saldo iniziale per condivisi
+                    if success and saldo_iniziale != 0:
+                         # Use existing transaction logic or specific for shared?
+                         # crea_conto_condiviso_dialog used aggiungi_transazione_condivisa
+                         from db.gestione_db import aggiungi_transazione_condivisa
+                         oggi = datetime.date.today().strftime('%Y-%m-%d')
+                         aggiungi_transazione_condivisa(utente_id, new_conto_id, oggi, "Saldo Iniziale", saldo_iniziale)
             else:
-                # Passa il saldo_iniziale come valore_manuale solo se il tipo è 'Fondo Pensione'
-                valore_manuale_iniziale = saldo_iniziale if tipo == 'Fondo Pensione' else 0.0
-                res = aggiungi_conto(utente_id, nome, tipo, iban, valore_manuale=valore_manuale_iniziale, master_key_b64=master_key_b64, id_famiglia=id_famiglia)
-                if isinstance(res, tuple):
-                    new_conto_id, msg = res
+                # -- PERSONAL ACCOUNT LOGIC --
+                if self.conto_id_in_modifica:
+                    # Passa il saldo_iniziale come valore_manuale solo se il tipo è 'Fondo Pensione'
+                    valore_manuale_modifica = saldo_iniziale if tipo == 'Fondo Pensione' else None
+                    
+                    success, msg = modifica_conto(self.conto_id_in_modifica, utente_id, nome, tipo, iban, valore_manuale=valore_manuale_modifica, master_key_b64=master_key_b64, id_famiglia=id_famiglia)
+                    messaggio = "modificato" if success else "errore modifica"
+                    new_conto_id = self.conto_id_in_modifica
+                    
+                    if success and tipo != 'Fondo Pensione' and tipo != 'Investimento':
+                        # In modifica NON aggiorniamo più il saldo iniziale da qui.
+                        pass
+
                 else:
-                    new_conto_id = res
-                
-                if new_conto_id:
-                    success = True
-                    messaggio = "aggiunto"
-                    # Crea la transazione di saldo iniziale solo per i conti che non sono Fondi Pensione
-                    if saldo_iniziale != 0 and tipo != 'Fondo Pensione':
-                        aggiungi_transazione(new_conto_id, datetime.date.today().strftime('%Y-%m-%d'),
-                                             "Saldo Iniziale", saldo_iniziale, master_key_b64=master_key_b64)
-                    for asset in lista_asset_iniziali:
-                        compra_asset(
-                            id_conto_investimento=new_conto_id,
-                            ticker=asset['ticker'], nome_asset=asset['nome'], quantita=asset['quantita'],
-                            costo_unitario_nuovo=asset['costo_medio'],
-                            tipo_mov='INIZIALE',
-                            prezzo_attuale_override=asset['prezzo_attuale']
-                        )
-                else:
-                    success = False
-                    messaggio = "errore aggiunta"
+                    # Passa il saldo_iniziale come valore_manuale solo se il tipo è 'Fondo Pensione'
+                    valore_manuale_iniziale = saldo_iniziale if tipo == 'Fondo Pensione' else 0.0
+                    res = aggiungi_conto(utente_id, nome, tipo, iban, valore_manuale=valore_manuale_iniziale, master_key_b64=master_key_b64, id_famiglia=id_famiglia)
+                    if isinstance(res, tuple):
+                        new_conto_id, msg = res
+                    else:
+                        new_conto_id = res
+                    
+                    if new_conto_id:
+                        success = True
+                        messaggio = "aggiunto"
+                        # Crea la transazione di saldo iniziale solo per i conti che non sono Fondi Pensione
+                        if saldo_iniziale != 0 and tipo != 'Fondo Pensione':
+                            aggiungi_transazione(new_conto_id, datetime.date.today().strftime('%Y-%m-%d'),
+                                                 "Saldo Iniziale", saldo_iniziale, master_key_b64=master_key_b64)
+                        for asset in lista_asset_iniziali:
+                            compra_asset(
+                                id_conto_investimento=new_conto_id,
+                                ticker=asset['ticker'], nome_asset=asset['nome'], quantita=asset['quantita'],
+                                costo_unitario_nuovo=asset['costo_medio'],
+                                tipo_mov='INIZIALE',
+                                prezzo_attuale_override=asset['prezzo_attuale']
+                            )
+                    else:
+                        success = False
+                        messaggio = "errore aggiunta"
+            # --- END SAVE LOGIC ---
 
             if success:
-                # Gestisci il conto di default
-                if self.chk_conto_default.value and new_conto_id:
+                # Gestisci il conto di default (solo personale per ora)
+                if self.chk_conto_default.value and new_conto_id and not is_shared:
                     imposta_conto_default_utente(utente_id, id_conto_personale=new_conto_id)
                 else:
                     # Se l'utente deseleziona il conto che era di default, lo rimuove

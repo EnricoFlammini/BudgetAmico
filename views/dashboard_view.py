@@ -329,16 +329,6 @@ class DashboardView:
         })
         index += 1
 
-        # 4. Conti Condivisi
-        self.sidebar_items.append({
-            'icon': ft.Icons.GROUP_OUTLINED,
-            'selected_icon': ft.Icons.GROUP,
-            'label': loc.get("shared_accounts"),
-            'view': self.tab_conti_condivisi,
-            'index': index
-        })
-        index += 1
-
         # 5. Spese Fisse
         self.sidebar_items.append({
             'icon': ft.Icons.CALENDAR_MONTH_OUTLINED,

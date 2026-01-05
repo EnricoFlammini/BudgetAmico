@@ -3,7 +3,10 @@ from functools import partial
 from db.gestione_db import (
     ottieni_dettagli_conti_utente,
     elimina_conto,
-    ottieni_riepilogo_patrimonio_utente
+    ottieni_riepilogo_patrimonio_utente,
+    ottieni_conti_condivisi_famiglia,
+    elimina_conto_condiviso,
+    ottieni_prima_famiglia_utente # Add helper to get family id
 )
 import datetime
 from utils.async_task import AsyncTask
@@ -17,7 +20,8 @@ class ContiTab(ft.Container):
         self.controller.page = controller.page
 
         # Controlli UI
-        self.lv_conti_personali = ft.Column(expand=True, scroll=ft.ScrollMode.ADAPTIVE, spacing=10)
+        # Unica lista scrollabile per tutti i conti
+        self.lv_conti = ft.Column(spacing=10) 
         
         # Loading view (inline spinner)
         self.loading_view = ft.Container(
@@ -30,8 +34,14 @@ class ContiTab(ft.Container):
             visible=False
         )
 
-        # Main content
-        self.main_view = ft.Column(expand=True, spacing=10)
+        # Main content - Scrollable Column
+        self.main_view = ft.Column(
+            expand=True, 
+            spacing=10, 
+            scroll=ft.ScrollMode.HIDDEN # Use hidden scroll to avoid double scrollbars if parent handles it, but here we want scrolling.
+        )
+        # Actually, let's set scroll on main_view so the whole page scrolls.
+        self.main_view.scroll = ft.ScrollMode.ADAPTIVE
 
         # Stack to switch between content and loading
         self.content = ft.Stack([
@@ -49,16 +59,17 @@ class ContiTab(ft.Container):
         # Setup main view structure
         self.main_view.controls = [
             AppStyles.section_header(
-                loc.get("my_personal_accounts"),
+                loc.get("my_accounts"), # Use generic "Miei Conti" (need to ensure translation exists or use string)
                 ft.IconButton(
                     icon=ft.Icons.ADD_CARD,
-                    tooltip=loc.get("add_personal_account"),
+                    tooltip=loc.get("add_account"),
                     on_click=lambda e: self.controller.conto_dialog.apri_dialog_conto(e, escludi_investimento=True),
                     icon_color=theme.primary
                 )
             ),
             AppStyles.page_divider(),
-            ft.Container(content=self.lv_conti_personali, expand=True),
+            self.lv_conti,
+            ft.Container(height=50) # Spacer at bottom
         ]
 
         utente_id = self.controller.get_user_id()
@@ -81,18 +92,40 @@ class ContiTab(ft.Container):
 
     def _fetch_data(self, utente_id, master_key_b64):
         conti = ottieni_dettagli_conti_utente(utente_id, master_key_b64=master_key_b64)
-        # Filtra i conti di investimento e le carte di credito (gestite separatamente)
-        return [c for c in conti if c['tipo'] not in ['Investimento', 'Carta di Credito']]
-
-    def _on_data_loaded(self, theme, conti_personali):
-        loc = self.controller.loc
-        self.lv_conti_personali.controls.clear()
+        personali = [c for c in conti if c['tipo'] not in ['Investimento', 'Carta di Credito']]
         
-        if not conti_personali:
-            self.lv_conti_personali.controls.append(ft.Text(loc.get("no_personal_accounts")))
-        else:
+        # Fetch Shared Accounts
+        condivisi = []
+        id_famiglia = ottieni_prima_famiglia_utente(utente_id)
+        if id_famiglia:
+            condivisi = ottieni_conti_condivisi_famiglia(id_famiglia, utente_id, master_key_b64=master_key_b64)
+            
+        return personali, condivisi
+
+    def _on_data_loaded(self, theme, result):
+        conti_personali, conti_condivisi = result
+        loc = self.controller.loc
+        self.lv_conti.controls.clear()
+        
+        has_accounts = False
+
+        # Personal Accounts
+        if conti_personali:
+            # self.lv_conti.controls.append(ft.Text("Personali", weight="bold")) # Optional label? User said remove page "Shared", implies unified list.
             for conto in conti_personali:
-                self.lv_conti_personali.controls.append(self._crea_widget_conto_personale(conto, theme))
+                self.lv_conti.controls.append(self._crea_widget_conto(conto, theme, is_shared=False))
+            has_accounts = True
+
+        # Shared Accounts
+        if conti_condivisi:
+            # self.lv_conti.controls.append(ft.Divider())
+            # self.lv_conti.controls.append(ft.Text("Condivisi", weight="bold"))
+            for conto in conti_condivisi:
+                self.lv_conti.controls.append(self._crea_widget_conto(conto, theme, is_shared=True))
+            has_accounts = True
+
+        if not has_accounts:
+             self.lv_conti.controls.append(ft.Text(loc.get("no_accounts_yet")))
 
         # Hide loading
         self.loading_view.visible = False
@@ -112,7 +145,7 @@ class ContiTab(ft.Container):
         # Deprecated
         return []
 
-    def _crea_widget_conto_personale(self, conto: dict, theme) -> ft.Container:
+    def _crea_widget_conto(self, conto: dict, theme, is_shared: bool = False) -> ft.Container:
         is_investimento = conto['tipo'] == 'Investimento'
         is_fondo_pensione = conto['tipo'] == 'Fondo Pensione'
 
@@ -132,8 +165,13 @@ class ContiTab(ft.Container):
         content = ft.ResponsiveRow([
             # Col 1: Nome Conto e IBAN
             ft.Column([
-                AppStyles.subheader_text(conto['nome_conto']),
-                AppStyles.caption_text(f"{conto['tipo']}" + (f" - IBAN: {conto['iban']}" if conto['iban'] else ""))
+                ft.Row([
+                    ft.Icon(ft.Icons.GROUP if is_shared else ft.Icons.PERSON, size=16, color=theme.outline),
+                    AppStyles.subheader_text(conto['nome_conto']),
+                ], spacing=5, alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                AppStyles.caption_text(f"{conto['tipo']}" + 
+                                       (f" - IBAN: {conto['iban']}" if not is_shared and conto.get('iban') else "") + 
+                                       (" - Conto Condiviso" if is_shared else ""))
             ], col={"xs": 12, "sm": 6}, spacing=2),
             
             # Col 2: Saldo
@@ -158,12 +196,12 @@ class ContiTab(ft.Container):
                                   on_click=lambda e: self.controller.conto_dialog.apri_dialog_rettifica_saldo(
                                       e.control.data), visible=is_admin and is_corrente),
                     ft.IconButton(icon=ft.Icons.EDIT, tooltip=self.controller.loc.get("edit_account"), data=conto,
-                                  on_click=lambda e: self.controller.conto_dialog.apri_dialog_conto(e, e.control.data, escludi_investimento=True),
+                                  on_click=lambda e: self.controller.conto_dialog.apri_dialog_conto(e, e.control.data, escludi_investimento=True, is_shared_edit=is_shared),
                                   icon_color=AppColors.INFO),
                     ft.IconButton(icon=ft.Icons.DELETE, tooltip=self.controller.loc.get("delete_account"),
-                                  icon_color=AppColors.ERROR, data=conto['id_conto'],
+                                  icon_color=AppColors.ERROR, data=(conto['id_conto'], is_shared),
                                   on_click=lambda e: self.controller.open_confirm_delete_dialog(
-                                      partial(self.elimina_conto_personale_cliccato, e))),
+                                      partial(self.elimina_conto_cliccato, e))),
                 ], alignment=ft.MainAxisAlignment.END, spacing=0)
             ], col={"xs": 6, "sm": 3}, alignment=ft.MainAxisAlignment.CENTER)
             
@@ -171,22 +209,33 @@ class ContiTab(ft.Container):
 
         return AppStyles.card_container(content, padding=15)
 
-    def elimina_conto_personale_cliccato(self, e):
-        id_conto = e.control.data
+    def elimina_conto_cliccato(self, e):
+        # Data is tuple (id, is_shared)
+        id_conto, is_shared = e.control.data
         utente_id = self.controller.get_user_id()
-        risultato = elimina_conto(id_conto, utente_id)
-
-        if risultato is True:
-            self.controller.show_snack_bar("Conto personale e dati collegati eliminati.", success=True)
-            self.controller.db_write_operation()
-        elif risultato == "NASCOSTO":
-            # Il conto è stato nascosto (ha transazioni ma saldo = 0)
-            self.controller.show_snack_bar("✅ Conto nascosto. Le transazioni storiche sono state mantenute.", success=True)
-            self.controller.db_write_operation()
-        elif risultato == "SALDO_NON_ZERO":
-            self.controller.show_snack_bar("❌ Errore: Il saldo/valore del conto non è 0.", success=False)
-        elif isinstance(risultato, tuple) and not risultato[0]:
-            # Nuovo: gestisce l'errore restituito dal DB e mostra il popup
-            self.controller.show_error_dialog(risultato[1])
+        
+        if is_shared:
+             # Logic for shared account deletion (requires implementing/importing elimina_conto_condiviso)
+             risultato = elimina_conto_condiviso(id_conto)
+             if risultato is True:
+                self.controller.show_snack_bar("Conto condiviso eliminato.", success=True)
+                self.controller.db_write_operation()
+             else:
+                 self.controller.show_error_dialog("Errore durante l'eliminazione del conto condiviso.")
         else:
-            self.controller.show_error_dialog("Si è verificato un errore sconosciuto durante l'eliminazione del conto.")
+            risultato = elimina_conto(id_conto, utente_id)
+
+            if risultato is True:
+                self.controller.show_snack_bar("Conto personale e dati collegati eliminati.", success=True)
+                self.controller.db_write_operation()
+            elif risultato == "NASCOSTO":
+                # Il conto è stato nascosto (ha transazioni ma saldo = 0)
+                self.controller.show_snack_bar("✅ Conto nascosto. Le transazioni storiche sono state mantenute.", success=True)
+                self.controller.db_write_operation()
+            elif risultato == "SALDO_NON_ZERO":
+                self.controller.show_snack_bar("❌ Errore: Il saldo/valore del conto non è 0.", success=False)
+            elif isinstance(risultato, tuple) and not risultato[0]:
+                # Nuovo: gestisce l'errore restituito dal DB e mostra il popup
+                self.controller.show_error_dialog(risultato[1])
+            else:
+                self.controller.show_error_dialog("Si è verificato un errore sconosciuto durante l'eliminazione del conto.")

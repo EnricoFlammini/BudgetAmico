@@ -2751,6 +2751,144 @@ def admin_imposta_saldo_conto_condiviso(id_conto_condiviso, nuovo_saldo):
 
 
 # --- Funzioni Conti Condivisi ---
+
+def ottieni_dettagli_conto_condiviso(id_conto, master_key_b64=None, id_utente=None):
+    """
+    Recupera i dettagli di un conto condiviso, inclusi i partecipanti.
+    """
+    try:
+        crypto, master_key = _get_crypto_and_key(master_key_b64)
+        family_key = None
+        
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # Fetch basic details
+            cur.execute("SELECT * FROM ContiCondivisi WHERE id_conto_condiviso = %s", (id_conto,))
+            row = cur.fetchone()
+            if not row:
+                return None
+                
+            dettagli = dict(row)
+            dettagli['id_conto'] = dettagli['id_conto_condiviso']
+            dettagli['condiviso'] = True
+            
+            # Decrypt Name
+            if master_key and id_utente:
+                 family_key = _get_family_key_for_user(dettagli['id_famiglia'], id_utente, master_key, crypto)
+                 if family_key:
+                     dettagli['nome_conto'] = _decrypt_if_key(dettagli['nome_conto'], family_key, crypto)
+
+            # Fetch participants
+            cur.execute("""
+                SELECT U.id_utente, U.username
+                FROM PartecipazioneContoCondiviso PCC
+                JOIN Utenti U ON PCC.id_utente = U.id_utente
+                WHERE PCC.id_conto_condiviso = %s
+            """, (id_conto,))
+            dettagli['partecipanti'] = [dict(r) for r in cur.fetchall()]
+            # Add dummy display name if needed or just use username
+            for p in dettagli['partecipanti']:
+                p['nome_visualizzato'] = p['username']
+            
+            # Calculate Balance (Useful for display/edit check)
+            cur.execute("SELECT COALESCE(SUM(importo), 0.0) as saldo FROM TransazioniCondivise WHERE id_conto_condiviso = %s", (id_conto,))
+            saldo_trans = cur.fetchone()['saldo']
+            dettagli['saldo_calcolato'] = saldo_trans + (dettagli['rettifica_saldo'] or 0.0)
+
+            return dettagli
+            
+    except Exception as e:
+        print(f"[ERRORE] ottieni_dettagli_conto_condiviso: {e}")
+        return None
+
+def ottieni_conti_condivisi_famiglia(id_famiglia, id_utente, master_key_b64=None):
+    """
+    Recupera la lista dei conti condivisi per una famiglia.
+    Filtra in base alla visibilità (tipo_condivisione='famiglia' o 'utenti' con inclusione).
+    Restituisce una lista di dizionari con dettagli e saldo calcolato.
+    """
+    try:
+        crypto, master_key = _get_crypto_and_key(master_key_b64)
+        family_key = None
+        if master_key and id_utente:
+             # Ottieni la chiave famiglia
+             family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+
+        conti = []
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # 1. Recupera i conti
+            # Se tipo='famiglia', visibile a tutti. Se 'utenti', verifica partecipazione.
+            query = """
+                SELECT DISTINCT CC.*
+                FROM ContiCondivisi CC
+                LEFT JOIN PartecipazioneContoCondiviso PCC ON CC.id_conto_condiviso = PCC.id_conto_condiviso
+                WHERE CC.id_famiglia = %s
+                  AND (
+                      CC.tipo_condivisione = 'famiglia' 
+                      OR (CC.tipo_condivisione = 'utenti' AND PCC.id_utente = %s)
+                      OR (CC.id_conto_condiviso IN (SELECT id_conto_condiviso FROM ContiCondivisi WHERE id_famiglia=%s AND tipo_condivisione='utenti' AND EXISTS (SELECT 1 FROM Appartenenza_Famiglia WHERE id_famiglia=%s AND id_utente=%s AND ruolo='admin'))) -- Admin vede tutto? Per ora assumiamo di sì o no? La richiesta dice "tutti i conti... condivisi". Assumo visibilità basata su regole.
+                  )
+            """
+            # Semplificazione: Admin vede tutto?
+            # Se l'utente è admin della famiglia, dovrebbe vedere tutto?
+            # Per ora atteniamoci alla logica di partecipazione standard.
+            # Se è 'utenti', deve essere nella tabella PartecipazioneContoCondiviso.
+            
+            cur.execute("""
+                SELECT DISTINCT CC.*
+                FROM ContiCondivisi CC
+                LEFT JOIN PartecipazioneContoCondiviso PCC ON CC.id_conto_condiviso = PCC.id_conto_condiviso
+                WHERE CC.id_famiglia = %s
+                  AND (
+                      CC.tipo_condivisione = 'famiglia' 
+                      OR (CC.tipo_condivisione = 'utenti' AND PCC.id_utente = %s)
+                  )
+            """, (id_famiglia, id_utente))
+            
+            rows = cur.fetchall()
+            
+            for row in rows:
+                c = dict(row)
+                
+                # Decrypt Name
+                nome_conto = c['nome_conto']
+                if family_key:
+                    nome_conto = _decrypt_if_key(nome_conto, family_key, crypto)
+                c['nome_conto'] = nome_conto
+
+                # Calcola Saldo
+                cur.execute("""
+                    SELECT COALESCE(SUM(importo), 0.0) as saldo 
+                    FROM TransazioniCondivise 
+                    WHERE id_conto_condiviso = %s
+                """, (c['id_conto_condiviso'],))
+                saldo_trans = cur.fetchone()['saldo']
+                c['saldo_calcolato'] = saldo_trans + (c['rettifica_saldo'] or 0.0)
+                
+                # Campi compatibili con FE
+                c['id_conto'] = c['id_conto_condiviso'] # Alias per uniformità
+                c['condiviso'] = True
+                
+                # Partecipanti (per info)
+                cur.execute("""
+                    SELECT U.username
+                    FROM PartecipazioneContoCondiviso PCC
+                    JOIN Utenti U ON PCC.id_utente = U.id_utente
+                    WHERE PCC.id_conto_condiviso = %s
+                """, (c['id_conto_condiviso'],))
+                partecipanti = cur.fetchall()
+                c['partecipanti_str'] = ", ".join([p['username'] or "Utente Sconosciuto" for p in partecipanti])
+                
+                conti.append(c)
+                
+        return conti
+
+    except Exception as e:
+        print(f"[ERRORE] ottieni_conti_condivisi_famiglia: {e}")
+        return []
 def crea_conto_condiviso(id_famiglia, nome_conto, tipo_conto, tipo_condivisione, lista_utenti=None, id_utente=None, master_key_b64=None):
     # Encrypt with family key if available
     encrypted_nome = nome_conto

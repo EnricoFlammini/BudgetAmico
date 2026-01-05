@@ -566,6 +566,9 @@ STRINGS = {
         "start_date": "Data Inizio",
         "required_field": "Campo obbligatorio",
         "delete_account": "Elimina Conto",
+        "personal_account": "Conto Personale",
+        "shared_account": "Conto Condiviso",
+        "my_accounts": "I Miei Conti",
 
     },
     "en": {
@@ -912,6 +915,9 @@ STRINGS = {
         "start_date": "Start Date",
         "required_field": "Required field",
         "delete_account": "Delete Account",
+        "personal_account": "Personal Account",
+        "shared_account": "Shared Account",
+        "my_accounts": "My Accounts",
         "auto_debit": "Auto Debit",
         "auto_debit_desc": "Select if the debit should be executed automatically every month.",
 

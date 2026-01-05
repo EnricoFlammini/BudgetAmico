@@ -1,4 +1,4 @@
-# Guida Rapida Budget Amico v0.32.00
+# Guida Rapida Budget Amico v0.33.00
 
 ## Benvenuto in Budget Amico! 🎉
 
@@ -44,8 +44,7 @@ La barra a sinistra ti permette di navigare tra le sezioni:
 |-------|---------|-------------|
 | 👤 | **Il tuo nome** | Riepilogo patrimonio personale |
 | 📊 | **Budget** | Gestione budget mensile |
-| 💳 | **Conti Personali** | I tuoi conti bancari e contanti |
-| 👥 | **Conti Condivisi** | Conti in comune con familiari |
+| 💳 | **I Miei Conti** | Tutti i conti (Personali e Condivisi) |
 | 📅 | **Spese Fisse** | Abbonamenti e pagamenti ricorrenti |
 | 🧮 | **Divisore Pro** | Calcolo divisione spese (Splitwise) |
 | 📈 | **Investimenti** | Portafogli di investimento |
@@ -71,9 +70,10 @@ Il pulsante blu in basso a destra ti permette di:
 
 Prima di registrare transazioni, devi creare almeno un conto:
 
-1. Clicca su **"Conti Personali"** nella barra laterale
-2. Clicca sul pulsante **"+ Nuovo Conto"**
+1. Clicca su **"I Miei Conti"** nella barra laterale
+2. Clicca sul pulsante **"+ Aggiungi Conto"**
 3. Compila i campi:
+   - **Tipo di Conto**: Seleziona "Personale" (default) o "Condiviso"
    - **Nome conto**: es. "Conto Corrente UniCredit"
    - **Tipo**: Corrente, Risparmio, Contanti, ecc.
    - **Saldo iniziale**: il saldo attuale del conto
@@ -93,7 +93,7 @@ Ora che hai un conto, puoi iniziare a registrare entrate e uscite:
 2. Seleziona **"Nuova Transazione"**
 
 ### Metodo 2: Dalla lista transazioni
-1. Vai su **"Conti Personali"**
+1. Vai su **"I Miei Conti"**
 2. Clicca sul conto desiderato
 3. Clicca su **"+ Aggiungi"**
 
@@ -143,5 +143,5 @@ Utilizza il nuovo modulo **Carte** per tracciare le spese effettuate con carta d
 
 ---
 
-*Budget Amico - *Versione documento: 0.32.00*
+*Budget Amico - *Versione documento: 0.33.00*
 *Sviluppato da Iscavar79*
