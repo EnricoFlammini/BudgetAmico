@@ -194,7 +194,7 @@ class FamigliaTab(ft.Container):
             titolo_mese = datetime.date(anno, mese, 1).strftime("%B %Y").capitalize()
             
             self.main_content.controls = [
-                AppStyles.section_header(f"Riepilogo Famiglia - {titolo_mese}"),
+                AppStyles.title_text(f"Riepilogo Famiglia - {titolo_mese}"),
                 ft.Container(content=self.dd_mese_filtro, padding=ft.padding.only(top=5, bottom=10)),
                 AppStyles.page_divider(),
                 AppStyles.card_container(
@@ -281,7 +281,7 @@ class FamigliaTab(ft.Container):
             
             # Aggiorna i controlli del main_content con riepilogo patrimonio
             self.main_content.controls = [
-                AppStyles.section_header(loc.get("family_transactions")),
+                AppStyles.title_text(loc.get("family_transactions")),
                 card_riepilogo,
                 ft.Container(content=self.dd_mese_filtro, padding=ft.padding.only(top=5, bottom=10)),
                 AppStyles.page_divider(),

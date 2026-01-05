@@ -58,15 +58,15 @@ class ContiTab(ft.Container):
 
         # Setup main view structure
         self.main_view.controls = [
-            AppStyles.section_header(
-                loc.get("my_accounts"), # Use generic "Miei Conti" (need to ensure translation exists or use string)
+            ft.Row([
+                AppStyles.title_text("Conti"),
                 ft.IconButton(
                     icon=ft.Icons.ADD_CARD,
                     tooltip=loc.get("add_account"),
                     on_click=lambda e: self.controller.conto_dialog.apri_dialog_conto(e, escludi_investimento=True),
                     icon_color=theme.primary
                 )
-            ),
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             AppStyles.page_divider(),
             self.lv_conti,
             ft.Container(height=50) # Spacer at bottom

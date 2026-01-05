@@ -313,7 +313,7 @@ class DashboardView:
         self.sidebar_items.append({
             'icon': ft.Icons.ACCOUNT_BALANCE_WALLET_OUTLINED,
             'selected_icon': ft.Icons.ACCOUNT_BALANCE_WALLET,
-            'label': loc.get("personal_accounts"),
+            'label': "Conti",
             'view': self.tab_conti,
             'index': index
         })
