@@ -482,21 +482,26 @@ class DashboardView:
             logger.debug("Initial load: loading only visible tab (PersonaleTab)")
             self.tab_personale.update_view_data(is_initial_load)
         else:
-            # Aggiornamento completo (richiesto esplicitamente)
-            self.tab_personale.update_view_data(is_initial_load)
-            self.tab_famiglia.update_view_data(is_initial_load)
-            self.tab_conti.update_view_data(is_initial_load)
-            self.tab_conti_condivisi.update_view_data(is_initial_load)
-            self.tab_spese_fisse.update_view_data(is_initial_load)
-            self.tab_budget.update_view_data(is_initial_load)
-            self.tab_investimenti.update_view_data(is_initial_load)
-            self.tab_prestiti.update_view_data(is_initial_load)
-            self.tab_immobili.update_view_data(is_initial_load)
-            self.tab_impostazioni.update_view_data(is_initial_load)
-            self.tab_carte.load_cards() # Refresh cards too
-
+            # Aggiornamento completo (richiesto esplicitamente o dopo operazioni)
+            # FIX: Aggiorna SOLO la tab attiva per evitare "Pool Exhaustion" (Max Clients)
+            # Le altre tab si aggiorneranno automaticamente quando l'utente ci clicca (lazy loading)
+            active_view = self.content_area.content
+            
+            # Se la vista attiva ha il metodo update_view_data, chiamalo
+            if hasattr(active_view, 'update_view_data'):
+                active_view.update_view_data(is_initial_load)
+            elif hasattr(active_view, 'update_all_admin_tabs_data'):
+                active_view.update_all_admin_tabs_data(is_initial_load)
+            elif hasattr(active_view, 'load_cards'):
+                active_view.load_cards()
+            
+            # Casi speciali: Se siamo su Personale, potremmo voler aggiornare anche Budget se visualizza widget?
+            # Per ora manteniamo strict lazy loading.
+            
+            # Refresh sidebar export button status
             if self.controller.get_user_role() == 'admin':
-                self.tab_admin.update_all_admin_tabs_data(is_initial_load)
+                # TabAdmin updates handled above if active
+                pass
             
             # Manage Export Button Visibility
             ruolo = self.controller.get_user_role()

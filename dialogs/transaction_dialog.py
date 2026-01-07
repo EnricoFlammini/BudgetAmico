@@ -119,12 +119,16 @@ class TransactionDialog(ft.AlertDialog):
                      if target_acc: is_shared_card = True
                 
                 if not target_acc:
-                     # Fallback
-                     target_acc = c.get('id_conto_riferimento')
-                     if not target_acc:
-                         target_acc = c.get('id_conto_riferimento_condiviso')
-                         if target_acc: is_shared_card = True
-                     
+                    # Fallback
+                    target_acc = c.get('id_conto_riferimento')
+                    if not target_acc:
+                        target_acc = c.get('id_conto_riferimento_condiviso')
+                        if target_acc: is_shared_card = True
+                
+                logger.debug(f"[DEBUG_CARD] Card: {c.get('nome_carta')}, ID: {c.get('id_carta')}, "
+                             f"Contabile: {c.get('id_conto_contabile')}, Rif: {c.get('id_conto_riferimento')}, "
+                             f"TargetResolved: {target_acc}")
+
                 if target_acc:
                     flag = 'S' if is_shared_card else 'P'
                     key = f"CARD_{c['id_carta']}_{target_acc}_{flag}"
@@ -135,7 +139,7 @@ class TransactionDialog(ft.AlertDialog):
 
         # 2. Accounts (Caricati DOPO le carte)
         tutti_i_conti = ottieni_tutti_i_conti_utente(utente_id, master_key_b64=master_key_b64)
-        conti_filtrati = [c for c in tutti_i_conti if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
+        conti_filtrati = [c for c in tutti_i_conti if c['tipo'] not in ['Fondo Pensione']]
 
         for c in conti_filtrati:
             suffix = " " + self.loc.get("shared_suffix") if c['is_condiviso'] else ""

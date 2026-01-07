@@ -146,7 +146,7 @@ class CardDialog:
             conti = ottieni_tutti_i_conti_utente(id_utente, master_key_b64=master_key)
             
             for c in conti:
-                if c['tipo'] in ['Investimento', 'Fondo Pensione']: continue
+                if c['tipo'] in ['Fondo Pensione']: continue
                 
                 # Format name based on type
                 prefix = "[Personale]" if not c['is_condiviso'] else "[Condiviso]"
@@ -213,6 +213,10 @@ class CardDialog:
             'addebito_automatico': True, # Implied for Credit, meaningless/instant for Debit
             'master_key_b64': mk
         }
+        if self.dd_tipo.value == "debito":
+            # For Debit Cards, Accounting Account must match Reference Account (Checking)
+            data['id_conto_contabile'] = id_conto_rif
+            data['id_conto_contabile_condiviso'] = id_conto_rif_condiviso
         
         # Parse numeric fields
         try:

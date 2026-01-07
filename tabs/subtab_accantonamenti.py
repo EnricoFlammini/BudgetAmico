@@ -339,10 +339,12 @@ class AccantonamentiTab(ft.Container):
                 # Check if already used
                 if is_shared:
                     if target_id in used_shared_accounts: continue
+                    key_prefix = "account_S_"
                 else:
                     if target_id in used_accounts: continue
+                    key_prefix = "account_P_"
                 
-                options.append(ft.dropdown.Option(key=f"account_{c['id_conto']}", text=c['nome_conto']))
+                options.append(ft.dropdown.Option(key=f"{key_prefix}{target_id}", text=c['nome_conto']))
                 
                 # Associated PBs ?
                 if id_famiglia:
@@ -446,28 +448,83 @@ class AccantonamentiTab(ft.Container):
                 msg = "Fondo Asset assegnato!"
                 
             elif selection_key.startswith("account_"):
-                # Create PB linked to Account
-                id_conto = int(selection_key.split("_")[1])
+                # Parse Key: account_TYPE_ID
+                parts = selection_key.split("_")
+                # parts[0] = account
+                # parts[1] = P or S
+                # parts[2] = ID
+                
+                acc_type = parts[1]
+                id_conto = int(parts[2])
                 nome = self.tf_nome_fondo.value
-                success = crea_salvadanaio(
-                    id_famiglia, nome, importo, 
+                
+                target_id_conto = None
+                target_id_shared = None
+                
+                if acc_type == 'P':
+                    target_id_conto = id_conto
+                    params = {'id_conto': id_conto}
+                elif acc_type == 'S':
+                    target_id_shared = id_conto
+                    params = {'id_conto_condiviso': id_conto}
+                else:
+                    # Legacy fallback
+                    return
+
+
+                # If transferring money (Account PB + Not Dynamic + Amount > 0)
+                should_transfer = (not usa_saldo_totale) and (importo > 0)
+                
+                # 1. Create (Start with 0 if transferring)
+                initial_importo = 0.0 if should_transfer else importo
+                
+                new_id = crea_salvadanaio(
+                    id_famiglia, nome, initial_importo, 
                     id_obiettivo=self.current_obj_for_funds['id'],
-                    id_conto=id_conto,
                     master_key_b64=master_key_b64, 
                     id_utente=id_utente,
                     incide_su_liquidita=False,
-                    usa_saldo_totale=usa_saldo_totale
+                    usa_saldo_totale=usa_saldo_totale,
+                    **params
                 )
-                msg = "Fondo Conto assegnato!"
+                
+                if new_id and should_transfer:
+                    # 2. Transfer Funds
+                    from db.gestione_db import esegui_giroconto_salvadanaio
+                    target_id = target_id_shared if target_id_shared else target_id_conto
+                    is_shared_parent = bool(target_id_shared)
+                    
+                    success_transfer = esegui_giroconto_salvadanaio(
+                        id_conto=target_id,
+                        id_salvadanaio=new_id,
+                        direzione='verso_salvadanaio',
+                        importo=importo,
+                        descrizione=f"Assegnazione a {self.current_obj_for_funds['nome']}",
+                        master_key_b64=master_key_b64,
+                        id_utente=id_utente,
+                        id_famiglia=id_famiglia,
+                        parent_is_shared=is_shared_parent
+                    )
+                    
+                    if not success_transfer:
+                        msg = "Salvadanaio creato ma ERRORE nel trasferimento fondi!"
+                        # Warning: PB exists with 0. User can fix manually.
+                        success = True # We still return success as PB exists? Or valid partial success.
+                    else:
+                        msg = "Fondo Conto assegnato e importo scalato!"
+                        success = True
+                else:
+                    success = bool(new_id)
+                    msg = "Fondo Conto assegnato!"
             
             if success:
                 self.tf_importo_fondo.value = ""
-                self._refresh_salvadanai_list()
+                # self._refresh_salvadanai_list() # Not needed if closing
                 self.update_view_data() # Update parent view totals
                 self.controller.show_snack_bar(msg, success=True)
                 
-                # Refresh dropdown to remove assigned PB
-                self._load_conti_options(update_ui=True)
+                # Close the dialog as requested
+                self.controller.page.close(self.dialog_fondi)
             else:
                 self.controller.show_snack_bar("Errore", success=False)
                 

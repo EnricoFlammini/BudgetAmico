@@ -129,7 +129,7 @@ class FamigliaTab(ft.Container):
                 id_utente=self.controller.get_user_id()
             )
             riepilogo = ottieni_riepilogo_patrimonio_famiglia_aggregato(
-                famiglia_id, anno, mese, master_key_b64=master_key_b64
+                famiglia_id, anno, mese, master_key_b64=master_key_b64, id_utente=self.controller.get_user_id()
             )
             result['transazioni'] = transazioni
             result['riepilogo'] = riepilogo

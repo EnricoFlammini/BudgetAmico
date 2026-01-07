@@ -3024,7 +3024,7 @@ def crea_conto_condiviso(id_famiglia, nome_conto, tipo_conto, tipo_condivisione,
         return None
 
 
-def modifica_conto_condiviso(id_conto_condiviso, nome_conto, tipo=None, lista_utenti=None, id_utente=None, master_key_b64=None):
+def modifica_conto_condiviso(id_conto_condiviso, nome_conto, tipo=None, tipo_condivisione=None, lista_utenti=None, id_utente=None, master_key_b64=None):
     # Encrypt with family key if available
     encrypted_nome = nome_conto
     if id_utente and master_key_b64:
@@ -3050,27 +3050,47 @@ def modifica_conto_condiviso(id_conto_condiviso, nome_conto, tipo=None, lista_ut
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
-
+            
+            # Update Nome, Tipo, TipoCondivisione
+            sql = "UPDATE ContiCondivisi SET nome_conto = %s"
+            params = [encrypted_nome]
+            
             if tipo:
-                cur.execute("UPDATE ContiCondivisi SET nome_conto = %s, tipo = %s WHERE id_conto_condiviso = %s",
-                            (encrypted_nome, tipo, id_conto_condiviso))
-            else:
-                cur.execute("UPDATE ContiCondivisi SET nome_conto = %s WHERE id_conto_condiviso = %s",
-                            (encrypted_nome, id_conto_condiviso))
-
-            cur.execute("SELECT tipo_condivisione FROM ContiCondivisi WHERE id_conto_condiviso = %s",
-                        (id_conto_condiviso,))
-            tipo_condivisione = cur.fetchone()['tipo_condivisione']
-
-            if tipo_condivisione == 'utenti' and lista_utenti is not None:
+                sql += ", tipo = %s"
+                params.append(tipo)
+            
+            if tipo_condivisione:
+                sql += ", tipo_condivisione = %s"
+                params.append(tipo_condivisione)
+            
+            sql += " WHERE id_conto_condiviso = %s"
+            params.append(id_conto_condiviso)
+            
+            cur.execute(sql, tuple(params))
+            
+            # Handle Participants if 'utenti'
+            # If switching TO utenti, or modifying utenti list
+            target_scope = tipo_condivisione # Should be passed
+            
+            # If not passed, we might need to fetch? 
+            # But caller SHOULD pass it. If not passed, assume no change?
+            # Safe bet: If lista_utenti is NOT None, we assume we want to update list.
+            # AND if passed scope is 'utenti'.
+            
+            if target_scope == 'utenti' and lista_utenti is not None:
                 cur.execute("DELETE FROM PartecipazioneContoCondiviso WHERE id_conto_condiviso = %s",
                             (id_conto_condiviso,))
                 for uid in lista_utenti:
                     cur.execute(
                         "INSERT INTO PartecipazioneContoCondiviso (id_conto_condiviso, id_utente) VALUES (%s, %s)",
                         (id_conto_condiviso, uid))
+            elif target_scope == 'famiglia':
+                # If switching to family, maybe clear specific participants?
+                # Cleanliness: Yes.
+                cur.execute("DELETE FROM PartecipazioneContoCondiviso WHERE id_conto_condiviso = %s", (id_conto_condiviso,))
 
+            con.commit() # Explicit commit needed context context autocommits? yes context usually commits except if error.
+                         # DbContext usually handles commit on exit.
             return True
     except Exception as e:
         print(f"[ERRORE] Errore generico durante la modifica conto condiviso: {e}")
@@ -3791,7 +3811,7 @@ def ottieni_riepilogo_patrimonio_utente(id_utente, anno, mese, master_key_b64=No
         }
 
 
-def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese, master_key_b64=None):
+def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese, master_key_b64=None, id_utente=None):
     try:
         data_limite = datetime.date(anno, mese, 1) + relativedelta(months=1) - relativedelta(days=1)
         data_limite_str = data_limite.strftime('%Y-%m-%d')
@@ -3880,8 +3900,64 @@ def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese, mas
             result = cur.fetchone()['val']
             patrimonio_immobile_lordo = float(result) if result else 0.0
             
+            # --- 4.1 Salvadanai (Piggy Banks) ---
+            # Sum of all PBs in the family
+            cur.execute("""
+                SELECT S.importo_assegnato, S.incide_su_liquidita, C.id_utente, S.note, S.nome
+                FROM Salvadanai S
+                LEFT JOIN Conti C ON S.id_conto = C.id_conto
+                WHERE S.id_famiglia = %s
+            """, (id_famiglia,))
+            
+            pb_rows = cur.fetchall()
+            valore_salvadanai = 0.0
+            salvadanai_incide = 0.0
+            
+            if master_key_b64 and id_utente:
+                crypto, master_key = _get_crypto_and_key(master_key_b64)
+                
+                # Fetch Family Key once
+                family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+                
+                for pb in pb_rows:
+                    # Logic similar to Personale: try decrypting
+                    # Usually Family PBs use Family Key. Personal PBs use ???
+                    # If this is aggregating ALL PBs of family, we ideally need to decrypt all.
+                    # If some are Personal PBs of OTHER users, we might NOT be able to decrypt them if they used their own Master Key.
+                    # However, usually PBs created in Family context use Family Key.
+                    
+                    decrypted_val = None
+                    try:
+                        # Try Family Key first (most likely for shared context)
+                        if family_key:
+                            decrypted_val = _decrypt_if_key(pb['importo_assegnato'], family_key, crypto)
+                        
+                        # Fallback to Master Key (if it's MY personal PB)
+                        if decrypted_val is None and str(pb['id_utente']) == str(id_utente):
+                            decrypted_val = _decrypt_if_key(pb['importo_assegnato'], master_key, crypto)
+                            
+                        # If still None, we can't decrypt (Personal PB of another user?).
+                        # But for "Patrimonio Famiglia", maybe we should only include Shared PBs?
+                        # Or PBs that we can read.
+                        
+                        if decrypted_val:
+                            val = float(decrypted_val)
+                            valore_salvadanai += val
+                            if pb['incide_su_liquidita']:
+                                salvadanai_incide += val
+                                
+                    except Exception:
+                        pass
+            
+            # Adjusted Totals
+            # Liquidità (Real) - PBs (Assigned) = Liquidità (Available)
+            liquidita = liquidita - salvadanai_incide
+            if liquidita < 0: liquidita = 0 # Should not happen usually
+            
+            risparmio = risparmio + valore_salvadanai
+
             # 6. Prestiti Totali (totale famiglia) - Calcolo avanzato con Piano Ammortamento
-            # Recuperiamo i prestiti e verifichiamo se hanno un piano custom
+            prestiti_totali = 0.0
             cur.execute("""
                 SELECT id_prestito, CAST(importo_residuo AS NUMERIC) as residuo_db
                 FROM Prestiti
@@ -3889,7 +3965,6 @@ def ottieni_riepilogo_patrimonio_famiglia_aggregato(id_famiglia, anno, mese, mas
             """, (id_famiglia,))
             prestiti_rows = cur.fetchall()
             
-            prestiti_totali = 0.0
             if prestiti_rows:
                 ids = [r['id_prestito'] for r in prestiti_rows]
                 residui_db = {r['id_prestito']: float(r['residuo_db'] or 0.0) for r in prestiti_rows}
@@ -4541,6 +4616,61 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese, master_key_b64=None, id_u
             # (il filtro SQL non funziona sui dati crittografati)
             results = [r for r in results if 'saldo iniziale' not in (r.get('descrizione') or '').lower()]
             
+            # --- SYNTHESIZE PIGGY BANK TRANSACTIONS ---
+            # Generate counterpart transactions for Piggy Bank transfers to visualize them in the list
+            pb_transactions = []
+            for row in results:
+                desc = row.get('descrizione', '')
+                try:
+                    # Case 1: Assignment (Account -> PB)
+                    # Desc: "Assegnazione a {nome_salvadanaio}"
+                    if desc and "Assegnazione a " in desc:
+                        pb_name = desc.replace("Assegnazione a ", "").strip()
+                        amount = row.get('importo', 0.0)
+                        
+                        # Only synthesize if it represents a debit on account (negative amount)
+                        # So PB receives credit (positive)
+                        if amount < 0:
+                            new_row = row.copy()
+                            new_row['nome_conto'] = pb_name # Virtual Account Name = PB Name
+                            new_row['importo'] = abs(amount) # Positive
+                            new_row['descrizione'] = f"Ricevuto da {row.get('nome_conto')}"
+                            new_row['nome_sottocategoria'] = "Risparmio" # Force category
+                            pb_transactions.append(new_row)
+                            
+                    # Case 2: Withdrawal/Closure (PB -> Account)
+                    # Desc: "Prelievo da {nome}" OR "Chiusura Salvadanaio" -- but "Prelievo" is usually explicit
+                    elif desc and "Prelievo da " in desc:
+                        pb_name = desc.replace("Prelievo da ", "").strip()
+                        amount = row.get('importo', 0.0)
+                        if amount > 0: # Credit on account
+                            new_row = row.copy()
+                            new_row['nome_conto'] = pb_name
+                            new_row['importo'] = -abs(amount) # Debit on PB
+                            new_row['descrizione'] = f"Versamento su {row.get('nome_conto')}"
+                            new_row['nome_sottocategoria'] = "Risparmio"
+                            pb_transactions.append(new_row)
+                            
+                    elif desc and "Chiusura Salvadanaio" in desc:
+                         # Name is unknown if generic desc. Display "Salvadanaio"
+                        amount = row.get('importo', 0.0)
+                        if amount > 0:
+                            new_row = row.copy()
+                            new_row['nome_conto'] = "Salvadanaio (Chiusura)"
+                            new_row['importo'] = -abs(amount)
+                            new_row['descrizione'] = f"Restituzione fondi a {row.get('nome_conto')}"
+                            new_row['nome_sottocategoria'] = "Risparmio"
+                            pb_transactions.append(new_row)
+
+                except Exception as e:
+                    pass
+            
+            # Append synthesized transactions
+            results.extend(pb_transactions)
+            
+            # Re-sort by Date DESC
+            results.sort(key=lambda x: str(x.get('data', '')), reverse=True)
+
             return results
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero dettagli famiglia: {e}")
@@ -8117,10 +8247,11 @@ def elimina_obiettivo(id_obiettivo: int, id_famiglia: str) -> bool:
 
 # --- GESTIONE SALVADANAI (Obiettivi v2) ---
 
-def crea_salvadanaio(id_famiglia: str, nome: str, importo: float, id_obiettivo: Optional[int] = None, id_conto: Optional[int] = None, id_asset: Optional[int] = None, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None, incide_su_liquidita: bool = False, id_conto_condiviso: Optional[int] = None, usa_saldo_totale: bool = False) -> bool:
+def crea_salvadanaio(id_famiglia: str, nome: str, importo: float, id_obiettivo: Optional[int] = None, id_conto: Optional[int] = None, id_asset: Optional[int] = None, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None, incide_su_liquidita: bool = False, id_conto_condiviso: Optional[int] = None, usa_saldo_totale: bool = False) -> Optional[int]:
     """
     Crea un salvadanaio.
     Richiede id_conto (Personale) OPPURE id_conto_condiviso (Condiviso).
+    Returns the ID of the new piggy bank, or None on failure.
     """
     try:
         crypto, master_key = _get_crypto_and_key(master_key_b64)
@@ -8132,11 +8263,11 @@ def crea_salvadanaio(id_famiglia: str, nome: str, importo: float, id_obiettivo: 
         if id_conto_condiviso:
             if not family_key:
                 logger.error("Tentativo di creare salvadanaio condiviso senza chiave famiglia.")
-                return False # Or raise Exception
+                return None
             key_to_use = family_key
         else:
             key_to_use = family_key if family_key else master_key
-            if not key_to_use: return False
+            if not key_to_use: return None
         
         # If usa_saldo_totale is True, importo might be ignored (or used solely as cap if compiled). 
         # But here we encrypt it anyway.
@@ -8151,13 +8282,19 @@ def crea_salvadanaio(id_famiglia: str, nome: str, importo: float, id_obiettivo: 
             cur.execute("""
                 INSERT INTO Salvadanai (id_famiglia, id_obiettivo, id_conto, id_conto_condiviso, id_asset, nome, importo_assegnato, note, incide_su_liquidita, usa_saldo_totale)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id_salvadanaio
             """, (id_famiglia, id_obiettivo, id_conto, id_conto_condiviso, id_asset, nome_enc, importo_enc, note_enc, incide_su_liquidita, usa_saldo_totale))
+            
+            row = cur.fetchone()
             con.commit()
-            return True
+            
+            if row:
+                return row['id_salvadanaio']
+            return None
             
     except Exception as e:
         logger.error(f"Errore crea_salvadanaio: {e}")
-        return False
+        return None
 
 def scollega_salvadanaio_obiettivo(id_salvadanaio: int, id_famiglia: str) -> bool:
     """
@@ -8197,15 +8334,29 @@ def ottieni_salvadanai_conto(id_conto: int, id_famiglia: str, master_key_b64: Op
                 family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
             
             if is_condiviso:
-                 # Shared Account -> Must use Family Key (or try both if strictly needed, but shared implies Family context)
-                 # But let's be robust:
                  keys_to_try = [family_key] if family_key else []
             else:
-                 # Personal Account -> Could be Family Key (if created during family membership) or Master Key
-                 keys_to_try = [family_key, master_key] if family_key else [master_key]
+                 keys_to_try = []
+                 if family_key: keys_to_try.append(family_key)
+                 if master_key: keys_to_try.append(master_key)
             
-            # Helper to try keys (Duplicate of logic in ottieni_salvadanai_obiettivo, maybe refactor later?)
+            # logger.info(f"DEBUG PB: User={id_utente}, Fam={id_famiglia}. Keys to try: {len(keys_to_try)} (MK={bool(master_key)}, FK={bool(family_key)})")
+
             def try_decrypt(val, keys):
+                last_res = None
+                for i, k in enumerate(keys):
+                    if not k: continue
+                    try:
+                        res = _decrypt_if_key(val, k, crypto, silent=True)
+                        # logger.info(f"DEBUG PB Decrypt Try {i}: ValPrefix={val[:10] if isinstance(val, str) else type(val)}... Res={res[:10] if isinstance(res, str) else res}")
+                        if res == "[ENCRYPTED]":
+                            last_res = res
+                            continue
+                        return res
+                    except Exception as e:
+                        # logger.error(f"DEBUG PB Decrypt Exception: {e}")
+                        continue
+                return last_res if last_res else "[ENCRYPTED]"
                 last_res = None
                 for k in keys:
                     if not k: continue
@@ -8574,43 +8725,39 @@ def elimina_salvadanaio(id_salvadanaio: int, id_famiglia: str, master_key_b64: O
                 try:
                     enc_val = row['importo_assegnato']
                     dec_val = _decrypt_if_key(enc_val, key_to_use, crypto, silent=True)
+                    if dec_val == "[ENCRYPTED]" or dec_val is None:
+                        logger.error("Abort deleting Piggy Bank: Cannot decrypt amount to refund.")
+                        return False # ABORT: Cannot determine refund amount
+                        
                     amount_to_refund = float(dec_val)
                     if amount_to_refund > 0:
                         needs_refund = True
-                except:
-                    # If decryption fails or not float, assume 0 or handle error?
-                    # Safer to assume 0 to avoid crashes, but then money is lost.
-                    pass
+                except Exception as e:
+                    logger.error(f"Abort deleting Piggy Bank: Decryption error {e}")
+                    return False # ABORT
             
             if needs_refund:
                 # Refund to Account
-                target_conto = row['id_conto'] if row['id_conto'] else row['id_conto_condiviso'] # esegui_giroconto handles both?
-                # esegui_giroconto_salvadanaio wants id_conto (or shared)
-                # It distinguishes via `parent_is_shared` param.
-                is_shared = bool(row['id_conto_condiviso'])
-                
-                # Careful: esegui_giroconto_salvadanaio expects the PB to exist to update it!
-                # But here we want to delete it.
-                # If we use `esegui_giroconto_salvadanaio(..., 'da_salvadanaio')`, it will UPDATE the PB to 0.
-                # Then we delete it. This is CLEANER because it creates the Transaction on Account side correctly.
+                parent_is_shared = bool(row['id_conto_condiviso'])
+                id_conto_target = row['id_conto'] if row['id_conto'] else row['id_conto_condiviso']
                 
                 success_refund = esegui_giroconto_salvadanaio(
-                    id_conto=(row['id_conto'] or row['id_conto_condiviso']),
+                    id_conto=id_conto_target,
                     id_salvadanaio=id_salvadanaio,
                     direzione='da_salvadanaio',
                     importo=amount_to_refund,
-                    descrizione="Chiusura Salvadanaio",
+                    descrizione=f"Chiusura Salvadanaio",
                     master_key_b64=master_key_b64,
                     id_utente=id_utente,
                     id_famiglia=id_famiglia,
-                    parent_is_shared=is_shared
+                    parent_is_shared=parent_is_shared
                 )
                 
                 if not success_refund:
                     logger.error("Refund failed during deletion. Aborting deletion to save funds.")
-                    return False
+                    return False # ABORT
             
-            # Proceed to Delete
+            # Proceed to Delete ONLY if Refund success or not needed
             cur.execute("DELETE FROM Salvadanai WHERE id_salvadanaio = %s AND id_famiglia = %s", (id_salvadanaio, id_famiglia))
             con.commit()
             return True

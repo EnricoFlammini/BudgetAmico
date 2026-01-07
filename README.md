@@ -10,6 +10,12 @@
 ---
 
 ## 📅 Changelog
+### v0.34.00 (07/01/2026)
+- **Bug Fix & Stabilità**:
+    - **Accantonamenti**: Risolto conflitto critico che causava ambiguità tra conti personali e condivisi con lo stesso ID durante l'assegnazione fondi.
+    - **Manutenzione Dati (Utente di Test)**: 
+        - Eseguiti script specifici per la rimozione di salvadanai corrotti ("ghost data").
+        - Verifica e riconciliazione delle transazioni non collegate per il calcolo corretto dei massimali carte.
 
 ### v0.33.04 (05/01/2026)
 - **Login Rapido**: È ora possibile effettuare l'accesso premendo semplicemente il tasto **Invio** nei campi Username o Password.

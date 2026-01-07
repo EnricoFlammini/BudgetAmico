@@ -301,9 +301,9 @@ class ContoDialog(ft.AlertDialog):
         current_user_id = self.controller.get_user_id()
         
         for user in utenti_famiglia:
-            # Exclude current user from selection (always included implicitly or by logic)
-            if str(user['id_utente']) == str(current_user_id):
-                 continue
+            # Include everyone, even current user
+            # if str(user['id_utente']) == str(current_user_id):
+            #      continue
                  
             self.lv_partecipanti.controls.append(
                 ft.Checkbox(
@@ -369,7 +369,10 @@ class ContoDialog(ft.AlertDialog):
             
             self.chk_conto_default.visible = (conto_data['tipo'] not in ['Investimento', 'Fondo Pensione']) and not is_shared
             self.txt_conto_iban.visible = (conto_data['tipo'] != 'Contanti')
-            self.chk_conto_default.value = (conto_data['id_conto'] == conto_default_id)
+            if not is_shared:
+                self.chk_conto_default.value = (conto_data.get('id_conto') == conto_default_id)
+            else:
+                self.chk_conto_default.value = False
             
             if is_shared:
                  self.dd_tipo_condivisione.value = conto_data.get('tipo_condivisione', 'famiglia')
@@ -531,7 +534,8 @@ class ContoDialog(ft.AlertDialog):
                         self.conto_id_in_modifica,
                         nome,
                         tipo,
-                        lista_utenti_selezionati if self.dd_tipo_condivisione.value == 'utenti' else None,
+                        tipo_condivisione=self.dd_tipo_condivisione.value,
+                        lista_utenti=lista_utenti_selezionati if self.dd_tipo_condivisione.value == 'utenti' else None,
                         id_utente=utente_id,
                         master_key_b64=master_key_b64
                     )
@@ -649,7 +653,14 @@ class ContoDialog(ft.AlertDialog):
         # Determine Family/Master keys
         id_utente = self.controller.get_user_id()
         master_key_b64 = self.controller.page.session.get("master_key")
-        id_famiglia = ottieni_prima_famiglia_utente(id_utente) # Or from controller
+        
+        # Use ID Family from conto_data if available (Shared Account), otherwise fallback
+        id_famiglia = conto_data.get('id_famiglia')
+        if not id_famiglia:
+             id_famiglia = ottieni_prima_famiglia_utente(id_utente)
+        
+        # Determine is_condiviso from data if not passed explicitly
+        is_condiviso_effective = is_condiviso or conto_data.get('condiviso', False) or conto_data.get('tipo', '') == 'Condiviso'
         
         # Fetch PBs
         salvadanai = ottieni_salvadanai_conto(
@@ -657,7 +668,7 @@ class ContoDialog(ft.AlertDialog):
             id_famiglia, 
             master_key_b64, 
             id_utente, 
-            is_condiviso=is_condiviso
+            is_condiviso=is_condiviso_effective
         )
         
         if not salvadanai:
