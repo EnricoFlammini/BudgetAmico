@@ -29,5 +29,5 @@ DROP POLICY IF EXISTS "Authenticated users can manage global asset history" ON p
 CREATE POLICY "Authenticated users can manage global asset history" ON public.storicoassetglobale
     FOR ALL
     TO authenticated
-    USING (auth.uid() IS NOT NULL)
-    WITH CHECK (auth.uid() IS NOT NULL);
+    USING ((select auth.uid()) IS NOT NULL)
+    WITH CHECK ((select auth.uid()) IS NOT NULL);
