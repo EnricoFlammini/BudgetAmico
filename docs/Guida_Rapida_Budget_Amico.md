@@ -1,4 +1,4 @@
-# Guida Rapida Budget Amico v0.33.04
+# Guida Rapida Budget Amico v0.34.00
 
 ## Benvenuto in Budget Amico! 🎉
 
@@ -143,5 +143,5 @@ Utilizza il nuovo modulo **Carte** per tracciare le spese effettuate con carta d
 
 ---
 
-*Budget Amico - *Versione documento: 0.33.00*
+*Budget Amico - *Versione documento: 0.34.00*
 *Sviluppato da Iscavar79*

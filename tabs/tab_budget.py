@@ -8,7 +8,7 @@ from db.gestione_db import (
 import datetime
 from utils.styles import AppStyles, AppColors, PageConstants
 from utils.async_task import AsyncTask
-from tabs.subtab_accantonamenti import AccantonamentiTab
+
 
 class BudgetTab(ft.Container):
     def __init__(self, controller):
@@ -24,11 +24,7 @@ class BudgetTab(ft.Container):
             ft.Segment(value="annuale", label=AppStyles.body_text("Analisi Annuale"), icon=ft.Icon(ft.Icons.BAR_CHART)),
         ]
         
-        utente = self.controller.page.session.get("utente_loggato")
-        if utente and utente.get('username') == 'Utente1':
-             segments_list.append(
-                ft.Segment(value="accantonamenti", label=AppStyles.body_text("Accantonamenti"), icon=ft.Icon(ft.Icons.SAVINGS))
-             )
+
 
         self.seg_view_mode = ft.SegmentedButton(
             selected={"dettaglio"},
@@ -36,7 +32,7 @@ class BudgetTab(ft.Container):
             segments=segments_list
         )
         
-        self.tab_accantonamenti = AccantonamentiTab(controller)
+
         
         # --- Controlli Filtro ---
         self.dd_mese = ft.Dropdown(
@@ -106,10 +102,10 @@ class BudgetTab(ft.Container):
     def _on_view_mode_change(self, e):
         """Gestisce cambio vista (Mensile/Annuale)."""
         mode = list(self.seg_view_mode.selected)[0]
-        # Mostra il mese solo se non siamo in vista annuale o accantonamenti
-        self.dd_mese.visible = (mode != "annuale" and mode != "accantonamenti")
-        # Mostra anno solo se non siamo in accantonamenti
-        self.dd_anno.visible = (mode != "accantonamenti")
+        # Mostra il mese solo se non siamo in vista annuale
+        self.dd_mese.visible = (mode != "annuale")
+        # Mostra anno sempre (tranne casi particolari non più esistenti)
+        self.dd_anno.visible = True
         if self.controller.page:
             self.controller.page.update()
         self._aggiorna_contenuto()
@@ -148,12 +144,7 @@ class BudgetTab(ft.Container):
         anno = int(self.dd_anno.value)
         mode = list(self.seg_view_mode.selected)[0]
         
-        if mode == "accantonamenti":
-            self.container_content.controls.clear()
-            self.container_content.controls.append(self.tab_accantonamenti)
-            self.tab_accantonamenti.update_view_data()
-            if self.controller.page: self.controller.page.update()
-            return
+
 
         mese = int(self.dd_mese.value) if self.dd_mese.value else 1
         

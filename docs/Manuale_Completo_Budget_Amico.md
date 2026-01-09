@@ -1,4 +1,4 @@
-# Manuale Completo Budget Amico v0.33.04
+# Manuale Completo Budget Amico v0.34.00
 
 ## Indice
 
@@ -313,7 +313,11 @@ Per garantire la privacy ma permettere la comprensione delle spese comuni:
 4. Inserisci: quantità, prezzo medio, data acquisto
 5. Il nome viene compilato automaticamente
 
-### 10.3 Sincronizzazione Prezzi
+### 10.3 Modifica e Cancellazione Asset
+- **Modifica**: Clicca sull'icona della matita ✏️ per modificare l'asset. È possibile aggiornare manualmente la **Quantità** e il **Prezzo Medio** di acquisto per correggere eventuali disallineamenti.
+- **Eliminazione**: Clicca sull'icona del cestino 🗑️ per eliminare definitivamente l'asset dal portafoglio.
+
+### 10.4 Sincronizzazione Prezzi
 
 Budget Amico recupera i prezzi da Yahoo Finance:
 - **Automatico**: all'avvio dell'app
@@ -590,5 +594,5 @@ Il Divisore Pro è accessibile in due modi:
 
 ---
 
-*Budget Amico - *Versione documento: 0.33.00*
+*Budget Amico - *Versione documento: 0.34.00*
 *Sviluppato con ❤️ da Iscavar79*

@@ -5897,35 +5897,64 @@ def ottieni_immobili_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
 
 # --- Funzioni Asset ---
 def compra_asset(id_conto_investimento, ticker, nome_asset, quantita, costo_unitario_nuovo, tipo_mov='COMPRA',
-                 prezzo_attuale_override=None, master_key_b64=None):
+                 prezzo_attuale_override=None, master_key_b64=None, id_utente=None):
     ticker_upper = ticker.upper()
     nome_asset_upper = nome_asset.upper()
     
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
     
+    # Determine Keys for Duplicate Check
+    keys_to_try = []
+    family_key = None
+    
+    if id_utente:
+         id_famiglia = ottieni_prima_famiglia_utente(id_utente)
+         if id_famiglia and master_key:
+              family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+    
+    if master_key: keys_to_try.append(master_key)
+    if family_key: keys_to_try.append(family_key)
+    
     try:
         with get_db_connection() as con:
             cur = con.cursor()
             
-            # Fetch all assets to find match (since encryption is non-deterministic)
+            # Fetch all assets to find match (since encryption is non-deterministic or mixed keys)
             cur.execute(
-                "SELECT id_asset, ticker, quantita, costo_iniziale_unitario FROM Asset WHERE id_conto = %s",
+                "SELECT id_asset, ticker, quantita, costo_iniziale_unitario, nome_asset FROM Asset WHERE id_conto = %s",
                 (id_conto_investimento,))
             assets = cur.fetchall()
             
             risultato = None
+            
+            # Helper for multi-key decryption
+            def try_decrypt(val, keys):
+                for k in keys:
+                    if not k: continue
+                    try:
+                        res = _decrypt_if_key(val, k, crypto, silent=True)
+                        if res != "[ENCRYPTED]": return res
+                    except: continue
+                # Fallback: try raw match if unencrypted (legacy)
+                return val 
+
             for asset in assets:
                 db_ticker = asset['ticker']
-                # Decrypt if possible
-                decrypted_ticker = _decrypt_if_key(db_ticker, master_key, crypto)
+                # Decrypt ticker using all available keys
+                decrypted_ticker = try_decrypt(db_ticker, keys_to_try)
+                
                 if decrypted_ticker == ticker_upper:
                     risultato = asset
                     break
             
+            # Determine encryption key for NEW write
+            # Use Family Key if available (shared logic preference), else Master Key
+            write_key = family_key if family_key else master_key
+            
             # Encrypt for storage
-            encrypted_ticker = _encrypt_if_key(ticker_upper, master_key, crypto)
-            encrypted_nome_asset = _encrypt_if_key(nome_asset_upper, master_key, crypto)
+            encrypted_ticker = _encrypt_if_key(ticker_upper, write_key, crypto)
+            encrypted_nome_asset = _encrypt_if_key(nome_asset_upper, write_key, crypto)
 
             cur.execute(
                 "INSERT INTO Storico_Asset (id_conto, ticker, data, tipo_movimento, quantita, prezzo_unitario_movimento) VALUES (%s, %s, %s, %s, %s, %s)",
@@ -5934,15 +5963,23 @@ def compra_asset(id_conto_investimento, ticker, nome_asset, quantita, costo_unit
                  
             if risultato:
                 id_asset_aggiornato = risultato['id_asset']
-                vecchia_quantita = risultato['quantita']
-                vecchio_costo_medio = risultato['costo_iniziale_unitario']
+                vecchia_quantita = float(risultato['quantita'])
+                vecchio_costo_medio = float(risultato['costo_iniziale_unitario'])
                 
                 nuova_quantita_totale = vecchia_quantita + quantita
                 nuovo_costo_medio = (
                                                 vecchia_quantita * vecchio_costo_medio + quantita * costo_unitario_nuovo) / nuova_quantita_totale
+                
+                # Keep existing name if not explicitly changed, or update? 
+                # Strategy: If found, we update Quantita and Costo Medio. 
+                # Should we re-encrypt Name and Ticker with new key? 
+                # Better to keep existing keys for consistency unless we want to migrate.
+                # Let's just update numerics to be safe, OR re-encrypt everything if we want to unify keys.
+                # Re-encrypting ensures latest key is used.
+                
                 cur.execute(
-                    "UPDATE Asset SET quantita = %s, nome_asset = %s, costo_iniziale_unitario = %s WHERE id_asset = %s",
-                    (nuova_quantita_totale, encrypted_nome_asset, nuovo_costo_medio, id_asset_aggiornato))
+                    "UPDATE Asset SET quantita = %s, costo_iniziale_unitario = %s WHERE id_asset = %s",
+                    (nuova_quantita_totale, nuovo_costo_medio, id_asset_aggiornato))
             else:
                 prezzo_attuale = prezzo_attuale_override if prezzo_attuale_override is not None else costo_unitario_nuovo
                 cur.execute(
@@ -6083,7 +6120,7 @@ def aggiorna_prezzo_manuale_asset(id_asset, nuovo_prezzo):
         return False
 
 
-def modifica_asset_dettagli(id_asset, nuovo_ticker, nuovo_nome, master_key_b64=None):
+def modifica_asset_dettagli(id_asset, nuovo_ticker, nuovo_nome, nuova_quantita=None, nuovo_costo_medio=None, master_key_b64=None):
     nuovo_ticker_upper = nuovo_ticker.upper()
     nuovo_nome_upper = nuovo_nome.upper()
     
@@ -6109,14 +6146,41 @@ def modifica_asset_dettagli(id_asset, nuovo_ticker, nuovo_nome, master_key_b64=N
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
-            cur.execute("UPDATE Asset SET ticker = %s, nome_asset = %s WHERE id_asset = %s",
-                        (encrypted_ticker, encrypted_nome, id_asset))
+            
+            # Costruisci query dinamica
+            query = "UPDATE Asset SET ticker = %s, nome_asset = %s"
+            params = [encrypted_ticker, encrypted_nome]
+            
+            if nuova_quantita is not None:
+                query += ", quantita = %s"
+                params.append(nuova_quantita)
+            
+            if nuovo_costo_medio is not None:
+                query += ", costo_iniziale_unitario = %s"
+                params.append(nuovo_costo_medio)
+                
+            query += " WHERE id_asset = %s"
+            params.append(id_asset)
+            
+            cur.execute(query, tuple(params))
             return cur.rowcount > 0
-    except sqlite3.IntegrityError:
-        return False
     except Exception as e:
         print(f"[ERRORE] Errore generico durante l'aggiornamento dettagli asset: {e}")
+        return False
+
+def elimina_asset(id_asset):
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            # Elimina lo storico associato (opzionale, ma consigliato per pulizia)
+            # ATTENZIONE: Se eliminiamo storico, perdiamo traccia dei movimenti?
+            # Se l'utente elimina l'asset, forse vuole cancellare tutto.
+            # Per ora cancelliamo solo l'asset dalla tabella Asset.
+            # Lo storico rimane "orfano" ma non crea problemi logici immediati.
+            cur.execute("DELETE FROM Asset WHERE id_asset = %s", (id_asset,))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"[ERRORE] Errore eliminazione asset: {e}")
         return False
 
 
@@ -8817,19 +8881,41 @@ def ottieni_asset_conto(id_conto: int, master_key_b64: Optional[str] = None, is_
     """
     Recupera gli asset (azioni, etf, ecc.) di un conto investimento.
     Supporta conti condivisi (richiede id_utente per recuperare chiave famiglia).
+    Tenta la decrittazione con entrambe le chiavi (Personale e Famiglia) per robustezza.
     """
     try:
         crypto, master_key = _get_crypto_and_key(master_key_b64)
         
-        # Determine Key
-        key_to_use = master_key
-        if is_shared and id_utente:
-            # Need Family Key
-            id_famiglia = ottieni_prima_famiglia_utente(id_utente)
-            if id_famiglia:
-                 family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
-                 if family_key: key_to_use = family_key
+        # Determine Keys to Try
+        keys_to_try = []
+        family_key = None
         
+        if id_utente:
+             id_famiglia = ottieni_prima_famiglia_utente(id_utente)
+             if id_famiglia and master_key:
+                  family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+        
+        if is_shared:
+            if family_key: keys_to_try.append(family_key)
+            if master_key: keys_to_try.append(master_key)
+        else:
+            if master_key: keys_to_try.append(master_key)
+            if family_key: keys_to_try.append(family_key)
+            
+        # Helper for multi-key decryption
+        def try_decrypt(val, keys):
+            last_res = None
+            for k in keys:
+                if not k: continue
+                try:
+                    res = _decrypt_if_key(val, k, crypto, silent=True)
+                    if res == "[ENCRYPTED]":
+                        last_res = res
+                        continue
+                    return res
+                except: continue
+            return last_res if last_res else "[ENCRYPTED]"
+
         with get_db_connection() as con:
             cur = con.cursor()
             cur.execute("SELECT * FROM Asset WHERE id_conto = %s", (id_conto,))
@@ -8838,8 +8924,8 @@ def ottieni_asset_conto(id_conto: int, master_key_b64: Optional[str] = None, is_
             assets = []
             for r in rows:
                 try:
-                    nome = _decrypt_if_key(r['nome_asset'], key_to_use, crypto)
-                    ticker = _decrypt_if_key(r['ticker'], key_to_use, crypto)
+                    nome = try_decrypt(r['nome_asset'], keys_to_try)
+                    ticker = try_decrypt(r['ticker'], keys_to_try)
                     assets.append({
                         'id': r['id_asset'],
                         'nome': nome,

@@ -5,6 +5,7 @@ from tabs.tab_investimenti import InvestimentiTab
 from tabs.tab_budget import BudgetTab
 from tabs.tab_famiglia import FamigliaTab
 from tabs.tab_divisore_pro import DivisoreProTab
+from tabs.tab_accantonamenti import AccantonamentiTab
 from utils.logger import setup_logger
 
 logger = setup_logger("WebDashboardView")
@@ -23,6 +24,7 @@ class WebDashboardView:
 
         self.tab_famiglia = FamigliaTab(controller)
         self.tab_divisore_pro = DivisoreProTab(controller)
+        self.tab_accantonamenti = AccantonamentiTab(controller)
         
         # We will use a simplified view index
         self.selected_index = 0
@@ -51,6 +53,7 @@ class WebDashboardView:
                 ft.NavigationBarDestination(icon=ft.Icons.HOME, label="Home"),
 
                 ft.NavigationBarDestination(icon=ft.Icons.PIE_CHART, label="Budget"),
+                ft.NavigationBarDestination(icon=ft.Icons.SAVINGS, label="Accantonamenti"),
                 ft.NavigationBarDestination(icon=ft.Icons.CALCULATE, label="Divisore"),
             ],
             on_change=self._on_nav_change,
@@ -85,7 +88,10 @@ class WebDashboardView:
         elif idx == 1: # Budget
             self.content_area.content = self.tab_budget
             self.tab_budget.update_view_data()
-        elif idx == 2: # Divisore Pro
+        elif idx == 2: # Accantonamenti
+            self.content_area.content = self.tab_accantonamenti
+            self.tab_accantonamenti.update_view_data()
+        elif idx == 3: # Divisore Pro
             self.content_area.content = self.tab_divisore_pro
             self.tab_divisore_pro.update_view_data()
 
@@ -100,6 +106,8 @@ class WebDashboardView:
         elif idx == 1:
             self.tab_budget.update_view_data(is_initial_load)
         elif idx == 2:
+            self.tab_accantonamenti.update_view_data(is_initial_load)
+        elif idx == 3:
             self.tab_divisore_pro.update_view_data(is_initial_load)
         
     def update_sidebar(self):

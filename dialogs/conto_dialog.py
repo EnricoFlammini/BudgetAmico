@@ -598,7 +598,8 @@ class ContoDialog(ft.AlertDialog):
                                 ticker=asset['ticker'], nome_asset=asset['nome'], quantita=asset['quantita'],
                                 costo_unitario_nuovo=asset['costo_medio'],
                                 tipo_mov='INIZIALE',
-                                prezzo_attuale_override=asset['prezzo_attuale']
+                                prezzo_attuale_override=asset['prezzo_attuale'],
+                                id_utente=utente_id
                             )
                     else:
                         success = False

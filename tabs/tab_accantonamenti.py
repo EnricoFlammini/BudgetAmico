@@ -5,7 +5,6 @@ from utils.styles import AppStyles, AppColors
 from db.gestione_db import (
     crea_obiettivo, ottieni_obiettivi, aggiorna_obiettivo, elimina_obiettivo,
     crea_salvadanaio, ottieni_salvadanai_obiettivo, elimina_salvadanaio,
-    crea_salvadanaio, ottieni_salvadanai_obiettivo, elimina_salvadanaio,
     ottieni_conti, ottieni_asset_conto, ottieni_salvadanai_conto,
     collega_salvadanaio_obiettivo, ottieni_prima_famiglia_utente,
     ottieni_conti_condivisi_famiglia, scollega_salvadanaio_obiettivo
@@ -50,7 +49,7 @@ class AccantonamentiTab(ft.Container):
         # Main Layout
         self.content = ft.Column([
             ft.Row([
-                AppStyles.subheader_text("Obiettivi di Risparmio"),
+                AppStyles.title_text("Accantonamenti"),
                 ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=AppColors.PRIMARY, tooltip="Aggiungi Obiettivo", on_click=self._apri_dialog_creazione)
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ft.Divider(height=10, color=ft.Colors.TRANSPARENT),

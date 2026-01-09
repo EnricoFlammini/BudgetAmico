@@ -14,6 +14,7 @@ from tabs.tab_spese_fisse import SpeseFisseTab
 from tabs.tab_investimenti import InvestimentiTab
 from tabs.tab_carte import TabCarte
 from tabs.tab_calcolatrice import CalcolatriceTab
+from tabs.tab_accantonamenti import AccantonamentiTab
 from utils.logger import setup_logger
 from utils.cache_manager import cache_manager
 
@@ -40,6 +41,7 @@ class DashboardView:
         self.tab_investimenti = InvestimentiTab(controller)
         self.tab_carte = TabCarte(controller)
         self.tab_calcolatrice = CalcolatriceTab(controller)
+        self.tab_accantonamenti = AccantonamentiTab(controller)
 
         # 2. Sidebar personalizzata (sostituisce NavigationRail)
         self.selected_index = 0
@@ -375,6 +377,16 @@ class DashboardView:
             })
             index += 1
 
+        # 8b. Accantonamenti (Tutti)
+        self.sidebar_items.append({
+            'icon': ft.Icons.SAVINGS_OUTLINED,
+            'selected_icon': ft.Icons.SAVINGS,
+            'label': "Accantonamenti",
+            'view': self.tab_accantonamenti,
+            'index': index
+        })
+        index += 1
+
         # 9. Famiglia (Livello 2+)
         if ruolo in ['admin', 'livello1', 'livello2']:
             self.sidebar_items.append({
@@ -399,7 +411,11 @@ class DashboardView:
 
 
 
-        # 12. Calcolatrice (Solo Utente1)
+            index += 1
+
+
+
+        # 13. Calcolatrice (Solo Utente1)
         if utente and utente.get('username') == 'Utente1':
             self.sidebar_items.append({
                 'icon': ft.Icons.CALCULATE_OUTLINED,

@@ -1,4 +1,4 @@
-# Budget Amico v0.33.04
+# Budget Amico v0.34.00
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -10,12 +10,14 @@
 ---
 
 ## 📅 Changelog
-### v0.34.00 (07/01/2026)
+### v0.34.00 (09/01/2026)
+- **Gestione Asset Avanzata**:
+    - **Eliminazione Asset**: Aggiunto supporto per eliminare asset dal portafoglio (icona Cestino 🗑️) per pulizia dati e rimozione duplicati.
+    - **Modifica Avanzata**: Possibilità di correggere manualmente **Quantità** e **Prezzo Medio** nel dialog di modifica (Matita ✏️).
+    - **Fix Duplicati**: Risolta la creazione di asset duplicati causata da chiavi di crittografia differenti (Master Key vs Family Key).
 - **Bug Fix & Stabilità**:
     - **Accantonamenti**: Risolto conflitto critico che causava ambiguità tra conti personali e condivisi con lo stesso ID durante l'assegnazione fondi.
-    - **Manutenzione Dati (Utente di Test)**: 
-        - Eseguiti script specifici per la rimozione di salvadanai corrotti ("ghost data").
-        - Verifica e riconciliazione delle transazioni non collegate per il calcolo corretto dei massimali carte.
+    - **Manutenzione Dati**: Script di pulizia per salvadanai corrotti e riconciliazione transazioni carte.
 
 ### v0.33.04 (05/01/2026)
 - **Login Rapido**: È ora possibile effettuare l'accesso premendo semplicemente il tasto **Invio** nei campi Username o Password.

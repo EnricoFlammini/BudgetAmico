@@ -8,7 +8,8 @@ from db.gestione_db import (
     modifica_asset_dettagli,
     ottieni_tutti_i_conti_utente,
     aggiungi_transazione,
-    aggiungi_transazione_condivisa
+    aggiungi_transazione_condivisa,
+    elimina_asset
 )
 from utils.yfinance_manager import applica_suffisso_borsa
 from utils.ticker_search import TickerSearchField
@@ -41,7 +42,7 @@ class PortafoglioDialogs:
                 ], alignment=ft.MainAxisAlignment.SPACE_AROUND),
                 ft.Divider(),
                 ft.Column([self.dt_portafoglio], scroll=ft.ScrollMode.ADAPTIVE, expand=True)
-            ], width=800, height=500),
+            ], width=1100, height=600),
             actions=[
                 ft.TextButton(on_click=self._chiudi_dialog_portafoglio),
                 ft.ElevatedButton(icon=ft.Icons.ADD_BOX, text=self.loc.get("add_existing_asset"), on_click=self._apri_dialog_asset_esistente),
@@ -110,11 +111,17 @@ class PortafoglioDialogs:
         )
         self.txt_modifica_ticker = ft.TextField()  # Nascosto, usato per valore
         self.txt_modifica_nome = ft.TextField()  # Nascosto, usato per valore
+        self.txt_modifica_quantita = ft.TextField(label="Quantità", keyboard_type=ft.KeyboardType.NUMBER)
+        self.txt_modifica_prezzo_medio = ft.TextField(label="Prezzo Medio Acquisto", keyboard_type=ft.KeyboardType.NUMBER)
         self.asset_da_modificare = None
         self.dialog_modifica_asset = ft.AlertDialog(
             modal=True,
             title=ft.Text(),
-            content=ft.Column([self.ticker_search_modifica], tight=True, width=400),
+            content=ft.Column([
+                self.ticker_search_modifica,
+                self.txt_modifica_quantita,
+                self.txt_modifica_prezzo_medio
+            ], tight=True, width=400),
             actions=[
                 ft.TextButton(on_click=self._chiudi_dialog_modifica_asset),
                 ft.TextButton(on_click=self._salva_modifica_asset)
@@ -198,6 +205,9 @@ class PortafoglioDialogs:
         self.dialog_modifica_asset.title.value = loc.get("edit_asset_details")
         self.txt_modifica_ticker.label = loc.get("ticker")
         self.txt_modifica_nome.label = loc.get("asset_name")
+        self.txt_modifica_quantita.label = loc.get("quantity")
+        self.txt_modifica_prezzo_medio.label = loc.get("avg_purchase_price")
+        self.txt_modifica_prezzo_medio.prefix_text = loc.currencies[loc.currency]['symbol']
         self.dialog_modifica_asset.actions[0].text = loc.get("cancel")
         self.dialog_modifica_asset.actions[1].text = loc.get("save")
 
@@ -255,7 +265,9 @@ class PortafoglioDialogs:
                         ft.IconButton(icon=ft.Icons.EDIT, tooltip=loc.get("edit"), data=asset,
                                       on_click=self._apri_dialog_modifica_asset),
                         ft.IconButton(icon=ft.Icons.PRICE_CHANGE, tooltip=loc.get("update_price"), data=asset,
-                                      on_click=self._apri_dialog_aggiorna_prezzo)
+                                      on_click=self._apri_dialog_aggiorna_prezzo),
+                        ft.IconButton(icon=ft.Icons.DELETE, icon_color="red", tooltip=loc.get("delete"), data=asset,
+                                      on_click=self._elimina_asset_click)
                     ]))
                 ])
             )
@@ -435,7 +447,9 @@ class PortafoglioDialogs:
                 descrizione = f"{'Cashback: ' if is_cashback else 'Acquisto '}{quantita} {ticker} @ {prezzo}"
                 
                 # Compra l'asset
-                compra_asset(self.conto_selezionato['id_conto'], ticker, nome_asset, quantita, prezzo, master_key_b64=master_key_b64)
+                # Compra l'asset
+                id_utente = self.controller.get_user_id()
+                compra_asset(self.conto_selezionato['id_conto'], ticker, nome_asset, quantita, prezzo, master_key_b64=master_key_b64, id_utente=id_utente)
                 
                 # Crea transazione SOLO se non è cashback
                 if not is_cashback:
@@ -532,6 +546,8 @@ class PortafoglioDialogs:
         # Setta valori correnti
         self.txt_modifica_ticker.value = self.asset_da_modificare['ticker']
         self.txt_modifica_nome.value = self.asset_da_modificare['nome_asset']
+        self.txt_modifica_quantita.value = str(self.asset_da_modificare['quantita'])
+        self.txt_modifica_prezzo_medio.value = str(self.asset_da_modificare['costo_iniziale_unitario'])
         # Mostra ticker corrente nel campo search
         self.ticker_search_modifica.txt_search.value = self.asset_da_modificare['ticker']
         self.ticker_search_modifica.dd_risultati.visible = False
@@ -553,13 +569,55 @@ class PortafoglioDialogs:
         # Usa txt se settato (da autocomplete), altrimenti dal campo search
         nuovo_ticker = self.txt_modifica_ticker.value.strip().upper() or self.ticker_search_modifica.value.strip().upper()
         nuovo_nome = self.txt_modifica_nome.value.strip() or nuovo_ticker  # Se nome non settato, usa ticker
+        
+        try:
+            nuova_quantita = float(self.txt_modifica_quantita.value.replace(",", ".")) if self.txt_modifica_quantita.value else None
+            nuovo_costo_medio = float(self.txt_modifica_prezzo_medio.value.replace(",", ".")) if self.txt_modifica_prezzo_medio.value else None
+        except ValueError:
+             self.controller.show_snack_bar(self.loc.get("invalid_amount_or_quantity"), success=False)
+             return
+
         master_key_b64 = self.controller.page.session.get("master_key")
         
         if nuovo_ticker and nuovo_nome:
-            modifica_asset_dettagli(self.asset_da_modificare['id_asset'], nuovo_ticker, nuovo_nome, master_key_b64=master_key_b64)
+            modifica_asset_dettagli(
+                self.asset_da_modificare['id_asset'], 
+                nuovo_ticker, 
+                nuovo_nome, 
+                nuova_quantita=nuova_quantita,
+                nuovo_costo_medio=nuovo_costo_medio,
+                master_key_b64=master_key_b64
+            )
             self.controller.db_write_operation()
             self._aggiorna_tabella_portafoglio()
             self._chiudi_dialog_modifica_asset(e)
+
+    def _elimina_asset_click(self, e):
+        asset = e.control.data
+        def on_confirm_delete(e_confirm):
+            self.controller.page.close(dlg_confirm)
+            if elimina_asset(asset['id_asset']):
+                self.controller.db_write_operation()
+                self._aggiorna_tabella_portafoglio()
+                self.controller.show_snack_bar(self.loc.get("asset_deleted_successfully"), success=True)
+            else:
+                self.controller.show_snack_bar("Errore durante l'eliminazione asset.", success=False)
+
+        def on_cancel_delete(e_cancel):
+            self.controller.page.close(dlg_confirm)
+
+        dlg_confirm = ft.AlertDialog(
+            modal=True,
+            title=ft.Text(self.loc.get("confirm_deletion")),
+            content=ft.Text(f"Sei sicuro di voler eliminare l'asset {asset['ticker']}?"),
+            actions=[
+                ft.TextButton(self.loc.get("cancel"), on_click=on_cancel_delete),
+                ft.TextButton(self.loc.get("delete"), on_click=on_confirm_delete, style=ft.ButtonStyle(color=ft.Colors.RED)),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.controller.page.open(dlg_confirm)
+        self.controller.page.update()
 
     def _apri_dialog_asset_esistente(self, e):
         self._update_texts()
@@ -640,7 +698,8 @@ class PortafoglioDialogs:
                     prezzo_medio, # Questo diventa il costo_iniziale_unitario
                     tipo_mov="APERTURA", # O altro identificativo per saldo iniziale
                     prezzo_attuale_override=valore_attuale, # Questo imposta il prezzo attuale manuale
-                    master_key_b64=master_key_b64
+                    master_key_b64=master_key_b64,
+                    id_utente=self.controller.get_user_id()
                 )
 
                 self.controller.db_write_operation()
