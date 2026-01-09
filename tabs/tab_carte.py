@@ -32,6 +32,10 @@ class TabCarte(ft.Container):
 
     # Removed build() method since Container doesn't support it in this way
 
+    def update_view_data(self):
+        """Metodo chiamato dal dashboard controller per aggiornare i dati della vista."""
+        self.load_cards()
+
     def load_cards(self):
         self.cards_view.controls.clear()
         

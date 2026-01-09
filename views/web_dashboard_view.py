@@ -6,6 +6,7 @@ from tabs.tab_budget import BudgetTab
 from tabs.tab_famiglia import FamigliaTab
 from tabs.tab_divisore_pro import DivisoreProTab
 from tabs.tab_accantonamenti import AccantonamentiTab
+from tabs.tab_carte import TabCarte
 from utils.logger import setup_logger
 
 logger = setup_logger("WebDashboardView")
@@ -24,7 +25,10 @@ class WebDashboardView:
 
         self.tab_famiglia = FamigliaTab(controller)
         self.tab_divisore_pro = DivisoreProTab(controller)
+        self.tab_famiglia = FamigliaTab(controller)
+        self.tab_divisore_pro = DivisoreProTab(controller)
         self.tab_accantonamenti = AccantonamentiTab(controller)
+        self.tab_carte = TabCarte(controller)
         
         # We will use a simplified view index
         self.selected_index = 0
@@ -51,13 +55,15 @@ class WebDashboardView:
         self.nav_bar = ft.NavigationBar(
             destinations=[
                 ft.NavigationBarDestination(icon=ft.Icons.HOME, label="Home"),
-
                 ft.NavigationBarDestination(icon=ft.Icons.PIE_CHART, label="Budget"),
-                ft.NavigationBarDestination(icon=ft.Icons.SAVINGS, label="Accantonamenti"),
+                ft.NavigationBarDestination(icon=ft.Icons.ACCOUNT_BALANCE_WALLET, label="Conti"),
+                ft.NavigationBarDestination(icon=ft.Icons.CREDIT_CARD, label="Carte"),
+                ft.NavigationBarDestination(icon=ft.Icons.SAVINGS, label="Risparmi"),
                 ft.NavigationBarDestination(icon=ft.Icons.CALCULATE, label="Divisore"),
             ],
             on_change=self._on_nav_change,
-            selected_index=0
+            selected_index=0,
+            label_behavior=ft.NavigationBarLabelBehavior.ONLY_SHOW_SELECTED
         )
         
         # Floating Action Button for "Add Transaction"
@@ -88,10 +94,16 @@ class WebDashboardView:
         elif idx == 1: # Budget
             self.content_area.content = self.tab_budget
             self.tab_budget.update_view_data()
-        elif idx == 2: # Accantonamenti
+        elif idx == 2: # Conti
+            self.content_area.content = self.tab_conti
+            self.tab_conti.update_view_data()
+        elif idx == 3: # Carte
+            self.content_area.content = self.tab_carte
+            self.tab_carte.update_view_data()
+        elif idx == 4: # Accantonamenti
             self.content_area.content = self.tab_accantonamenti
             self.tab_accantonamenti.update_view_data()
-        elif idx == 3: # Divisore Pro
+        elif idx == 5: # Divisore Pro
             self.content_area.content = self.tab_divisore_pro
             self.tab_divisore_pro.update_view_data()
 
