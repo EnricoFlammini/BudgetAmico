@@ -68,6 +68,21 @@ class PortafoglioDialogs:
         self.txt_nome_asset = ft.TextField()  # Nascosto, usato solo per valore
         self.txt_quantita = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         self.txt_prezzo_unitario = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
+        
+        # Date Picker configuration
+        self.date_picker = ft.DatePicker(
+            on_change=self._on_date_change,
+            first_date=datetime.datetime(2000, 1, 1),
+            last_date=datetime.datetime(2099, 12, 31)
+        )
+        self.txt_data_operazione = ft.TextField(label="Data", hint_text="YYYY-MM-DD", read_only=True, expand=True)
+        self.btn_date_picker = ft.IconButton(
+            icon=ft.Icons.CALENDAR_MONTH,
+            on_click=lambda _: self.date_picker.pick_date(),
+            tooltip="Seleziona data"
+        )
+        self.row_data_operazione = ft.Row([self.txt_data_operazione, self.btn_date_picker], spacing=10)
+
         self.radio_operazione = ft.RadioGroup(content=ft.Row())
         self.dialog_operazione_asset = ft.AlertDialog(
             modal=True,
@@ -75,11 +90,12 @@ class PortafoglioDialogs:
             content=ft.Column([
                 self.dd_asset_esistenti,
                 self.ticker_search,  # Autocomplete + nome automatico
+                self.row_data_operazione,
                 self.txt_quantita,
                 self.txt_prezzo_unitario,
                 self.dd_conto_transazione,
                 self.radio_operazione
-            ], tight=True, spacing=10, height=450, width=420),
+            ], tight=True, spacing=10, height=520, width=420),
             actions=[
                 ft.TextButton(on_click=self._chiudi_dialog_operazione),
                 ft.TextButton(on_click=self._salva_operazione)
@@ -157,6 +173,12 @@ class PortafoglioDialogs:
                 ft.TextButton(on_click=self._salva_asset_esistente)
             ]
         )
+
+    def _on_date_change(self, e):
+        """Callback per il cambio data dal DatePicker."""
+        if self.date_picker.value:
+            self.txt_data_operazione.value = self.date_picker.value.strftime('%Y-%m-%d')
+            self.dialog_operazione_asset.update()
 
     def _update_texts(self):
         """Aggiorna i testi di tutti i dialoghi."""
@@ -283,22 +305,28 @@ class PortafoglioDialogs:
         self.dialog_operazione_asset.content = ft.Column([
             self.dd_asset_esistenti,
             self.ticker_search,  # Autocomplete + nome automatico
+            self.row_data_operazione,
             self.txt_quantita,
             self.txt_prezzo_unitario,
             self.dd_conto_transazione,
             self.radio_operazione
-        ], tight=True, spacing=10, height=450, width=420)
+        ], tight=True, spacing=10, height=520, width=420)
         
         self.dialog_operazione_asset.actions = [
             ft.TextButton(on_click=self._chiudi_dialog_operazione),
             ft.TextButton(on_click=self._salva_operazione)
         ]
 
+        # Add DatePicker to overlay
+        if self.date_picker not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.date_picker)
+
         self._update_texts()
         # Reset dei campi
         self.txt_ticker.value = ""
         self.txt_nome_asset.value = ""
         self.ticker_search.reset()
+        self.txt_data_operazione.value = datetime.date.today().strftime('%Y-%m-%d')
         self.txt_quantita.value = ""
         self.txt_prezzo_unitario.value = ""
         self.radio_operazione.value = "COMPRA"
@@ -439,14 +467,22 @@ class PortafoglioDialogs:
 
             # Calcola l'importo totale della transazione
             importo_totale = quantita * prezzo
-            data_oggi = datetime.date.today().strftime('%Y-%m-%d')
+            
+            # Recupera e valida la data
+            data_op_str = self.txt_data_operazione.value.strip()
+            try:
+                datetime.datetime.strptime(data_op_str, '%Y-%m-%d')
+                data_op = data_op_str
+            except ValueError:
+                self.controller.show_snack_bar("Formato data non valido (USA: YYYY-MM-DD)", success=False)
+                return
+
             master_key_b64 = self.controller.page.session.get("master_key")
 
             if tipo_op == "COMPRA":
                 # Acquisto: sottrai denaro dal conto (se non è cashback)
                 descrizione = f"{'Cashback: ' if is_cashback else 'Acquisto '}{quantita} {ticker} @ {prezzo}"
                 
-                # Compra l'asset
                 # Compra l'asset
                 id_utente = self.controller.get_user_id()
                 compra_asset(self.conto_selezionato['id_conto'], ticker, nome_asset, quantita, prezzo, master_key_b64=master_key_b64, id_utente=id_utente)
@@ -463,14 +499,14 @@ class PortafoglioDialogs:
                         aggiungi_transazione_condivisa(
                             id_utente, 
                             id_conto_transazione, 
-                            data_oggi, 
+                            data_op, 
                             descrizione, 
                             importo_transazione
                         )
                     else:
                         aggiungi_transazione(
                             id_conto_transazione, 
-                            data_oggi, 
+                            data_op, 
                             descrizione, 
                             importo_transazione
                         )
@@ -491,14 +527,14 @@ class PortafoglioDialogs:
                     aggiungi_transazione_condivisa(
                         id_utente, 
                         id_conto_transazione, 
-                        data_oggi, 
+                        data_op, 
                         descrizione, 
                         importo_transazione
                     )
                 else:
                     aggiungi_transazione(
                         id_conto_transazione, 
-                        data_oggi, 
+                        data_op, 
                         descrizione, 
                         importo_transazione
                     )

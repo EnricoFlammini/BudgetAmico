@@ -1,4 +1,4 @@
-# Budget Amico v0.34.00
+# Budget Amico v0.35.00
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -10,6 +10,14 @@
 ---
 
 ## 📅 Changelog
+### v0.35.00 (24/01/2026)
+- **Web App**:
+    - **Gestione Conti**: Aggiunta la pagina "Conti" anche nella versione Web, permettendo la gestione completa (creazione, modifica, visualizzazione) dei conti direttamente dal browser.
+- **Interfaccia Utente**:
+    - **Selettore Data**: Aggiunto un calendario pop-up (Date Picker) per la selezione della data nelle transazioni, rendendo l'inserimento più rapido e preciso.
+- **Bug Fix**:
+    - **Analisi Budget**: Corretto il calcolo delle "Spese Totali" nelle viste Analisi Mensile e Annuale, che in alcuni casi non considerava correttamente le categorie di storno o le spese condivise.
+
 ### v0.34.00 (09/01/2026)
 - **Gestione Asset Avanzata**:
     - **Eliminazione Asset**: Aggiunto supporto per eliminare asset dal portafoglio (icona Cestino 🗑️) per pulizia dati e rimozione duplicati.

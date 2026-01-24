@@ -118,8 +118,12 @@ class WebDashboardView:
         elif idx == 1:
             self.tab_budget.update_view_data(is_initial_load)
         elif idx == 2:
-            self.tab_accantonamenti.update_view_data(is_initial_load)
+            self.tab_conti.update_view_data(is_initial_load)
         elif idx == 3:
+            self.tab_carte.update_view_data(is_initial_load)
+        elif idx == 4:
+            self.tab_accantonamenti.update_view_data(is_initial_load)
+        elif idx == 5:
             self.tab_divisore_pro.update_view_data(is_initial_load)
         
     def update_sidebar(self):

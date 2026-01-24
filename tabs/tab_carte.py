@@ -1,10 +1,12 @@
 
 import flet as ft
 import datetime
+import traceback
 from db.gestione_db import ottieni_carte_utente, elimina_carta, calcola_totale_speso_carta
 from dialogs.card_dialog import CardDialog
 from dialogs.card_transactions_dialog import CardTransactionsDialog
 from utils.styles import AppStyles
+from utils.color_utils import get_color_from_string, get_type_color, MATERIAL_COLORS
 
 class TabCarte(ft.Container):
     def __init__(self, page_ctrl):
@@ -29,8 +31,6 @@ class TabCarte(ft.Container):
         
         # Initial load
         self.load_cards()
-
-    # Removed build() method since Container doesn't support it in this way
 
     def update_view_data(self):
         """Metodo chiamato dal dashboard controller per aggiornare i dati della vista."""
@@ -63,44 +63,49 @@ class TabCarte(ft.Container):
                 run_spacing=10,
             )
             
-            for c in carte:
-                grid.controls.append(self._build_card_tile(c))
+            for idx, c in enumerate(carte):
+                # Unique color assignment
+                color = MATERIAL_COLORS[idx % len(MATERIAL_COLORS)]
+                grid.controls.append(self._build_card_tile(c, assigned_color=color))
             
             self.cards_view.controls.append(grid)
             
-        # self.update() # Causes error if called during init (not attached to page yet)
         if self.page:
             try:
                 self.update()
             except Exception as e:
                 print(f"Error updating TabCarte: {e}")
 
-    def _get_card_color(self, type_str, circuit_str):
-        circuit = circuit_str.lower()
-        is_credit = type_str == 'credito'
-        
-        if 'visa' in circuit:
-            return ft.Colors.INDIGO_900 if is_credit else ft.Colors.BLUE_600
-        elif 'master' in circuit:
-             return ft.Colors.DEEP_ORANGE_900 if is_credit else ft.Colors.ORANGE_800
-        elif 'amex' in circuit:
-            return ft.Colors.TEAL_900
-        elif 'paypal' in circuit:
-            return ft.Colors.BLUE_ACCENT_700
-        else:
-            return ft.Colors.BLUE_GREY_800 if is_credit else ft.Colors.TEAL_700
-
-    def _build_card_tile(self, card_data):
+    def _build_card_tile(self, card_data, assigned_color: str = None):
         # Create a nice visual card
         is_credit = card_data['tipo_carta'] == 'credito'
-        bg_color = self._get_card_color(card_data['tipo_carta'], card_data['circuito'])
+        
+        # Use new utility for unique background color
+        if assigned_color:
+            bg_color = assigned_color
+        else:
+            seed = f"{card_data.get('id_carta')}{card_data.get('nome_carta')}"
+            bg_color = get_color_from_string(seed)
+        
+        # Type indicator color
+        type_color = get_type_color(card_data['tipo_carta'])
+        
         icon = ft.Icons.CREDIT_CARD if is_credit else ft.Icons.CREDIT_CARD_OFF_OUTLINED
         
         content_col = [
             ft.ListTile(
                 leading=ft.Icon(icon, color=ft.Colors.WHITE, size=30),
                 title=AppStyles.subheader_text(card_data['nome_carta'], color=ft.Colors.WHITE),
-                subtitle=AppStyles.small_text(f"{card_data['circuito'].upper()} - {card_data['tipo_carta'].capitalize()}", color=ft.Colors.WHITE70),
+                subtitle=ft.Row([
+                    AppStyles.small_text(f"{card_data['circuito'].upper()} - {card_data['tipo_carta'].capitalize()}", color=ft.Colors.WHITE70),
+                     ft.Container(
+                        content=ft.Text(card_data['tipo_carta'][:1].upper(), color=ft.Colors.BLACK, size=10, weight="bold"),
+                        bgcolor=type_color,
+                        width=20, height=20, border_radius=10,
+                        alignment=ft.alignment.center,
+                        tooltip=f"Tipo: {card_data['tipo_carta']}"
+                    )
+                ])
             )
         ]
         
@@ -166,7 +171,6 @@ class TabCarte(ft.Container):
             dlg.open()
         except Exception as ex:
             print(f"Error opening add card dialog: {ex}")
-            import traceback
             traceback.print_exc()
 
     def _open_edit_dialog(self, card_data):
@@ -186,13 +190,6 @@ class TabCarte(ft.Container):
             if elimina_carta(id_carta):
                 self.load_cards()
             self.page_ctrl.close_dialog() # Assuming page_ctrl has this helper or using local dlg
-        
-        # Simple confirm dialog
-        # Assuming page_ctrl.show_confirm_dialog exists? Or verify dashboard_view.
-        # DashboardView usually handles dialogs.
-        # Let's verify dashboard_view capability or create specific dialog.
-        # I'll use page.dialog for now manually or reuse a generic one if I recalled it.
-        # app_controller has show_confirm_dialog? Check headers.
         
         dlg = ft.AlertDialog(
             title=AppStyles.section_header_text("Conferma Eliminazione"),
@@ -224,9 +221,7 @@ class TabCarte(ft.Container):
                 master_key_b64=mk,
                 controller=self.page_ctrl
             )
-            # Use page.open() which is the modern Flet way and handles overlay automatically
             page.open(dlg)
         except Exception as ex:
             print(f"Error opening transactions dialog: {ex}")
-            import traceback
             traceback.print_exc()

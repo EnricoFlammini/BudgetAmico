@@ -44,8 +44,12 @@ class FamigliaTab(ft.Container):
             expand=True,
             border_radius=10,
             heading_row_height=40,
-            data_row_max_height=60
+            data_row_max_height=60,
+            sort_column_index=1,
+            sort_ascending=False,
         )
+        
+        self.transazioni_data = []  # Store for sorting
         
         self.no_data_view = ft.Container(
             content=AppStyles.body_text(self.controller.loc.get("no_transactions_found_family")),
@@ -289,46 +293,82 @@ class FamigliaTab(ft.Container):
             ]
 
             transazioni = data.get('transazioni', [])
-            self.dt_transazioni_famiglia.rows.clear()
+            self.transazioni_data = transazioni # Store data for sorting
+            
             if not transazioni:
                 self.dt_transazioni_famiglia.visible = False
                 self.no_data_view.visible = True
             else:
                 self.dt_transazioni_famiglia.visible = True
                 self.no_data_view.visible = False
-                for t in transazioni:
-                    # Determina il testo dell'importo
-                    if t.get('importo_nascosto'):
-                        importo_text = self.controller.loc.get("amount_reserved")
-                        importo_color = AppColors.TEXT_SECONDARY
-                    else:
-                        importo_text = self.controller.loc.format_currency(t.get('importo', 0))
-                        importo_color = AppColors.SUCCESS if t.get('importo', 0) >= 0 else AppColors.ERROR
-                    
-                    self.dt_transazioni_famiglia.rows.append(
-                        ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(t.get('utente_nome') or self.controller.loc.get("shared"))),
-                            ft.DataCell(ft.Text(t.get('data') or "N/A")),
-                            ft.DataCell(ft.Text(t.get('descrizione') or "N/A", tooltip=t.get('descrizione'))),
-                            ft.DataCell(ft.Text(t.get('nome_sottocategoria') or "N/A")),
-                            ft.DataCell(ft.Text(t.get('conto_nome') or "N/A")),
-                            ft.DataCell(ft.Text(importo_text,
-                                                color=importo_color,
-                                                weight=ft.FontWeight.BOLD)),
-                        ])
-                    )
+                # Initial sort (by date desc if not set)
+                if self.dt_transazioni_famiglia.sort_column_index is None:
+                     self.dt_transazioni_famiglia.sort_column_index = 1
+                     self.dt_transazioni_famiglia.sort_ascending = False
+                
+                self._populate_transazioni_table(update_ui=False)
+
+    def _populate_transazioni_table(self, update_ui=True):
+        self.dt_transazioni_famiglia.rows.clear()
+        for t in self.transazioni_data:
+            # Determina il testo dell'importo
+            if t.get('importo_nascosto'):
+                importo_text = self.controller.loc.get("amount_reserved")
+                importo_color = AppColors.TEXT_SECONDARY
+            else:
+                importo_text = self.controller.loc.format_currency(t.get('importo', 0))
+                importo_color = AppColors.SUCCESS if t.get('importo', 0) >= 0 else AppColors.ERROR
+            
+            self.dt_transazioni_famiglia.rows.append(
+                ft.DataRow(cells=[
+                    ft.DataCell(ft.Text(t.get('utente_nome') or self.controller.loc.get("shared"))),
+                    ft.DataCell(ft.Text(t.get('data') or "N/A")),
+                    ft.DataCell(ft.Text(t.get('descrizione') or "N/A", tooltip=t.get('descrizione'))),
+                    ft.DataCell(ft.Text(t.get('nome_sottocategoria') or "N/A")),
+                    ft.DataCell(ft.Text(t.get('conto_nome') or "N/A")),
+                    ft.DataCell(ft.Text(importo_text,
+                                        color=importo_color,
+                                        weight=ft.FontWeight.BOLD)),
+                ])
+            )
+        if update_ui and self.controller.page:
+            self.dt_transazioni_famiglia.update()
+
+    def _on_sort(self, e: ft.DataColumnSortEvent):
+        self.dt_transazioni_famiglia.sort_column_index = e.column_index
+        self.dt_transazioni_famiglia.sort_ascending = e.ascending
+        
+        # Mapping index to key
+        # 0: User, 1: Date, 2: Description, 3: Subcategory, 4: Account, 5: Amount
+        key_map = {
+            0: 'utente_nome',
+            1: 'data',
+            2: 'descrizione',
+            3: 'nome_sottocategoria',
+            4: 'conto_nome',
+            5: 'importo'
+        }
+        
+        sort_key = key_map.get(e.column_index)
+        if sort_key:
+            self.transazioni_data.sort(
+                key=lambda x: x.get(sort_key) if x.get(sort_key) is not None else "",
+                reverse=not e.ascending
+            )
+            
+        self._populate_transazioni_table()
 
     def build_controls(self, theme):
         loc = self.controller.loc
         
         self.dd_mese_filtro.label = loc.get("filter_by_month")
         self.dt_transazioni_famiglia.columns = [
-            ft.DataColumn(ft.Text(loc.get("user"), weight=ft.FontWeight.BOLD)), 
-            ft.DataColumn(ft.Text(loc.get("date"), weight=ft.FontWeight.BOLD)),
-            ft.DataColumn(ft.Text(loc.get("description"), weight=ft.FontWeight.BOLD)), 
-            ft.DataColumn(ft.Text(loc.get("subcategory"), weight=ft.FontWeight.BOLD)),
-            ft.DataColumn(ft.Text(loc.get("account"), weight=ft.FontWeight.BOLD)), 
-            ft.DataColumn(ft.Text(loc.get("amount"), weight=ft.FontWeight.BOLD), numeric=True),
+            ft.DataColumn(ft.Text(loc.get("user"), weight=ft.FontWeight.BOLD), on_sort=self._on_sort), 
+            ft.DataColumn(ft.Text(loc.get("date"), weight=ft.FontWeight.BOLD), on_sort=self._on_sort),
+            ft.DataColumn(ft.Text(loc.get("description"), weight=ft.FontWeight.BOLD), on_sort=self._on_sort), 
+            ft.DataColumn(ft.Text(loc.get("subcategory"), weight=ft.FontWeight.BOLD), on_sort=self._on_sort),
+            ft.DataColumn(ft.Text(loc.get("account"), weight=ft.FontWeight.BOLD), on_sort=self._on_sort), 
+            ft.DataColumn(ft.Text(loc.get("amount"), weight=ft.FontWeight.BOLD), numeric=True, on_sort=self._on_sort),
         ]
 
         return []  # Controlli costruiti dinamicamente in _aggiorna_contenuto_per_ruolo

@@ -485,8 +485,8 @@ class BudgetTab(ft.Container):
         else:
             colore_cat = AppColors.ERROR   # Red
 
-        # Clamp percentage for progress bar (max 1.0)
-        progress_value = min(percentuale_cat, 1.0)
+        # Clamp percentage for progress bar (max 1.0, min 0.0)
+        progress_value = max(0.0, min(percentuale_cat, 1.0))
         
         # Determine Status Text
         if limite_cat > 0:
@@ -567,7 +567,7 @@ class BudgetTab(ft.Container):
         else:
             colore_progress = AppColors.ERROR
 
-        progress_value = min(percentuale, 1.0)
+        progress_value = max(0.0, min(percentuale, 1.0))
 
         return ft.Container(
             content=ft.Column([

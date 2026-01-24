@@ -571,7 +571,9 @@ def ottieni_dati_analisi_mensile(id_famiglia: str, anno: int, mese: int, master_
             for id_sub, importo in spese_condivise.items():
                 tutte_spese_map[id_sub] = tutte_spese_map.get(id_sub, 0.0) + importo
             
-            spese_totali = sum(tutte_spese_map.values())
+            # spese_totali = sum(tutte_spese_map.values()) # OLD LOGIC: Included everything, even Income corrections or Orphans
+
+            spese_totali = 0.0
 
             # Ora aggreghiamo per Categoria e decriptiamo i nomi
             cur.execute("SELECT id_categoria, nome_categoria FROM Categorie WHERE id_famiglia = %s", (id_famiglia,))
@@ -589,11 +591,16 @@ def ottieni_dati_analisi_mensile(id_famiglia: str, anno: int, mese: int, master_
                 subs = [row['id_sottocategoria'] for row in cur.fetchall()]
                 
                 tot_cat = sum(tutte_spese_map.get(sub_id, 0.0) for sub_id in subs)
+                
                 if tot_cat > 0:
-                    spese_per_categoria.append({
-                        'nome_categoria': nome_chiaro,
-                        'importo': tot_cat
-                    })
+                    # FIX: Escludi categorie "Entrate" (che contengono storni/correzioni) dal totale SPESE
+                    # ed escludile dalla lista per coerenza (già fatto dalla UI, ma lo facciamo anche qui)
+                    if "entrat" not in nome_chiaro.lower():
+                        spese_totali += tot_cat
+                        spese_per_categoria.append({
+                            'nome_categoria': nome_chiaro,
+                            'importo': tot_cat
+                        })
 
         # Calcola percentuali
         for item in spese_per_categoria:
@@ -791,7 +798,8 @@ def ottieni_dati_analisi_annuale(id_famiglia: str, anno: int, master_key_b64: st
         media_spese_mensili = totale_spese_annuali / divisor
         media_budget_mensile = budget_totale_periodo / divisor
         media_entrate_mensili = entrate_totali_periodo / divisor
-        
+
+        # --- RISPARMIO e DELTA ---
         media_risparmio = media_entrate_mensili - media_spese_mensili
         media_delta = media_budget_mensile - media_spese_mensili
 
@@ -4875,7 +4883,7 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64=Non
                         FROM Transazioni T
                         JOIN Conti CO ON T.id_conto = CO.id_conto
                         JOIN Appartenenza_Famiglia AF ON CO.id_utente = AF.id_utente
-                        WHERE AF.id_famiglia = %s AND T.importo < 0 AND T.data BETWEEN %s AND %s
+                        WHERE AF.id_famiglia = %s AND T.data BETWEEN %s AND %s
                           AND T.id_sottocategoria IS NOT NULL
                         GROUP BY T.id_sottocategoria
                         UNION ALL
@@ -4884,7 +4892,7 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64=Non
                             SUM(TC.importo) as spesa_totale
                         FROM TransazioniCondivise TC
                         JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
-                        WHERE CC.id_famiglia = %s AND TC.importo < 0 AND TC.data BETWEEN %s AND %s
+                        WHERE CC.id_famiglia = %s AND TC.data BETWEEN %s AND %s
                           AND TC.id_sottocategoria IS NOT NULL
                         GROUP BY TC.id_sottocategoria
                     ) AS U
@@ -4916,7 +4924,7 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64=Non
                         'sottocategorie': []
                     }
                 
-                spesa = abs(row['spesa_totale'])
+                spesa = -row['spesa_totale']
                 
                 # Decrypt importo_limite (Try Family Key, then Master Key)
                 if family_key:
@@ -6983,6 +6991,7 @@ def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=Non
             cur.execute("""
                 SELECT 
                     SF.id_spesa_fissa,
+                    SF.id_famiglia,
                     SF.nome,
                     SF.importo,
                     SF.id_conto_personale_addebito,
@@ -6997,6 +7006,8 @@ def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=Non
                     CARTE.nome_carta,
                     CARTE.id_conto_contabile as id_conto_carta_pers,
                     CARTE.id_conto_contabile_condiviso as id_conto_carta_cond,
+                    CARTE.id_conto_riferimento as id_carta_rif_pers,
+                    CARTE.id_conto_riferimento_condiviso as id_carta_rif_cond,
                     U_CP.username_enc as username_enc_conto,
                     U_CARTE.username_enc as username_enc_carta
                 FROM SpeseFisse SF
@@ -7105,40 +7116,53 @@ def _trova_admin_famiglia(id_famiglia):
         print(f"[ERRORE] _trova_admin_famiglia: {e}")
         return None
 
-def _esegui_spesa_fissa(spesa):
+def _determina_conti_spesa(spesa):
+    """
+    Determina i conti effettivi di addebito (personale o condiviso) per una spesa fissa,
+    considerando anche le carte e i loro conti di appoggio.
+    Ritorna: (id_conto_personale, id_conto_condiviso) - uno dei due sarà valorizzato.
+    """
+    id_conto_personale = spesa.get('id_conto_personale_addebito')
+    id_conto_condiviso = spesa.get('id_conto_condiviso_addebito')
+    id_carta = spesa.get('id_carta')
+    
+    if id_carta:
+         # Priorità 1: Conto Contabile della Carta (es. Credito)
+         if spesa.get('id_conto_carta_pers'):
+             return spesa.get('id_conto_carta_pers'), None
+         elif spesa.get('id_conto_carta_cond'):
+             return None, spesa.get('id_conto_carta_cond')
+         
+         # Priorità 2: Conto di Riferimento della Carta (es. Debito fallback)
+         elif spesa.get('id_carta_rif_pers'):
+             return spesa.get('id_carta_rif_pers'), None
+         elif spesa.get('id_carta_rif_cond'):
+             return None, spesa.get('id_carta_rif_cond')
+    
+    return id_conto_personale, id_conto_condiviso
+
+def _esegui_spesa_fissa(spesa, descrizione_custom=None, data_esecuzione=None):
     """Esegue una singola spesa fissa creando la transazione."""
     today = datetime.date.today()
     try:
-        # Determina id_conto effettivo:
-        # Se c'è una carta, usa il suo conto contabile (o di riferimento)
-        id_conto_personale = spesa.get('id_conto_personale_addebito')
-        id_conto_condiviso = spesa.get('id_conto_condiviso_addebito')
+        id_conto_personale, id_conto_condiviso = _determina_conti_spesa(spesa)
         id_carta = spesa.get('id_carta')
-        
-        # Se id_carta è presente, usiamo il conto contabile della carta come conto di addebito
-        if id_carta:
-             # Se la carta è definita, il conto di addebito deve essere quello della carta
-             # Se Conto Personale Carta
-             if spesa.get('id_conto_carta_pers'):
-                 id_conto_personale = spesa.get('id_conto_carta_pers')
-                 id_conto_condiviso = None
-             # Se Conto Condiviso Carta
-             elif spesa.get('id_conto_carta_cond'):
-                 id_conto_condiviso = spesa.get('id_conto_carta_cond')
-                 id_conto_personale = None
-             # Se non c'è conto contabile (es. debito senza specifico), usa quello di riferimento o quello gia impostato
-             # ... (logica attuale OK se id_conto_personale_addebito era già quello della carta)
+
         
         # Se nome è criptato e non abbiamo chiave qui (job automatico), lo passiamo criptato o cerchiamo di decriptare?
         # Il job automatico spesso non ha chiavi utente in memoria se gira in background.
         # Ma controlla_scadenze viene chiamato spesso con utente loggato.
         # Assumiamo che descrizione sia già il nome (potrebbe essere criptato).
         
+        # Usa valori custom se passati, altrimenti default
+        descrizione_finale = descrizione_custom if descrizione_custom else f"{spesa['nome']} (Automatico)"
+        data_finale = data_esecuzione if data_esecuzione else today.strftime('%Y-%m-%d')
+        
         if id_conto_personale:
             res = aggiungi_transazione(
                 id_conto=id_conto_personale,
-                data=today.strftime('%Y-%m-%d'),
-                descrizione=f"{spesa['nome']} (Automatico)",
+                data=data_finale,
+                descrizione=descrizione_finale,
                 importo=-abs(spesa['importo']),
                 id_sottocategoria=spesa['id_sottocategoria'],
                 master_key_b64=None, # Non possiamo decriptare se background, MA aggiungi_transazione cifra se key passata.
@@ -7160,8 +7184,8 @@ def _esegui_spesa_fissa(spesa):
             res = aggiungi_transazione_condivisa(
                 id_utente_autore=id_autore,
                 id_conto_condiviso=id_conto_condiviso,
-                data=today.strftime('%Y-%m-%d'),
-                descrizione=f"{spesa['nome']} (Automatico)",
+                data=data_finale,
+                descrizione=descrizione_finale,
                 importo=-abs(spesa['importo']),
                 id_sottocategoria=spesa['id_sottocategoria'],
                 master_key_b64=None,
@@ -7192,30 +7216,37 @@ def check_e_processa_spese_fisse(id_famiglia, master_key_b64=None, id_utente=Non
                 if not spesa.get('addebito_automatico'):
                     continue
 
-                # Suffisso univoco per identificare la spesa (non criptato, usato per controllo duplicati)
+                # Suffisso univoco per identificare la spesa
                 suffisso_id = f"[SF-{spesa['id_spesa_fissa']}]"
+                
+                # Risolvi conti effettivi per il controllo
+                conto_pers_check, conto_cond_check = _determina_conti_spesa(spesa)
 
                 # Controlla se la spesa è già stata eseguita questo mese
-                # Usa POSITION per cercare il suffisso ID nella descrizione (che è criptata ma il suffisso no)
+                already_paid = False
+                
                 # Check personal account
-                if spesa.get('id_conto_personale_addebito'):
+                if conto_pers_check:
                     cur.execute("""
                         SELECT 1 FROM Transazioni
                         WHERE id_conto = %s
                         AND POSITION(%s IN descrizione) > 0
                         AND TO_CHAR(data::date, 'YYYY-MM') = %s
-                    """, (spesa['id_conto_personale_addebito'], suffisso_id, oggi.strftime('%Y-%m')))
-                    if cur.fetchone(): continue
+                    """, (conto_pers_check, suffisso_id, oggi.strftime('%Y-%m')))
+                    if cur.fetchone(): already_paid = True
                 
                 # Check shared account
-                if spesa.get('id_conto_condiviso_addebito'):
+                if not already_paid and conto_cond_check:
                     cur.execute("""
                         SELECT 1 FROM TransazioniCondivise
                         WHERE id_conto_condiviso = %s
                         AND POSITION(%s IN descrizione) > 0
                         AND TO_CHAR(data::date, 'YYYY-MM') = %s
-                    """, (spesa['id_conto_condiviso_addebito'], suffisso_id, oggi.strftime('%Y-%m')))
-                    if cur.fetchone(): continue
+                    """, (conto_cond_check, suffisso_id, oggi.strftime('%Y-%m')))
+                    if cur.fetchone(): already_paid = True
+
+                if already_paid:
+                    continue
 
                 # Se il giorno di addebito è passato, esegui la transazione
                 if oggi.day >= spesa['giorno_addebito']:
@@ -7226,7 +7257,7 @@ def check_e_processa_spese_fisse(id_famiglia, master_key_b64=None, id_utente=Non
                     importo = -abs(spesa['importo'])
 
                     # Use the new _esegui_spesa_fissa helper
-                    if _esegui_spesa_fissa(spesa):
+                    if _esegui_spesa_fissa(spesa, descrizione_custom=descrizione, data_esecuzione=data_esecuzione):
                         spese_eseguite += 1
             if spese_eseguite > 0:
                 con.commit()
@@ -8938,3 +8969,196 @@ def ottieni_asset_conto(id_conto: int, master_key_b64: Optional[str] = None, is_
         logger.error(f"Errore ottieni_asset_conto: {e}")
         return []
 
+
+def ottieni_mesi_disponibili_conto(id_conto: str) -> List[Tuple[int, int]]:
+    """
+    Restituisce una lista di tuple (anno, mese) per i quali esistono transazioni
+    per il conto specificato.
+    """
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("""
+                SELECT DISTINCT EXTRACT(YEAR FROM data::date) as anno, EXTRACT(MONTH FROM data::date) as mese
+                FROM Transazioni
+                WHERE id_conto = %s
+                ORDER BY anno DESC, mese DESC
+            """, (id_conto,))
+            return [(int(row['anno']), int(row['mese'])) for row in cur.fetchall()]
+    except Exception as e:
+        logger.error(f"Errore ottieni_mesi_disponibili_conto: {e}")
+        return []
+
+def ottieni_transazioni_conto_mese(id_conto: str, mese: int, anno: int, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None, id_famiglia: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Recupera le transazioni di un conto per un mese specifico.
+    Decripta i dati se necessario.
+    """
+    data_inizio = f"{anno}-{mese:02d}-01"
+    ultimo_giorno = (datetime.date(anno, mese, 1) + relativedelta(months=1) - relativedelta(days=1)).day
+    data_fine = f"{anno}-{mese:02d}-{ultimo_giorno}"
+    
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    family_key = None
+    if master_key and id_utente and id_famiglia:
+        family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+    
+    # Priority: usually Master Key for personal, Family for shared.
+    keys_to_try = []
+    if master_key: keys_to_try.append(master_key)
+    if family_key: keys_to_try.append(family_key)
+
+    # Helper to try keys
+    def try_decrypt(val, keys):
+        last_res = None
+        for k in keys:
+             if not k: continue
+             try:
+                 # Pass silent=True to avoid excessive error logs
+                 res = _decrypt_if_key(val, k, crypto, silent=True)
+                 if res == "[ENCRYPTED]":
+                     last_res = res
+                     continue
+                 return res
+             except: continue
+        return last_res if last_res else "[ENCRYPTED]"
+
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # Query Transazioni
+            cur.execute("""
+                SELECT T.id_transazione, T.data, T.importo, T.descrizione,
+                       C.nome_categoria, S.nome_sottocategoria
+                FROM Transazioni T
+                LEFT JOIN Sottocategorie S ON T.id_sottocategoria = S.id_sottocategoria
+                LEFT JOIN Categorie C ON S.id_categoria = C.id_categoria
+                WHERE T.id_conto = %s
+                  AND T.data BETWEEN %s AND %s
+                ORDER BY T.data DESC, T.id_transazione DESC
+            """, (id_conto, data_inizio, data_fine))
+            
+            transazioni = []
+            for row in cur.fetchall():
+                t = dict(row)
+                # Decrypt text fields with fallback
+                t['descrizione'] = try_decrypt(t['descrizione'], keys_to_try)
+                
+                # Category names might be encrypted with family key if they belong to family
+                if t['nome_categoria']:
+                     t['nome_categoria'] = try_decrypt(t['nome_categoria'], keys_to_try)
+                
+                transazioni.append(t)
+                
+            return transazioni
+            
+    except Exception as e:
+        logger.error(f"Errore ottieni_transazioni_conto_mese: {e}")
+        return []
+
+
+def ottieni_mesi_disponibili_conto_condiviso(id_conto_condiviso: str) -> List[Tuple[int, int]]:
+    """
+    Restituisce (anno, mese) per i quali esistono transazioni condivise.
+    """
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("""
+                SELECT DISTINCT EXTRACT(YEAR FROM data::date) as anno, EXTRACT(MONTH FROM data::date) as mese
+                FROM TransazioniCondivise
+                WHERE id_conto_condiviso = %s
+                ORDER BY anno DESC, mese DESC
+            """, (id_conto_condiviso,))
+            return [(int(row['anno']), int(row['mese'])) for row in cur.fetchall()]
+    except Exception as e:
+        logger.error(f"Errore ottieni_mesi_disponibili_conto_condiviso: {e}")
+        return []
+
+def ottieni_transazioni_conto_condiviso_mese(id_conto_condiviso: str, mese: int, anno: int, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None, id_famiglia: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Recupera le transazioni condivise per un mese specifico.
+    """
+    data_inizio = f"{anno}-{mese:02d}-01"
+    ultimo_giorno = (datetime.date(anno, mese, 1) + relativedelta(months=1) - relativedelta(days=1)).day
+    data_fine = f"{anno}-{mese:02d}-{ultimo_giorno}"
+    
+    crypto, master_key = _get_crypto_and_key(master_key_b64)
+    family_key = None
+    if master_key and id_utente and id_famiglia:
+        family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+    
+    # Priority: usually Family Key for shared.
+    keys_to_try = []
+    if family_key: keys_to_try.append(family_key)
+    if master_key: keys_to_try.append(master_key)
+
+    # Helper to try keys
+    def try_decrypt(val, keys):
+        last_res = None
+        for k in keys:
+             if not k: continue
+             try:
+                 res = _decrypt_if_key(val, k, crypto, silent=True)
+                 if res == "[ENCRYPTED]":
+                     last_res = res
+                     continue
+                 return res
+             except: continue
+        return last_res if last_res else "[ENCRYPTED]"
+
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            """
+            Struttura TransazioniCondivise prevista:
+            id_transazione_condivisa, id_conto_condiviso, data, descrizione, importo, 
+            id_sottocategoria, id_utente_autore
+            """
+            
+            cur.execute("""
+                SELECT T.id_transazione_condivisa as id_transazione, T.data, T.importo, T.descrizione,
+                       C.nome_categoria, S.nome_sottocategoria,
+                       U.username, U.nome_enc_server
+                FROM TransazioniCondivise T
+                LEFT JOIN Sottocategorie S ON T.id_sottocategoria = S.id_sottocategoria
+                LEFT JOIN Categorie C ON S.id_categoria = C.id_categoria
+                LEFT JOIN Utenti U ON T.id_utente_autore = U.id_utente
+                WHERE T.id_conto_condiviso = %s
+                  AND T.data BETWEEN %s AND %s
+                ORDER BY T.data DESC, T.id_transazione_condivisa DESC
+            """, (id_conto_condiviso, data_inizio, data_fine))
+            
+            transazioni = []
+            for row in cur.fetchall():
+                t = dict(row)
+                t['is_shared'] = True # Mark as shared explicitly
+                
+                # Decrypt text
+                t['descrizione'] = try_decrypt(t['descrizione'], keys_to_try)
+                
+                if t['nome_categoria']:
+                     t['nome_categoria'] = try_decrypt(t['nome_categoria'], keys_to_try)
+                
+                # Resolve Author Name
+                # Assuming username is blind indexed/encrypted logic, might display fallback
+                # or decrypt 'nome_enc_server' if available (system encrypted)
+                author = "Utente"
+                if t['nome_enc_server']:
+                     dec_name = decrypt_system_data(t['nome_enc_server'])
+                     if dec_name: author = dec_name
+                elif t['username']:
+                     # Legacy or plain username?
+                     author = t['username']
+                
+                t['autore'] = author
+
+                transazioni.append(t)
+                
+            return transazioni
+            
+    except Exception as e:
+        logger.error(f"Errore ottieni_transazioni_conto_condiviso_mese: {e}")
+        return []
