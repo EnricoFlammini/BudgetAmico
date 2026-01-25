@@ -142,8 +142,18 @@ class SpeseFisseTab(ft.Container):
         """Sceglie quale vista renderizzare in base alla larghezza della pagina."""
         if not self.page: return
         
-        # Breakpoint per mobile (es. < 600px)
-        is_mobile = self.page.width < 600
+        # Su web usa sempre la vista mobile cards
+        is_web = False
+        try:
+            from controllers.web_app_controller import WebAppController
+            if isinstance(self.controller, WebAppController):
+                is_web = True
+        except ImportError:
+            pass
+        
+        is_mobile = is_web  # Su web sempre mobile
+        if not is_mobile:
+            is_mobile = self.page.width < 600  # Fallback per desktop
         
         if is_mobile:
             self.content_container.content = self._build_mobile_view(self.spese_fisse_local_data)

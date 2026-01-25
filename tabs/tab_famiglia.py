@@ -83,7 +83,8 @@ class FamigliaTab(ft.Container):
         # Ridisegna le transazioni se sono caricate
         if self.transazioni_data:
              self._update_transactions_view()
-             self.page.update()
+             if self.page:
+                 self.page.update()
 
     def update_view_data(self, is_initial_load=False):
         theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
@@ -388,15 +389,24 @@ class FamigliaTab(ft.Container):
         """Aggiorna la vista delle transazioni (Tabella vs Cards) in base alla larghezza."""
         if not self.transazioni_data: return
         
-        is_mobile = False
-        if self.page:
-            is_mobile = self.page.width < 700 # Breakpoint leggermente più alto per tabella complessa
+        # Su web usa sempre la vista mobile cards
+        is_web = False
+        try:
+            from controllers.web_app_controller import WebAppController
+            if isinstance(self.controller, WebAppController):
+                is_web = True
+        except ImportError:
+            pass
+        
+        is_mobile = is_web  # Su web sempre mobile
+        if not is_mobile and self.page:
+            is_mobile = self.page.width < 700  # Fallback per desktop
         
         if is_mobile:
              self.transazioni_container.content = self._build_mobile_transactions_list()
         else:
              self.transazioni_container.content = ft.Column([self.dt_transazioni_famiglia], scroll=ft.ScrollMode.ADAPTIVE, expand=True)
-             self._populate_transazioni_table(update_ui=False) # Assicurati che la tabella sia popolata
+             self._populate_transazioni_table(update_ui=False)  # Assicurati che la tabella sia popolata
 
     def _build_mobile_transactions_list(self):
         """Costruisce la lista di card per mobile."""
