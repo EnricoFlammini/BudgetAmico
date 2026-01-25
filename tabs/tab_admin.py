@@ -208,6 +208,17 @@ class AdminTab(ft.Container):
                     padding=15,
                     border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
                     border_radius=10
+                ),
+                ft.Container(height=5),
+                ft.Container(
+                     visible=(self.server_automation_enabled if hasattr(self, 'server_automation_enabled') else False),
+                     content=ft.OutlinedButton(
+                        "Esegui Check Ora (Forza Aggiornamento)",
+                        icon=ft.Icons.REFRESH,
+                        on_click=self._force_background_check_click,
+                        style=ft.ButtonStyle(color=AppColors.PRIMARY)
+                     ),
+                     padding=ft.padding.only(left=5)
                 )
             ], scroll=ft.ScrollMode.AUTO)
         )
@@ -742,6 +753,51 @@ class AdminTab(ft.Container):
         else:
             # Execute disable immediately
             self._execute_toggle_automation(False, switch)
+
+    def _force_background_check_click(self, e):
+        """Forza l'esecuzione immediata dei task di background (solo se automazione attiva)."""
+        if not self.server_automation_enabled:
+            return
+
+        # Disable button
+        btn = e.control
+        btn.disabled = True
+        btn.text = "Esecuzione in corso..."
+        btn.update()
+
+        def _run_force_job():
+            try:
+                # Import here to avoid circular dependencies if any
+                from services.background_service import BackgroundService
+                # We can instantiate a temporary service or use a static method if we had one.
+                # Since BackgroundService is designed to be singleton-like or safe to instantiate:
+                service = BackgroundService()
+                
+                # Run for THIS family specifically?
+                # The service runs for ALL families. But that's fine for an admin action 
+                # (it effectively wakes up the server worker).
+                # Alternatively, we could call specific logic for this family.
+                # But to keep it consistent with the "Server Automation" feature,
+                # let's run the global job logic.
+                
+                service.run_all_jobs_now()
+                return True, "Task eseguiti con successo."
+            except Exception as ex:
+                return False, str(ex)
+
+        def _on_force_complete(result):
+            success, msg = result
+            btn.disabled = False
+            btn.text = "Esegui Check Ora (Forza Aggiornamento)"
+            
+            if hasattr(self.controller, 'show_snack_bar'):
+                color = AppColors.SUCCESS if success else AppColors.ERROR
+                self.controller.show_snack_bar(msg, success=success)
+            
+            if self.page: self.page.update()
+
+        task = AsyncTask(target=_run_force_job, callback=_on_force_complete)
+        task.start()
 
     def _execute_toggle_automation(self, enable, switch_control):
         id_famiglia = self.controller.get_family_id()

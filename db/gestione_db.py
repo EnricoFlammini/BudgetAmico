@@ -5135,10 +5135,18 @@ def trigger_budget_history_update(id_famiglia, date_obj, master_key_b64, id_uten
     if not id_famiglia or not id_utente or not date_obj:
         return
     try:
+        # Robust parsing: ensure we have a datetime/date object
         if isinstance(date_obj, str):
-            date_obj = parse_date(date_obj)
+            try:
+                # dateutil.parser is powerful but sometimes overkill or ambiguous
+                # First try standard ISO format
+                parsed_date = datetime.datetime.strptime(date_obj, '%Y-%m-%d')
+            except ValueError:
+                # Fallback to dateutil
+                parsed_date = parse_date(date_obj)
+            date_obj = parsed_date
         
-        # Saves snapshot for that month
+        # Now safely access .year and .month
         salva_budget_mese_corrente(id_famiglia, date_obj.year, date_obj.month, master_key_b64, id_utente)
     except Exception as e:
         print(f"[WARN] Failed to auto-update budget history: {e}")
