@@ -61,6 +61,15 @@ def main(page: ft.Page):
 
 # Avvio dell'applicazione in modalità WEB
 if __name__ == "__main__":
+    # Avvio Background Service per automazione server
+    try:
+        from services.background_service import BackgroundService
+        bg_service = BackgroundService()
+        bg_service.start()
+        print("[INFO] Background Service avviato.")
+    except Exception as e:
+        print(f"[ERRORE] Impossibile avviare Background Service: {e}")
+
     port = int(os.environ.get("PORT", 8556))
     print(f"Avvio server web... Apri il browser su: http://localhost:{port}")
     ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=port, host="0.0.0.0")

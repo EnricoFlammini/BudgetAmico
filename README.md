@@ -1,4 +1,4 @@
-# Budget Amico v0.36.01
+# Budget Amico v0.37.00
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -11,6 +11,14 @@
 ---
 
 ## 📅 Changelog
+### v0.37.00 (25/01/2026)
+- **Automazione Cloud (BETA)**:
+    - **Server-Side Background Tasks**: Introdotta la possibilità di eseguire operazioni automatiche direttamente sul server (Koyeb/Cloud) senza la necessità di effettuare il login client.
+    - **Chiave Famiglia Sicura**: Implementato un sistema seguro per archiviare una copia criptata della chiave di decrittazione famigliare sul server (protetta da Server Secret Key), permettendo al backend di operare in autonomia.
+    - **Funzionalità Supportate**:
+        - Addebito automatico delle **Spese Fisse** alla scadenza.
+        - Aggiornamento periodico dei prezzi degli **Asset Finanziari** (Investimenti).
+    - **Pannello Admin**: Aggiunta la sezione "Backup / Export" > "Automazione Cloud" per attivare/disattivare questa funzionalità (opt-in).
 ### v0.36.00 (25/01/2026)
 - **Spese Fisse**:
     - **Giroconti Automatici**: È ora possibile pianificare **Giroconti** automatici nelle Spese Fisse, trasferendo fondi periodicamente tra conti personali o condivisi (anche verso conti Risparmio).

@@ -40,7 +40,8 @@ TABLES = {
     "Famiglie": """
         CREATE TABLE Famiglie (
             id_famiglia INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome_famiglia TEXT UNIQUE NOT NULL
+            nome_famiglia TEXT UNIQUE NOT NULL,
+            server_encrypted_key TEXT
         );
     """,
     "Appartenenza_Famiglia": """

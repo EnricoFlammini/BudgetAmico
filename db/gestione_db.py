@@ -63,6 +63,72 @@ def decrypt_system_data(value_enc):
     except Exception:
         return None
 
+def get_server_family_key(id_famiglia):
+    """
+    Recupera la Family Key decriptata (usando SERVER_SECRET_KEY) per l'automazione background.
+    """
+    if not SERVER_SECRET_KEY: return None
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT server_encrypted_key FROM Famiglie WHERE id_famiglia = %s", (id_famiglia,))
+            row = cur.fetchone()
+            if row and row['server_encrypted_key']:
+                 # Decrypt: Server Encrypted Key -> Family Key B64
+                 fk_b64_enc = row['server_encrypted_key']
+                 fk_b64 = decrypt_system_data(fk_b64_enc)
+                 return fk_b64
+    except Exception as e:
+        logger.error(f"Error retrieving server family key: {e}")
+    return None
+
+def enable_server_automation(id_famiglia, master_key_b64, id_utente):
+    """
+    Abilita l'automazione server salvando la Family Key criptata con la chiave di sistema.
+    """
+    if not SERVER_SECRET_KEY:
+        logger.error("SERVER_SECRET_KEY missing. Cannot enable automation.")
+        return False
+        
+    try:
+        # 1. Get Family Key using User's Master Key
+        crypto = CryptoManager()
+        master_key = master_key_b64.encode()
+        
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
+            row = cur.fetchone()
+            if not row or not row['chiave_famiglia_criptata']:
+                logger.error("Family Key not found for user.")
+                return False
+                
+            fk_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+            
+            # 2. Encrypt Family Key with System Key
+            server_enc_key = encrypt_system_data(fk_b64)
+            
+            # 3. Save to Famiglie table
+            cur.execute("UPDATE Famiglie SET server_encrypted_key = %s WHERE id_famiglia = %s", (server_enc_key, id_famiglia))
+            con.commit()
+            return True
+    except Exception as e:
+        logger.error(f"Error enabling server automation: {e}")
+        return False
+
+def disable_server_automation(id_famiglia):
+    """Disabilita l'automazione server rimuovendo la chiave."""
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("UPDATE Famiglie SET server_encrypted_key = NULL WHERE id_famiglia = %s", (id_famiglia,))
+            con.commit()
+            return True
+    except Exception as e:
+        logger.error(f"Error disabling server automation: {e}")
+        return False
+
+
 
 
 def ottieni_ruolo_utente(id_famiglia: str, id_utente: str) -> Optional[str]:
@@ -7005,7 +7071,7 @@ def elimina_spesa_fissa(id_spesa_fissa):
         return False
 
 
-def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
+def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=None, forced_family_key_b64=None):
     try:
         with get_db_connection() as con:
             # con.row_factory = sqlite3.Row # Removed for Supabase
@@ -7048,7 +7114,12 @@ def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=Non
             # Decrypt nome if keys available
             crypto, master_key = _get_crypto_and_key(master_key_b64)
             family_key = None
-            if master_key and id_utente:
+            
+            if forced_family_key_b64:
+                 try:
+                     family_key = base64.b64decode(forced_family_key_b64)
+                 except: pass
+            elif master_key and id_utente:
                 try:
                     cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
                     row = cur.fetchone()
@@ -7170,7 +7241,7 @@ def _determina_conti_spesa(spesa):
     
     return id_conto_personale, id_conto_condiviso
 
-def _esegui_spesa_fissa(spesa, descrizione_custom=None, data_esecuzione=None):
+def _esegui_spesa_fissa(spesa, descrizione_custom=None, data_esecuzione=None, master_key_b64=None):
     """Esegue una singola spesa fissa creando la transazione."""
     today = datetime.date.today()
     try:
@@ -7194,7 +7265,7 @@ def _esegui_spesa_fissa(spesa, descrizione_custom=None, data_esecuzione=None):
                 descrizione=descrizione_finale,
                 importo=-abs(spesa['importo']),
                 id_sottocategoria=spesa['id_sottocategoria'],
-                master_key_b64=None,
+                master_key_b64=master_key_b64, # Use passed key (could be family key)
                 id_carta=id_carta
             )
         elif id_conto_condiviso:
@@ -7208,7 +7279,7 @@ def _esegui_spesa_fissa(spesa, descrizione_custom=None, data_esecuzione=None):
                 descrizione=descrizione_finale,
                 importo=-abs(spesa['importo']),
                 id_sottocategoria=spesa['id_sottocategoria'],
-                master_key_b64=None,
+                master_key_b64=master_key_b64, # Use passed key
                 id_carta=id_carta
             )
         else:
@@ -7227,7 +7298,7 @@ def _esegui_spesa_fissa(spesa, descrizione_custom=None, data_esecuzione=None):
                     descrizione=descrizione_accredito,
                     importo=importo_accredito,
                     id_sottocategoria=spesa['id_sottocategoria'], # Same category/subcategory? Usually "Giroconti" or "Transfer"
-                    master_key_b64=None
+                    master_key_b64=master_key_b64
                  )
              # Destinazione Condivisa
              elif spesa.get('id_conto_condiviso_beneficiario'):
@@ -7240,7 +7311,7 @@ def _esegui_spesa_fissa(spesa, descrizione_custom=None, data_esecuzione=None):
                         descrizione=descrizione_accredito,
                         importo=importo_accredito,
                         id_sottocategoria=spesa['id_sottocategoria'],
-                        master_key_b64=None
+                        master_key_b64=master_key_b64
                      )
 
         return res is not None
@@ -7250,11 +7321,15 @@ def _esegui_spesa_fissa(spesa, descrizione_custom=None, data_esecuzione=None):
         return False
 
 
-def check_e_processa_spese_fisse(id_famiglia, master_key_b64=None, id_utente=None):
+def check_e_processa_spese_fisse(id_famiglia, master_key_b64=None, id_utente=None, forced_family_key_b64=None):
     oggi = datetime.date.today()
     spese_eseguite = 0
     try:
-        spese_da_processare = ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
+        spese_da_processare = ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente, forced_family_key_b64=forced_family_key_b64)
+        
+        # Use forced key if available, otherwise user's master key
+        key_to_use = forced_family_key_b64 if forced_family_key_b64 else master_key_b64
+        
         with get_db_connection() as con:
             cur = con.cursor()
             for spesa in spese_da_processare:
@@ -7306,7 +7381,7 @@ def check_e_processa_spese_fisse(id_famiglia, master_key_b64=None, id_utente=Non
                     importo = -abs(spesa['importo'])
 
                     # Use the new _esegui_spesa_fissa helper
-                    if _esegui_spesa_fissa(spesa, descrizione_custom=descrizione, data_esecuzione=data_esecuzione):
+                    if _esegui_spesa_fissa(spesa, descrizione_custom=descrizione, data_esecuzione=data_esecuzione, master_key_b64=key_to_use):
                         spese_eseguite += 1
             if spese_eseguite > 0:
                 con.commit()

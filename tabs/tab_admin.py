@@ -10,7 +10,11 @@ from db.gestione_db import (
     get_smtp_config, 
     save_smtp_config, 
     esporta_dati_famiglia,
-    get_impostazioni_budget_famiglia
+    esporta_dati_famiglia,
+    get_impostazioni_budget_famiglia,
+    get_server_family_key,
+    enable_server_automation,
+    disable_server_automation
 )
 from utils.email_sender import send_email
 from tabs.admin_tabs.subtab_budget_manager import AdminSubTabBudgetManager
@@ -178,6 +182,32 @@ class AdminTab(ft.Container):
                     padding=15,
                     border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
                     border_radius=10
+                ),
+                ft.Container(height=10),
+                ft.Container(
+                    content=ft.Row([
+                        ft.Column([
+                            ft.Row([
+                                ft.Text("Automazione Cloud (Koyeb)", weight=ft.FontWeight.W_500),
+                                ft.Icon(ft.Icons.CLOUD_QUEUE, color=AppColors.PRIMARY, size=16),
+                                ft.Container(
+                                    content=ft.Text("BETA", size=10, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD),
+                                    bgcolor=AppColors.SECONDARY,
+                                    padding=ft.padding.symmetric(horizontal=4, vertical=2),
+                                    border_radius=4
+                                )
+                            ], spacing=5),
+                            ft.Text("Esegui spese fisse e aggiorna asset in background.", 
+                                   size=12, color=AppColors.TEXT_SECONDARY)
+                        ], expand=True),
+                        ft.Switch(
+                            value=(self.server_automation_enabled if hasattr(self, 'server_automation_enabled') else False),
+                            on_change=self._toggle_automation_click
+                        )
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    padding=15,
+                    border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                    border_radius=10
                 )
             ], scroll=ft.ScrollMode.AUTO)
         )
@@ -216,7 +246,8 @@ class AdminTab(ft.Container):
             'membri': ottieni_membri_famiglia(famiglia_id, master_key_b64, id_utente),
             'smtp_config': get_smtp_config(famiglia_id, master_key_b64, id_utente),
             'impostazioni_budget': get_impostazioni_budget_famiglia(famiglia_id),
-            'budget_impostati': ottieni_budget_famiglia(famiglia_id, master_key_b64, id_utente)
+            'budget_impostati': ottieni_budget_famiglia(famiglia_id, master_key_b64, id_utente),
+            'server_key': get_server_family_key(famiglia_id)
         }
 
     def _on_data_loaded(self, result):
@@ -232,6 +263,9 @@ class AdminTab(ft.Container):
             
             # 4. Popola Budget Manager
             self.subtab_budget_manager.update_view_data(prefetched_data=result)
+            
+            # 5. Stato Automazione
+            self.server_automation_enabled = result.get('server_key') is not None
             
             if self.page:
                 self.page.update()
@@ -665,3 +699,72 @@ class AdminTab(ft.Container):
                     "Errore nel salvataggio dell'impostazione.", 
                     success=False
                 )
+    def _toggle_automation_click(self, e):
+        """Gestisce il click sullo switch Automazione."""
+        switch = e.control
+        is_enabling = switch.value
+        
+        if is_enabling:
+            # Revert UI temporarily until confirmed
+            switch.value = False
+            switch.update()
+            
+            # Show confirmation dialog
+            def close_dlg(e):
+                dlg.open = False
+                self.controller.page.update()
+
+            def confirm_enable(e):
+                dlg.open = False
+                self.controller.page.update()
+                self._execute_toggle_automation(True, switch)
+
+            dlg = ft.AlertDialog(
+                modal=True,
+                title=ft.Text("Attivare Automazione Cloud?"),
+                content=ft.Column([
+                    ft.Text("Abilitando questa funzione, accetti di salvare una copia criptata della tua chiave di famiglia sul server."),
+                    ft.Text("Questo permette al server di:", size=12, weight=ft.FontWeight.BOLD),
+                    ft.Text("- Pagare le spese fisse alla scadenza", size=12),
+                    ft.Text("- Aggiornare i prezzi degli asset", size=12),
+                    ft.Container(height=10),
+                    ft.Text("Nota: La chiave è protetta dalla chiave segreta del server, ma non è più Zero-Knowledge pura.", 
+                           color=AppColors.WARNING, size=12, italic=True),
+                ], tight=True),
+                actions=[
+                    ft.TextButton("Annulla", on_click=close_dlg),
+                    ft.TextButton("Accetto e Attiva", on_click=confirm_enable),
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+            )
+            self.controller.page.open(dlg)
+            self.controller.page.update()
+        else:
+            # Execute disable immediately
+            self._execute_toggle_automation(False, switch)
+
+    def _execute_toggle_automation(self, enable, switch_control):
+        id_famiglia = self.controller.get_family_id()
+        id_utente = self.controller.get_user_id()
+        master_key = self.controller.page.session.get("master_key")
+        
+        success = False
+        if enable:
+            success = enable_server_automation(id_famiglia, master_key, id_utente)
+            msg = "Automazione Attivata!" if success else "Errore attivazione. Controlla i log."
+        else:
+            success = disable_server_automation(id_famiglia)
+            msg = "Automazione Disattivata." if success else "Errore disattivazione."
+            
+        # Update UI state
+        if success:
+            switch_control.value = enable
+            self.server_automation_enabled = enable
+            if hasattr(self.controller, 'show_snack_bar'):
+                self.controller.show_snack_bar(msg, success=True)
+        else:
+            switch_control.value = not enable # Revert
+            if hasattr(self.controller, 'show_snack_bar'):
+                self.controller.show_snack_bar(msg, success=False)
+        
+        switch_control.update()
