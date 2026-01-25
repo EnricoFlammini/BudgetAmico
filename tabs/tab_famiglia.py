@@ -278,19 +278,78 @@ class FamigliaTab(ft.Container):
             if val_prestiti > 0:
                 righe_dettaglio.append(riga_resp(loc.get("loans"), loc.format_currency(-val_prestiti), color=AppColors.ERROR))
             
-            # Card riepilogo responsive
+            # --- Web Logic: Collapsible Details ---
+            is_web = False
+            try:
+                from controllers.web_app_controller import WebAppController
+                if isinstance(self.controller, WebAppController):
+                    is_web = True
+            except ImportError:
+                pass
+
+            content_dettagli = ft.Column(righe_dettaglio, spacing=5)
+            
+            icona_espandi = None
+            if is_web:
+                # Default hidden on web
+                content_dettagli.visible = False
+                
+                def toggle_dettagli(e):
+                    content_dettagli.visible = not content_dettagli.visible
+                    e.control.icon = ft.Icons.KEYBOARD_ARROW_UP if content_dettagli.visible else ft.Icons.KEYBOARD_ARROW_DOWN
+                    if self.controller.page:
+                        self.controller.page.update()
+
+                icona_espandi = ft.IconButton(
+                    icon=ft.Icons.KEYBOARD_ARROW_DOWN,
+                    on_click=toggle_dettagli,
+                    tooltip="Mostra/Nascondi Dettagli"
+                )
+
+            # Card riepilogo patrimonio responsive
+            header_patrimonio = ft.Column([
+                AppStyles.caption_text(loc.get("family_net_worth")),
+                ft.Row([
+                    AppStyles.big_currency_text(loc.format_currency(val_patrimonio),
+                        color=AppColors.SUCCESS if val_patrimonio >= 0 else AppColors.ERROR),
+                    icona_espandi if icona_espandi else ft.Container()
+                ], alignment=ft.MainAxisAlignment.START)
+            ])
+
             card_riepilogo = AppStyles.card_container(
                 content=ft.ResponsiveRow([
-                    ft.Column([
-                        AppStyles.caption_text(loc.get("family_net_worth")),
-                        AppStyles.big_currency_text(loc.format_currency(val_patrimonio),
-                            color=AppColors.SUCCESS if val_patrimonio >= 0 else AppColors.ERROR)
-                    ], col={"xs": 12, "sm": 12, "md": 5}),
+                    # Colonna Totale
+                    ft.Column([header_patrimonio], col={"xs": 12, "sm": 12, "md": 5}),
                     
-                    ft.Column(righe_dettaglio, spacing=5, col={"xs": 12, "sm": 12, "md": 7})
+                    # Colonna Dettagli
+                    ft.Column([content_dettagli], col={"xs": 12, "sm": 12, "md": 7})
                 ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 padding=20
             )
+            
+            container_mese = ft.Container(
+                content=self.dd_mese_filtro,
+                padding=ft.padding.only(left=10, right=10, top=10)
+            )
+
+            area_riepilogo = ft.Column([card_riepilogo, container_mese], spacing=0)
+
+            # Toggle Header for Web
+            icona_global_collapser = None
+            if is_web:
+                area_riepilogo.visible = False  # Default hidden on web as requested
+                
+                def toggle_area_riepilogo(e):
+                    area_riepilogo.visible = not area_riepilogo.visible
+                    e.control.icon = ft.Icons.KEYBOARD_ARROW_UP if area_riepilogo.visible else ft.Icons.KEYBOARD_ARROW_DOWN
+                    if self.controller.page:
+                        self.controller.page.update()
+                
+                icona_global_collapser = ft.IconButton(
+                    icon=ft.Icons.KEYBOARD_ARROW_DOWN,
+                    on_click=toggle_area_riepilogo,
+                    tooltip="Espandi/Riduci Riepilogo"
+                )
             
             # --- TRANSAZIONI LOGIC ---
             transazioni = data.get('transazioni', [])
@@ -310,10 +369,13 @@ class FamigliaTab(ft.Container):
             # Contenitore polimorfico che conterrà Tabella o Cards
             self.transazioni_container = ft.Container(content=content_transazioni, expand=True)
 
+            header_row_content = [ft.Container(AppStyles.title_text(loc.get("family_transactions")), expand=True)]
+            if icona_global_collapser:
+                header_row_content.append(icona_global_collapser)
+
             self.main_content.controls = [
-                AppStyles.title_text(loc.get("family_transactions")),
-                card_riepilogo,
-                ft.Container(content=self.dd_mese_filtro, padding=ft.padding.only(top=5, bottom=10)),
+                ft.Row(header_row_content, alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                area_riepilogo,
                 AppStyles.page_divider(),
                 self.transazioni_container
             ]
