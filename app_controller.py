@@ -30,7 +30,8 @@ from db.gestione_db import (
     check_e_processa_spese_fisse, get_user_count, crea_famiglia_e_admin,
     aggiungi_categorie_iniziali, cerca_utente_per_username, aggiungi_utente_a_famiglia,
     ottieni_versione_db, crea_invito, ottieni_invito_per_token,
-    ottieni_utenti_senza_famiglia, ensure_family_key, trigger_budget_history_update
+    ottieni_utenti_senza_famiglia, ensure_family_key, trigger_budget_history_update,
+    get_server_family_key
 )
 
 from utils.logger import setup_logger
@@ -264,20 +265,34 @@ class AppController:
 
         id_famiglia = self.get_family_id()
         if id_famiglia:
+            # Check if Server Automation is active
+            server_key_exists = get_server_family_key(id_famiglia) is not None
+            
             # Note: These checks are still synchronous but usually fast. 
             # Could be moved to async if needed, but low priority.
             master_key_b64 = self.page.session.get("master_key")
             id_utente = self.get_user_id()
             pagamenti_fatti = check_e_paga_rate_scadute(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
-            spese_fisse_eseguite = check_e_processa_spese_fisse(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
+            
+            # Se l'automazione server è attiva, SALTATO il check locale delle spese fisse
+            if not server_key_exists:
+                spese_fisse_eseguite = check_e_processa_spese_fisse(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
+                if spese_fisse_eseguite > 0: self.show_snack_bar(f"{spese_fisse_eseguite} spese fisse automatiche eseguite.", success=True)
+            else:
+                logger.info("Server Automation Active: Skipping local fixed expenses check.")
+
             if pagamenti_fatti > 0: self.show_snack_bar(f"{pagamenti_fatti} pagamenti rata automatici eseguiti.", success=True)
-            if spese_fisse_eseguite > 0: self.show_snack_bar(f"{spese_fisse_eseguite} spese fisse automatiche eseguite.", success=True)
+            
 
         self.update_all_views(is_initial_load=True)
         self.page.update()
         
         # Aggiorna prezzi asset in background (non blocca UI)
-        self._aggiorna_prezzi_asset_in_background()
+        # Skip if server automation is active
+        if id_famiglia and get_server_family_key(id_famiglia):
+             logger.info("Server Automation Active: Skipping local asset price update.")
+        else:
+             self._aggiorna_prezzi_asset_in_background()
         
         # Controlla aggiornamenti in background
         self._controlla_aggiornamenti_in_background()

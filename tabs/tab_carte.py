@@ -75,6 +75,7 @@ class TabCarte(ft.Container):
                 self.update()
             except Exception as e:
                 print(f"Error updating TabCarte: {e}")
+                traceback.print_exc()
 
     def _build_card_tile(self, card_data, assigned_color: str = None):
         # Create a nice visual card
@@ -92,11 +93,12 @@ class TabCarte(ft.Container):
         
         icon = ft.Icons.CREDIT_CARD if is_credit else ft.Icons.CREDIT_CARD_OFF_OUTLINED
         
-        content_col = [
-            ft.ListTile(
-                leading=ft.Icon(icon, color=ft.Colors.WHITE, size=30),
-                title=AppStyles.subheader_text(card_data['nome_carta'], color=ft.Colors.WHITE),
-                subtitle=ft.Row([
+        # Custom Header (Replacing ListTile to fix styling issues)
+        header_row = ft.Row([
+            ft.Icon(icon, color=ft.Colors.WHITE, size=30),
+            ft.Column([
+                AppStyles.subheader_text(card_data['nome_carta'], color=ft.Colors.WHITE),
+                ft.Row([
                     AppStyles.small_text(f"{card_data['circuito'].upper()} - {card_data['tipo_carta'].capitalize()}", color=ft.Colors.WHITE70),
                      ft.Container(
                         content=ft.Text(card_data['tipo_carta'][:1].upper(), color=ft.Colors.BLACK, size=10, weight="bold"),
@@ -105,14 +107,21 @@ class TabCarte(ft.Container):
                         alignment=ft.alignment.center,
                         tooltip=f"Tipo: {card_data['tipo_carta']}"
                     )
-                ])
-            )
+                ], spacing=5)
+            ], expand=True, spacing=2)
+        ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+        
+        content_col = [
+            ft.Container(content=header_row, padding=5),
+            ft.Divider(color=ft.Colors.WHITE24, height=1)
         ]
         
         # Shared logic for spending calculation
         today = datetime.date.today()
         speso = calcola_totale_speso_carta(card_data['id_carta'], today.month, today.year)
         massimale = float(card_data.get('massimale', 0))
+
+        spending_info = []
 
         if massimale > 0:
             # Show Progress Bar for both Credit and Debit if limit is set
@@ -124,21 +133,23 @@ class TabCarte(ft.Container):
             else:
                 extra_info = "Addebito immediato"
 
-            content_col.append(ft.Container(padding=10, content=ft.Column([
+            spending_info.extend([
                 AppStyles.small_text(f"Speso questo mese: € {speso:.2f} / € {massimale:.2f}", color=ft.Colors.WHITE),
                 ft.ProgressBar(value=percent, color=ft.Colors.ORANGE if percent > 0.8 else ft.Colors.GREEN, bgcolor=ft.Colors.WHITE24),
                 AppStyles.small_text(extra_info, color=ft.Colors.WHITE70)
-            ])))
+            ])
         else:
             # No limit set
             if is_credit:
-                 content_col.append(ft.Container(padding=10, content=AppStyles.small_text("Nessun massimale impostato", color=ft.Colors.WHITE70)))
+                 spending_info.append(AppStyles.small_text("Nessun massimale impostato", color=ft.Colors.WHITE70))
             else:
                   # Debit without limit - just show spending
-                  content_col.append(ft.Container(padding=10, content=ft.Column([
+                  spending_info.extend([
                      AppStyles.small_text(f"Speso questo mese: € {speso:.2f}", color=ft.Colors.WHITE),
                      AppStyles.small_text("Addebito immediato", color=ft.Colors.WHITE70)
-                  ])))
+                  ])
+        
+        content_col.append(ft.Container(padding=10, content=ft.Column(spending_info)))
 
         # Azioni Modifica/Elimina
         actions_row = ft.Row([
@@ -154,11 +165,12 @@ class TabCarte(ft.Container):
 
         return ft.Card(
             content=ft.Container(
-                content=ft.Column(content_col),
+                content=ft.Column(content_col, spacing=5),
                 padding=10,
                 bgcolor=bg_color,
-                border_radius=10,
-            )
+                border_radius=10, # Card radius
+            ),
+            elevation=5
         )
 
     def _open_add_dialog(self, e):
