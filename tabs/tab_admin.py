@@ -63,6 +63,23 @@ class AdminTab(ft.Container):
         
         # Nuovo subtab Gestione Budget
         self.subtab_budget_manager = AdminSubTabBudgetManager(controller)
+        
+        # Stato Automazione (inizializzato a False, aggiornato dopo fetch)
+        self.server_automation_enabled = False
+        self.switch_automation = ft.Switch(
+            value=False,
+            on_change=self._toggle_automation_click
+        )
+        self.container_force_check = ft.Container(
+             visible=False,
+             content=ft.OutlinedButton(
+                "Esegui Check Ora (Forza Aggiornamento)",
+                icon=ft.Icons.REFRESH,
+                on_click=self._force_background_check_click,
+                style=ft.ButtonStyle(color=AppColors.PRIMARY)
+             ),
+             padding=ft.padding.only(left=5)
+        )
 
         self.content = ft.Column(
             [self.tabs_admin],
@@ -129,9 +146,15 @@ class AdminTab(ft.Container):
                 AppStyles.page_divider(),
                 self.dd_email_provider,
                 self.txt_gmail_hint,
-                ft.Row([self.txt_smtp_server, self.txt_smtp_port], spacing=10),
-                ft.Row([self.txt_smtp_user, self.txt_smtp_password], spacing=10),
-                ft.Row([self.btn_test_email, self.btn_salva_email], spacing=10),
+                ft.ResponsiveRow([
+                    ft.Column([self.txt_smtp_server], col={"xs": 12, "sm": 8}), 
+                    ft.Column([self.txt_smtp_port], col={"xs": 12, "sm": 4})
+                ]),
+                ft.ResponsiveRow([
+                    ft.Column([self.txt_smtp_user], col={"xs": 12, "sm": 6}), 
+                    ft.Column([self.txt_smtp_password], col={"xs": 12, "sm": 6})
+                ]),
+                ft.Row([self.btn_test_email, self.btn_salva_email], spacing=10, wrap=True),
             ], scroll=ft.ScrollMode.AUTO)
         )
         tabs.append(t_email)
@@ -200,26 +223,14 @@ class AdminTab(ft.Container):
                             ft.Text("Esegui spese fisse e aggiorna asset in background.", 
                                    size=12, color=AppColors.TEXT_SECONDARY)
                         ], expand=True),
-                        ft.Switch(
-                            value=(self.server_automation_enabled if hasattr(self, 'server_automation_enabled') else False),
-                            on_change=self._toggle_automation_click
-                        )
+                        self.switch_automation  # Usa riferimento salvato
                     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                     padding=15,
                     border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
                     border_radius=10
                 ),
                 ft.Container(height=5),
-                ft.Container(
-                     visible=(self.server_automation_enabled if hasattr(self, 'server_automation_enabled') else False),
-                     content=ft.OutlinedButton(
-                        "Esegui Check Ora (Forza Aggiornamento)",
-                        icon=ft.Icons.REFRESH,
-                        on_click=self._force_background_check_click,
-                        style=ft.ButtonStyle(color=AppColors.PRIMARY)
-                     ),
-                     padding=ft.padding.only(left=5)
-                )
+                self.container_force_check  # Usa riferimento salvato
             ], scroll=ft.ScrollMode.AUTO)
         )
         tabs.append(t_back)
@@ -275,8 +286,10 @@ class AdminTab(ft.Container):
             # 4. Popola Budget Manager
             self.subtab_budget_manager.update_view_data(prefetched_data=result)
             
-            # 5. Stato Automazione
+            # 5. Stato Automazione - aggiorna switch e container
             self.server_automation_enabled = result.get('server_key') is not None
+            self.switch_automation.value = self.server_automation_enabled
+            self.container_force_check.visible = self.server_automation_enabled
             
             if self.page:
                 self.page.update()
@@ -354,8 +367,8 @@ class AdminTab(ft.Container):
                 if membro['id_utente'] == current_user_id:
                     continue
 
-                # Bottoni azione per il membro
-                action_buttons = [
+                # Bottoni azione per il membro (Wrap=True per gestirli se sono tanti)
+                action_buttons = ft.Row([
                     ft.IconButton(
                         icon=ft.Icons.SEND,
                         tooltip="Rimanda Credenziali",
@@ -380,19 +393,30 @@ class AdminTab(ft.Container):
                             partial(self.rimuovi_membro_cliccato, e)
                         )
                     )
-                ]
+                ], spacing=0, wrap=True, alignment=ft.MainAxisAlignment.END)
 
-                content = ft.Row(
+                content = ft.ResponsiveRow(
                     [
-                        ft.Icon(ft.Icons.PERSON, color=AppColors.PRIMARY),
+                        # Col 1: Icona + Info Utente
                         ft.Column(
                             [
-                                AppStyles.subheader_text(membro['nome_visualizzato']),
-                                ft.Text(membro['ruolo'], color=AppColors.TEXT_SECONDARY)
-                            ],
-                            expand=True
+                                ft.Row([
+                                    ft.Icon(ft.Icons.PERSON, color=AppColors.PRIMARY),
+                                    ft.Column([
+                                            AppStyles.subheader_text(membro['nome_visualizzato']),
+                                            ft.Text(membro['ruolo'], color=AppColors.TEXT_SECONDARY)
+                                    ], spacing=2)
+                                ])
+                            ], 
+                            col={"xs": 12, "sm": 8}
                         ),
-                        ft.Row(action_buttons, spacing=0)
+                        
+                        # Col 2: Bottoni
+                        ft.Column(
+                            [action_buttons], 
+                            col={"xs": 12, "sm": 4},
+                            horizontal_alignment=ft.CrossAxisAlignment.END
+                        )
                     ],
                     vertical_alignment=ft.CrossAxisAlignment.CENTER
                 )

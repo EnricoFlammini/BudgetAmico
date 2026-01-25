@@ -1,4 +1,4 @@
-# Budget Amico v0.37.00
+# Budget Amico v0.38.00
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -11,6 +11,17 @@
 ---
 
 ## 📅 Changelog
+### v0.38.00 (25/01/2026)
+- **Web App - Navigazione Drawer**:
+    - **Menu Laterale**: Sostituita la barra di navigazione in basso (troppo affollata) con un elegante menu laterale a scomparsa (Drawer).
+    - **Hamburger Menu**: Nuova icona ☰ nell'AppBar per aprire il Drawer.
+    - **Header Utente**: Il Drawer mostra nome utente e ID nella parte superiore.
+- **Grafici Responsivi**:
+    - **Storico Asset e Monte Carlo**: Corretti layout che causavano overflow orizzontale su schermi piccoli. I grafici ora si adattano correttamente.
+- **Admin Tab**:
+    - **Fix Switch Automazione Cloud**: Corretto bug che mostrava lo switch sempre su "OFF" anche quando l'automazione era già attiva nel database.
+- **Schede Aggiuntive Web**:
+    - Aggiunte le schede **Admin** e **Impostazioni** alla Web App (visibili in base al ruolo).
 ### v0.37.00 (25/01/2026)
 - **Automazione Cloud (BETA)**:
     - **Server-Side Background Tasks**: Introdotta la possibilità di eseguire operazioni automatiche direttamente sul server (Koyeb/Cloud) senza la necessità di effettuare il login client.

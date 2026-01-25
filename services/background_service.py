@@ -26,11 +26,11 @@ class BackgroundService:
         self.running = True
         logger.info("Avvio Background Service...")
         
-        # Schedulazione dei task
-        # Esegui check spese fisse ogni 6 ore
-        schedule.every(6).hours.do(self.run_fixed_expenses_job)
+        # Schedule jobs
+        # 1. Fixed Expenses & Automation -> Every 6 hours
+        schedule.every(6).hours.do(self.check_and_run_jobs)
         
-        # Esegui aggiornamento asset ogni 12 ore (mercati chiusi/aperti)
+        # 2. Asset Update -> Every 12 hours
         schedule.every(12).hours.do(self.run_asset_updates_job)
         
         # Esegui subito all'avvio (in un thread separato per non bloccare)
@@ -49,9 +49,95 @@ class BackgroundService:
         self.running = False
         logger.info("Background Service fermato.")
 
+    def check_and_run_jobs(self):
+        """
+        Ciclo principale: 
+        1. Spese Fisse, Rate Prestiti, Storico Budget, Saldo Carte (ogni 6 ore o forzato)
+        2. Asset Update (ogni 12 ore o forzato)
+        """
+        logger.info("Esecuzione ciclo jobs background...")
+        conn = None
+        try:
+            # Get all families with server key
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT id_famiglia, server_encrypted_key FROM Famiglie WHERE server_encrypted_key IS NOT NULL")
+            families = cur.fetchall()
+            
+            crypto_manager = CryptoManager()
+            server_secret = os.getenv("SERVER_SECRET_KEY")
+
+            if not server_secret:
+                logger.error("SERVER_SECRET_KEY non trovata. Impossibile eseguire automazione server.")
+                return
+
+            for fam in families:
+                id_famiglia = fam['id_famiglia']
+                if not fam['server_encrypted_key']:
+                     continue
+
+                try:
+                    # Decrypt Family Key
+                    family_key = crypto_manager.decrypt(fam['server_encrypted_key'], server_secret)
+                    if not family_key:
+                        logger.error(f"Impossibile decriptare chiave per famiglia {id_famiglia}")
+                        continue
+                        
+                    logger.info(f"--- Automazione per Famiglia {id_famiglia} ---")
+                    
+                    # 1. SPESE FISSE
+                    logger.info(f"Checking Spese Fisse per {id_famiglia}...")
+                    n_fixed = check_e_processa_spese_fisse(id_famiglia, master_key_b64=family_key, id_utente=None)
+                    if n_fixed > 0: logger.info(f"Eseguite {n_fixed} spese fisse.")
+
+                    # 2. RATE PRESTITI
+                    logger.info(f"Checking Rate Prestiti per {id_famiglia}...")
+                    n_loans = check_e_paga_rate_scadute(id_famiglia, master_key_b64=family_key, id_utente=None)
+                    if n_loans > 0: logger.info(f"Pagate {n_loans} rate prestiti.")
+
+                    # 3. STORICO BUDGET
+                    # Richiede un id_utente fittizio o valido per la logica interna?
+                    # trigger_budget_history_update controlla if not id_utente: return.
+                    # Cerchiamo un utente qualsiasi (es. l'admin o il primo)
+                    membri = ottieni_membri_famiglia(id_famiglia)
+                    admin_id = None
+                    if membri:
+                        # Find admin or pick first
+                        for m in membri:
+                            if m['ruolo'] == 'admin':
+                                admin_id = m['id_utente']
+                                break
+                        if not admin_id and membri: admin_id = membri[0]['id_utente']
+                    
+                    if admin_id:
+                        logger.info(f"Updating Budget History per {id_famiglia}...")
+                        now = datetime.datetime.now()
+                        trigger_budget_history_update(id_famiglia, now, master_key_b64=family_key, id_utente=admin_id)
+
+                        # 4. SALDO CARTE DI CREDITO
+                        # Itera su tutti i membri per controllare le loro carte
+                        logger.info(f"Checking Carte di Credito per {len(membri)} membri...")
+                        tot_cards = 0
+                        for m in membri:
+                            # process_credit_card_settlements usa id_utente per trovare le carte
+                            # Passiamo la Family Key come master key -> funziona per conti condivisi o se il sistema è full-shared
+                            c_n = process_credit_card_settlements(m['id_utente'], master_key_b64=family_key)
+                            tot_cards += c_n
+                        if tot_cards > 0: logger.info(f"Saldati {tot_cards} addebiti carte.")
+
+                except Exception as e_fam:
+                    logger.error(f"Errore automazione famiglia {id_famiglia}: {e_fam}")
+                    traceback.print_exc()
+
+        except Exception as e:
+            logger.error(f"Errore generale loop job: {e}")
+            traceback.print_exc()
+        finally:
+             if conn: conn.close()
     def run_all_jobs_now(self):
-        logger.info("Esecuzione immediata di tutti i job background...")
-        self.run_fixed_expenses_job()
+        """Manually trigger all jobs (for Admin)."""
+        logger.info("Manual trigger of all jobs...")
+        self.check_and_run_jobs()
         self.run_asset_updates_job()
 
     def _get_enabled_families(self):

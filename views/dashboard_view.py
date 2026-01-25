@@ -166,8 +166,39 @@ class DashboardView:
         """
         Costruisce e restituisce la vista del Dashboard con sidebar personalizzata.
         """
+        from app_controller import VERSION
         loc = self.controller.loc
-        self.appbar_title.value = loc.get("app_title")
+        self.appbar_title.value = f"{loc.get('app_title')} v{VERSION}"
+        self.appbar_title.size = 20
+        self.appbar_title.weight = ft.FontWeight.BOLD
+
+        # Version badge
+        self.version_text = ft.Text(
+            f"v{VERSION}", 
+            size=12, 
+            color=ft.Colors.WHITE54, 
+            weight=ft.FontWeight.W_400
+        )
+        
+        # Combine title and version
+        # NOTE: AppBar title expects a Control. We can use a Row.
+        # But DashboardView.build_view passes self.appbar_title as title.
+        # Let's change self.appbar_title to be a Row if possible, or just append text.
+        # Simpler: Just append text to the value string as requested "in piccolo sulla destra"
+        # Since 'title' in AppBar takes a Control, we can make self.appbar_title a Row.
+        
+        self.appbar_row = ft.Row(
+            [
+                ft.Text(loc.get("app_title"), weight=ft.FontWeight.BOLD, size=20),
+                ft.Container(
+                    content=ft.Text(f"v{VERSION}", size=11, weight=ft.FontWeight.NORMAL),
+                    padding=ft.padding.only(top=5, left=5),
+                    opacity=0.7
+                )
+            ],
+            spacing=0,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER
+        )
 
         # Inizializza il container della sidebar
         self.sidebar_container = ft.Container(
@@ -201,7 +232,7 @@ class DashboardView:
                     tooltip="Menu",
                     on_click=self._toggle_sidebar
                 ),
-                title=self.appbar_title,
+                title=self.appbar_row,
                 center_title=False,
                 actions=[
                     ft.IconButton(
@@ -488,7 +519,10 @@ class DashboardView:
         self.update_sidebar()
 
         # Aggiorna il titolo
-        self.appbar_title.value = self.controller.loc.get("app_title")
+        # Aggiorna il titolo (non serve fare nulla se usiamo Row statica con versione, 
+        # ma se la lingua cambia forse dovremmo rigenerare la Row.
+        # Per semplicità, ignoriamo il cambio lingua dinamico del titolo per ora o accediamo al Text dentro la Row)
+        self.appbar_row.controls[0].value = self.controller.loc.get("app_title")
 
         # Pattern: Stale-While-Revalidate
         # - All'avvio: carica solo la tab corrente (tab_personale)

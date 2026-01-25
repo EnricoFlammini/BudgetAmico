@@ -5,11 +5,16 @@ from tabs.tab_investimenti import InvestimentiTab
 from tabs.tab_budget import BudgetTab
 from tabs.tab_famiglia import FamigliaTab
 from tabs.tab_divisore_pro import DivisoreProTab
+from tabs.tab_spese_fisse import SpeseFisseTab
 from tabs.tab_accantonamenti import AccantonamentiTab
 from tabs.tab_carte import TabCarte
 from utils.logger import setup_logger
+from utils.styles import AppColors
 
 logger = setup_logger("WebDashboardView")
+
+from tabs.tab_admin import AdminTab
+from tabs.tab_impostazioni import ImpostazioniTab
 
 class WebDashboardView:
     def __init__(self, controller):
@@ -25,12 +30,13 @@ class WebDashboardView:
 
         self.tab_famiglia = FamigliaTab(controller)
         self.tab_divisore_pro = DivisoreProTab(controller)
-        self.tab_famiglia = FamigliaTab(controller)
-        self.tab_divisore_pro = DivisoreProTab(controller)
         self.tab_accantonamenti = AccantonamentiTab(controller)
         self.tab_carte = TabCarte(controller)
+        self.tab_spese_fisse = SpeseFisseTab(controller)
+        self.tab_admin = AdminTab(controller)
+        self.tab_impostazioni = ImpostazioniTab(controller)
         
-        # We will use a simplified view index
+        # Current selected index
         self.selected_index = 0
         
         # Main content area
@@ -40,30 +46,115 @@ class WebDashboardView:
             padding=5
         )
 
-    def build_view(self) -> ft.View:
-        # App Bar
-        app_bar = ft.AppBar(
-            title=ft.Text("Budget Amico Web"),
-            center_title=True,
-            bgcolor=ft.Colors.SURFACE,
-            actions=[
-                ft.IconButton(ft.Icons.LOGOUT, on_click=self.controller.logout)
-            ]
+        # Dynamic tabs list: (ViewInstance, Icon, Label)
+        self.active_tabs = []
+        
+        # Drawer reference
+        self.drawer = None
+
+    def _build_drawer(self) -> ft.NavigationDrawer:
+        """Costruisce il Drawer con tutte le voci di navigazione."""
+        ruolo = self.controller.get_user_role()
+        
+        # Define available tabs: (View, Icon, Label)
+        possible_tabs = [
+            (self.tab_personale, ft.Icons.HOME, "Home"),
+            (self.tab_budget, ft.Icons.PIE_CHART, "Budget"),
+            (self.tab_conti, ft.Icons.ACCOUNT_BALANCE_WALLET, "Conti"),
+            (self.tab_carte, ft.Icons.CREDIT_CARD, "Carte"),
+            (self.tab_accantonamenti, ft.Icons.SAVINGS, "Risparmi"),
+            (self.tab_spese_fisse, ft.Icons.CALENDAR_MONTH, "Spese Fisse"),
+            (self.tab_famiglia, ft.Icons.DIVERSITY_3, "Famiglia"),
+            (self.tab_investimenti, ft.Icons.TRENDING_UP, "Investimenti"),
+            (self.tab_divisore_pro, ft.Icons.CALCULATE, "Divisore"),
+        ]
+        
+        # Add Admin if authorized
+        if ruolo == 'admin':
+             possible_tabs.append((self.tab_admin, ft.Icons.ADMIN_PANEL_SETTINGS, "Amministrazione"))
+        
+        # Add Settings (Always)
+        possible_tabs.append((self.tab_impostazioni, ft.Icons.SETTINGS, "Impostazioni"))
+
+        self.active_tabs = possible_tabs
+        
+        # Build drawer destinations
+        drawer_controls = [
+            # Header con info utente
+            ft.Container(
+                content=ft.Column([
+                    ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=48, color=AppColors.PRIMARY),
+                    ft.Text(
+                        self.page.session.get("nome_visualizzato") or "Utente",
+                        weight=ft.FontWeight.BOLD,
+                        size=16
+                    ),
+                    ft.Text(
+                        f"ID: {self.controller.get_user_id() or 'N/A'}",
+                        size=12,
+                        color=AppColors.TEXT_SECONDARY
+                    ),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=5),
+                padding=20,
+                bgcolor=AppColors.SURFACE_VARIANT,
+                width=280
+            ),
+            ft.Divider(height=1),
+        ]
+        
+        # Add navigation destinations
+        for idx, (view, icon, label) in enumerate(possible_tabs):
+            drawer_controls.append(
+                ft.NavigationDrawerDestination(
+                    icon=icon,
+                    label=label,
+                    selected_icon=icon
+                )
+            )
+        
+        # Divider before logout
+        drawer_controls.append(ft.Divider(height=1))
+        
+        return ft.NavigationDrawer(
+            controls=drawer_controls,
+            selected_index=self.selected_index,
+            on_change=self._on_drawer_change,
         )
 
-        # Bottom Navigation Bar
-        self.nav_bar = ft.NavigationBar(
-            destinations=[
-                ft.NavigationBarDestination(icon=ft.Icons.HOME, label="Home"),
-                ft.NavigationBarDestination(icon=ft.Icons.PIE_CHART, label="Budget"),
-                ft.NavigationBarDestination(icon=ft.Icons.ACCOUNT_BALANCE_WALLET, label="Conti"),
-                ft.NavigationBarDestination(icon=ft.Icons.CREDIT_CARD, label="Carte"),
-                ft.NavigationBarDestination(icon=ft.Icons.SAVINGS, label="Risparmi"),
-                ft.NavigationBarDestination(icon=ft.Icons.CALCULATE, label="Divisore"),
-            ],
-            on_change=self._on_nav_change,
-            selected_index=0,
-            label_behavior=ft.NavigationBarLabelBehavior.ONLY_SHOW_SELECTED
+    def build_view(self) -> ft.View:
+        from app_controller import VERSION
+        
+        # Build Drawer
+        self.drawer = self._build_drawer()
+        
+        # App Bar with hamburger menu
+        app_bar = ft.AppBar(
+            leading=ft.IconButton(
+                icon=ft.Icons.MENU,
+                on_click=self._open_drawer,
+                tooltip="Menu"
+            ),
+            title=ft.Row(
+                [
+                    ft.Text("Budget Amico", weight=ft.FontWeight.BOLD, size=18),
+                    ft.Container(
+                        content=ft.Text(f"v{VERSION}", size=10, weight=ft.FontWeight.NORMAL),
+                        padding=ft.padding.only(top=3, left=5),
+                        opacity=0.6
+                    )
+                ],
+                spacing=0,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            center_title=False,
+            bgcolor=ft.Colors.SURFACE,
+            actions=[
+                ft.IconButton(
+                    ft.Icons.LOGOUT,
+                    on_click=self.controller.logout,
+                    tooltip="Logout"
+                )
+            ]
         )
         
         # Floating Action Button for "Add Transaction"
@@ -78,53 +169,43 @@ class WebDashboardView:
             "/dashboard",
             controls=[self.content_area],
             appbar=app_bar,
-            navigation_bar=self.nav_bar,
+            drawer=self.drawer,
             floating_action_button=fab,
-            # bgcolor=ft.Colors.BACKGROUND,
-            padding=0 # Maximize space
+            padding=0
         )
 
-    def _on_nav_change(self, e):
-        idx = e.control.selected_index
-        logger.info(f"[WEB] Nav changed to {idx}")
-        
-        if idx == 0: # Home
-            self.content_area.content = self.tab_personale
-            self.tab_personale.update_view_data()
-        elif idx == 1: # Budget
-            self.content_area.content = self.tab_budget
-            self.tab_budget.update_view_data()
-        elif idx == 2: # Conti
-            self.content_area.content = self.tab_conti
-            self.tab_conti.update_view_data()
-        elif idx == 3: # Carte
-            self.content_area.content = self.tab_carte
-            self.tab_carte.update_view_data()
-        elif idx == 4: # Accantonamenti
-            self.content_area.content = self.tab_accantonamenti
-            self.tab_accantonamenti.update_view_data()
-        elif idx == 5: # Divisore Pro
-            self.content_area.content = self.tab_divisore_pro
-            self.tab_divisore_pro.update_view_data()
+    def _open_drawer(self, e):
+        """Apre il drawer."""
+        self.page.open(self.drawer)
 
+    def _on_drawer_change(self, e):
+        """Gestisce la selezione di una voce dal drawer."""
+        idx = e.control.selected_index
+        logger.info(f"[WEB] Drawer nav changed to {idx}")
+        
+        self.selected_index = idx
+        
+        if 0 <= idx < len(self.active_tabs):
+            selected_view = self.active_tabs[idx][0]
+            self.content_area.content = selected_view
+            
+            if hasattr(selected_view, 'update_view_data'):
+                selected_view.update_view_data()
+            elif hasattr(selected_view, 'update_all_admin_tabs_data'):
+                selected_view.update_all_admin_tabs_data()
+        
+        # Chiudi il drawer dopo la selezione
+        self.page.close(self.drawer)
         self.page.update()
 
     def update_all_tabs_data(self, is_initial_load=False):
         """Called by controller to refresh data"""
-        idx = self.nav_bar.selected_index
-        # Refresh current visible tab
-        if idx == 0:
-            self.tab_personale.update_view_data(is_initial_load)
-        elif idx == 1:
-            self.tab_budget.update_view_data(is_initial_load)
-        elif idx == 2:
-            self.tab_conti.update_view_data(is_initial_load)
-        elif idx == 3:
-            self.tab_carte.update_view_data(is_initial_load)
-        elif idx == 4:
-            self.tab_accantonamenti.update_view_data(is_initial_load)
-        elif idx == 5:
-            self.tab_divisore_pro.update_view_data(is_initial_load)
-        
+        if 0 <= self.selected_index < len(self.active_tabs):
+            selected_view = self.active_tabs[self.selected_index][0]
+            if hasattr(selected_view, 'update_view_data'):
+                selected_view.update_view_data(is_initial_load)
+            elif hasattr(selected_view, 'update_all_admin_tabs_data'):
+                selected_view.update_all_admin_tabs_data(is_initial_load)
+    
     def update_sidebar(self):
         pass # No sidebar in web view

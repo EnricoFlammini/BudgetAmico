@@ -163,34 +163,54 @@ class ImpostazioniTab(ft.Container):
             # Sezione Lingua e Valuta
             AppStyles.section_header(loc.get("language_and_currency")),
             AppStyles.page_divider(),
-            ft.Row([
-                self.dd_lingua,
-                self.dd_valuta,
-            ], spacing=10),
+            ft.ResponsiveRow([
+                ft.Column([self.dd_lingua], col={"xs": 12, "sm": 6}),
+                ft.Column([self.dd_valuta], col={"xs": 12, "sm": 6}),
+            ]),
 
             ft.Divider(height=30, color=ft.Colors.TRANSPARENT),
 
             # Sezione Conto Predefinito
             AppStyles.section_header(loc.get("default_account")),
             AppStyles.page_divider(),
-            ft.Row([
-                self.dd_conto_default,
-                self.btn_salva_conto_default
-            ], spacing=10),
-
+            ft.ResponsiveRow([
+                ft.Column([self.dd_conto_default], col={"xs": 12, "sm": 8}),
+                ft.Column([self.btn_salva_conto_default], col={"xs": 12, "sm": 4}),
+            ]),
+            
             ft.Divider(height=30, color=ft.Colors.TRANSPARENT),
 
             # Sezione Profilo Utente
             AppStyles.section_header(loc.get("user_profile")),
             AppStyles.page_divider(),
-            ft.Row([self.txt_username, self.txt_email], spacing=10),
-            ft.Row([self.txt_nome, self.txt_cognome], spacing=10),
-            ft.Row([self.txt_data_nascita, self.txt_codice_fiscale], spacing=10),
-            self.txt_indirizzo,
+            
+            ft.ResponsiveRow([
+                ft.Column([self.txt_username], col={"xs": 12, "sm": 6}),
+                ft.Column([self.txt_email], col={"xs": 12, "sm": 6}),
+            ]),
+            
+            ft.ResponsiveRow([
+                ft.Column([self.txt_nome], col={"xs": 12, "sm": 6}),
+                ft.Column([self.txt_cognome], col={"xs": 12, "sm": 6}),
+            ]),
+            
+            ft.ResponsiveRow([
+                ft.Column([self.txt_data_nascita], col={"xs": 12, "sm": 6}),
+                ft.Column([self.txt_codice_fiscale], col={"xs": 12, "sm": 6}),
+            ]),
+            
+            ft.ResponsiveRow([
+                ft.Column([self.txt_indirizzo], col={"xs": 12})
+            ]),
+
             ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
             AppStyles.subheader_text(loc.get("change_password")),
-            self.txt_nuova_password,
-            self.txt_conferma_password,
+            
+            ft.ResponsiveRow([
+                ft.Column([self.txt_nuova_password], col={"xs": 12, "sm": 6}),
+                ft.Column([self.txt_conferma_password], col={"xs": 12, "sm": 6}),
+            ]),
+            
             ft.Row([self.btn_salva_profilo], alignment=ft.MainAxisAlignment.END),
             
             ft.Divider(height=30, color=ft.Colors.TRANSPARENT),
@@ -198,16 +218,26 @@ class ImpostazioniTab(ft.Container):
             # Sezione Backup
             AppStyles.section_header(loc.get("backup_and_restore")),
             AppStyles.page_divider(),
-            ft.Row(
+            ft.ResponsiveRow(
                 [
-                    ft.ElevatedButton(
-                        loc.get("create_backup"),
-                        icon=ft.Icons.SAVE,
-                        on_click=lambda e: self.controller.backup_dati_clicked(),
-                        bgcolor=AppColors.PRIMARY, color=AppColors.ON_PRIMARY
-                    ),
-                    ft.ElevatedButton(loc.get("restore_from_backup"), icon=ft.Icons.RESTORE,
-                                      on_click=lambda e: self.controller.ripristina_dati_clicked()),
+                    ft.Column([
+                        ft.ElevatedButton(
+                            loc.get("create_backup"),
+                            icon=ft.Icons.SAVE,
+                            on_click=lambda e: self.controller.backup_dati_clicked(),
+                            bgcolor=AppColors.PRIMARY, color=AppColors.ON_PRIMARY,
+                            width=1000 # Fill column width
+                        )
+                    ], col={"xs": 12, "sm": 6}),
+                    
+                    ft.Column([
+                        ft.ElevatedButton(
+                            loc.get("restore_from_backup"), 
+                            icon=ft.Icons.RESTORE,
+                            on_click=lambda e: self.controller.ripristina_dati_clicked(),
+                            width=1000 # Fill column width
+                        )
+                    ], col={"xs": 12, "sm": 6}),
                 ]
             ),
             # Padding in fondo

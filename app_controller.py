@@ -39,7 +39,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 MAX_RECENT_FILES = 5
-VERSION = "0.37.00"
+VERSION = "0.38.00"
 
 
 class AppController:
@@ -272,16 +272,16 @@ class AppController:
             # Could be moved to async if needed, but low priority.
             master_key_b64 = self.page.session.get("master_key")
             id_utente = self.get_user_id()
-            pagamenti_fatti = check_e_paga_rate_scadute(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
-            
-            # Se l'automazione server è attiva, SALTATO il check locale delle spese fisse
             if not server_key_exists:
+                # Local Automation (Server disabled or not configured)
+                pagamenti_fatti = check_e_paga_rate_scadute(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
                 spese_fisse_eseguite = check_e_processa_spese_fisse(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
+                
+                if pagamenti_fatti > 0: self.show_snack_bar(f"{pagamenti_fatti} pagamenti rata automatici eseguiti.", success=True)
                 if spese_fisse_eseguite > 0: self.show_snack_bar(f"{spese_fisse_eseguite} spese fisse automatiche eseguite.", success=True)
             else:
-                logger.info("Server Automation Active: Skipping local fixed expenses check.")
-
-            if pagamenti_fatti > 0: self.show_snack_bar(f"{pagamenti_fatti} pagamenti rata automatici eseguiti.", success=True)
+                # Server Automation Active -> Skip ALL local heavy checks
+                logger.info("Server Automation Active: Skipping local Fixed Expenses and Loan checks.")
             
 
         self.update_all_views(is_initial_load=True)
@@ -597,29 +597,35 @@ class AppController:
             self.page.session.set("ruolo_utente", ottieni_ruolo_utente(id_utente, id_famiglia))
             
             # --- Auto-Update History Snapshot & Credit Card Settlement on Login ---
-            try:
-                from utils.async_task import AsyncTask
-                from utils.card_processing import process_credit_card_settlements
-                
-                def _bg_tasks():
-                    master_key_b64 = utente.get("master_key")
-                    now = datetime.datetime.now()
-                    # 1. Update Budget History
-                    try:
-                        trigger_budget_history_update(id_famiglia, now, master_key_b64, id_utente)
-                    except Exception as e:
-                        logger.warning(f"History update failed: {e}")
+            # SKIP if Server Automation is active (checked via get_server_family_key)
+            from db.gestione_db import get_server_family_key
+            
+            if not get_server_family_key(id_famiglia):
+                try:
+                    from utils.async_task import AsyncTask
+                    from utils.card_processing import process_credit_card_settlements
                     
-                    # 2. Process Credit Card Settlements
-                    try:
-                        n = process_credit_card_settlements(id_utente, master_key_b64)
-                        if n > 0: logger.info(f"Processed {n} credit card settlements.")
-                    except Exception as e:
-                        logger.warning(f"Card settlement processing failed: {e}")
-                
-                AsyncTask(target=_bg_tasks).start()
-            except Exception as e:
-                logger.warning(f"Failed background tasks on login: {e}")
+                    def _bg_tasks():
+                        master_key_b64 = utente.get("master_key")
+                        now = datetime.datetime.now()
+                        # 1. Update Budget History
+                        try:
+                            trigger_budget_history_update(id_famiglia, now, master_key_b64, id_utente)
+                        except Exception as e:
+                            logger.warning(f"History update failed: {e}")
+                        
+                        # 2. Process Credit Card Settlements
+                        try:
+                            n = process_credit_card_settlements(id_utente, master_key_b64)
+                            if n > 0: logger.info(f"Processed {n} credit card settlements.")
+                        except Exception as e:
+                            logger.warning(f"Card settlement processing failed: {e}")
+                    
+                    AsyncTask(target=_bg_tasks).start()
+                except Exception as e:
+                    logger.warning(f"Failed background tasks on login: {e}")
+            else:
+                logger.info("Server Automation Active: Skipping local History & Card tasks.")
 
             self.page.go("/dashboard")
         else:

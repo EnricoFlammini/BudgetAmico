@@ -151,7 +151,7 @@ class MonteCarloSubTab(ft.Container):
         config_container = AppStyles.card_container(
             content=config_content,
             padding=20,
-            width=380 
+            # width=380  <-- Removed fixed width
         )
         
         # Right Results Panel
@@ -159,18 +159,23 @@ class MonteCarloSubTab(ft.Container):
             self.card_pessimistic,
             self.card_expected,
             self.card_optimistic
-        ], spacing=10)
+        ], spacing=10, wrap=True) # Wrap cards if needed
         
         right_col = ft.Column([
-            self.chart_container,
+            ft.Container(
+                content=self.chart_container,
+                height=500 # Fixed height for chart
+            ),
             results_row,
             ft.Container(content=self.txt_info_storico, alignment=ft.Alignment(1, 0))
-        ], expand=True, spacing=10)
+        ], spacing=10)
         
-        self.content = ft.Row([
-            ft.Column([config_container], scroll=ft.ScrollMode.AUTO, height=800), 
-            right_col
-        ], expand=True, spacing=20)
+        self.content = ft.Column([
+            ft.ResponsiveRow([
+                ft.Column([config_container], col={"xs": 12, "md": 4}), 
+                ft.Column([right_col], col={"xs": 12, "md": 8})
+            ])
+        ], scroll=ft.ScrollMode.AUTO, expand=True)
 
     def update_view_data(self):
         """Carica dati portafoglio e inizializza lista asset."""

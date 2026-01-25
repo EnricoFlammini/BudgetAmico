@@ -20,7 +20,8 @@ matplotlib>=3.8.0
 python-dateutil>=2.9.0
 requests>=2.32.0
 yfinance>=0.2.40
-schedule>=1.2.0
+APScheduler==3.10.4
+schedule==1.2.1
 
 # Build Tools
 pyinstaller>=6.16.0

@@ -74,9 +74,21 @@ class FamigliaTab(ft.Container):
             self.loading_view
         ], expand=True)
 
+    def did_mount(self):
+        # Sottoscrizione all'evento di resize della pagina
+        if self.page:
+            self.page.on_resized = self._on_page_resize
+
+    def _on_page_resize(self, e):
+        # Ridisegna le transazioni se sono caricate
+        if self.transazioni_data:
+             self._update_transactions_view()
+             self.page.update()
+
     def update_view_data(self, is_initial_load=False):
         theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()
         
+        # Inizializza controlli base
         self.main_content.controls = self.build_controls(theme)
         
         self.txt_patrimonio_totale_famiglia.color = theme.primary
@@ -99,14 +111,14 @@ class FamigliaTab(ft.Container):
         from utils.async_task import AsyncTask
         task = AsyncTask(
             target=self._fetch_data,
-            args=(famiglia_id, ruolo, theme),
+            args=(famiglia_id, ruolo, theme.primary), # Pass primary color string if needed, or object
             callback=self._on_data_loaded,
             error_callback=self._on_error
         )
         task.start()
 
-    def _fetch_data(self, famiglia_id, ruolo, theme):
-        result = {'famiglia_id': famiglia_id, 'ruolo': ruolo, 'theme': theme}
+    def _fetch_data(self, famiglia_id, ruolo, theme_primary):
+        result = {'famiglia_id': famiglia_id, 'ruolo': ruolo}
         
         if not famiglia_id:
             return result
@@ -146,10 +158,9 @@ class FamigliaTab(ft.Container):
     def _on_data_loaded(self, result):
         famiglia_id = result['famiglia_id']
         ruolo = result['ruolo']
-        theme = result['theme']
 
         # Ricostruisci UI con i dati
-        self._aggiorna_contenuto_per_ruolo(famiglia_id, ruolo, theme, result)
+        self._aggiorna_contenuto_per_ruolo(famiglia_id, ruolo, result)
 
         # Hide Loading
         self.loading_view.visible = False
@@ -163,7 +174,7 @@ class FamigliaTab(ft.Container):
         self.main_content.visible = True
         if self.controller.page: self.controller.page.update()
 
-    def _aggiorna_contenuto_per_ruolo(self, famiglia_id, ruolo, theme, data):
+    def _aggiorna_contenuto_per_ruolo(self, famiglia_id, ruolo, data):
         if not famiglia_id:
             self.main_content.controls = [ft.Column(
                 [
@@ -172,8 +183,8 @@ class FamigliaTab(ft.Container):
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER, expand=True
             )]
-            return
-
+            return 
+        
         if ruolo == 'livello3':
             self.main_content.controls = [ft.Column(
                 [
@@ -236,11 +247,11 @@ class FamigliaTab(ft.Container):
             val_patrimonio_immobile = riepilogo.get('patrimonio_immobile_lordo', 0)
             val_prestiti = riepilogo.get('prestiti_totali', 0)
             
-            # Custom styles for responsive text
+            # Custom styles
             text_style_label = ft.TextStyle(size=14, color=AppColors.TEXT_SECONDARY)
             text_style_val = ft.TextStyle(size=14, weight=ft.FontWeight.BOLD)
 
-            # Helper to create responsive detail row
+            # Helper
             def riga_resp(label, val_formatted, color=None):
                 return ft.ResponsiveRow([
                     ft.Column([ft.Text(label, style=text_style_label)], col={"xs": 6, "sm": 6}),
@@ -248,7 +259,7 @@ class FamigliaTab(ft.Container):
                               col={"xs": 6, "sm": 6}, alignment=ft.MainAxisAlignment.END, horizontal_alignment=ft.CrossAxisAlignment.END)
                 ])
 
-            # Costruisci righe dettaglio responsive
+            # Costruisci righe dettaglio
             righe_dettaglio = []
             righe_dettaglio.append(riga_resp(loc.get("liquidity"), loc.format_currency(val_liquidita)))
             
@@ -267,51 +278,109 @@ class FamigliaTab(ft.Container):
             if val_prestiti > 0:
                 righe_dettaglio.append(riga_resp(loc.get("loans"), loc.format_currency(-val_prestiti), color=AppColors.ERROR))
             
-            # Card riepilogo patrimonio famiglia responsive - FORCE STACKING ON MOBILE/TABLET
+            # Card riepilogo responsive
             card_riepilogo = AppStyles.card_container(
                 content=ft.ResponsiveRow([
-                    # Colonna Totale: Full width on xs AND sm. Only side-by-side on md+
                     ft.Column([
                         AppStyles.caption_text(loc.get("family_net_worth")),
                         AppStyles.big_currency_text(loc.format_currency(val_patrimonio),
                             color=AppColors.SUCCESS if val_patrimonio >= 0 else AppColors.ERROR)
                     ], col={"xs": 12, "sm": 12, "md": 5}),
                     
-                    # Colonna Dettagli: Full width on xs AND sm.
                     ft.Column(righe_dettaglio, spacing=5, col={"xs": 12, "sm": 12, "md": 7})
                 ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 padding=20
             )
             
-            # Aggiorna i controlli del main_content con riepilogo patrimonio
+            # --- TRANSAZIONI LOGIC ---
+            transazioni = data.get('transazioni', [])
+            self.transazioni_data = transazioni # Store for switching views
+            
+            if not transazioni:
+                self.dt_transazioni_famiglia.visible = False
+                self.no_data_view.visible = True
+                
+                # Container per la lista (vuoto ma visibile nella struttura)
+                content_transazioni = self.no_data_view
+            else:
+                self.no_data_view.visible = False
+                # La scelta tra tabella e card avviene qui
+                content_transazioni = self.dt_transazioni_famiglia # Default desktop placeholder, will be swapped
+            
+            # Contenitore polimorfico che conterrà Tabella o Cards
+            self.transazioni_container = ft.Container(content=content_transazioni, expand=True)
+
             self.main_content.controls = [
                 AppStyles.title_text(loc.get("family_transactions")),
                 card_riepilogo,
                 ft.Container(content=self.dd_mese_filtro, padding=ft.padding.only(top=5, bottom=10)),
                 AppStyles.page_divider(),
-                self.data_stack
+                self.transazioni_container
             ]
-
-            transazioni = data.get('transazioni', [])
-            self.transazioni_data = transazioni # Store data for sorting
             
-            if not transazioni:
-                self.dt_transazioni_famiglia.visible = False
-                self.no_data_view.visible = True
+            if transazioni:
+                 # Logic to decide which view to show
+                 self._update_transactions_view()
+
+    def _update_transactions_view(self):
+        """Aggiorna la vista delle transazioni (Tabella vs Cards) in base alla larghezza."""
+        if not self.transazioni_data: return
+        
+        is_mobile = False
+        if self.page:
+            is_mobile = self.page.width < 700 # Breakpoint leggermente più alto per tabella complessa
+        
+        if is_mobile:
+             self.transazioni_container.content = self._build_mobile_transactions_list()
+        else:
+             self.transazioni_container.content = ft.Column([self.dt_transazioni_famiglia], scroll=ft.ScrollMode.ADAPTIVE, expand=True)
+             self._populate_transazioni_table(update_ui=False) # Assicurati che la tabella sia popolata
+
+    def _build_mobile_transactions_list(self):
+        """Costruisce la lista di card per mobile."""
+        loc = self.controller.loc
+        cards = []
+        
+        for t in self.transazioni_data:
+            # Formatta importo
+            if t.get('importo_nascosto'):
+                importo_text = loc.get("amount_reserved")
+                importo_color = AppColors.TEXT_SECONDARY
             else:
-                self.dt_transazioni_famiglia.visible = True
-                self.no_data_view.visible = False
-                # Initial sort (by date desc if not set)
-                if self.dt_transazioni_famiglia.sort_column_index is None:
-                     self.dt_transazioni_famiglia.sort_column_index = 1
-                     self.dt_transazioni_famiglia.sort_ascending = False
+                importo = t.get('importo', 0)
+                importo_text = loc.format_currency(importo)
+                importo_color = AppColors.SUCCESS if importo >= 0 else AppColors.ERROR
+            
+            card_content = ft.Column([
+                ft.Row([
+                    ft.Column([
+                        AppStyles.subheader_text(t.get('descrizione') or "N/A"),
+                        AppStyles.small_text(f"{t.get('data')} - {t.get('utente_nome')}")
+                    ], expand=True),
+                    
+                    ft.Column([
+                        AppStyles.data_text(importo_text, color=importo_color, size=16),
+                        AppStyles.small_text(t.get('conto_nome') or "N/A")
+                    ], horizontal_alignment=ft.CrossAxisAlignment.END)
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 
-                self._populate_transazioni_table(update_ui=False)
+                ft.Row([
+                     AppStyles.caption_text(t.get('nome_sottocategoria') or "N/A")
+                ])
+            ], spacing=5)
+            
+            cards.append(AppStyles.card_container(content=card_content, padding=12))
+            
+        return ft.ListView(controls=cards, spacing=10, padding=5, expand=True)
 
     def _populate_transazioni_table(self, update_ui=True):
         self.dt_transazioni_famiglia.rows.clear()
+        
+        # Apply sorting if set
+        # (La logica di sort è già in _on_sort, ma qui assicuriamo che self.transazioni_data sia ordinato se necessario?
+        #  No, _on_sort ordina self.transazioni_data. Qui si assume sia già ordinato o default ordine DB)
+            
         for t in self.transazioni_data:
-            # Determina il testo dell'importo
             if t.get('importo_nascosto'):
                 importo_text = self.controller.loc.get("amount_reserved")
                 importo_color = AppColors.TEXT_SECONDARY
@@ -339,7 +408,6 @@ class FamigliaTab(ft.Container):
         self.dt_transazioni_famiglia.sort_ascending = e.ascending
         
         # Mapping index to key
-        # 0: User, 1: Date, 2: Description, 3: Subcategory, 4: Account, 5: Amount
         key_map = {
             0: 'utente_nome',
             1: 'data',
@@ -350,13 +418,17 @@ class FamigliaTab(ft.Container):
         }
         
         sort_key = key_map.get(e.column_index)
-        if sort_key:
+        if sort_key and self.transazioni_data:
             self.transazioni_data.sort(
                 key=lambda x: x.get(sort_key) if x.get(sort_key) is not None else "",
                 reverse=not e.ascending
             )
             
-        self._populate_transazioni_table()
+        if self.dt_transazioni_famiglia.visible:
+             self._populate_transazioni_table()
+        # Se siamo in mobile view (cards), il sort della tabella non ha effetto visivo immediato sulle card
+        # a meno che non rigeneriamo anche la lista card.
+        # Per ora lasciamo il sort attivo solo sulla tabella.
 
     def build_controls(self, theme):
         loc = self.controller.loc

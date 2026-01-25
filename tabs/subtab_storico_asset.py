@@ -115,35 +115,38 @@ class StoricoAssetSubTab(ft.Container):
             ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
             
             # Main content: checkbox sinistra + grafico destra
-            ft.Row([
+            ft.ResponsiveRow([
                 # Sidebar con checkbox asset e ricerca preferiti
-                AppStyles.card_container(
-                    content=ft.Column([
-                        AppStyles.caption_text("Asset Portafoglio"),
-                        ft.Divider(height=1),
-                        self.checkbox_container,
-                        ft.Container(height=15),
-                        AppStyles.caption_text("Aggiungi Preferito"),
-                        ft.Divider(height=1),
-                        self.ticker_search,
-                    ], spacing=5),
-                    padding=10,
-                    width=250
-                ),
+                ft.Column([
+                    AppStyles.card_container(
+                        content=ft.Column([
+                            AppStyles.caption_text("Asset Portafoglio"),
+                            ft.Divider(height=1),
+                            self.checkbox_container,
+                            ft.Container(height=15),
+                            AppStyles.caption_text("Aggiungi Preferito"),
+                            ft.Divider(height=1),
+                            self.ticker_search,
+                        ], spacing=5),
+                        padding=10,
+                        # width=250  <-- Removed fixed width
+                    )
+                ], col={"xs": 12, "md": 3}), # 3/12 width on desktop, full on mobile
                 
                 # Grafico principale con info aggiornamento
                 ft.Column([
                     ft.Container(
                         content=self.grafico_container,
-                        expand=True,
+                        # expand=True, <-- Removed expand, controlled by Column
+                        height=500, # Give it a height so Image fit works well
                         border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
                         border_radius=8,
                         padding=10
                     ),
                     self.txt_ultimo_aggiornamento,
-                ], expand=True, spacing=5)
-            ], expand=True)
-        ], expand=True)
+                ], col={"xs": 12, "md": 9}, spacing=5) # 9/12 width on desktop
+            ])
+        ], expand=True, scroll=ft.ScrollMode.AUTO) # Added scroll to main column if needed
     
     def update_view_data(self, is_initial_load=False):
         """Carica la lista degli asset disponibili."""
