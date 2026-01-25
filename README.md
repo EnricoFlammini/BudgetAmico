@@ -1,4 +1,4 @@
-# Budget Amico v0.36.00
+# Budget Amico v0.36.01
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -6,6 +6,7 @@
 
 
 **Budget Amico** è un'applicazione avanzata per la gestione delle finanze personali e familiari, sviluppata in Python con framework Flet.
+> Il tuo assistente personale per la gestione delle finanze familiari. Semplice, sicuro, multipiattaforma. in Python con framework Flet.
 
 ---
 

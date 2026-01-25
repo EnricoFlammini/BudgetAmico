@@ -139,7 +139,7 @@ class TransactionDialog(ft.AlertDialog):
 
         # 2. Accounts (Caricati DOPO le carte)
         tutti_i_conti = ottieni_tutti_i_conti_utente(utente_id, master_key_b64=master_key_b64)
-        conti_filtrati = [c for c in tutti_i_conti if c['tipo'] not in ['Fondo Pensione']]
+        conti_filtrati = [c for c in tutti_i_conti if c['tipo'] not in []] # Removed 'Fondo Pensione' exclusion
 
         for c in conti_filtrati:
             suffix = " " + self.loc.get("shared_suffix") if c['is_condiviso'] else ""

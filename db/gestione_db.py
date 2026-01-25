@@ -394,7 +394,7 @@ def calcola_entrate_mensili_famiglia(id_famiglia: str, anno: int, mese: int, mas
             if not id_sottocategorie:
                 return 0.0
             
-            # Somma le transazioni personali con queste sottocategorie
+            # Somma le transazioni personali con queste sottocategorie, ESCLUDENDO i Fondi Pensione
             placeholders_sub = ','.join(['%s'] * len(id_sottocategorie))
             cur.execute(f"""
                 SELECT COALESCE(SUM(T.importo), 0.0) as totale
@@ -404,6 +404,7 @@ def calcola_entrate_mensili_famiglia(id_famiglia: str, anno: int, mese: int, mas
                 WHERE AF.id_famiglia = %s
                   AND T.id_sottocategoria IN ({placeholders_sub})
                   AND T.data BETWEEN %s AND %s
+                  AND C.tipo != 'Fondo Pensione'
             """, (id_famiglia, *id_sottocategorie, data_inizio, data_fine))
             totale_personali = cur.fetchone()['totale'] or 0.0
             
@@ -4735,8 +4736,27 @@ def esegui_operazione_fondo_pensione(id_fondo_pensione, tipo_operazione, importo
 
             if tipo_operazione == 'VERSAMENTO':
                 descrizione = f"Versamento a fondo pensione (ID: {id_fondo_pensione})"
+                # Transazione in uscita dal conto collegato
                 cur.execute("INSERT INTO Transazioni (id_conto, data, descrizione, importo) VALUES (?, %s, %s, %s)",
                             (id_conto_collegato, data, descrizione, -abs(importo)))
+                
+                # Transazione in entrata nel fondo pensione (opzionale, ma utile per tracciamento)
+                # Per ora manteniamo la logica originale che aggiorna solo il valore manuale, 
+                # ma potremmo voler tracciare anche qui.
+                # Se vogliamo tracciare l'entrata nel fondo pensione:
+                # cur.execute("INSERT INTO Transazioni (id_conto, data, descrizione, importo) VALUES (?, %s, %s, %s)",
+                #             (id_fondo_pensione, data, "Versamento da conto", abs(importo)))
+
+            elif tipo_operazione == 'VERSAMENTO_ESTERNO':
+                # Nuova logica: registriamo una transazione di entrata direttamente sul fondo pensione
+                descrizione = "Versamento Esterno / Entrata"
+                # Assicuriamoci di avere una categoria/sottocategoria appropriata o lasciamo NULL
+                # Se vogliamo che sia un'entrata, l'importo deve essere positivo.
+                cur.execute("""
+                    INSERT INTO Transazioni (id_conto, data, descrizione, importo) 
+                    VALUES (%s, %s, %s, %s)
+                """, (id_fondo_pensione, data, descrizione, abs(importo)))
+
             elif tipo_operazione == 'PRELIEVO':
                 descrizione = f"Prelievo da fondo pensione (ID: {id_fondo_pensione})"
                 cur.execute("INSERT INTO Transazioni (id_conto, data, descrizione, importo) VALUES (?, %s, %s, %s)",
