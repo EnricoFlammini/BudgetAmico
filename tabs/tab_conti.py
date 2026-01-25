@@ -267,6 +267,17 @@ class ContiTab(ft.Container):
             )
         )
 
+        # Realign Balance Button (Restored)
+        actions.append(
+            ft.IconButton(
+                icon=ft.Icons.TUNE,
+                tooltip="Riallinea Saldo",
+                icon_color=ft.Colors.WHITE,
+                data=conto,
+                on_click=lambda e: self.controller.conto_dialog.apri_dialog_rettifica_saldo(e.control.data, is_condiviso=is_shared)
+            )
+        )
+
         # Piggy Bank create
         if not is_investimento and not is_fondo:
              actions.append(

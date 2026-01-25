@@ -195,7 +195,7 @@ class AccountTransactionsDialog(ft.AlertDialog):
         
         # Campi modifica
         self.txt_mod_data = ft.TextField(label="Data", value=str(t['data']), width=200, read_only=True)
-        btn_date = ft.IconButton(icon=ft.Icons.CALENDAR_MONTH, on_click=lambda _: self.date_picker.pick_date())
+        btn_date = ft.IconButton(icon=ft.Icons.CALENDAR_MONTH, on_click=lambda _: self.page_ref.open(self.date_picker))
         row_data = ft.Row([self.txt_mod_data, btn_date], spacing=5)
 
         self.txt_mod_desc = ft.TextField(label="Descrizione", value=t.get('descrizione', ''), width=300)

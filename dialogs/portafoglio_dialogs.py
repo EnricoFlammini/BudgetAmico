@@ -78,7 +78,7 @@ class PortafoglioDialogs:
         self.txt_data_operazione = ft.TextField(label="Data", hint_text="YYYY-MM-DD", read_only=True, expand=True)
         self.btn_date_picker = ft.IconButton(
             icon=ft.Icons.CALENDAR_MONTH,
-            on_click=lambda _: self.date_picker.pick_date(),
+            on_click=lambda _: self.controller.page.open(self.date_picker),
             tooltip="Seleziona data"
         )
         self.row_data_operazione = ft.Row([self.txt_data_operazione, self.btn_date_picker], spacing=10)

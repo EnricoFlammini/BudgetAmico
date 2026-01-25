@@ -1,4 +1,4 @@
-# Budget Amico v0.35.00
+# Budget Amico v0.36.00
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -10,6 +10,14 @@
 ---
 
 ## 📅 Changelog
+### v0.36.00 (25/01/2026)
+- **Spese Fisse**:
+    - **Giroconti Automatici**: È ora possibile pianificare **Giroconti** automatici nelle Spese Fisse, trasferendo fondi periodicamente tra conti personali o condivisi (anche verso conti Risparmio).
+    - **Interfaccia Migliorata**: Aggiunto selettore "Tipo Operazione" (Spesa vs Giroconto) e selezione del conto beneficiario.
+- **Bug Fix**:
+    - **DatePicker**: Risolto crash critico del calendario in `PortafoglioDialogs` e `AccountTransactionsDialog` causato da un aggiornamento delle librerie.
+    - **Migrazione Database**: Eseguiti script correttivi per allineare lo schema del database con le nuove funzionalità.
+
 ### v0.35.00 (24/01/2026)
 - **Web App**:
     - **Gestione Conti**: Aggiunta la pagina "Conti" anche nella versione Web, permettendo la gestione completa (creazione, modifica, visualizzazione) dei conti direttamente dal browser.

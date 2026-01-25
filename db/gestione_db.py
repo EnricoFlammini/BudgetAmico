@@ -6899,7 +6899,7 @@ def ottieni_prima_famiglia_utente(id_utente):
 
 
 # --- NUOVE FUNZIONI PER SPESE FISSE ---
-def aggiungi_spesa_fissa(id_famiglia, nome, importo, id_conto_personale=None, id_conto_condiviso=None, id_sottocategoria=None, giorno_addebito=1, attiva=True, addebito_automatico=False, master_key_b64=None, id_utente=None, id_carta=None):
+def aggiungi_spesa_fissa(id_famiglia, nome, importo, id_conto_personale=None, id_conto_condiviso=None, id_sottocategoria=None, giorno_addebito=1, attiva=True, addebito_automatico=False, master_key_b64=None, id_utente=None, id_carta=None, is_giroconto=False, id_conto_personale_beneficiario=None, id_conto_condiviso_beneficiario=None):
     try:
         crypto, master_key = _get_crypto_and_key(master_key_b64)
         family_key = None
@@ -6915,10 +6915,11 @@ def aggiungi_spesa_fissa(id_famiglia, nome, importo, id_conto_personale=None, id
             cur.execute("""
                 INSERT INTO SpeseFisse (
                     id_famiglia, nome, importo, id_conto_personale_addebito, id_conto_condiviso_addebito,
-                    id_categoria, id_sottocategoria, giorno_addebito, attiva, addebito_automatico, id_carta
+                    id_categoria, id_sottocategoria, giorno_addebito, attiva, addebito_automatico, id_carta,
+                    is_giroconto, id_conto_personale_beneficiario, id_conto_condiviso_beneficiario
                 )
-                VALUES (%s, %s, %s, %s, %s, (SELECT id_categoria FROM Sottocategorie WHERE id_sottocategoria = %s), %s, %s, %s, %s, %s)
-            """, (id_famiglia, nome_enc, importo, id_conto_personale, id_conto_condiviso, id_sottocategoria, id_sottocategoria, giorno_addebito, attiva, addebito_automatico, id_carta))
+                VALUES (%s, %s, %s, %s, %s, (SELECT id_categoria FROM Sottocategorie WHERE id_sottocategoria = %s), %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (id_famiglia, nome_enc, importo, id_conto_personale, id_conto_condiviso, id_sottocategoria, id_sottocategoria, giorno_addebito, attiva, addebito_automatico, id_carta, is_giroconto, id_conto_personale_beneficiario, id_conto_condiviso_beneficiario))
             con.commit()
             return True
     except Exception as e:
@@ -6926,7 +6927,7 @@ def aggiungi_spesa_fissa(id_famiglia, nome, importo, id_conto_personale=None, id
         return None
 
 
-def modifica_spesa_fissa(id_spesa_fissa, nome, importo, id_conto_personale=None, id_conto_condiviso=None, id_sottocategoria=None, giorno_addebito=1, attiva=True, addebito_automatico=False, master_key_b64=None, id_utente=None, id_carta=None):
+def modifica_spesa_fissa(id_spesa_fissa, nome, importo, id_conto_personale=None, id_conto_condiviso=None, id_sottocategoria=None, giorno_addebito=1, attiva=True, addebito_automatico=False, master_key_b64=None, id_utente=None, id_carta=None, is_giroconto=False, id_conto_personale_beneficiario=None, id_conto_condiviso_beneficiario=None):
     try:
         # Recupera famiglia
         id_famiglia = None
@@ -6950,9 +6951,10 @@ def modifica_spesa_fissa(id_spesa_fissa, nome, importo, id_conto_personale=None,
                 UPDATE SpeseFisse
                 SET nome = %s, importo = %s, id_conto_personale_addebito = %s, id_conto_condiviso_addebito = %s,
                     id_sottocategoria = %s, id_categoria = (SELECT id_categoria FROM Sottocategorie WHERE id_sottocategoria = %s),
-                    giorno_addebito = %s, attiva = %s, addebito_automatico = %s, id_carta = %s
+                    giorno_addebito = %s, attiva = %s, addebito_automatico = %s, id_carta = %s,
+                    is_giroconto = %s, id_conto_personale_beneficiario = %s, id_conto_condiviso_beneficiario = %s
                 WHERE id_spesa_fissa = %s
-            """, (nome_enc, importo, id_conto_personale, id_conto_condiviso, id_sottocategoria, id_sottocategoria, giorno_addebito, attiva, addebito_automatico, id_carta, id_spesa_fissa))
+            """, (nome_enc, importo, id_conto_personale, id_conto_condiviso, id_sottocategoria, id_sottocategoria, giorno_addebito, attiva, addebito_automatico, id_carta, is_giroconto, id_conto_personale_beneficiario, id_conto_condiviso_beneficiario, id_spesa_fissa))
             con.commit()
             return True
     except Exception as e:
@@ -7016,6 +7018,8 @@ def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=Non
                 LEFT JOIN ContiCondivisi CC ON SF.id_conto_condiviso_addebito = CC.id_conto_condiviso
                 LEFT JOIN Carte CARTE ON SF.id_carta = CARTE.id_carta
                 LEFT JOIN Utenti U_CARTE ON CARTE.id_utente = U_CARTE.id_utente
+                LEFT JOIN Conti CP_BEN ON SF.id_conto_personale_beneficiario = CP_BEN.id_conto
+                LEFT JOIN ContiCondivisi CC_BEN ON SF.id_conto_condiviso_beneficiario = CC_BEN.id_conto_condiviso
                 WHERE SF.id_famiglia = %s
                 ORDER BY SF.nome
             """, (id_famiglia,))
@@ -7040,6 +7044,11 @@ def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=Non
             if family_key:
                 for spesa in spese:
                     spesa['nome'] = _decrypt_if_key(spesa['nome'], family_key, crypto)
+                    
+                    # Decripta nome beneficiario se presente
+                    if spesa.get('id_conto_personale_beneficiario'):
+                         # Assuming personal beneficiary is mostly own account or decrypted easily if needed.
+                         pass 
                     
                     # Decripta anche il nome del conto
                     if spesa.get('nome_conto'):
@@ -7165,19 +7174,10 @@ def _esegui_spesa_fissa(spesa, descrizione_custom=None, data_esecuzione=None):
                 descrizione=descrizione_finale,
                 importo=-abs(spesa['importo']),
                 id_sottocategoria=spesa['id_sottocategoria'],
-                master_key_b64=None, # Non possiamo decriptare se background, MA aggiungi_transazione cifra se key passata.
-                # Se non passiamo key, salva in chiaro? NO. Salva criptato SE trova key in session o altro.
-                # Qui è tricky. Se gira automatico background senza sessione. 
-                # Per ora assumiamo esecuzione con utente loggato o che accetti encrypted string.
+                master_key_b64=None,
                 id_carta=id_carta
             )
         elif id_conto_condiviso:
-            # Serve autore. Per spese fisse automatiche, chi è l'autore?
-            # Se background, serve "sistema" o primo admin.
-            # Qui semplifichiamo: se chiamato da UI, usa user. Se background?
-            # BudgetAmico è desktop app single user session mostly. 
-            # Assumiamo id_utente della spesa fissa? SpeseFisse non ha id_utente OWNER, ma id_famiglia.
-            # Cerchiamo un admin della famiglia?
             id_autore = _trova_admin_famiglia(spesa['id_famiglia'])
             if not id_autore: return False
             
@@ -7193,6 +7193,35 @@ def _esegui_spesa_fissa(spesa, descrizione_custom=None, data_esecuzione=None):
             )
         else:
             return False
+            
+        # -- GESTIONE GIROCONTO (NUOVO) --
+        if res and spesa.get('is_giroconto'):
+             importo_accredito = abs(spesa['importo'])
+             descrizione_accredito = f"Giroconto da: {spesa['nome']} (Automatico)"
+             
+             # Destinazione Personale
+             if spesa.get('id_conto_personale_beneficiario'):
+                 aggiungi_transazione(
+                    id_conto=spesa['id_conto_personale_beneficiario'],
+                    data=data_finale,
+                    descrizione=descrizione_accredito,
+                    importo=importo_accredito,
+                    id_sottocategoria=spesa['id_sottocategoria'], # Same category/subcategory? Usually "Giroconti" or "Transfer"
+                    master_key_b64=None
+                 )
+             # Destinazione Condivisa
+             elif spesa.get('id_conto_condiviso_beneficiario'):
+                 id_autore_ben = _trova_admin_famiglia(spesa['id_famiglia'])
+                 if id_autore_ben:
+                     aggiungi_transazione_condivisa(
+                        id_utente_autore=id_autore_ben,
+                        id_conto_condiviso=spesa['id_conto_condiviso_beneficiario'],
+                        data=data_finale,
+                        descrizione=descrizione_accredito,
+                        importo=importo_accredito,
+                        id_sottocategoria=spesa['id_sottocategoria'],
+                        master_key_b64=None
+                     )
 
         return res is not None
 

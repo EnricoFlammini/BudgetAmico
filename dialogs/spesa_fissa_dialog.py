@@ -30,11 +30,30 @@ class SpesaFissaDialog(ft.AlertDialog):
         self.sw_attiva = ft.Switch(value=True)
         self.cb_addebito_automatico = ft.Checkbox(value=False)
 
+        # NUOVI CONTROLLI GIROCONTO
+        self.radio_tipo = ft.RadioGroup(
+            content=ft.Row([
+                ft.Radio(value="spesa", label="Spesa"),
+                ft.Radio(value="giroconto", label="Giroconto (Trasferimento)"),
+            ]),
+            value="spesa",
+            on_change=self._on_tipo_change
+        )
+        
+        self.dd_conto_beneficiario = ft.Dropdown(label="Conto Destinazione (Accredito)")
+
+        self.container_beneficiario = ft.Container(
+            content=self.dd_conto_beneficiario,
+            visible=False # Default hidden
+        )
+
         self.content = ft.Column(
             [
+                self.radio_tipo, # Moved to top
                 self.txt_nome,
                 self.txt_importo,
                 self.dd_conto_addebito,
+                self.container_beneficiario, # New
                 self.dd_sottocategoria,
                 self.dd_giorno_addebito,
                 self.sw_attiva,
@@ -42,8 +61,9 @@ class SpesaFissaDialog(ft.AlertDialog):
             ],
             tight=True,
             spacing=10,
-            height=450,
+            height=550, # Increased height
             width=500,
+            scroll=ft.ScrollMode.ADAPTIVE
         )
 
         self.actions = [
@@ -66,6 +86,11 @@ class SpesaFissaDialog(ft.AlertDialog):
         self.actions[0].text = loc.get("cancel")
         self.actions[1].text = loc.get("save")
 
+    def _on_tipo_change(self, e):
+        is_giro = (self.radio_tipo.value == "giroconto")
+        self.container_beneficiario.visible = is_giro
+        self.content.update()
+
     def apri_dialog(self, spesa_fissa_data=None):
         self._update_texts()
         self._reset_campi()
@@ -76,6 +101,20 @@ class SpesaFissaDialog(ft.AlertDialog):
             self.id_spesa_fissa_in_modifica = spesa_fissa_data['id_spesa_fissa']
             self.txt_nome.value = spesa_fissa_data['nome']
             self.txt_importo.value = str(abs(spesa_fissa_data['importo']))
+            
+            # Set Type
+            is_giro = spesa_fissa_data.get('is_giroconto', False)
+            self.radio_tipo.value = "giroconto" if is_giro else "spesa"
+            self.container_beneficiario.visible = is_giro
+            
+            # Set Beneficiary Account
+            if is_giro:
+                 c_ben_pers = spesa_fissa_data.get('id_conto_personale_beneficiario')
+                 c_ben_cond = spesa_fissa_data.get('id_conto_condiviso_beneficiario')
+                 if c_ben_pers:
+                     self.dd_conto_beneficiario.value = f"P{c_ben_pers}"
+                 elif c_ben_cond:
+                     self.dd_conto_beneficiario.value = f"C{c_ben_cond}"
 
             if spesa_fissa_data.get('id_carta'):
                  # Reconstruct key for card
@@ -98,6 +137,9 @@ class SpesaFissaDialog(ft.AlertDialog):
         else:
             self.title.value = self.loc.get("add_fixed_expense")
             self.id_spesa_fissa_in_modifica = None
+            self.radio_tipo.value = "spesa"
+            self.container_beneficiario.visible = False
+            self.dd_conto_beneficiario.value = None
 
         if self not in self.controller.page.overlay:
             self.controller.page.overlay.append(self)
@@ -132,7 +174,11 @@ class SpesaFissaDialog(ft.AlertDialog):
         self.txt_nome.error_text = None
         self.txt_importo.error_text = None
         self.dd_conto_addebito.error_text = None
+        self.dd_conto_beneficiario.error_text = None
         self.dd_sottocategoria.error_text = None
+        self.radio_tipo.value = "spesa"
+        self.container_beneficiario.visible = False
+        self.dd_conto_beneficiario.value = None
 
     def _popola_dropdowns(self):
         # Popola conti - solo quelli accessibili all'utente corrente
@@ -140,11 +186,16 @@ class SpesaFissaDialog(ft.AlertDialog):
         user_id = self.controller.get_user_id()
         conti = ottieni_tutti_i_conti_utente(user_id, master_key_b64=master_key)
         
-        # Filtra i tipi di conto che non fanno parte della liquidità
-        tipi_esclusi = ['Investimento', 'Fondo Pensione', 'Risparmio']
-        conti_filtrati = [c for c in conti if c.get('tipo') not in tipi_esclusi]
+        # Filtra i tipi di conto che non fanno parte della liquidità (per addebito)
+        tipi_esclusi_addebito = ['Investimento', 'Fondo Pensione', 'Risparmio']
+        conti_filtrati_addebito = [c for c in conti if c.get('tipo') not in tipi_esclusi_addebito]
+
+        # Per beneficiario (giroconto), includiamo anche Risparmio
+        tipi_esclusi_beneficiario = ['Investimento', 'Fondo Pensione']
+        conti_filtrati_beneficiario = [c for c in conti if c.get('tipo') not in tipi_esclusi_beneficiario]
         
-        options_conti = []
+        options_conti_addebito = []
+        options_conti_beneficiario = []
         
         # 1. Carte (Prima per consistenza)
         carte = ottieni_carte_utente(user_id, master_key_b64=master_key)
@@ -167,19 +218,31 @@ class SpesaFissaDialog(ft.AlertDialog):
                 if target_acc:
                     flag = 'S' if is_shared_card else 'P'
                     key = f"CARD_{c['id_carta']}_{target_acc}_{flag}"
-                    options_conti.append(ft.dropdown.Option(key, f"💳 {c['nome_carta']}"))
+                    options_conti_addebito.append(ft.dropdown.Option(key, f"💳 {c['nome_carta']}"))
 
-            options_conti.append(ft.dropdown.Option(key="DIVIDER", text="-- Conti --", disabled=True))
+            options_conti_addebito.append(ft.dropdown.Option(key="DIVIDER", text="-- Conti --", disabled=True))
 
-        for conto in conti_filtrati:
+        # Populate Debit Accounts
+        for conto in conti_filtrati_addebito:
             is_condiviso = conto.get('is_condiviso') or conto.get('condiviso')
             tipo_prefix = "C" if is_condiviso else "P"
             key = f"{tipo_prefix}{conto['id_conto']}"
-            # Mostra solo il nome per i conti personali, aggiungi "(Condiviso)" solo per i condivisi
             suffix = " (Condiviso)" if is_condiviso else ""
             text = f"{conto['nome_conto']}{suffix}"
-            options_conti.append(ft.dropdown.Option(key, text))
-        self.dd_conto_addebito.options = options_conti
+            options_conti_addebito.append(ft.dropdown.Option(key, text))
+        self.dd_conto_addebito.options = options_conti_addebito
+        
+        # Populate Beneficiary Accounts (for Giroconto)
+        for conto in conti_filtrati_beneficiario:
+            is_condiviso = conto.get('is_condiviso') or conto.get('condiviso')
+            tipo_prefix = "C" if is_condiviso else "P"
+            key = f"{tipo_prefix}{conto['id_conto']}"
+            suffix = " (Condiviso)" if is_condiviso else ""
+            text = f"{conto['nome_conto']}{suffix}"
+            # Add Savings icon if saving
+            icon_str = "🐖 " if conto.get('tipo') == 'Risparmio' else ""
+            options_conti_beneficiario.append(ft.dropdown.Option(key, f"{icon_str}{text}"))
+        self.dd_conto_beneficiario.options = options_conti_beneficiario
 
         # Popola categorie
         cats_subcats = ottieni_categorie_e_sottocategorie(self.controller.get_family_id())
@@ -234,6 +297,25 @@ class SpesaFissaDialog(ft.AlertDialog):
                 id_conto_personale = None if is_condiviso else id_conto
                 id_conto_condiviso = id_conto if is_condiviso else None
 
+            # Parsa conto beneficiario
+            is_giroconto = (self.radio_tipo.value == "giroconto")
+            id_conto_personale_beneficiario = None
+            id_conto_condiviso_beneficiario = None
+            
+            if is_giroconto:
+                ben_key = self.dd_conto_beneficiario.value
+                if ben_key:
+                    is_cond_ben = ben_key.startswith("C")
+                    id_conto_ben = int(ben_key[1:])
+                    id_conto_personale_beneficiario = None if is_cond_ben else id_conto_ben
+                    id_conto_condiviso_beneficiario = id_conto_ben if is_cond_ben else None
+            
+            if is_giroconto and not (id_conto_personale_beneficiario or id_conto_condiviso_beneficiario):
+                 self.dd_conto_beneficiario.error_text = "Seleziona un conto di destinazione"
+                 self.content.update()
+                 self.controller.hide_loading()
+                 return
+
             id_sottocategoria = int(self.dd_sottocategoria.value)
             giorno = int(self.dd_giorno_addebito.value)
             attiva = self.sw_attiva.value
@@ -256,7 +338,10 @@ class SpesaFissaDialog(ft.AlertDialog):
                     addebito_automatico=auto,
                     master_key_b64=master_key_b64,
                     id_utente=current_user_id,
-                    id_carta=id_carta
+                    id_carta=id_carta,
+                    is_giroconto=is_giroconto,
+                    id_conto_personale_beneficiario=id_conto_personale_beneficiario,
+                    id_conto_condiviso_beneficiario=id_conto_condiviso_beneficiario
                 )
             else:
                 success = aggiungi_spesa_fissa(
@@ -271,7 +356,10 @@ class SpesaFissaDialog(ft.AlertDialog):
                     addebito_automatico=auto,
                     master_key_b64=master_key_b64,
                     id_utente=current_user_id,
-                    id_carta=id_carta
+                    id_carta=id_carta,
+                    is_giroconto=is_giroconto,
+                    id_conto_personale_beneficiario=id_conto_personale_beneficiario,
+                    id_conto_condiviso_beneficiario=id_conto_condiviso_beneficiario
                 )
 
             if success:
