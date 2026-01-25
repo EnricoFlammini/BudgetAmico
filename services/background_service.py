@@ -1,17 +1,22 @@
-
 import time
 import threading
 import schedule
 import logging
+import traceback
+import os
+import datetime
 from db.supabase_manager import get_db_connection
 from db.gestione_db import (
     check_e_processa_spese_fisse,
     get_server_family_key,
     ottieni_dettagli_conti_utente,
     ottieni_portafoglio,
-    aggiorna_prezzo_manuale_asset
+    aggiorna_prezzo_manuale_asset,
+    ottieni_membri_famiglia,
+    trigger_budget_history_update
 )
 from utils.yfinance_manager import ottieni_prezzi_multipli
+from utils.crypto_manager import CryptoManager
 
 logger = logging.getLogger("BackgroundService")
 
@@ -56,13 +61,12 @@ class BackgroundService:
         2. Asset Update (ogni 12 ore o forzato)
         """
         logger.info("Esecuzione ciclo jobs background...")
-        conn = None
         try:
             # Get all families with server key
-            conn = get_db_connection()
-            cur = conn.cursor()
-            cur.execute("SELECT id_famiglia, server_encrypted_key FROM Famiglie WHERE server_encrypted_key IS NOT NULL")
-            families = cur.fetchall()
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT id_famiglia, server_encrypted_key FROM Famiglie WHERE server_encrypted_key IS NOT NULL")
+                families = cur.fetchall()
             
             crypto_manager = CryptoManager()
             server_secret = os.getenv("SERVER_SECRET_KEY")
@@ -77,8 +81,8 @@ class BackgroundService:
                      continue
 
                 try:
-                    # Decrypt Family Key
-                    family_key = crypto_manager.decrypt(fam['server_encrypted_key'], server_secret)
+                    # Decrypt Family Key using get_server_family_key (which does internal decryption)
+                    family_key = get_server_family_key(id_famiglia)
                     if not family_key:
                         logger.error(f"Impossibile decriptare chiave per famiglia {id_famiglia}")
                         continue
@@ -87,43 +91,24 @@ class BackgroundService:
                     
                     # 1. SPESE FISSE
                     logger.info(f"Checking Spese Fisse per {id_famiglia}...")
-                    n_fixed = check_e_processa_spese_fisse(id_famiglia, master_key_b64=family_key, id_utente=None)
+                    n_fixed = check_e_processa_spese_fisse(id_famiglia, forced_family_key_b64=family_key)
                     if n_fixed > 0: logger.info(f"Eseguite {n_fixed} spese fisse.")
 
-                    # 2. RATE PRESTITI
-                    logger.info(f"Checking Rate Prestiti per {id_famiglia}...")
-                    n_loans = check_e_paga_rate_scadute(id_famiglia, master_key_b64=family_key, id_utente=None)
-                    if n_loans > 0: logger.info(f"Pagate {n_loans} rate prestiti.")
-
-                    # 3. STORICO BUDGET
-                    # Richiede un id_utente fittizio o valido per la logica interna?
-                    # trigger_budget_history_update controlla if not id_utente: return.
-                    # Cerchiamo un utente qualsiasi (es. l'admin o il primo)
-                    membri = ottieni_membri_famiglia(id_famiglia)
+                    # 2. STORICO BUDGET
+                    membri = ottieni_membri_famiglia(id_famiglia, family_key, None)
                     admin_id = None
                     if membri:
-                        # Find admin or pick first
                         for m in membri:
-                            if m['ruolo'] == 'admin':
+                            if m.get('ruolo') == 'admin':
                                 admin_id = m['id_utente']
                                 break
-                        if not admin_id and membri: admin_id = membri[0]['id_utente']
+                        if not admin_id and membri: 
+                            admin_id = membri[0]['id_utente']
                     
                     if admin_id:
                         logger.info(f"Updating Budget History per {id_famiglia}...")
                         now = datetime.datetime.now()
                         trigger_budget_history_update(id_famiglia, now, master_key_b64=family_key, id_utente=admin_id)
-
-                        # 4. SALDO CARTE DI CREDITO
-                        # Itera su tutti i membri per controllare le loro carte
-                        logger.info(f"Checking Carte di Credito per {len(membri)} membri...")
-                        tot_cards = 0
-                        for m in membri:
-                            # process_credit_card_settlements usa id_utente per trovare le carte
-                            # Passiamo la Family Key come master key -> funziona per conti condivisi o se il sistema è full-shared
-                            c_n = process_credit_card_settlements(m['id_utente'], master_key_b64=family_key)
-                            tot_cards += c_n
-                        if tot_cards > 0: logger.info(f"Saldati {tot_cards} addebiti carte.")
 
                 except Exception as e_fam:
                     logger.error(f"Errore automazione famiglia {id_famiglia}: {e_fam}")
@@ -132,8 +117,6 @@ class BackgroundService:
         except Exception as e:
             logger.error(f"Errore generale loop job: {e}")
             traceback.print_exc()
-        finally:
-             if conn: conn.close()
     def run_all_jobs_now(self):
         """Manually trigger all jobs (for Admin)."""
         logger.info("Manual trigger of all jobs...")
