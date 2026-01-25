@@ -72,10 +72,23 @@ class TabCarte(ft.Container):
             
         if self.page:
             try:
-                self.update()
+                # Only update if attached to page
+                if self.page.controls and self in self.page.controls: # Crude check, better to relay on mounted
+                     self.update()
+                else:
+                     # If the control is not in the page's tree, update() fails. 
+                     # However, TabCarte is usually inside a Tabs or Dashboard view.
+                     # If it's the initial load, we don't need to update self, just populating children is enough
+                     # because the parent will update.
+                     # But if it's a refresh (e.g. after add), we need to update.
+                     
+                     # Safe fallback: update the cards_view directly if possible?
+                     # Or check properties
+                     if self.uid:
+                        self.update()
             except Exception as e:
                 print(f"Error updating TabCarte: {e}")
-                traceback.print_exc()
+                # traceback.print_exc() # detailed logging if needed
 
     def _build_card_tile(self, card_data, assigned_color: str = None):
         # Create a nice visual card
