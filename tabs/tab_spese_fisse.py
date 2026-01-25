@@ -65,7 +65,8 @@ class SpeseFisseTab(ft.Container):
         # Ridisegna la vista corrente usando i dati locali quando la pagina viene ridimensionata
         if self.spese_fisse_local_data:
              self._render_responsive_view()
-             self.page.update()
+             if self.page:
+                 self.page.update()
 
     def update_view_data(self, is_initial_load=False):
         theme = self.controller._get_current_theme_scheme() or ft.ColorScheme()

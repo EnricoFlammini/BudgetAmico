@@ -317,7 +317,7 @@ class InvestimentiTab(ft.Container):
             content=ft.ResponsiveRow([
                 # Riga 1: Nome asset completo (su tutta la larghezza su mobile)
                 ft.Column([
-                    AppStyles.data_text(asset['ticker'], weight=ft.FontWeight.BOLD),
+                    AppStyles.data_text(asset['ticker']),
                     AppStyles.small_text(asset['nome_asset'], color=AppColors.TEXT_SECONDARY),
                     AppStyles.small_text(f"{loc.get('quantity')}: {asset['quantita']:.4f}", color=AppColors.TEXT_SECONDARY)
                 ], col={"xs": 12, "sm": 4, "md": 4}),
