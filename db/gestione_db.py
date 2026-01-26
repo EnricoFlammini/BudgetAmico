@@ -7366,61 +7366,81 @@ def check_e_processa_spese_fisse(id_famiglia, master_key_b64=None, id_utente=Non
         with get_db_connection() as con:
             cur = con.cursor()
             for spesa in spese_da_processare:
-                if not spesa['attiva']:
+                try:
+                    # -----------------------------------------------------------
+                    # ROW LOCKING PER EVITARE RACE CONDITIONS
+                    # -----------------------------------------------------------
+                    # Acquisisce un lock esclusivo sulla riga della spesa fissa.
+                    # Qualsiasi altro processo che tenta di processare la stessa spesa
+                    # attenderà qui finché questa transazione non viene committata o rollbacked.
+                    cur.execute("SELECT 1 FROM SpeseFisse WHERE id_spesa_fissa = %s FOR UPDATE", (spesa['id_spesa_fissa'],))
+                    
+                    if not spesa['attiva']:
+                        continue
+                    
+                    # Processa solo le spese con addebito automatico abilitato
+                    if not spesa.get('addebito_automatico'):
+                        continue
+
+                    # Suffisso univoco per identificare la spesa
+                    suffisso_id = f"[SF-{spesa['id_spesa_fissa']}]"
+                    
+                    # Risolvi conti effettivi per il controllo
+                    conto_pers_check, conto_cond_check = _determina_conti_spesa(spesa)
+
+                    # Controlla se la spesa è già stata eseguita questo mese
+                    already_paid = False
+                    
+                    # Check personal account
+                    if conto_pers_check:
+                        cur.execute("""
+                            SELECT 1 FROM Transazioni
+                            WHERE id_conto = %s
+                            AND POSITION(%s IN descrizione) > 0
+                            AND TO_CHAR(data::date, 'YYYY-MM') = %s
+                        """, (conto_pers_check, suffisso_id, oggi.strftime('%Y-%m')))
+                        if cur.fetchone(): already_paid = True
+                    
+                    # Check shared account
+                    if not already_paid and conto_cond_check:
+                        cur.execute("""
+                            SELECT 1 FROM TransazioniCondivise
+                            WHERE id_conto_condiviso = %s
+                            AND POSITION(%s IN descrizione) > 0
+                            AND TO_CHAR(data::date, 'YYYY-MM') = %s
+                        """, (conto_cond_check, suffisso_id, oggi.strftime('%Y-%m')))
+                        if cur.fetchone(): already_paid = True
+
+                    if already_paid:
+                        continue
+
+                    # Se il giorno di addebito è passato, esegui la transazione
+                    if oggi.day >= spesa['giorno_addebito']:
+                        # Usa il giorno configurato per la data di esecuzione, non la data odierna
+                        data_esecuzione = datetime.date(oggi.year, oggi.month, spesa['giorno_addebito']).strftime('%Y-%m-%d')
+                        # Aggiungi suffisso ID alla descrizione per tracciabilità e controllo duplicati
+                        descrizione = f"Spesa Fissa: {spesa['nome']} {suffisso_id}"
+                        importo = -abs(spesa['importo'])
+
+                        # NOTA: _esegui_spesa_fissa userà una sua connessione per eseguire l'insert.
+                        # Dato che siamo in READ COMMITTED, l'insert sarà visibile agli altri solo dopo che loro acquisiranno il lock.
+                        if _esegui_spesa_fissa(spesa, descrizione_custom=descrizione, data_esecuzione=data_esecuzione, master_key_b64=key_to_use):
+                            spese_eseguite += 1
+                
+                except Exception as e:
+                    logger.error(f"Errore processamento singola spesa {spesa.get('id_spesa_fissa')}: {e}")
+                    # Continua con la prossima spesa, non rompere tutto il ciclo
                     continue
-                
-                # Processa solo le spese con addebito automatico abilitato
-                if not spesa.get('addebito_automatico'):
-                    continue
 
-                # Suffisso univoco per identificare la spesa
-                suffisso_id = f"[SF-{spesa['id_spesa_fissa']}]"
-                
-                # Risolvi conti effettivi per il controllo
-                conto_pers_check, conto_cond_check = _determina_conti_spesa(spesa)
-
-                # Controlla se la spesa è già stata eseguita questo mese
-                already_paid = False
-                
-                # Check personal account
-                if conto_pers_check:
-                    cur.execute("""
-                        SELECT 1 FROM Transazioni
-                        WHERE id_conto = %s
-                        AND POSITION(%s IN descrizione) > 0
-                        AND TO_CHAR(data::date, 'YYYY-MM') = %s
-                    """, (conto_pers_check, suffisso_id, oggi.strftime('%Y-%m')))
-                    if cur.fetchone(): already_paid = True
-                
-                # Check shared account
-                if not already_paid and conto_cond_check:
-                    cur.execute("""
-                        SELECT 1 FROM TransazioniCondivise
-                        WHERE id_conto_condiviso = %s
-                        AND POSITION(%s IN descrizione) > 0
-                        AND TO_CHAR(data::date, 'YYYY-MM') = %s
-                    """, (conto_cond_check, suffisso_id, oggi.strftime('%Y-%m')))
-                    if cur.fetchone(): already_paid = True
-
-                if already_paid:
-                    continue
-
-                # Se il giorno di addebito è passato, esegui la transazione
-                if oggi.day >= spesa['giorno_addebito']:
-                    # Usa il giorno configurato per la data di esecuzione, non la data odierna
-                    data_esecuzione = datetime.date(oggi.year, oggi.month, spesa['giorno_addebito']).strftime('%Y-%m-%d')
-                    # Aggiungi suffisso ID alla descrizione per tracciabilità e controllo duplicati
-                    descrizione = f"Spesa Fissa: {spesa['nome']} {suffisso_id}"
-                    importo = -abs(spesa['importo'])
-
-                    # Use the new _esegui_spesa_fissa helper
-                    if _esegui_spesa_fissa(spesa, descrizione_custom=descrizione, data_esecuzione=data_esecuzione, master_key_b64=key_to_use):
-                        spese_eseguite += 1
+            # Commit finale: rilascia TUTTI i lock acquisiti nel loop
             if spese_eseguite > 0:
                 con.commit()
+            else:
+                con.commit() # Commit comunque necessario per rilasciare i lock anche se non abbiamo fatto insert
+                
         return spese_eseguite
     except Exception as e:
-        print(f"[ERRORE] Errore critico durante il processamento delle spese fisse: {e}")
+        logger.error(f"Errore critico durante il processamento delle spese fisse: {e}")
         return 0
 
 
