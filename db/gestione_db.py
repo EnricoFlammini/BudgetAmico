@@ -128,6 +128,23 @@ def disable_server_automation(id_famiglia):
         logger.error(f"Error disabling server automation: {e}")
         return False
 
+def is_server_automation_enabled(id_famiglia):
+    """
+    Verifica se l'automazione server è abilitata per una famiglia.
+    A differenza di get_server_family_key, questa funzione NON richiede SERVER_SECRET_KEY locale.
+    Usa questa funzione per decidere se saltare l'elaborazione locale delle spese fisse.
+    """
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT server_encrypted_key FROM Famiglie WHERE id_famiglia = %s", (id_famiglia,))
+            row = cur.fetchone()
+            # Se esiste una chiave criptata, l'automazione server è abilitata
+            return row is not None and row['server_encrypted_key'] is not None and row['server_encrypted_key'] != ''
+    except Exception as e:
+        logger.error(f"Error checking server automation status: {e}")
+        return False
+
 
 
 

@@ -365,7 +365,9 @@ class SpeseFisseTab(ft.Container):
         try:
             # Prepara i dati per la transazione
             data_oggi = datetime.now().strftime("%Y-%m-%d")
-            descrizione = f"Pagamento: {spesa['nome']}"
+            # Usa lo stesso suffisso del sistema automatico per evitare duplicati
+            suffisso_id = f"[SF-{spesa['id_spesa_fissa']}]"
+            descrizione = f"Spesa Fissa: {spesa['nome']} {suffisso_id}"
             importo = -abs(spesa['importo'])  # Negativo perché è un'uscita
             id_sottocategoria = spesa.get('id_sottocategoria')
             

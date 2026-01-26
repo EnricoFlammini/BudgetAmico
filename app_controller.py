@@ -31,7 +31,7 @@ from db.gestione_db import (
     aggiungi_categorie_iniziali, cerca_utente_per_username, aggiungi_utente_a_famiglia,
     ottieni_versione_db, crea_invito, ottieni_invito_per_token,
     ottieni_utenti_senza_famiglia, ensure_family_key, trigger_budget_history_update,
-    get_server_family_key
+    is_server_automation_enabled
 )
 
 from utils.logger import setup_logger
@@ -265,14 +265,14 @@ class AppController:
 
         id_famiglia = self.get_family_id()
         if id_famiglia:
-            # Check if Server Automation is active
-            server_key_exists = get_server_family_key(id_famiglia) is not None
+            # Check if Server Automation is active (uses DB check, not local SERVER_SECRET_KEY)
+            server_automation_active = is_server_automation_enabled(id_famiglia)
             
             # Note: These checks are still synchronous but usually fast. 
             # Could be moved to async if needed, but low priority.
             master_key_b64 = self.page.session.get("master_key")
             id_utente = self.get_user_id()
-            if not server_key_exists:
+            if not server_automation_active:
                 # Local Automation (Server disabled or not configured)
                 pagamenti_fatti = check_e_paga_rate_scadute(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
                 spese_fisse_eseguite = check_e_processa_spese_fisse(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
@@ -289,7 +289,7 @@ class AppController:
         
         # Aggiorna prezzi asset in background (non blocca UI)
         # Skip if server automation is active
-        if id_famiglia and get_server_family_key(id_famiglia):
+        if id_famiglia and is_server_automation_enabled(id_famiglia):
              logger.info("Server Automation Active: Skipping local asset price update.")
         else:
              self._aggiorna_prezzi_asset_in_background()
@@ -597,10 +597,8 @@ class AppController:
             self.page.session.set("ruolo_utente", ottieni_ruolo_utente(id_utente, id_famiglia))
             
             # --- Auto-Update History Snapshot & Credit Card Settlement on Login ---
-            # SKIP if Server Automation is active (checked via get_server_family_key)
-            from db.gestione_db import get_server_family_key
-            
-            if not get_server_family_key(id_famiglia):
+            # SKIP if Server Automation is active
+            if not is_server_automation_enabled(id_famiglia):
                 try:
                     from utils.async_task import AsyncTask
                     from utils.card_processing import process_credit_card_settlements
