@@ -7391,25 +7391,52 @@ def check_e_processa_spese_fisse(id_famiglia, master_key_b64=None, id_utente=Non
                     # Controlla se la spesa è già stata eseguita questo mese
                     already_paid = False
                     
+                    # Controllo duplicati Python-side (necessario per descrizioni criptate)
+                    already_paid = False
+                    
+                    # Prepare crypto helper
+                    crypto_chk, mk_chk = _get_crypto_and_key(key_to_use)
+                    family_key_chk = None
+                    try:
+                        if id_utente and mk_chk and spesa.get('id_famiglia'):
+                             family_key_chk = _get_family_key_for_user(spesa['id_famiglia'], id_utente, mk_chk, crypto_chk)
+                    except: pass
+                    
+                    def _is_dup_desc(desc_enc):
+                        # 1. Try with Master Key (Personal) or provided key
+                        d = _decrypt_if_key(desc_enc, mk_chk, crypto_chk, silent=True)
+                        if suffisso_id in d: return True
+                        # 2. Try with Family Key (Shared)
+                        if family_key_chk:
+                            d2 = _decrypt_if_key(desc_enc, family_key_chk, crypto_chk, silent=True)
+                            if suffisso_id in d2: return True
+                        # 3. Try plaintext?
+                        if suffisso_id in desc_enc: return True
+                        return False
+
                     # Check personal account
                     if conto_pers_check:
                         cur.execute("""
-                            SELECT 1 FROM Transazioni
+                            SELECT descrizione FROM Transazioni
                             WHERE id_conto = %s
-                            AND POSITION(%s IN descrizione) > 0
                             AND TO_CHAR(data::date, 'YYYY-MM') = %s
-                        """, (conto_pers_check, suffisso_id, oggi.strftime('%Y-%m')))
-                        if cur.fetchone(): already_paid = True
+                        """, (conto_pers_check, oggi.strftime('%Y-%m')))
+                        for row in cur.fetchall():
+                             if _is_dup_desc(row['descrizione']): 
+                                 already_paid = True
+                                 break
                     
                     # Check shared account
                     if not already_paid and conto_cond_check:
                         cur.execute("""
-                            SELECT 1 FROM TransazioniCondivise
+                            SELECT descrizione FROM TransazioniCondivise
                             WHERE id_conto_condiviso = %s
-                            AND POSITION(%s IN descrizione) > 0
                             AND TO_CHAR(data::date, 'YYYY-MM') = %s
-                        """, (conto_cond_check, suffisso_id, oggi.strftime('%Y-%m')))
-                        if cur.fetchone(): already_paid = True
+                        """, (conto_cond_check, oggi.strftime('%Y-%m')))
+                        for row in cur.fetchall():
+                             if _is_dup_desc(row['descrizione']):
+                                 already_paid = True
+                                 break
 
                     if already_paid:
                         continue
