@@ -47,7 +47,7 @@ class InfoTab(ft.Container):
                 ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
                 alignment=ft.alignment.center,
                 padding=20,
-                bgcolor=ft.Colors.SURFACE_VARIANT,
+                bgcolor=ft.Colors.GREY_100,
                 border_radius=10
             )
         ], scroll=ft.ScrollMode.AUTO, spacing=20)
