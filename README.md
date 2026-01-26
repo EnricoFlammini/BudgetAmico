@@ -1,4 +1,4 @@
-# Budget Amico v0.38.00
+# Budget Amico v0.38.05
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -11,6 +11,10 @@
 ---
 
 ## 📅 Changelog
+### v0.38.05 (26/01/2026)
+- **Web App - Info & Download**:
+    - Aggiunta una nuova pagina **Info** accessibile dal menu laterale.
+    - Include un link diretto per scaricare l'ultima release dell'applicazione Desktop (exe/zip) da GitHub.
 ### v0.38.00 (25/01/2026)
 - **Web App - Navigazione Drawer**:
     - **Menu Laterale**: Sostituita la barra di navigazione in basso (troppo affollata) con un elegante menu laterale a scomparsa (Drawer).

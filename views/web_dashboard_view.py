@@ -15,6 +15,7 @@ logger = setup_logger("WebDashboardView")
 
 from tabs.tab_admin import AdminTab
 from tabs.tab_impostazioni import ImpostazioniTab
+from tabs.tab_info import InfoTab
 
 class WebDashboardView:
     def __init__(self, controller):
@@ -35,6 +36,7 @@ class WebDashboardView:
         self.tab_spese_fisse = SpeseFisseTab(controller)
         self.tab_admin = AdminTab(controller)
         self.tab_impostazioni = ImpostazioniTab(controller)
+        self.tab_info = InfoTab(controller)
         
         # Current selected index
         self.selected_index = 0
@@ -73,8 +75,9 @@ class WebDashboardView:
         if ruolo == 'admin':
              possible_tabs.append((self.tab_admin, ft.Icons.ADMIN_PANEL_SETTINGS, "Amministrazione"))
         
-        # Add Settings (Always)
+        # Add Info & Settings (Always)
         possible_tabs.append((self.tab_impostazioni, ft.Icons.SETTINGS, "Impostazioni"))
+        possible_tabs.append((self.tab_info, ft.Icons.INFO_OUTLINE, "Info & Download"))
 
         self.active_tabs = possible_tabs
         
