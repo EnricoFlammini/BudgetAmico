@@ -1,16 +1,29 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+VERSION = '0.38.05'
 
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('assets', 'assets'), ('credentials.json', '.')],
-    hiddenimports=['yfinance', 'python_dotenv'],
+    datas=[('assets', 'assets'), ('docs', 'docs'), ('.env', '.')],
+    hiddenimports=['yfinance', 'dotenv', 'pg8000', 'scramp', 'matplotlib', 'matplotlib.pyplot', 'matplotlib.backends.backend_agg', 'openpyxl', 'schedule'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        # Moduli di test e sviluppo
+        'pytest', 'unittest', 'test', 'tests',
+        # Moduli non necessari
+        'tkinter', 'tcl', 'tk',
+        'IPython', 'jupyter', 'notebook',
+        'sphinx', 'docutils',
+        'setuptools', 'pip', 'wheel',
+        # Pre-commit e linting
+        'pre_commit', 'black', 'flake8', 'pylint', 'mypy',
+        # psycopg2 non piu usato
+        'psycopg2', 'psycopg2_binary',
+    ],
     noarchive=False,
     optimize=0,
 )
@@ -19,13 +32,16 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.datas,
     [],
-    exclude_binaries=True,
-    name='Budget Amico',
+    name=f'Budget Amico_{VERSION}',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -33,13 +49,4 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=['assets\\icon.ico'],
-)
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='Budget Amico',
 )

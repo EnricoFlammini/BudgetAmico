@@ -11,7 +11,7 @@
 ---
 
 ## 📅 Changelog
-### v0.38.05 (26/01/2026)
+### v0.38.05 (27/01/2026)
 - **Web App - Info & Download**:
     - Aggiunta una nuova pagina **Info** accessibile dal menu laterale.
     - Include un link diretto per scaricare l'ultima release dell'applicazione Desktop (exe/zip) da GitHub.
