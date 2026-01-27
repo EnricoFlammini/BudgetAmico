@@ -3533,7 +3533,15 @@ def aggiungi_transazione(id_conto, data, descrizione, importo, id_sottocategoria
             # Auto-update History
             try:
                 idf, idu = _get_famiglia_and_utente_from_conto(id_conto)
-                trigger_budget_history_update(idf, data, master_key_b64, idu)
+                # Ensure data is datetime for trigger (logic copied from edit)
+                dt_obj = data
+                if isinstance(data, str):
+                    try:
+                        dt_obj = datetime.datetime.strptime(data[:10], '%Y-%m-%d')
+                    except Exception:
+                        pass # Let it fail downstream or use as-is if parsing fails
+                        
+                trigger_budget_history_update(idf, dt_obj, master_key_b64, idu)
             except Exception as e:
                 print(f"[WARN] Auto-history failed in add: {e}")
                 
