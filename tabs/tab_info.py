@@ -40,7 +40,7 @@ class InfoTab(ft.Container):
                     
                     ft.Text("Risorse Utili", weight=ft.FontWeight.BOLD),
                     ft.Row([
-                        ft.TextButton("Manuale Utente", icon=ft.Icons.MENU_BOOK, url="https://github.com/EnricoFlammini/BudgetAmico/blob/main/Sviluppo/docs/Manuale_Completo_Budget_Amico.md"),
+                        ft.TextButton("Manuale Utente", icon=ft.Icons.MENU_BOOK, url="https://github.com/EnricoFlammini/BudgetAmico/blob/main/docs/Manuale_Completo_Budget_Amico.md"),
                         ft.TextButton("Repository GitHub", icon=ft.Icons.CODE, url="https://github.com/EnricoFlammini/BudgetAmico"),
                         ft.TextButton("Segnala un Problema", icon=ft.Icons.BUG_REPORT, url="https://github.com/EnricoFlammini/BudgetAmico/issues"),
                     ], wrap=True),
