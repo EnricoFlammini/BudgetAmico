@@ -7910,10 +7910,13 @@ def aggiorna_stato_rata_piano(id_rata, nuovo_stato):
 
 # --- Funzioni Budget History Helpers ---
 
-def trigger_budget_history_update(id_famiglia, data_riferimento, master_key_b64=None, id_utente=None, cursor=None):
+def trigger_budget_history_update(id_famiglia, data_riferimento, master_key_b64=None, id_utente=None, cursor=None, forced_family_key_b64=None):
     """
     Allinea la tabella Budget_Storico con la tabella Budget per il mese/anno corrente.
     Itera sui budget definiti, cripta nome e spesa (0), ed esegue UPSERT.
+    
+    Se forced_family_key_b64 è fornito, viene usato direttamente senza tentare la decifratura 
+    (utile per le chiamate dal background_service che hanno già la chiave decifrata).
     """
     anno = data_riferimento.year
     mese = data_riferimento.month
@@ -7921,7 +7924,11 @@ def trigger_budget_history_update(id_famiglia, data_riferimento, master_key_b64=
     # 1. Recupera chiavi per crittografia
     crypto, master_key = _get_crypto_and_key(master_key_b64)
     family_key = None
-    if master_key and id_utente:
+    
+    # Se è stata fornita la family_key già decifrata, usala direttamente
+    if forced_family_key_b64:
+        family_key = base64.b64decode(forced_family_key_b64)
+    elif master_key and id_utente:
         family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
     
     if not family_key:

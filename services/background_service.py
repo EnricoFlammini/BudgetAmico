@@ -108,7 +108,7 @@ class BackgroundService:
                     if admin_id:
                         logger.info(f"Updating Budget History per {id_famiglia}...")
                         now = datetime.datetime.now()
-                        trigger_budget_history_update(id_famiglia, now, master_key_b64=family_key, id_utente=admin_id)
+                        trigger_budget_history_update(id_famiglia, now, forced_family_key_b64=family_key, id_utente=admin_id)
 
                 except Exception as e_fam:
                     logger.error(f"Errore automazione famiglia {id_famiglia}: {e_fam}")
