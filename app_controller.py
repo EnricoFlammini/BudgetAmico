@@ -15,12 +15,13 @@ from views.dashboard_view import DashboardView
 from views.export_view import ExportView
 from dialogs.transaction_dialog import TransactionDialog
 from dialogs.conto_dialog import ContoDialog
+from dialogs.card_dialog import CardDialog
+from dialogs.contact_dialog import ContactDialog
 from dialogs.admin_dialogs import AdminDialogs
 from dialogs.portafoglio_dialogs import PortafoglioDialogs
 from dialogs.prestito_dialogs import PrestitoDialogs
 from dialogs.immobile_dialog import ImmobileDialog
 from dialogs.fondo_pensione_dialog import FondoPensioneDialog
-from dialogs.giroconto_dialog import GirocontoDialog
 from dialogs.conto_condiviso_dialog import ContoCondivisoDialog
 from dialogs.spesa_fissa_dialog import SpesaFissaDialog
 from utils.localization import LocalizationManager
@@ -39,7 +40,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 MAX_RECENT_FILES = 5
-VERSION = "0.38.05"
+VERSION = "0.39.00"
 
 
 class AppController:
@@ -78,7 +79,6 @@ class AppController:
         self.immobile_dialog = ImmobileDialog(self)
         self.fondo_pensione_dialog = FondoPensioneDialog(self)
         self.conto_condiviso_dialog = ContoCondivisoDialog(self)
-        self.giroconto_dialog = GirocontoDialog(self)
         self.spesa_fissa_dialog = SpesaFissaDialog(self)
 
         # Inizializza le viste
@@ -161,7 +161,7 @@ class AppController:
             self.portafoglio_dialogs.dialog_operazione_asset, self.portafoglio_dialogs.dialog_aggiorna_prezzo,
             self.portafoglio_dialogs.dialog_modifica_asset, self.date_picker, self.file_picker_salva_excel,
             self.prestito_dialogs.dialog_prestito, self.prestito_dialogs.dialog_paga_rata,
-            self.immobile_dialog, self.fondo_pensione_dialog, self.giroconto_dialog,
+            self.immobile_dialog, self.fondo_pensione_dialog,
             self.conto_condiviso_dialog, self.spesa_fissa_dialog, self.confirm_delete_dialog,
             self.file_picker_salva_backup, self.file_picker_apri_backup, self.error_dialog
             # NOTE: info_dialog e loading_overlay sono gestiti dinamicamente
@@ -719,6 +719,62 @@ class AppController:
         logger.info("User logged out")
         self.page.session.clear()
         self.page.go("/")
+
+    def open_new_transaction_dialog(self):
+        """Apre il dialogo Nuova Transazione."""
+        self.transaction_dialog.apri_dialog_nuova_transazione()
+
+    def open_new_account_dialog(self):
+        """Apre il dialogo Nuovo Conto."""
+        self.conto_dialog.apri_dialog_conto(None)
+
+    def open_new_card_dialog(self):
+        """Apre il dialogo Nuova Carta."""
+        def callback():
+            self.update_all_views()
+            
+        dlg = CardDialog(self.page, callback)
+        dlg.open()
+
+    def open_new_savings_dialog(self):
+        """
+        Apre il dialogo Nuovo Obiettivo Accantonamento.
+        Tenta di accedere alla tab Accantonamenti se disponibile.
+        """
+        try:
+            # Per desktop dashboard
+            if hasattr(self.dashboard_view, 'tab_accantonamenti'):
+                # Switch tab se necessario (opzionale, ma utile per contesto)
+                # self.dashboard_view.content_area.content = self.dashboard_view.tab_accantonamenti
+                # self.dashboard_view.update() # Forse troppo invasivo cambiare tab?
+                
+                # Apri il dialogo direttamente dall'istanza della tab
+                self.dashboard_view.tab_accantonamenti._apri_dialog_creazione(None)
+            else:
+                self.show_snack_bar("Funzione non disponibile in questa vista.", success=False)
+        except Exception as e:
+            logger.error(f"Errore apertura dialog risparmio: {e}")
+            self.show_snack_bar("Errore apertura dialogo.", success=False)
+
+    def open_new_fixed_expense_dialog(self):
+        """Apre il dialogo Nuova Spesa Fissa."""
+        self.spesa_fissa_dialog.apri_dialog()
+
+    def open_new_loan_dialog(self):
+        """Apre il dialogo Nuovo Prestito."""
+        self.prestito_dialogs.apri_dialog_prestito()
+
+    def open_new_property_dialog(self):
+        """Apre il dialogo Nuovo Immobile."""
+        self.immobile_dialog.apri_dialog_immobile()
+
+    def open_new_contact_dialog(self):
+        """Apre il dialogo Nuovo Contatto."""
+        def callback():
+            self.update_all_views()
+        
+        dlg = ContactDialog(self.page, self, on_dismiss=callback)
+        self.page.open(dlg)
 
     def update_all_views(self, is_initial_load=False):
         if self.dashboard_view:

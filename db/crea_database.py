@@ -15,7 +15,7 @@ DB_FILE = os.path.join(APP_DATA_DIR, 'budget_amico.db')
 
 # --- SCHEMA DATABASE ---
 # Versione 11: Aggiunta tabella Carte e supporto transazioni con carte
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 19
 
 TABLES = {
     "Utenti": """
@@ -307,6 +307,29 @@ TABLES = {
             data_inizio_validita TEXT NOT NULL,
             massimale_encrypted TEXT NOT NULL,
             UNIQUE(id_carta, data_inizio_validita)
+        );
+    """,
+    "Contatti": """
+        CREATE TABLE Contatti (
+            id_contatto SERIAL PRIMARY KEY,
+            id_utente INTEGER NOT NULL REFERENCES Utenti(id_utente) ON DELETE CASCADE,
+            nome_encrypted TEXT NOT NULL,
+            cognome_encrypted TEXT,
+            societa_encrypted TEXT,
+            iban_encrypted TEXT,
+            email_encrypted TEXT,
+            telefono_encrypted TEXT,
+            tipo_condivisione TEXT NOT NULL DEFAULT 'privato' CHECK(tipo_condivisione IN ('privato', 'famiglia', 'selezione')),
+            id_famiglia INTEGER REFERENCES Famiglie(id_famiglia) ON DELETE SET NULL,
+            colore TEXT DEFAULT '#424242',
+            data_creazione TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """,
+    "CondivisioneContatto": """
+        CREATE TABLE CondivisioneContatto (
+            id_contatto INTEGER NOT NULL REFERENCES Contatti(id_contatto) ON DELETE CASCADE,
+            id_utente INTEGER NOT NULL REFERENCES Utenti(id_utente) ON DELETE CASCADE,
+            PRIMARY KEY (id_contatto, id_utente)
         );
     """
 }

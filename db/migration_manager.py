@@ -241,6 +241,216 @@ def _migra_da_v15_a_v16(con: sqlite3.Connection):
         return False
 
 
+def _migra_da_v16_a_v17(con: sqlite3.Connection):
+    """
+    Logica specifica per migrare un DB dalla versione 16 alla 17.
+    - Crea le tabelle Contatti e CondivisioneContatto.
+    """
+    print("Esecuzione migrazione da v16 a v17...")
+    try:
+        cur = con.cursor()
+
+        print("  - Creazione tabella Contatti...")
+        cur.execute(TABLES["Contatti"])
+
+        print("  - Creazione tabella CondivisioneContatto...")
+        cur.execute(TABLES["CondivisioneContatto"])
+
+        con.commit()
+        print("Migrazione a v17 completata con successo.")
+        return True
+
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v16 a v17: {e}")
+        try:
+            con.rollback()
+        except:
+            pass
+        return False
+
+
+
+def _migra_da_v17_a_v18(con):
+    """
+    Logica specifica per migrare un DB dalla versione 17 alla 18.
+    - Aggiunge la colonna 'colore' alla tabella Contatti.
+    """
+    print("Esecuzione migrazione da v17 a v18...")
+    try:
+        cur = con.cursor()
+        print("  - Aggiunta colonna 'colore' a Contatti...")
+        try:
+            # Postgres supports ADD COLUMN standard
+            cur.execute("ALTER TABLE Contatti ADD COLUMN colore TEXT DEFAULT '#424242'")
+        except Exception as e:
+            # Check if column already exists (catch-all for different DB behaviors)
+            if "duplicate column" in str(e) or "already exists" in str(e):
+                print("    Colonna 'colore' già esistente.")
+            else:
+                raise e
+        
+        con.commit()
+        print("Migrazione a v18 completata con successo.")
+        return True
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v17 a v18: {e}")
+        try: con.rollback() 
+        except: pass
+        return False
+
+
+
+def _migra_da_v18_a_v19(con):
+    """
+    Logica specifica per migrare un DB dalla versione 18 alla 19.
+    1. Rinomina colonne Contatti per encryption (dati rimangono in chiaro temporaneamente).
+    2. Abilita RLS su Contatti e CondivisioneContatto.
+    """
+    print("Esecuzione migrazione da v18 a v19...")
+    try:
+        cur = con.cursor()
+        
+        # 1. Rinomina Colonne
+        print("  - Rinominazione colonne Contatti...")
+        # NOTA: Supabase Postgres. SQLite non supporta RENAME COLUMN multipli o facili in vecchie versioni, ma qui assumiamo focus Supabase/PG.
+        # Fallback per SQLite se necessario: non critico se ambiente è PG.
+        try:
+            cur.execute("ALTER TABLE Contatti RENAME COLUMN nome TO nome_encrypted")
+            cur.execute("ALTER TABLE Contatti RENAME COLUMN cognome TO cognome_encrypted")
+            cur.execute("ALTER TABLE Contatti RENAME COLUMN societa TO societa_encrypted")
+            cur.execute("ALTER TABLE Contatti RENAME COLUMN email TO email_encrypted")
+            cur.execute("ALTER TABLE Contatti RENAME COLUMN telefono TO telefono_encrypted")
+        except Exception as e:
+            print(f"    Warning su rinomina (potrebbero essere già rinominate): {e}")
+
+        # 2. Abilita RLS
+        print("  - Abilitazione RLS su Contatti e CondivisioneContatto...")
+        tables = ["Contatti", "CondivisioneContatto"]
+        for table in tables:
+            try:
+                cur.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
+            except Exception as e:
+                 print(f"    Warning abilitazione RLS su {table}: {e}")
+
+        # 3. Policy Contatti
+        print("  - Applicazione Policy Contatti...")
+        
+        # Reset Policy
+        try: cur.execute("DROP POLICY IF EXISTS contatti_select_policy ON Contatti")
+        except: pass
+        try: cur.execute("DROP POLICY IF EXISTS contatti_insert_policy ON Contatti")
+        except: pass
+        try: cur.execute("DROP POLICY IF EXISTS contatti_update_policy ON Contatti")
+        except: pass
+        try: cur.execute("DROP POLICY IF EXISTS contatti_delete_policy ON Contatti")
+        except: pass
+        
+        # Policy: SELECT (Vedo Miei + Condivisi Famiglia + Condivisi Selezione)
+        # Nota: current_setting('app.current_user_id', true)::INTEGER
+        # Per semplicità usiamo sintassi PG diretta.
+        cur.execute("""
+            CREATE POLICY contatti_select_policy ON Contatti
+            FOR SELECT
+            USING (
+                id_utente = current_setting('app.current_user_id', true)::INTEGER
+                OR (
+                    tipo_condivisione = 'famiglia' 
+                    AND id_famiglia IN (
+                        SELECT id_famiglia FROM MembriFamiglia 
+                        WHERE id_utente = current_setting('app.current_user_id', true)::INTEGER
+                    )
+                )
+                OR (
+                    id_contatto IN (
+                        SELECT id_contatto FROM CondivisioneContatto 
+                        WHERE id_utente = current_setting('app.current_user_id', true)::INTEGER
+                    )
+                )
+            )
+        """)
+        
+        # Policy: INSERT (Solo Miei)
+        cur.execute("""
+            CREATE POLICY contatti_insert_policy ON Contatti
+            FOR INSERT
+            WITH CHECK (
+                id_utente = current_setting('app.current_user_id', true)::INTEGER
+            )
+        """)
+        
+        # Policy: UPDATE (Solo Miei)
+        cur.execute("""
+            CREATE POLICY contatti_update_policy ON Contatti
+            FOR UPDATE
+            USING (id_utente = current_setting('app.current_user_id', true)::INTEGER)
+            WITH CHECK (id_utente = current_setting('app.current_user_id', true)::INTEGER)
+        """)
+
+        # Policy: DELETE (Solo Miei)
+        cur.execute("""
+            CREATE POLICY contatti_delete_policy ON Contatti
+            FOR DELETE
+            USING (id_utente = current_setting('app.current_user_id', true)::INTEGER)
+        """)
+
+        # 4. Policy CondivisioneContatto
+        print("  - Applicazione Policy CondivisioneContatto...")
+        
+         # Reset Policy
+        try: cur.execute("DROP POLICY IF EXISTS condivisione_select_policy ON CondivisioneContatto")
+        except: pass
+        try: cur.execute("DROP POLICY IF EXISTS condivisione_insert_policy ON CondivisioneContatto")
+        except: pass
+        try: cur.execute("DROP POLICY IF EXISTS condivisione_delete_policy ON CondivisioneContatto")
+        except: pass
+
+        # Policy: SELECT (Vedo se sono proprietario del contatto O se sono destinario)
+        cur.execute("""
+            CREATE POLICY condivisione_select_policy ON CondivisioneContatto
+            FOR SELECT
+            USING (
+                id_utente = current_setting('app.current_user_id', true)::INTEGER
+                OR id_contatto IN (
+                    SELECT id_contatto FROM Contatti 
+                    WHERE id_utente = current_setting('app.current_user_id', true)::INTEGER
+                )
+            )
+        """)
+        
+        # Policy: INSERT (Solo se sono proprietario del contatto)
+        cur.execute("""
+            CREATE POLICY condivisione_insert_policy ON CondivisioneContatto
+            FOR INSERT
+            WITH CHECK (
+                id_contatto IN (
+                    SELECT id_contatto FROM Contatti 
+                    WHERE id_utente = current_setting('app.current_user_id', true)::INTEGER
+                )
+            )
+        """)
+        
+        # Policy: DELETE (Solo se sono proprietario del contatto)
+        cur.execute("""
+            CREATE POLICY condivisione_delete_policy ON CondivisioneContatto
+            FOR DELETE
+            USING (
+                id_contatto IN (
+                    SELECT id_contatto FROM Contatti 
+                    WHERE id_utente = current_setting('app.current_user_id', true)::INTEGER
+                )
+            )
+        """)
+
+        con.commit()
+        print("Migrazione a v19 completata con successo.")
+        return True
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v18 a v19: {e}")
+        try: con.rollback() 
+        except: pass
+        return False
+
+
 def _migra_da_v7_a_v8(con: sqlite3.Connection):
     """
     Logica specifica per migrare un DB dalla versione 7 alla 8.
@@ -464,109 +674,149 @@ def _migra_da_v14_a_v15(con: sqlite3.Connection):
         con.rollback()
         return False
 
-def migra_database(db_path, versione_vecchia, versione_nuova):
+def migra_database(con, versione_vecchia=None, versione_nuova=None):
     """
     Funzione principale che gestisce il processo di migrazione.
     Chiama le funzioni specifiche per ogni salto di versione.
+    Accetta una connessione aperta (SQLite o Postgres/Supabase).
     """
-    if versione_vecchia >= versione_nuova:
-        print("Nessuna migrazione necessaria.")
-        return True
-
-    # Crea una copia di backup del database prima di iniziare
-    backup_path = db_path + f".v{versione_vecchia}.bak"
-    shutil.copyfile(db_path, backup_path)
-    print(f"Backup del database creato in: {backup_path}")
-
     try:
-        with sqlite3.connect(db_path) as con:
-            cur = con.cursor()
-            
-            # Esegui le migrazioni in sequenza
-            if versione_vecchia == 1 and versione_nuova >= 2:
-                if not _migra_da_v1_a_v2(con):
-                    raise Exception("Migrazione da v1 a v2 fallita.")
-                versione_vecchia = 2
-            
-            if versione_vecchia == 2 and versione_nuova >= 3:
-                if not _migra_da_v2_a_v3(con):
-                    raise Exception("Migrazione da v2 a v3 fallita.")
-                versione_vecchia = 3
-            
-            if versione_vecchia == 3 and versione_nuova >= 4:
-                if not _migra_da_v3_a_v4(con):
-                    raise Exception("Migrazione da v3 a v4 fallita.")
-                versione_vecchia = 4
-            
-            if versione_vecchia == 4 and versione_nuova >= 5:
-                if not _migra_da_v4_a_v5(con):
-                    raise Exception("Migrazione da v4 a v5 fallita.")
-                versione_vecchia = 5
-            
-            if versione_vecchia == 5 and versione_nuova >= 6:
-                if not _migra_da_v5_a_v6(con):
-                    raise Exception("Migrazione da v5 a v6 fallita.")
-                versione_vecchia = 6
+        cur = con.cursor()
+        
+        # Se le versioni non sono passate, recuperale
+        if versione_vecchia is None:
+            try:
+                # Prova lettura Postgres/standard
+                cur.execute("SELECT valore FROM InfoDB WHERE chiave = 'versione'")
+                row = cur.fetchone()
+                versione_vecchia = int(row['valore']) if row else 0
+            except:
+                try:
+                    # Fallback SQLite vecchio stile o PRAGMA
+                    cur.execute("PRAGMA user_version")
+                    res = cur.fetchone()
+                    versione_vecchia = int(res[0]) if res else 0
+                except:
+                    versione_vecchia = 0
 
-            if versione_vecchia == 6 and versione_nuova >= 7:
-                if not _migra_da_v6_a_v7(con):
-                    raise Exception("Migrazione da v6 a v7 fallita.")
-                versione_vecchia = 7
+        if versione_nuova is None:
+             from db.crea_database import SCHEMA_VERSION
+             versione_nuova = SCHEMA_VERSION
 
-            if versione_vecchia == 7 and versione_nuova >= 8:
-                if not _migra_da_v7_a_v8(con):
-                    raise Exception("Migrazione da v7 a v8 fallita.")
-                versione_vecchia = 8
+        print(f"Verifica migrazione DB: versione {versione_vecchia} -> target {versione_nuova}")
 
-            if versione_vecchia == 8 and versione_nuova >= 9:
-                if not _migra_da_v8_a_v9(con):
-                    raise Exception("Migrazione da v8 a v9 fallita.")
-                versione_vecchia = 9
-
-            if versione_vecchia == 9 and versione_nuova >= 10:
-                if not _migra_da_v9_a_v10(con):
-                    raise Exception("Migrazione da v9 a v10 fallita.")
-                versione_vecchia = 10
-            
-            if versione_vecchia == 10 and versione_nuova >= 11:
-                if not _migra_da_v10_a_v11(con):
-                    raise Exception("Migrazione da v10 a v11 fallita.")
-                versione_vecchia = 11
-
-            if versione_vecchia == 11 and versione_nuova >= 12:
-                if not _migra_da_v11_a_v12(con):
-                    raise Exception("Migrazione da v11 a v12 fallita.")
-                versione_vecchia = 12
-
-            if versione_vecchia == 12 and versione_nuova >= 13:
-                if not _migra_da_v12_a_v13(con):
-                    raise Exception("Migrazione da v12 a v13 fallita.")
-                versione_vecchia = 13
-
-            if versione_vecchia == 13 and versione_nuova >= 14:
-                if not _migra_da_v13_a_v14(con):
-                    raise Exception("Migrazione da v13 a v14 fallita.")
-                versione_vecchia = 14
-
-                if not _migra_da_v14_a_v15(con):
-                    raise Exception("Migrazione da v14 a v15 fallita.")
-                versione_vecchia = 15
-
-            if versione_vecchia == 15 and versione_nuova >= 16:
-                if not _migra_da_v15_a_v16(con):
-                    raise Exception("Migrazione da v15 a v16 fallita.")
-                versione_vecchia = 16
-
-            # Se tutto è andato bene, aggiorna la versione del DB
-            cur.execute(f"PRAGMA user_version = {versione_nuova}")
-            con.commit()
-            print(f"Database migrato con successo alla versione {versione_nuova}.")
+        if versione_vecchia >= versione_nuova:
             return True
 
+        # Esegui le migrazioni in sequenza
+        if versione_vecchia == 1 and versione_nuova >= 2:
+            if not _migra_da_v1_a_v2(con):
+                raise Exception("Migrazione da v1 a v2 fallita.")
+            versione_vecchia = 2
+        
+        if versione_vecchia == 2 and versione_nuova >= 3:
+            if not _migra_da_v2_a_v3(con):
+                raise Exception("Migrazione da v2 a v3 fallita.")
+            versione_vecchia = 3
+
+        if versione_vecchia == 3 and versione_nuova >= 4:
+            if not _migra_da_v3_a_v4(con):
+                raise Exception("Migrazione da v3 a v4 fallita.")
+            versione_vecchia = 4
+        
+        if versione_vecchia == 4 and versione_nuova >= 5:
+            if not _migra_da_v4_a_v5(con):
+                raise Exception("Migrazione da v4 a v5 fallita.")
+            versione_vecchia = 5
+            
+        if versione_vecchia == 5 and versione_nuova >= 6:
+            if not _migra_da_v5_a_v6(con):
+                raise Exception("Migrazione da v5 a v6 fallita.")
+            versione_vecchia = 6
+
+        if versione_vecchia == 6 and versione_nuova >= 7:
+            if not _migra_da_v6_a_v7(con):
+                raise Exception("Migrazione da v6 a v7 fallita.")
+            versione_vecchia = 7
+
+        if versione_vecchia == 7 and versione_nuova >= 8:
+            if not _migra_da_v7_a_v8(con):
+                raise Exception("Migrazione da v7 a v8 fallita.")
+            versione_vecchia = 8
+            
+        if versione_vecchia == 8 and versione_nuova >= 9:
+            if not _migra_da_v8_a_v9(con):
+                raise Exception("Migrazione da v8 a v9 fallita.")
+            versione_vecchia = 9
+
+        if versione_vecchia == 9 and versione_nuova >= 10:
+            if not _migra_da_v9_a_v10(con):
+                raise Exception("Migrazione da v9 a v10 fallita.")
+            versione_vecchia = 10
+        
+        if versione_vecchia == 10 and versione_nuova >= 11:
+            if not _migra_da_v10_a_v11(con):
+                raise Exception("Migrazione da v10 a v11 fallita.")
+            versione_vecchia = 11
+
+        if versione_vecchia == 11 and versione_nuova >= 12:
+            if not _migra_da_v11_a_v12(con):
+                raise Exception("Migrazione da v11 a v12 fallita.")
+            versione_vecchia = 12
+
+        if versione_vecchia == 12 and versione_nuova >= 13:
+            if not _migra_da_v12_a_v13(con):
+                raise Exception("Migrazione da v12 a v13 fallita.")
+            versione_vecchia = 13
+
+        if versione_vecchia == 13 and versione_nuova >= 14:
+            if not _migra_da_v13_a_v14(con):
+                raise Exception("Migrazione da v13 a v14 fallita.")
+            versione_vecchia = 14
+
+            if not _migra_da_v14_a_v15(con):
+                raise Exception("Migrazione da v14 a v15 fallita.")
+            versione_vecchia = 15
+
+        if versione_vecchia == 15 and versione_nuova >= 16:
+            if not _migra_da_v15_a_v16(con):
+                raise Exception("Migrazione da v15 a v16 fallita.")
+            versione_vecchia = 16
+
+        if versione_vecchia == 16 and versione_nuova >= 17:
+            if not _migra_da_v16_a_v17(con):
+                raise Exception("Migrazione da v16 a v17 fallita.")
+            versione_vecchia = 17
+
+        if versione_vecchia == 17 and versione_nuova >= 18:
+            if not _migra_da_v17_a_v18(con):
+                raise Exception("Migrazione da v17 a v18 fallita.")
+            versione_vecchia = 18
+
+        if versione_vecchia == 18 and versione_nuova >= 19:
+            if not _migra_da_v18_a_v19(con):
+                raise Exception("Migrazione da v18 a v19 fallita.")
+            versione_vecchia = 19
+
+        # Se tutto è andato bene, aggiorna la versione del DB
+        # Per Postgres usiamo InfoDB, per SQLite PRAGMA
+        try:
+             # Postgres/Table approach
+             cur.execute("UPDATE InfoDB SET valore = %s WHERE chiave = 'versione'", (str(versione_nuova),))
+             if cur.rowcount == 0:
+                 cur.execute("INSERT INTO InfoDB (chiave, valore) VALUES ('versione', %s)", (str(versione_nuova),))
+        except:
+             try:
+                cur.execute(f"PRAGMA user_version = {versione_nuova}")
+             except: pass
+             
+        con.commit()
+        print(f"Database migrato con successo alla versione {versione_nuova}.")
+        return True
+
     except Exception as e:
-        print(f"❌ Errore durante la migrazione: {e}. Ripristino dal backup.")
-        # Ripristina dal backup in caso di errore
-        # ensure copy back only if something failed after backup
-        if os.path.exists(backup_path):
-             shutil.copyfile(backup_path, db_path) # Changed to copyfile to enable retry
+        print(f"❌ Errore durante la migrazione: {e}")
+        try:
+            con.rollback()
+        except: pass
         return False

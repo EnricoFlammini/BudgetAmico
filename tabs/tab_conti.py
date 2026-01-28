@@ -76,12 +76,6 @@ class ContiTab(ft.Container):
         self.main_view.controls = [
             ft.Row([
                 AppStyles.title_text("Gestione Conti"),
-                ft.IconButton(
-                    icon=ft.Icons.ACCOUNT_BALANCE_WALLET,
-                    icon_color="primary", # Uses theme primary color
-                    tooltip="Aggiungi Conto",
-                    on_click=self._apri_dialog_aggiungi
-                )
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             AppStyles.page_divider(),
             self.grid_conti,

@@ -50,7 +50,6 @@ class AccantonamentiTab(ft.Container):
         self.content = ft.Column([
             ft.Row([
                 AppStyles.title_text("Accantonamenti"),
-                ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=AppColors.PRIMARY, tooltip="Aggiungi Obiettivo", on_click=self._apri_dialog_creazione)
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
             self.lista_obiettivi

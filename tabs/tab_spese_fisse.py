@@ -329,12 +329,6 @@ class SpeseFisseTab(ft.Container):
         return [
             ft.Row([
                 AppStyles.title_text(loc.get("fixed_expenses_management")),
-                ft.IconButton(
-                    icon=ft.Icons.ADD,
-                    tooltip=loc.get("add_fixed_expense"),
-                    icon_color=AppColors.PRIMARY,
-                    on_click=lambda e: self.controller.spesa_fissa_dialog.apri_dialog()
-                )
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             AppStyles.page_divider(),
             self.data_stack

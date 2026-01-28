@@ -18,12 +18,6 @@ class TabCarte(ft.Container):
         self.content = ft.Column([
             ft.Row([
                 AppStyles.title_text("Gestione Carte"),
-                ft.IconButton(
-                    icon=ft.Icons.ADD_CARD,
-                    icon_color="primary", # Uses theme primary color
-                    tooltip="Aggiungi Carta",
-                    on_click=self._open_add_dialog
-                )
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ft.Container(height=10),
             self.cards_view

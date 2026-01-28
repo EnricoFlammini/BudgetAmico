@@ -15,6 +15,7 @@ from tabs.tab_investimenti import InvestimentiTab
 from tabs.tab_carte import TabCarte
 from tabs.tab_calcolatrice import CalcolatriceTab
 from tabs.tab_accantonamenti import AccantonamentiTab
+from tabs.tab_contatti import ContattiTab
 from utils.logger import setup_logger
 from utils.cache_manager import cache_manager
 
@@ -41,7 +42,9 @@ class DashboardView:
         self.tab_investimenti = InvestimentiTab(controller)
         self.tab_carte = TabCarte(controller)
         self.tab_calcolatrice = CalcolatriceTab(controller)
+        self.tab_calcolatrice = CalcolatriceTab(controller)
         self.tab_accantonamenti = AccantonamentiTab(controller)
+        self.tab_contatti = ContattiTab(controller)
 
         # 2. Sidebar personalizzata (sostituisce NavigationRail)
         self.selected_index = 0
@@ -284,32 +287,69 @@ class DashboardView:
         logger.info("[ACTION] FAB '+' clicked: Opening add menu")
         loc = self.controller.loc
 
-        def close_bs(e):
+        def go_to_action(action_callback):
+            """Helper to close sheet and run action"""
             bs.open = False
             bs.update()
+            if action_callback:
+                action_callback()
 
         bs = ft.BottomSheet(
             ft.Container(
                 ft.Column(
                     [
                         ft.ListTile(
-                            title=ft.Text(loc.get("new_transaction")),
-                            leading=ft.Icon(ft.Icons.ADD),
-                            on_click=lambda _: [close_bs(_),
-                                                self.controller.transaction_dialog.apri_dialog_nuova_transazione()]
+                            title=ft.Text(loc.get("new_transaction", "Nuova Transazione")),
+                            leading=ft.Icon(ft.Icons.PAYMENT),
+                            on_click=lambda _: go_to_action(self.controller.open_new_transaction_dialog)
                         ),
                         ft.ListTile(
-                            title=ft.Text(loc.get("new_transfer")),
-                            leading=ft.Icon(ft.Icons.SWAP_HORIZ),
-                            on_click=lambda _: [close_bs(_), self.controller.giroconto_dialog.apri_dialog()]
+                            title=ft.Text(loc.get("new_account", "Nuovo Conto")),
+                            leading=ft.Icon(ft.Icons.ACCOUNT_BALANCE_WALLET),
+                            on_click=lambda _: go_to_action(self.controller.open_new_account_dialog)
                         ),
-                    ], tight=True
-                ), padding=10
+                        ft.ListTile(
+                            title=ft.Text(loc.get("new_card", "Nuova Carta")),
+                            leading=ft.Icon(ft.Icons.CREDIT_CARD),
+                            on_click=lambda _: go_to_action(self.controller.open_new_card_dialog)
+                        ),
+                        ft.ListTile(
+                            title=ft.Text(loc.get("new_savings", "Nuovo Risparmio")),
+                            leading=ft.Icon(ft.Icons.SAVINGS),
+                            on_click=lambda _: go_to_action(self.controller.open_new_savings_dialog)
+                        ),
+                        ft.ListTile(
+                            title=ft.Text(loc.get("new_fixed_expense", "Nuova Spesa Fissa")),
+                            leading=ft.Icon(ft.Icons.REPEAT),
+                            on_click=lambda _: go_to_action(self.controller.open_new_fixed_expense_dialog)
+                        ),
+                        ft.ListTile(
+                            title=ft.Text(loc.get("new_loan", "Nuovo Prestito")),
+                            leading=ft.Icon(ft.Icons.MONEY_OFF),
+                            on_click=lambda _: go_to_action(self.controller.open_new_loan_dialog)
+                        ),
+                        ft.ListTile(
+                            title=ft.Text(loc.get("new_property", "Nuovo Immobile")),
+                            leading=ft.Icon(ft.Icons.HOME_WORK),
+                            on_click=lambda _: go_to_action(self.controller.open_new_property_dialog)
+                        ),
+                        ft.ListTile(
+                            title=ft.Text(loc.get("new_contact", "Nuovo Contatto")),
+                            leading=ft.Icon(ft.Icons.CONTACT_PHONE),
+                            on_click=lambda _: go_to_action(self.controller.open_new_contact_dialog)
+                        ),
+                    ],
+                    tight=True,
+                ),
+                padding=20, # Add padding for aesthetics
+                border_radius=ft.border_radius.only(top_left=20, top_right=20) # Modern rounded corners
             ),
             open=True,
+            on_dismiss=lambda e: logger.debug("Bottom sheet dismissed")
         )
         self.page.overlay.append(bs)
-        self._safe_update(self.page)
+        self.page.update()
+
 
     def update_sidebar(self):
         """
@@ -429,6 +469,16 @@ class DashboardView:
             })
             index += 1
 
+        # 9b. Contatti (Tutti)
+        self.sidebar_items.append({
+            'icon': ft.Icons.CONTACT_PHONE_OUTLINED,
+            'selected_icon': ft.Icons.CONTACT_PHONE,
+            'label': "Contatti",
+            'view': self.tab_contatti,
+            'index': index
+        })
+        index += 1
+
         # 10. Admin (Solo Admin)
         if ruolo == 'admin':
             self.sidebar_items.append({
@@ -446,8 +496,9 @@ class DashboardView:
 
 
 
-        # 13. Calcolatrice (Solo Utente1)
-        if utente and utente.get('username') == 'Utente1':
+        # 13. Calcolatrice (Solo ID 16)
+        uid = str(self.controller.get_user_id())
+        if uid == '16':
             self.sidebar_items.append({
                 'icon': ft.Icons.CALCULATE_OUTLINED,
                 'selected_icon': ft.Icons.CALCULATE,

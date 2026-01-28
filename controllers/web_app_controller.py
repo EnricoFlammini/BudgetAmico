@@ -5,7 +5,12 @@ from views.web_dashboard_view import WebDashboardView
 # Import dialogs (reusing existing ones)
 from dialogs.transaction_dialog import TransactionDialog
 from dialogs.conto_dialog import ContoDialog
-from dialogs.giroconto_dialog import GirocontoDialog
+from dialogs.conto_dialog import ContoDialog
+from dialogs.spesa_fissa_dialog import SpesaFissaDialog
+from dialogs.immobile_dialog import ImmobileDialog
+from dialogs.prestito_dialogs import PrestitoDialogs
+from dialogs.portafoglio_dialogs import PortafoglioDialogs
+from dialogs.card_dialog import CardDialog
 from views.auth_view import AuthView
 from utils.logger import setup_logger
 
@@ -34,8 +39,13 @@ class WebAppController(AppController):
     def _init_dialogs_and_views(self):
         # We only init the dialogs we strictly need for the mobile Lite version
         self.transaction_dialog = TransactionDialog(self)
-        self.conto_dialog = ContoDialog(self) # Useful for checking details
-        self.giroconto_dialog = GirocontoDialog(self)
+        self.transaction_dialog = TransactionDialog(self)
+        self.conto_dialog = ContoDialog(self) 
+        self.card_dialog = CardDialog(page=self.page, callback=self.update_all_views) # Fixed: using callback directly
+        self.spesa_fissa_dialog = SpesaFissaDialog(self)
+        self.immobile_dialog = ImmobileDialog(self)
+        self.prestito_dialogs = PrestitoDialogs(self)
+        self.portafoglio_dialogs = PortafoglioDialogs(self)
         
         # Init Views
         self.auth_view = AuthView(self)
@@ -72,10 +82,17 @@ class WebAppController(AppController):
         self.page.overlay.extend([
             self.transaction_dialog, 
             self.conto_dialog,
-            self.giroconto_dialog,
             self.date_picker, 
             self.confirm_delete_dialog,
             self.error_dialog,
+            self.spesa_fissa_dialog,
+            self.immobile_dialog,
+            self.prestito_dialogs.dialog_prestito,
+            self.prestito_dialogs.dialog_paga_rata,
+            self.portafoglio_dialogs.dialog_portafoglio,
+            self.portafoglio_dialogs.dialog_operazione_asset,
+            self.portafoglio_dialogs.dialog_aggiorna_prezzo,
+            self.portafoglio_dialogs.dialog_modifica_asset,
             # self.loading_overlay is dynamic
         ])
 

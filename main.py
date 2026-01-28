@@ -58,6 +58,19 @@ def main(page: ft.Page):
         logger.critical("Impossibile connettersi al database.")
         return
 
+    # Esegui migrazioni database
+    try:
+        from db.migration_manager import migra_database
+        from db.supabase_manager import get_db_connection
+        logger.info("Avvio procedura di migrazione database...")
+        with get_db_connection() as con:
+            migra_database(con)
+    except Exception as e:
+        logger.critical(f"Errore critico durante la migrazione del DB: {e}")
+        page.add(ft.Text(f"Errore migrazione DB: {e}", color=ft.Colors.RED))
+        # Non blocchiamo l'avvio, ma potrebbe causare errori successivi
+
+
     try:
         versione_corrente_db = int(ottieni_versione_db())
         logger.info(f"Versione DB: {versione_corrente_db}")

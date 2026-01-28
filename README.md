@@ -1,4 +1,4 @@
-# Budget Amico v0.38.05
+# Budget Amico v0.39.00
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -11,11 +11,15 @@
 ---
 
 ## 📅 Changelog
+### v0.39.00 (28/01/2026)
+- **Web App - Navigazione Completa**:
+    - **Allineamento Desktop**: La sidebar Web ora include tutte le pagine disponibili su Desktop (Prestiti, Immobili, Contatti, Calcolatrice).
+    - **FAB Menu Espanso**: Aggiunte opzioni rapide per creare Prestiti, Immobili e Contatti dal pulsante "+".
+    - **Dialoghi Correttamente Registrati**: Tutti i dialoghi (Portafoglio, Prestiti, Immobili, Spese Fisse) ora correttamente inizializzati nel controller Web.
+- **Controllo Accessi**:
+    - **Pagina Calcolatrice**: Visibile solo per l'utente ID 16.
+    - **Pagina Contatti**: Ora accessibile a tutti gli utenti.
 ### v0.38.05 (27/01/2026)
-- **Web App - Info & Download**:
-    - Aggiunta una nuova pagina **Info** accessibile dal menu laterale.
-    - Include un link diretto per scaricare l'ultima release dell'applicazione Desktop (exe/zip) da GitHub.
-### v0.38.00 (25/01/2026)
 - **Web App - Navigazione Drawer**:
     - **Menu Laterale**: Sostituita la barra di navigazione in basso (troppo affollata) con un elegante menu laterale a scomparsa (Drawer).
     - **Hamburger Menu**: Nuova icona ☰ nell'AppBar per aprire il Drawer.
