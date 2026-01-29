@@ -5,7 +5,6 @@
 <img width="500" height="500" alt="Budget Amico" src="https://github.com/user-attachments/assets/ed2e29d2-c8a4-4e95-82b0-c6b40e125179" />
 
 
-**Budget Amico** è un'applicazione avanzata per la gestione delle finanze personali e familiari, sviluppata in Python con framework Flet.
 > Il tuo assistente personale per la gestione delle finanze familiari. Semplice, sicuro, multipiattaforma. in Python con framework Flet.
 
 ---
