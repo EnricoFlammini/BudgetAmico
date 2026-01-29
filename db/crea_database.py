@@ -14,8 +14,8 @@ if not os.path.exists(APP_DATA_DIR):
 DB_FILE = os.path.join(APP_DATA_DIR, 'budget_amico.db')
 
 # --- SCHEMA DATABASE ---
-# Versione 11: Aggiunta tabella Carte e supporto transazioni con carte
-SCHEMA_VERSION = 19
+# Versione 21: Aggiunta tabella Config_Logger per configurazione logger selettivi
+SCHEMA_VERSION = 21
 
 TABLES = {
     "Utenti": """
@@ -330,6 +330,28 @@ TABLES = {
             id_contatto INTEGER NOT NULL REFERENCES Contatti(id_contatto) ON DELETE CASCADE,
             id_utente INTEGER NOT NULL REFERENCES Utenti(id_utente) ON DELETE CASCADE,
             PRIMARY KEY (id_contatto, id_utente)
+        );
+    """,
+    "Log_Sistema": """
+        CREATE TABLE Log_Sistema (
+            id_log SERIAL PRIMARY KEY,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            livello TEXT NOT NULL CHECK(livello IN ('DEBUG','INFO','WARNING','ERROR','CRITICAL')),
+            componente TEXT NOT NULL,
+            messaggio TEXT NOT NULL,
+            dettagli TEXT,
+            id_utente INTEGER REFERENCES Utenti(id_utente) ON DELETE SET NULL,
+            id_famiglia INTEGER REFERENCES Famiglie(id_famiglia) ON DELETE SET NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_log_timestamp ON Log_Sistema(timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_log_livello ON Log_Sistema(livello);
+        CREATE INDEX IF NOT EXISTS idx_log_componente ON Log_Sistema(componente);
+    """,
+    "Config_Logger": """
+        CREATE TABLE Config_Logger (
+            componente TEXT PRIMARY KEY,
+            abilitato BOOLEAN DEFAULT FALSE,
+            livello_minimo TEXT DEFAULT 'INFO' CHECK(livello_minimo IN ('DEBUG','INFO','WARNING','ERROR','CRITICAL'))
         );
     """
 }

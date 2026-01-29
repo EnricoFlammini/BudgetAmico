@@ -1,4 +1,4 @@
-# Budget Amico v0.39.00
+# Budget Amico v0.40.00
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -11,6 +11,19 @@
 ---
 
 ## 📅 Changelog
+### v0.40.00 (29/01/2026)
+- **Sistema Logging su Database**:
+    - **Tabella Log_Sistema**: Nuova tabella PostgreSQL per logging centralizzato con conservazione 30 giorni.
+    - **DBLogger**: Nuovo modulo `utils/db_logger.py` per scrittura asincrona log su database.
+    - **Pannello Admin**: Interfaccia web `/admin` per visualizzare, filtrare e gestire i log di sistema.
+    - **Autenticazione Admin**: Accesso protetto con credenziali configurabili via variabili d'ambiente (`ADMIN_USERNAME`, `ADMIN_PASSWORD`).
+    - **Pulizia Automatica**: Eliminazione automatica log più vecchi di 30 giorni (schedulata ogni 24 ore).
+    - **Integrazione BackgroundService**: Tutti i job automatici (spese fisse, aggiornamento asset) ora loggano su database.
+- **Logger Configurabili**:
+    - **Selezione Componenti**: Possibilità di abilitare/disabilitare il logging per singoli componenti (YFinanceManager, AppController, GestioneDB, ecc.) direttamente dal pannello admin.
+    - **Chip Toggle**: Interfaccia intuitiva con chip selezionabili per ogni componente.
+    - **DBLogHandler**: Nuovo handler che intercetta i log Python standard e li scrive su database in base alla configurazione.
+    - **Livello Minimo**: Configurazione del livello minimo di log da catturare (DEBUG, INFO, WARNING, ERROR, CRITICAL).
 ### v0.39.00 (28/01/2026)
 - **Web App - Navigazione Completa**:
     - **Allineamento Desktop**: La sidebar Web ora include tutte le pagine disponibili su Desktop (Prestiti, Immobili, Contatti, Calcolatrice).

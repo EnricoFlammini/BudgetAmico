@@ -17,8 +17,10 @@ from db.gestione_db import (
 )
 from utils.yfinance_manager import ottieni_prezzi_multipli
 from utils.crypto_manager import CryptoManager
+from utils.db_logger import DBLogger, cleanup_old_logs
 
 logger = logging.getLogger("BackgroundService")
+db_logger = DBLogger("BackgroundService")
 
 class BackgroundService:
     def __init__(self):
@@ -30,6 +32,10 @@ class BackgroundService:
             return
         self.running = True
         logger.info("Avvio Background Service...")
+        db_logger.info("Background Service avviato")
+        
+        # Pulizia log vecchi all'avvio
+        cleanup_old_logs(days=30)
         
         # Schedule jobs
         # 1. Fixed Expenses & Automation -> Every 6 hours
@@ -37,6 +43,9 @@ class BackgroundService:
         
         # 2. Asset Update -> Every 12 hours
         schedule.every(12).hours.do(self.run_asset_updates_job)
+        
+        # 3. Log cleanup -> Every 24 hours
+        schedule.every(24).hours.do(lambda: cleanup_old_logs(days=30))
         
         # Esegui subito all'avvio (in un thread separato per non bloccare)
         threading.Thread(target=self.run_all_jobs_now).start()
@@ -53,6 +62,7 @@ class BackgroundService:
     def stop(self):
         self.running = False
         logger.info("Background Service fermato.")
+        db_logger.info("Background Service fermato")
 
     def check_and_run_jobs(self):
         """
@@ -61,6 +71,7 @@ class BackgroundService:
         2. Asset Update (ogni 12 ore o forzato)
         """
         logger.info("Esecuzione ciclo jobs background...")
+        db_logger.info("Inizio ciclo jobs background")
         try:
             # Get all families with server key
             with get_db_connection() as conn:
@@ -73,6 +84,7 @@ class BackgroundService:
 
             if not server_secret:
                 logger.error("SERVER_SECRET_KEY non trovata. Impossibile eseguire automazione server.")
+                db_logger.error("SERVER_SECRET_KEY non trovata - automazione impossibile")
                 return
 
             for fam in families:
@@ -85,6 +97,7 @@ class BackgroundService:
                     family_key = get_server_family_key(id_famiglia)
                     if not family_key:
                         logger.error(f"Impossibile decriptare chiave per famiglia {id_famiglia}")
+                        db_logger.error(f"Impossibile decriptare chiave famiglia", id_famiglia=id_famiglia)
                         continue
                         
                     logger.info(f"--- Automazione per Famiglia {id_famiglia} ---")
@@ -92,7 +105,10 @@ class BackgroundService:
                     # 1. SPESE FISSE
                     logger.info(f"Checking Spese Fisse per {id_famiglia}...")
                     n_fixed = check_e_processa_spese_fisse(id_famiglia, forced_family_key_b64=family_key)
-                    if n_fixed > 0: logger.info(f"Eseguite {n_fixed} spese fisse.")
+                    if n_fixed > 0:
+                        logger.info(f"Eseguite {n_fixed} spese fisse.")
+                        db_logger.info(f"Eseguite {n_fixed} spese fisse", 
+                                      dettagli={"count": n_fixed}, id_famiglia=id_famiglia)
 
                     # 2. STORICO BUDGET
                     membri = ottieni_membri_famiglia(id_famiglia, family_key, None)
@@ -109,13 +125,20 @@ class BackgroundService:
                         logger.info(f"Updating Budget History per {id_famiglia}...")
                         now = datetime.datetime.now()
                         trigger_budget_history_update(id_famiglia, now, forced_family_key_b64=family_key, id_utente=admin_id)
+                        db_logger.info("Storico budget aggiornato", id_famiglia=id_famiglia)
 
                 except Exception as e_fam:
                     logger.error(f"Errore automazione famiglia {id_famiglia}: {e_fam}")
+                    db_logger.error(f"Errore automazione famiglia: {e_fam}", 
+                                   id_famiglia=id_famiglia, include_traceback=True)
                     traceback.print_exc()
+
+            db_logger.info("Ciclo jobs background completato", 
+                          dettagli={"famiglie_processate": len(families)})
 
         except Exception as e:
             logger.error(f"Errore generale loop job: {e}")
+            db_logger.error(f"Errore generale loop job: {e}", include_traceback=True)
             traceback.print_exc()
     def run_all_jobs_now(self):
         """Manually trigger all jobs (for Admin)."""
@@ -238,8 +261,14 @@ class BackgroundService:
                 
                 if updated_count > 0:
                     logger.info(f"Famiglia {id_famiglia}: {updated_count} prezzi aggiornati.")
+                    db_logger.info(f"Prezzi asset aggiornati", 
+                                  dettagli={"count": updated_count, "tickers": len(all_tickers)},
+                                  id_famiglia=id_famiglia)
 
             except Exception as e:
                 logger.error(f"Error updating assets for family {id_famiglia}: {e}")
+                db_logger.error(f"Errore aggiornamento asset: {e}", 
+                               id_famiglia=id_famiglia, include_traceback=True)
         
         logger.info("Job Aggiornamento Asset completato.")
+        db_logger.info("Job aggiornamento asset completato")

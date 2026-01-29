@@ -40,7 +40,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 MAX_RECENT_FILES = 5
-VERSION = "0.39.00"
+VERSION = "0.40.00"
 
 
 class AppController:
@@ -225,6 +225,8 @@ class AppController:
                 self.page.views.append(self.auth_view.get_force_change_password_view())
             elif route_path == "/divisore":
                 self.page.views.append(self._build_public_divisore_view())
+            elif route_path == "/admin/login" or route_path == "/admin":
+                self._handle_admin_route(route_path)
             else:
                 self.page.go("/")
             self.page.update()
@@ -714,6 +716,29 @@ class AppController:
             ],
             scroll=ft.ScrollMode.ADAPTIVE
         )
+
+    def _handle_admin_route(self, route_path: str):
+        """Gestisce le route /admin e /admin/login per il pannello amministrativo."""
+        from views.admin_panel_view import AdminPanelView, AdminLoginView
+        
+        def on_login_success():
+            self.page.go("/admin")
+        
+        def on_admin_logout():
+            self.page.session.remove("admin_authenticated")
+            self.page.go("/")
+        
+        if route_path == "/admin/login":
+            login_view = AdminLoginView(self.page, on_login_success)
+            self.page.views.append(login_view.build_view())
+        elif route_path == "/admin":
+            # Verifica se l'admin è autenticato
+            if self.page.session.get("admin_authenticated"):
+                admin_panel = AdminPanelView(self.page, on_admin_logout)
+                self.page.views.append(admin_panel.build_view())
+            else:
+                # Redirect al login
+                self.page.go("/admin/login")
 
     def logout(self, e=None):
         logger.info("User logged out")

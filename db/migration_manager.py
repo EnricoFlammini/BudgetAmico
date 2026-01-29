@@ -451,6 +451,101 @@ def _migra_da_v18_a_v19(con):
         return False
 
 
+def _migra_da_v19_a_v20(con):
+    """
+    Logica specifica per migrare un DB dalla versione 19 alla 20.
+    - Crea la tabella Log_Sistema per logging centralizzato.
+    """
+    print("Esecuzione migrazione da v19 a v20...")
+    try:
+        cur = con.cursor()
+
+        # 1. Crea la tabella Log_Sistema
+        print("  - Creazione tabella Log_Sistema...")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS Log_Sistema (
+                id_log SERIAL PRIMARY KEY,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                livello TEXT NOT NULL CHECK(livello IN ('DEBUG','INFO','WARNING','ERROR','CRITICAL')),
+                componente TEXT NOT NULL,
+                messaggio TEXT NOT NULL,
+                dettagli TEXT,
+                id_utente INTEGER REFERENCES Utenti(id_utente) ON DELETE SET NULL,
+                id_famiglia INTEGER REFERENCES Famiglie(id_famiglia) ON DELETE SET NULL
+            );
+        """)
+
+        # 2. Crea indici per performance
+        print("  - Creazione indici per Log_Sistema...")
+        try:
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_log_timestamp ON Log_Sistema(timestamp DESC);")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_log_livello ON Log_Sistema(livello);")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_log_componente ON Log_Sistema(componente);")
+        except Exception as e:
+            print(f"    Warning creazione indici (potrebbero già esistere): {e}")
+
+        con.commit()
+        print("Migrazione a v20 completata con successo.")
+        return True
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v19 a v20: {e}")
+        try: con.rollback() 
+        except: pass
+        return False
+
+
+def _migra_da_v20_a_v21(con):
+    """
+    Logica specifica per migrare un DB dalla versione 20 alla 21.
+    - Crea la tabella Config_Logger per configurazione logger selettivi.
+    """
+    print("Esecuzione migrazione da v20 a v21...")
+    try:
+        cur = con.cursor()
+
+        # 1. Crea la tabella Config_Logger
+        print("  - Creazione tabella Config_Logger...")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS Config_Logger (
+                componente TEXT PRIMARY KEY,
+                abilitato BOOLEAN DEFAULT FALSE,
+                livello_minimo TEXT DEFAULT 'INFO' CHECK(livello_minimo IN ('DEBUG','INFO','WARNING','ERROR','CRITICAL'))
+            );
+        """)
+
+        # 2. Inserisci componenti predefiniti
+        print("  - Inserimento componenti predefiniti...")
+        componenti_default = [
+            ('BackgroundService', True, 'INFO'),  # Già abilitato di default
+            ('YFinanceManager', False, 'WARNING'),
+            ('AppController', False, 'WARNING'),
+            ('GestioneDB', False, 'ERROR'),
+            ('AuthView', False, 'WARNING'),
+            ('SupabaseManager', False, 'ERROR'),
+            ('CryptoManager', False, 'ERROR'),
+            ('WebAppController', False, 'WARNING'),
+            ('Main', False, 'INFO'),
+        ]
+        for comp, abilitato, livello in componenti_default:
+            try:
+                cur.execute("""
+                    INSERT INTO Config_Logger (componente, abilitato, livello_minimo)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (componente) DO NOTHING
+                """, (comp, abilitato, livello))
+            except:
+                pass
+
+        con.commit()
+        print("Migrazione a v21 completata con successo.")
+        return True
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v20 a v21: {e}")
+        try: con.rollback() 
+        except: pass
+        return False
+
+
 def _migra_da_v7_a_v8(con: sqlite3.Connection):
     """
     Logica specifica per migrare un DB dalla versione 7 alla 8.
@@ -797,6 +892,16 @@ def migra_database(con, versione_vecchia=None, versione_nuova=None):
             if not _migra_da_v18_a_v19(con):
                 raise Exception("Migrazione da v18 a v19 fallita.")
             versione_vecchia = 19
+
+        if versione_vecchia == 19 and versione_nuova >= 20:
+            if not _migra_da_v19_a_v20(con):
+                raise Exception("Migrazione da v19 a v20 fallita.")
+            versione_vecchia = 20
+
+        if versione_vecchia == 20 and versione_nuova >= 21:
+            if not _migra_da_v20_a_v21(con):
+                raise Exception("Migrazione da v20 a v21 fallita.")
+            versione_vecchia = 21
 
         # Se tutto è andato bene, aggiorna la versione del DB
         # Per Postgres usiamo InfoDB, per SQLite PRAGMA

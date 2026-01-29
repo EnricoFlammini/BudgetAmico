@@ -43,8 +43,18 @@ def main(page: ft.Page):
     try:
         versione_corrente_db = int(ottieni_versione_db())
         print(f"Versione DB: {versione_corrente_db}")
+        
+        # Esegui migrazione se necessario
+        from db.crea_database import SCHEMA_VERSION
+        if versione_corrente_db < SCHEMA_VERSION:
+            print(f"Migrazione necessaria: v{versione_corrente_db} -> v{SCHEMA_VERSION}")
+            from db.migration_manager import migra_database
+            from db.supabase_manager import get_db_connection
+            with get_db_connection() as con:
+                migra_database(con, versione_corrente_db, SCHEMA_VERSION)
+            print("Migrazione completata.")
     except Exception as e:
-        print(f"Errore verifica versione DB: {e}")
+        print(f"Errore verifica/migrazione DB: {e}")
         page.add(ft.Text(f"Errore verifica versione DB: {e}", color=ft.Colors.RED))
         return
     # --- Fine Logica ---
@@ -61,6 +71,35 @@ def main(page: ft.Page):
 
 # Avvio dell'applicazione in modalità WEB
 if __name__ == "__main__":
+    # --- Esegui migrazione database PRIMA di avviare qualsiasi servizio ---
+    print("Verifica connessione e migrazione database...")
+    if SupabaseManager.test_connection():
+        try:
+            from db.crea_database import SCHEMA_VERSION
+            from db.supabase_manager import get_db_connection
+            
+            versione_corrente_db = int(ottieni_versione_db())
+            print(f"Versione DB attuale: {versione_corrente_db}, Schema richiesto: {SCHEMA_VERSION}")
+            
+            if versione_corrente_db < SCHEMA_VERSION:
+                print(f"Migrazione necessaria: v{versione_corrente_db} -> v{SCHEMA_VERSION}")
+                from db.migration_manager import migra_database
+                with get_db_connection() as con:
+                    migra_database(con, versione_corrente_db, SCHEMA_VERSION)
+                print("Migrazione completata con successo.")
+        except Exception as e:
+            print(f"[ERRORE] Migrazione database fallita: {e}")
+    else:
+        print("[ERRORE] Connessione database fallita!")
+
+    # Inizializza DBLogHandler per intercettare i log Python
+    try:
+        from utils.db_log_handler import attach_db_handler_to_all_loggers
+        attach_db_handler_to_all_loggers()
+        print("[INFO] DBLogHandler inizializzato per tutti i logger.")
+    except Exception as e:
+        print(f"[WARNING] Impossibile inizializzare DBLogHandler: {e}")
+
     # Avvio Background Service per automazione server
     try:
         from services.background_service import BackgroundService
