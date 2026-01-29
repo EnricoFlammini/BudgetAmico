@@ -162,10 +162,14 @@ class DBLogHandler(logging.Handler):
                             'traceback': ''.join(traceback.format_exception(*record.exc_info))
                         })
                     
+                    # Estrai contesto utente/famiglia se presente in extra
+                    id_utente = getattr(record, 'id_utente', None)
+                    id_famiglia = getattr(record, 'id_famiglia', None)
+                    
                     cur.execute("""
-                        INSERT INTO Log_Sistema (livello, componente, messaggio, dettagli)
-                        VALUES (%s, %s, %s, %s)
-                    """, (level_name, self.componente, message, details))
+                        INSERT INTO Log_Sistema (livello, componente, messaggio, dettagli, id_utente, id_famiglia)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """, (level_name, self.componente, message, details, id_utente, id_famiglia))
                     
                     conn.commit()
             except Exception as e:

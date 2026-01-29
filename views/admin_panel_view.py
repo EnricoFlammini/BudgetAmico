@@ -48,6 +48,8 @@ class AdminPanelView:
                 ft.DataColumn(ft.Text("Timestamp", size=12, weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Livello", size=12, weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Componente", size=12, weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Utente", size=12, weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Famiglia", size=12, weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Messaggio", size=12, weight=ft.FontWeight.BOLD)),
             ],
             rows=[],
@@ -217,6 +219,8 @@ class AdminPanelView:
                         ft.DataCell(ft.Text(ts_str, size=11)),
                         ft.DataCell(self._get_level_badge(log.get("livello", "INFO"))),
                         ft.DataCell(ft.Text(log.get("componente", "-"), size=11)),
+                        ft.DataCell(ft.Text(str(log.get("id_utente")) if log.get("id_utente") else "-", size=11)),
+                        ft.DataCell(ft.Text(str(log.get("id_famiglia")) if log.get("id_famiglia") else "-", size=11)),
                         ft.DataCell(ft.Text(messaggio, size=11)),
                     ],
                     on_select_changed=lambda e, l=log: self._show_log_details(l)
