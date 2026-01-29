@@ -58,7 +58,7 @@ def send_email(to_email, subject, body, smtp_config=None):
         msg.attach(part)
 
         # Connessione al server SMTP
-        server = smtplib.SMTP(smtp_server, int(smtp_port))
+        server = smtplib.SMTP(smtp_server, int(smtp_port), timeout=10)
         server.starttls() # Sicurezza TLS
         server.login(smtp_user, smtp_password)
         server.sendmail(smtp_user, to_email, msg.as_string())

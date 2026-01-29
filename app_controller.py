@@ -722,6 +722,7 @@ class AppController:
         from views.admin_panel_view import AdminPanelView, AdminLoginView
         
         def on_login_success():
+            self.page.session.set("admin_authenticated", True)
             self.page.go("/admin")
         
         def on_admin_logout():

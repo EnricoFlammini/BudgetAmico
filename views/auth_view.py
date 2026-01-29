@@ -190,6 +190,15 @@ class AuthView:
             from db.gestione_db import verifica_login
             utente = verifica_login(username, password)
             if utente:
+                if utente.get('sospeso'):
+                    logger.warning(f"LOGIN BLOCCATO - Utente sospeso: {username}")
+                    self.txt_errore_login.value = "Account sospeso. Contatta l'amministratore."
+                    self.txt_errore_login.visible = True
+                    btn_login.disabled = False
+                    self.page.update()
+                    self.controller.hide_loading()
+                    return
+
                 logger.info(f"LOGIN RIUSCITO - Utente ID: {utente.get('id')}")
                 logger.info(f"  - Forza cambio password: {utente.get('forza_cambio_password')}")
                 logger.info(f"  - Master key presente: {'Si' if utente.get('master_key') else 'No'}")

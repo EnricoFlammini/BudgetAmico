@@ -1,4 +1,4 @@
-# Budget Amico v0.40.00
+# Budget Amico v0.41.00
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -11,6 +11,13 @@
 ---
 
 ## 📅 Changelog
+### v0.41.00 (29/01/2026)
+- **Controlli Admin Avanzati**:
+    - **Sospensione Utenti**: Nuova funzionalità per sospendere temporaneamente l'accesso agli utenti. Colonna "Sospeso" e azioni dedicate nel pannello admin.
+    - **Protezione Cancellazione Famiglia**: Impedita la cancellazione accidentale di famiglie che hanno ancora membri associati.
+    - **Autenticazione Azioni Sensibili**: Tutte le operazioni distruttive (elimina utente/famiglia, sospendi, reset password) ora richiedono la conferma tramite **Password Admin**.
+    - **Database**: Migrazione automatica (v22) per supportare lo stato di sospensione.
+
 ### v0.40.00 (29/01/2026)
 - **Sistema Logging su Database**:
     - **Tabella Log_Sistema**: Nuova tabella PostgreSQL per logging centralizzato con conservazione 30 giorni.

@@ -903,6 +903,11 @@ def migra_database(con, versione_vecchia=None, versione_nuova=None):
                 raise Exception("Migrazione da v20 a v21 fallita.")
             versione_vecchia = 21
 
+        if versione_vecchia == 21 and versione_nuova >= 22:
+            if not _migra_da_v21_a_v22(con):
+                 raise Exception("Migrazione da v21 a v22 fallita.")
+            versione_vecchia = 22
+
         # Se tutto è andato bene, aggiorna la versione del DB
         # Per Postgres usiamo InfoDB, per SQLite PRAGMA
         try:

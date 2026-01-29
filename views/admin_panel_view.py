@@ -2,7 +2,7 @@
 Admin Panel View - Pannello di amministrazione di sistema per BudgetAmico Web.
 
 Questo modulo fornisce un'interfaccia web per gli amministratori di sistema
-per visualizzare i log e gestire configurazioni.
+per visualizzare i log, gestire utenti e famiglie, e configurare impostazioni globali.
 """
 
 import flet as ft
@@ -22,6 +22,9 @@ def verifica_admin_sistema(username: str, password: str) -> bool:
     admin_username = os.getenv("ADMIN_USERNAME", "admin")
     admin_password = os.getenv("ADMIN_PASSWORD")
     
+    print(f"[DEBUG] Login Check - EnvUser: {admin_username}, EnvPassSet: {bool(admin_password)}")
+    print(f"[DEBUG] Input - User: {username}, PassMatch: {password == admin_password}")
+
     if not admin_password:
         print("[ADMIN] ADMIN_PASSWORD non configurata in .env")
         return False
@@ -36,13 +39,92 @@ class AdminPanelView:
         self.page = page
         self.on_logout = on_logout
         
-        # Stato
+        # --- LOGS VARIABLES ---
         self.current_filter_level = None
         self.current_filter_component = None
         self.current_page = 0
         self.logs_per_page = 50
         
-        # Componenti UI
+        # --- TAB CONTROLLER ---
+        self.tabs = ft.Tabs(
+            selected_index=0,
+            animation_duration=300,
+            tabs=[],  # Will be populated in build()
+            expand=True,
+        )
+
+        # --- UI INITIALIZATION ---
+        self._init_logs_tab_ui()
+        self._init_users_tab_ui()
+        self._init_families_tab_ui()
+        self._init_config_tab_ui()
+
+    def build_view(self) -> ft.View:
+        """Costruisce la UI della pagina."""
+        # Popola il dropdown componenti per i log
+        self._load_components()
+        
+        # Carica dati iniziali per le tab
+        self._load_logs()
+        self._load_stats()
+        # Utenti e famiglie verranno caricati quando richiesto (o refresh per semplicità caricare tutto init)
+        self._load_users()
+        self._load_families()
+        self._load_smtp_config()
+
+        # Definisci le tabs
+        self.tabs.tabs = [
+            ft.Tab(
+                text="Log Sistema",
+                icon=ft.Icons.MONITOR_HEART,
+                content=self._build_logs_tab_content()
+            ),
+            ft.Tab(
+                text="Utenti",
+                icon=ft.Icons.PEOPLE,
+                content=self._build_users_tab_content()
+            ),
+            ft.Tab(
+                text="Famiglie",
+                icon=ft.Icons.FAMILY_RESTROOM,
+                content=self._build_families_tab_content()
+            ),
+            ft.Tab(
+                text="Configurazione",
+                icon=ft.Icons.SETTINGS,
+                content=self._build_config_tab_content()
+            ),
+        ]
+
+        app_bar = ft.AppBar(
+            title=ft.Text("🔧 Admin Panel - Budget Amico", color=ft.Colors.WHITE),
+            center_title=True,
+            bgcolor=ft.Colors.BLUE_GREY_900,
+            actions=[
+                ft.IconButton(
+                    icon=ft.Icons.LOGOUT, 
+                    tooltip="Logout",
+                    icon_color=ft.Colors.WHITE,
+                    on_click=lambda e: self.on_logout()
+                )
+            ],
+            color=ft.Colors.WHITE
+        )
+
+        return ft.View(
+            "/admin",
+            [
+                app_bar,
+                self.tabs
+            ],
+            scroll=ft.ScrollMode.HIDDEN # Tabs handles scrolling internally inside contents if needed
+        )
+
+    # =========================================================================
+    # --- LOGS TAB LOGIC ---
+    # =========================================================================
+    def _init_logs_tab_ui(self):
+        # Table
         self.logs_table = ft.DataTable(
             columns=[
                 ft.DataColumn(ft.Text("Timestamp", size=12, weight=ft.FontWeight.BOLD)),
@@ -59,60 +141,83 @@ class AdminPanelView:
             heading_row_color=ft.Colors.BLUE_GREY_100,
             show_checkbox_column=False,
         )
-        
         self.stats_text = ft.Text("Caricamento statistiche...")
         self.pagination_text = ft.Text("Pagina 1")
         
-        # Dropdown filtri
+        # Filters
         self.level_dropdown = ft.Dropdown(
-            label="Livello",
-            width=150,
+            label="Livello", width=150,
             options=[
-                ft.dropdown.Option("", "Tutti"),
-                ft.dropdown.Option("DEBUG", "DEBUG"),
-                ft.dropdown.Option("INFO", "INFO"),
-                ft.dropdown.Option("WARNING", "WARNING"),
-                ft.dropdown.Option("ERROR", "ERROR"),
-                ft.dropdown.Option("CRITICAL", "CRITICAL"),
+                ft.dropdown.Option("", "Tutti"), ft.dropdown.Option("DEBUG", "DEBUG"),
+                ft.dropdown.Option("INFO", "INFO"), ft.dropdown.Option("WARNING", "WARNING"),
+                ft.dropdown.Option("ERROR", "ERROR"), ft.dropdown.Option("CRITICAL", "CRITICAL"),
             ],
-            value="",
-            on_change=self._on_filter_change
+            value="", on_change=self._on_filter_change
         )
-        
         self.component_dropdown = ft.Dropdown(
-            label="Componente",
-            width=200,
+            label="Componente", width=200,
             options=[ft.dropdown.Option("", "Tutti")],
-            value="",
-            on_change=self._on_filter_change
+            value="", on_change=self._on_filter_change
         )
         
-        # Container per configurazione logger (chip toggle)
+        # Config Section (Chips)
         self.config_expanded = False
-        self.config_content = ft.Container(visible=False)  # Contenitore espandibile
+        self.config_content = ft.Container(visible=False)
         self.expand_icon = ft.IconButton(
-            icon=ft.Icons.EXPAND_MORE,
-            tooltip="Espandi/Comprimi",
-            on_click=self._toggle_config_section,
-            icon_size=18,
+            icon=ft.Icons.EXPAND_MORE, tooltip="Espandi/Comprimi",
+            on_click=self._toggle_config_section, icon_size=18,
         )
-    
+
+    def _build_logs_tab_content(self):
+        return ft.Container(
+            content=ft.Column([
+                # Filters & Config Row
+                ft.Row([
+                    self.level_dropdown,
+                    self.component_dropdown,
+                    ft.IconButton(icon=ft.Icons.REFRESH, tooltip="Aggiorna", on_click=self._on_refresh),
+                    ft.IconButton(icon=ft.Icons.DELETE_SWEEP, tooltip="Pulisci log vecchi (>30gg)",
+                                  icon_color=ft.Colors.RED_400, on_click=self._on_cleanup_logs),
+                ], alignment=ft.MainAxisAlignment.START),
+                
+                # Config Logger Section
+                self._build_logger_config_section(),
+                
+                # Stats
+                ft.Container(
+                    content=self.stats_text,
+                    padding=10, bgcolor=ft.Colors.BLUE_50, border_radius=5,
+                ),
+                
+                # Table Container
+                ft.Container(
+                    content=self.logs_table,
+                    expand=True, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=8,
+                ),
+                
+                # Pagination
+                ft.Row([
+                    ft.IconButton(icon=ft.Icons.CHEVRON_LEFT, on_click=self._on_prev_page),
+                    self.pagination_text,
+                    ft.IconButton(icon=ft.Icons.CHEVRON_RIGHT, on_click=self._on_next_page),
+                ], alignment=ft.MainAxisAlignment.CENTER),
+                
+            ], expand=True),
+            padding=20, expand=True,
+        )
+
     def _build_logger_config_section(self) -> ft.Container:
-        """Costruisce la sezione di configurazione dei logger."""
         components = get_all_components()
-        
         chips = []
         for comp in components:
             chip = ft.Chip(
                 label=ft.Text(comp['componente'], size=11),
                 selected=comp['abilitato'],
                 on_select=lambda e, c=comp['componente']: self._toggle_logger(c, e.control.selected),
-                bgcolor=ft.Colors.GREY_200,
-                selected_color=ft.Colors.GREEN_100,
+                bgcolor=ft.Colors.GREY_200, selected_color=ft.Colors.GREEN_100,
             )
             chips.append(chip)
         
-        # Aggiorna il contenuto espandibile
         self.config_content.content = ft.Column([
             ft.Text("Seleziona i componenti da monitorare:", size=11, color=ft.Colors.GREY_600),
             ft.Row(chips, wrap=True, spacing=5, run_spacing=5),
@@ -128,31 +233,26 @@ class AdminPanelView:
                 ], alignment=ft.MainAxisAlignment.START),
                 self.config_content,
             ]),
-            padding=10,
-            bgcolor=ft.Colors.AMBER_50,
-            border_radius=8,
-            border=ft.border.all(1, ft.Colors.AMBER_200),
+            padding=10, bgcolor=ft.Colors.AMBER_50, border_radius=8, border=ft.border.all(1, ft.Colors.AMBER_200),
         )
-    
+
     def _toggle_config_section(self, e):
-        """Espande/comprime la sezione configurazione."""
         self.config_expanded = not self.config_expanded
         self.config_content.visible = self.config_expanded
         self.expand_icon.icon = ft.Icons.EXPAND_LESS if self.config_expanded else ft.Icons.EXPAND_MORE
         self.page.update()
-    
+
     def _toggle_logger(self, componente: str, abilitato: bool):
-        """Attiva/disattiva un logger."""
         if update_logger_config(componente, abilitato):
             self.page.snack_bar = ft.SnackBar(
                 content=ft.Text(f"Logger '{componente}' {'abilitato' if abilitato else 'disabilitato'}"),
                 bgcolor=ft.Colors.GREEN_400 if abilitato else ft.Colors.GREY_400
             )
-            self.page.snack_bar.open = True
+            invalidate_config_cache()
+            self._build_logger_config_section()
             self.page.update()
-    
+
     def _get_level_badge(self, level: str) -> ft.Container:
-        """Restituisce un badge colorato per il livello di log."""
         colors = {
             "DEBUG": (ft.Colors.GREY_400, ft.Colors.BLACK),
             "INFO": (ft.Colors.BLUE_400, ft.Colors.WHITE),
@@ -161,57 +261,38 @@ class AdminPanelView:
             "CRITICAL": (ft.Colors.RED_900, ft.Colors.WHITE),
         }
         bg, fg = colors.get(level, (ft.Colors.GREY, ft.Colors.BLACK))
-        
         return ft.Container(
             content=ft.Text(level, size=10, color=fg, weight=ft.FontWeight.BOLD),
-            bgcolor=bg,
-            padding=ft.padding.symmetric(horizontal=8, vertical=4),
-            border_radius=4,
+            bgcolor=bg, padding=ft.padding.symmetric(horizontal=8, vertical=4), border_radius=4,
         )
-    
+
     def _load_components(self):
-        """Carica la lista dei componenti distinti per il filtro."""
         components = get_distinct_components()
         self.component_dropdown.options = [ft.dropdown.Option("", "Tutti")]
         for comp in components:
             self.component_dropdown.options.append(ft.dropdown.Option(comp, comp))
-    
+
     def _load_logs(self):
-        """Carica i log dal database con i filtri correnti."""
-        # Gestisce sia stringa vuota che "Tutti" come None
         level_val = self.level_dropdown.value
         level = None if not level_val or level_val == "Tutti" else level_val
-        
         comp_val = self.component_dropdown.value
         component = None if not comp_val or comp_val == "Tutti" else comp_val
         
-        print(f"[ADMIN] Loading logs - livello: {level}, componente: {component}, page: {self.current_page}")
-        
         logs = get_logs(
-            livello=level,
-            componente=component,
-            limit=self.logs_per_page,
-            offset=self.current_page * self.logs_per_page
+            livello=level, componente=component,
+            limit=self.logs_per_page, offset=self.current_page * self.logs_per_page
         )
         
-        print(f"[ADMIN] Retrieved {len(logs)} logs")
-        
-        # Aggiorna la tabella - usa lista nuova invece di clear()
         new_rows = []
-        
         for log in logs:
             timestamp = log.get("timestamp")
             if timestamp:
-                if isinstance(timestamp, str):
-                    ts_str = timestamp[:19]
-                else:
-                    ts_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                ts_str = timestamp[:19] if isinstance(timestamp, str) else timestamp.strftime("%Y-%m-%d %H:%M:%S")
             else:
                 ts_str = "-"
             
             messaggio = log.get("messaggio", "")
-            if len(messaggio) > 100:
-                messaggio = messaggio[:100] + "..."
+            if len(messaggio) > 100: messaggio = messaggio[:100] + "..."
             
             new_rows.append(
                 ft.DataRow(
@@ -229,82 +310,65 @@ class AdminPanelView:
         
         self.logs_table.rows = new_rows
         self.pagination_text.value = f"Pagina {self.current_page + 1}"
-    
+
     def _load_stats(self):
-        """Carica le statistiche dei log."""
         stats = get_log_stats()
-        
         if stats:
             counts = stats.get("count_per_livello", {})
             total = stats.get("totale_log", 0)
-            
             stats_parts = [f"Totale: {total}"]
             for level in ["ERROR", "WARNING", "INFO"]:
-                if level in counts:
-                    stats_parts.append(f"{level}: {counts[level]}")
-            
+                if level in counts: stats_parts.append(f"{level}: {counts[level]}")
             self.stats_text.value = " | ".join(stats_parts)
         else:
             self.stats_text.value = "Nessuna statistica disponibile"
-    
+
     def _on_filter_change(self, e):
-        """Gestisce il cambio di filtro."""
         self.current_page = 0
         self._load_logs()
         self.page.update()
-    
+
     def _on_prev_page(self, e):
-        """Pagina precedente."""
         if self.current_page > 0:
             self.current_page -= 1
             self._load_logs()
             self.page.update()
-    
+
     def _on_next_page(self, e):
-        """Pagina successiva."""
         self.current_page += 1
         self._load_logs()
         self.page.update()
-    
+
     def _on_refresh(self, e):
-        """Ricarica i log."""
         self._load_logs()
         self._load_stats()
+        self._load_users()
+        self._load_families()
         self.page.update()
-    
+
     def _on_cleanup_logs(self, e):
-        """Esegue la pulizia manuale dei log vecchi."""
         deleted = cleanup_old_logs(days=30)
         self._load_logs()
         self._load_stats()
-        self.page.update()
-        
-        # Mostra snackbar
         self.page.snack_bar = ft.SnackBar(
             content=ft.Text(f"Eliminati {deleted} log più vecchi di 30 giorni"),
             bgcolor=ft.Colors.GREEN_400
         )
         self.page.snack_bar.open = True
         self.page.update()
-    
+
     def _show_log_details(self, log: dict):
-        """Mostra i dettagli di un log in un dialog."""
         details = log.get("dettagli", {})
         details_text = ""
-        
         if details:
             if isinstance(details, dict):
-                for k, v in details.items():
-                    details_text += f"{k}: {v}\n"
+                for k, v in details.items(): details_text += f"{k}: {v}\n"
             else:
                 details_text = str(details)
         else:
             details_text = "Nessun dettaglio disponibile"
         
-        def close_dialog(e):
-            self.page.close(dialog)
-        
-        dialog = ft.AlertDialog(
+        dlg = ft.AlertDialog(
             modal=True,
             title=ft.Text(f"Log #{log.get('id_log', 'N/A')}", weight=ft.FontWeight.BOLD),
             content=ft.Column([
@@ -318,105 +382,307 @@ class AdminPanelView:
                 ft.Text(log.get("messaggio", "-"), size=11),
                 ft.Divider(),
                 ft.Text("Dettagli:", weight=ft.FontWeight.BOLD, size=12),
-                ft.Text(details_text, size=10, selectable=True),
-            ], scroll=ft.ScrollMode.AUTO, width=500, height=400),
+                ft.Container(
+                    content=ft.Text(details_text, font_family="monospace", size=10),
+                    bgcolor=ft.Colors.GREY_100, padding=5, border_radius=4
+                )
+            ], scroll=ft.ScrollMode.AUTO, height=400, width=600),
+            actions=[ft.TextButton("Chiudi", on_click=lambda e: self.page.close(dlg))],
+        )
+        self.page.open(dlg)
+
+    # =========================================================================
+    # --- USERS TAB LOGIC ---
+    # =========================================================================
+    def _init_users_tab_ui(self):
+        self.users_table = ft.DataTable(
+            columns=[
+                ft.DataColumn(ft.Text("ID", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Famiglie ID", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Sospeso", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Username", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Email", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Nome", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Azioni", weight=ft.FontWeight.BOLD)),
+            ],
+            rows=[],
+            border=ft.border.all(1, ft.Colors.GREY_300),
+            border_radius=8,
+            heading_row_color=ft.Colors.BLUE_GREY_50,
+        )
+
+    def _build_users_tab_content(self):
+        return ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Text("Gestione Utenti", size=20, weight=ft.FontWeight.BOLD),
+                    ft.IconButton(icon=ft.Icons.REFRESH, tooltip="Ricarica Lista", on_click=lambda e: self._load_users_refresh())
+                ]),
+                ft.Container(content=self.users_table, expand=True, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8)
+            ]),
+            padding=20, expand=True
+        )
+
+    def _load_users(self):
+        # Lazy import to avoid circular dependency
+        from db.gestione_db import get_all_users
+        users = get_all_users()
+        self.users_table.rows = []
+        for u in users:
+            self.users_table.rows.append(
+                ft.DataRow(cells=[
+                    ft.DataCell(ft.Text(str(u['id_utente']))),
+                    ft.DataCell(ft.Text(u.get('famiglie', '-'))),
+                    ft.DataCell(
+                        ft.Container(
+                            content=ft.Text("SI" if u.get('sospeso') else "NO", color=ft.Colors.WHITE, size=10, weight=ft.FontWeight.BOLD),
+                            bgcolor=ft.Colors.RED if u.get('sospeso') else ft.Colors.GREEN,
+                            padding=5, border_radius=4, alignment=ft.alignment.center
+                        )
+                    ),
+                    ft.DataCell(ft.Text(u['username'])),
+                    ft.DataCell(ft.Text(u['email'])),
+                    ft.DataCell(ft.Text(f"{(u.get('nome') or '')} {(u.get('cognome') or '')}")),
+                    ft.DataCell(ft.Row([
+                        ft.IconButton(
+                            icon=ft.Icons.LOCK_RESET, tooltip="Invia Credenziali / Reset Password",
+                            icon_color=ft.Colors.BLUE,
+                            on_click=lambda e, uid=u['id_utente'], uname=u['username']: self._confirm_password_reset(uid, uname)
+                        ),
+                        ft.IconButton(
+                            icon=ft.Icons.BLOCK if not u.get('sospeso') else ft.Icons.CHECK_CIRCLE,
+                            tooltip="Sospendi Utente" if not u.get('sospeso') else "Riattiva Utente",
+                            icon_color=ft.Colors.ORANGE if not u.get('sospeso') else ft.Colors.GREEN,
+                            on_click=lambda e, uid=u['id_utente'], uname=u['username'], susp=u.get('sospeso'): self._confirm_user_suspension(uid, uname, susp)
+                        ),
+                        ft.IconButton(
+                            icon=ft.Icons.DELETE, tooltip="Elimina Utente",
+                            icon_color=ft.Colors.RED,
+                            on_click=lambda e, uid=u['id_utente'], uname=u['username']: self._confirm_delete_user(uid, uname)
+                        ),
+                    ]))
+                ])
+            )
+
+    def _load_users_refresh(self):
+        self._load_users()
+        self.page.update()
+
+    def _open_admin_auth_dialog(self, title, action_callback):
+        """Apre un dialog che richiede la password admin per confermare un'azione."""
+        from db.gestione_db import verify_admin_password
+        
+        txt_password = ft.TextField(label="Password Admin", password=True, width=200)
+        txt_error = ft.Text("", color=ft.Colors.RED, size=12, visible=False)
+        
+        def on_confirm(e):
+            if verify_admin_password(txt_password.value):
+                self.page.close(dlg)
+                action_callback()
+            else:
+                txt_error.value = "Password errata."
+                txt_error.visible = True
+                self.page.update()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text(title, weight=ft.FontWeight.BOLD),
+            content=ft.Column([
+                ft.Text("Questa azione richiede conferma.", size=14),
+                ft.Container(height=10),
+                txt_password,
+                txt_error
+            ], tight=True, width=300),
             actions=[
-                ft.TextButton("Chiudi", on_click=close_dialog)
+                ft.TextButton("Annulla", on_click=lambda e: self.page.close(dlg)),
+                ft.ElevatedButton("Conferma", on_click=on_confirm, color=ft.Colors.WHITE, bgcolor=ft.Colors.RED),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.page.open(dlg)
+
+    def _confirm_user_suspension(self, user_id, username, is_suspended):
+        action = "riattivare" if is_suspended else "sospendere"
+        def do_suspend():
+            from db.gestione_db import toggle_user_suspension
+            if toggle_user_suspension(user_id, not is_suspended):
+                self.page.snack_bar = ft.SnackBar(ft.Text(f"Utente {username} {action} con successo!"), bgcolor=ft.Colors.GREEN)
+                self.page.snack_bar.open = True
+                self._load_users() # Refresh
+            else:
+                self.page.snack_bar = ft.SnackBar(ft.Text(f"Errore durante l'operazione."), bgcolor=ft.Colors.RED)
+                self.page.snack_bar.open = True
+            self.page.update()
+            
+        self._open_admin_auth_dialog(f"Conferma {action} {username}", do_suspend)
+
+    def _confirm_password_reset(self, user_id, username):
+        def do_reset():
+            from db.gestione_db import reset_user_password
+            success, msg = reset_user_password(user_id)
+            self.page.update()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Conferma Reset Password"),
+            content=ft.Text(f"Vuoi resettare la password per '{username}' e inviare le nuove credenziali via email?"),
+            actions=[
+                ft.TextButton("Annulla", on_click=lambda e: self.page.close(dlg)),
+                ft.TextButton("Reset e Invia", on_click=reset),
             ]
         )
-        
-        self.page.open(dialog)
-    
-    def _close_dialog(self, dialog):
-        """Chiude un dialog."""
-        self.page.close(dialog)
-    
-    def build_view(self) -> ft.View:
-        """Costruisce la vista del pannello admin."""
-        # Carica dati iniziali
-        self._load_components()
-        self._load_logs()
-        self._load_stats()
-        
-        return ft.View(
-            "/admin",
-            [
-                ft.AppBar(
-                    title=ft.Text("🔧 Admin Panel - Budget Amico", color=ft.Colors.WHITE),
-                    bgcolor=ft.Colors.BLUE_GREY_900,
-                    actions=[
-                        ft.IconButton(
-                            icon=ft.Icons.LOGOUT,
-                            icon_color=ft.Colors.WHITE,
-                            tooltip="Logout Admin",
-                            on_click=lambda e: self.on_logout()
-                        )
-                    ]
-                ),
-                ft.Container(
-                    content=ft.Column([
-                        # Header con statistiche
-                        ft.Container(
-                            content=ft.Row([
-                                ft.Icon(ft.Icons.ANALYTICS, color=ft.Colors.BLUE_400),
-                                self.stats_text,
-                            ]),
-                            padding=10,
-                            bgcolor=ft.Colors.BLUE_GREY_50,
-                            border_radius=8,
-                        ),
-                        
-                        ft.Divider(),
-                        
-                        # Configurazione Logger
-                        self._build_logger_config_section(),
-                        
-                        ft.Divider(),
-                        
-                        # Filtri
-                        ft.Row([
-                            self.level_dropdown,
-                            self.component_dropdown,
-                            ft.IconButton(
-                                icon=ft.Icons.REFRESH,
-                                tooltip="Ricarica",
-                                on_click=self._on_refresh
-                            ),
-                            ft.IconButton(
-                                icon=ft.Icons.DELETE_SWEEP,
-                                tooltip="Pulisci log vecchi (>30 giorni)",
-                                on_click=self._on_cleanup_logs
-                            ),
-                        ]),
-                        
-                        # Tabella log
-                        ft.Container(
-                            content=self.logs_table,
-                            expand=True,
-                            border=ft.border.all(1, ft.Colors.GREY_300),
-                            border_radius=8,
-                        ),
-                        
-                        # Paginazione
-                        ft.Row([
-                            ft.IconButton(
-                                icon=ft.Icons.CHEVRON_LEFT,
-                                on_click=self._on_prev_page
-                            ),
-                            self.pagination_text,
-                            ft.IconButton(
-                                icon=ft.Icons.CHEVRON_RIGHT,
-                                on_click=self._on_next_page
-                            ),
-                        ], alignment=ft.MainAxisAlignment.CENTER),
-                        
-                    ], expand=True),
-                    padding=20,
-                    expand=True,
-                )
+        self.page.open(dlg)
+
+
+    # =========================================================================
+    # --- FAMILIES TAB LOGIC ---
+    # =========================================================================
+    def _init_families_tab_ui(self):
+        self.families_table = ft.DataTable(
+            columns=[
+                ft.DataColumn(ft.Text("ID", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Nome Famiglia", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Azioni", weight=ft.FontWeight.BOLD)),
             ],
-            scroll=ft.ScrollMode.AUTO,
+            rows=[],
+            border=ft.border.all(1, ft.Colors.GREY_300),
+            border_radius=8,
+            heading_row_color=ft.Colors.BLUE_GREY_50,
         )
+
+    def _build_families_tab_content(self):
+        return ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Text("Gestione Famiglie", size=20, weight=ft.FontWeight.BOLD),
+                    ft.IconButton(icon=ft.Icons.REFRESH, tooltip="Ricarica Lista", on_click=lambda e: self._load_families_refresh())
+                ]),
+                ft.Container(content=self.families_table, expand=True, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8)
+            ]),
+            padding=20, expand=True
+        )
+
+    def _load_families(self):
+        from db.gestione_db import get_all_families
+        families = get_all_families()
+        self.families_table.rows = []
+        for f in families:
+            self.families_table.rows.append(
+                ft.DataRow(cells=[
+                    ft.DataCell(ft.Text(str(f['id_famiglia']))),
+                    ft.DataCell(ft.Text(f['nome_famiglia'])),
+                    ft.DataCell(
+                        ft.IconButton(
+                            icon=ft.Icons.DELETE, tooltip="Elimina Famiglia",
+                            icon_color=ft.Colors.RED,
+                            on_click=lambda e, fid=f['id_famiglia'], fname=f['nome_famiglia']: self._confirm_delete_family(fid, fname)
+                        )
+                    )
+                ])
+            )
+
+    def _load_families_refresh(self):
+        self._load_families()
+        self.page.update()
+
+    def _confirm_delete_family(self, family_id, family_name):
+        def do_delete():
+            from db.gestione_db import delete_family
+            success, msg = delete_family(family_id)
+            if success:
+                self.page.snack_bar = ft.SnackBar(ft.Text(f"Famiglia {family_name} eliminata."), bgcolor=ft.Colors.GREEN)
+                self._load_families_refresh()
+            else:
+                self.page.snack_bar = ft.SnackBar(ft.Text(f"Errore: {msg}"), bgcolor=ft.Colors.RED)
+            self.page.snack_bar.open = True
+            self.page.update()
+            
+        self._open_admin_auth_dialog(f"Elimina Famiglia {family_name}", do_delete)
+
+
+
+    # =========================================================================
+    # --- CONFIG TAB LOGIC (EMAIL) ---
+    # =========================================================================
+    def _init_config_tab_ui(self):
+        self.smtp_server = ft.TextField(label="SMTP Server (es. smtp.gmail.com)")
+        self.smtp_port = ft.TextField(label="SMTP Port (es. 587)")
+        self.smtp_user = ft.TextField(label="SMTP User (Email)")
+        self.smtp_password = ft.TextField(label="SMTP Password", password=True, can_reveal_password=True)
+        self.smtp_test_email = ft.TextField(label="Email Destinatario Test")
+
+    def _build_config_tab_content(self):
+        return ft.Container(
+            content=ft.Column([
+                ft.Text("Configurazione Email (SMTP)", size=20, weight=ft.FontWeight.BOLD),
+                ft.Text("Queste credenziali verranno usate per inviare notifiche e reset password.", size=12, color=ft.Colors.GREY),
+                ft.Divider(),
+                self.smtp_server,
+                self.smtp_port,
+                self.smtp_user,
+                self.smtp_password,
+                ft.ElevatedButton("Salva Configurazione", icon=ft.Icons.SAVE, on_click=self._save_smtp),
+                ft.Divider(height=40),
+                ft.Text("Test Invio Email", size=16, weight=ft.FontWeight.BOLD),
+                ft.Row([
+                    self.smtp_test_email,
+                    ft.ElevatedButton("Invia Test", icon=ft.Icons.SEND, on_click=self._send_test_email)
+                ])
+            ], scroll=ft.ScrollMode.AUTO),
+            padding=20, expand=True
+        )
+
+    def _load_smtp_config(self):
+        from db.gestione_db import get_smtp_config
+        config = get_smtp_config() # retrieves global config
+        if config:
+            self.smtp_server.value = config.get('server') or ""
+            self.smtp_port.value = config.get('port') or ""
+            self.smtp_user.value = config.get('user') or ""
+            self.smtp_password.value = config.get('password') or ""
+
+    def _save_smtp(self, e):
+        from db.gestione_db import save_system_config
+        
+        # Save each key using save_system_config
+        try:
+             save_system_config('smtp_server', self.smtp_server.value)
+             save_system_config('smtp_port', self.smtp_port.value)
+             save_system_config('smtp_user', self.smtp_user.value)
+             save_system_config('smtp_password', self.smtp_password.value)
+             save_system_config('smtp_provider', 'custom')
+             
+             self.page.snack_bar = ft.SnackBar(ft.Text("Configurazione salvata con successo!"), bgcolor=ft.Colors.GREEN)
+        except Exception as ex:
+             self.page.snack_bar = ft.SnackBar(ft.Text(f"Errore salvataggio configurazione: {ex}"), bgcolor=ft.Colors.RED)
+             
+        self.page.snack_bar.open = True
+        self.page.update()
+
+    def _send_test_email(self, e):
+        from utils.email_sender import send_email
+        if not self.smtp_test_email.value:
+            self.page.snack_bar = ft.SnackBar(ft.Text("Inserisci un'email per il test."), bgcolor=ft.Colors.RED)
+            self.page.snack_bar.open = True
+            self.page.update()
+            return
+
+        self.page.snack_bar = ft.SnackBar(ft.Text("Invio email in corso..."), bgcolor=ft.Colors.BLUE)
+        self.page.snack_bar.open = True
+        self.page.update()
+            
+        success, error = send_email(
+            to_email=self.smtp_test_email.value,
+            subject="BudgetAmico - Test Email",
+            body="<h1>Test Riuscito</h1><p>Se leggi questa email, la configurazione SMTP è corretta.</p>"
+        )
+        
+        if success:
+             self.page.snack_bar = ft.SnackBar(ft.Text("Email di test inviata! Controlla la posta."), bgcolor=ft.Colors.GREEN)
+        else:
+             self.page.snack_bar = ft.SnackBar(ft.Text(f"Errore invio: {error}"), bgcolor=ft.Colors.RED)
+        self.page.snack_bar.open = True
+        self.page.update()
 
 
 class AdminLoginView:
@@ -429,67 +695,52 @@ class AdminLoginView:
         self.txt_username = ft.TextField(
             label="Username Admin",
             autofocus=True,
-            width=300,
-            on_submit=self._on_login
+            width=300
         )
         self.txt_password = ft.TextField(
-            label="Password",
+            label="Password Admin",
             password=True,
             can_reveal_password=True,
             width=300,
-            on_submit=self._on_login
+            on_submit=self._on_login_click
         )
-        self.txt_error = ft.Text(visible=False, color=ft.Colors.RED_400)
+        self.error_text = ft.Text(color=ft.Colors.RED, size=12)
     
-    def _on_login(self, e):
-        """Gestisce il tentativo di login."""
-        username = self.txt_username.value.strip()
+    def _on_login_click(self, e):
+        username = self.txt_username.value
         password = self.txt_password.value
         
-        if not username or not password:
-            self.txt_error.value = "Inserisci username e password"
-            self.txt_error.visible = True
-            self.page.update()
-            return
-        
         if verifica_admin_sistema(username, password):
-            self.page.session.set("admin_authenticated", True)
             self.on_login_success()
         else:
-            self.txt_error.value = "Credenziali non valide"
-            self.txt_error.visible = True
+            self.error_text.value = "Credenziali non valide."
             self.page.update()
-    
+            
     def build_view(self) -> ft.View:
-        """Costruisce la vista di login admin."""
         return ft.View(
             "/admin/login",
             [
-                ft.Column([
-                    ft.Icon(ft.Icons.ADMIN_PANEL_SETTINGS, size=80, color=ft.Colors.BLUE_400),
-                    ft.Text("Admin Login", size=30, weight=ft.FontWeight.BOLD),
-                    ft.Text("Accesso riservato agli amministratori di sistema", 
-                           size=12, color=ft.Colors.GREY_600),
-                    ft.Container(height=20),
-                    self.txt_username,
-                    self.txt_password,
-                    self.txt_error,
-                    ft.Container(height=10),
-                    ft.ElevatedButton(
-                        "Login",
-                        icon=ft.Icons.LOGIN,
-                        on_click=self._on_login,
-                        width=300,
-                    ),
-                    ft.TextButton(
-                        "Torna alla Home",
-                        on_click=lambda e: self.page.go("/")
-                    ),
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                alignment=ft.MainAxisAlignment.CENTER,
-                expand=True),
-            ],
-            vertical_alignment=ft.MainAxisAlignment.CENTER,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                ft.Container(
+                    content=ft.Column([
+                        ft.Icon(ft.Icons.ADMIN_PANEL_SETTINGS, size=64, color=ft.Colors.BLUE),
+                        ft.Text("Admin Login", size=24, weight=ft.FontWeight.BOLD),
+                        ft.Container(height=20),
+                        self.txt_username,
+                        self.txt_password,
+                        self.error_text,
+                        ft.Container(height=20),
+                        ft.ElevatedButton(
+                            "Accedi",
+                            on_click=self._on_login_click,
+                            width=300
+                        ),
+                        ft.TextButton(
+                            "Torna alla Home",
+                            on_click=lambda e: self.page.go("/")
+                        )
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
+                    alignment=ft.alignment.center,
+                    expand=True
+                )
+            ]
         )

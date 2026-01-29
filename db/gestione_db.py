@@ -239,6 +239,7 @@ def generate_token(length=32):
     return ''.join(secrets.choice(characters) for _ in range(length))
 
 
+
 def get_user_count():
     try:
         with get_db_connection() as con:
@@ -250,6 +251,292 @@ def get_user_count():
         return -1
 
 
+def get_all_users() -> List[Dict[str, Any]]:
+    """Recupera la lista di tutti gli utenti."""
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            # USE ENCRYPTED SHADOW COLUMNS
+            # USE ENCRYPTED SHADOW COLUMNS and JOIN for Families
+            cur.execute("""
+                SELECT u.id_utente, u.username_enc, u.email_enc, u.nome_enc_server, u.cognome_enc_server, u.sospeso,
+                       string_agg(af.id_famiglia::text, ', ') as famiglie
+                FROM Utenti u
+                LEFT JOIN Appartenenza_Famiglia af ON u.id_utente = af.id_utente
+                GROUP BY u.id_utente
+                ORDER BY u.id_utente
+            """)
+            rows = []
+            for row in cur.fetchall():
+                d = {}
+                d['id_utente'] = row['id_utente']
+                d['famiglie'] = row['famiglie'] or "-"
+                d['sospeso'] = row.get('sospeso', False)
+                # Decrypt sensitive fields using System Key
+                # Nota: usiamo .get() perché potrebbero essere NULL
+                d['username'] = decrypt_system_data(row.get('username_enc')) or row.get('username_enc', '-')
+                d['email'] = decrypt_system_data(row.get('email_enc')) or row.get('email_enc', '-')
+                d['nome'] = decrypt_system_data(row.get('nome_enc_server')) or row.get('nome_enc_server', '-')
+                d['cognome'] = decrypt_system_data(row.get('cognome_enc_server')) or row.get('cognome_enc_server', '-')
+                rows.append(d)
+            return rows
+    except Exception as e:
+        logger.error(f"Errore get_all_users: {e}")
+        return []
+
+
+def delete_user(user_id: int) -> bool:
+    """Elimina un utente dal database."""
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("DELETE FROM Utenti WHERE id_utente = %s", (user_id,))
+            con.commit()
+            return True
+    except Exception as e:
+        logger.error(f"Errore delete_user {user_id}: {e}")
+        return False
+
+
+def get_all_families() -> List[Dict[str, Any]]:
+    """Recupera la lista di tutte le famiglie, tentando di decriptare il nome."""
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT id_famiglia, nome_famiglia, server_encrypted_key FROM Famiglie ORDER BY id_famiglia")
+            families = cur.fetchall()
+            
+            rows = []
+            crypto = CryptoManager()
+            
+            for row in families:
+                d = {}
+                d['id_famiglia'] = row['id_famiglia']
+                encrypted_name = row['nome_famiglia']
+                srv_key_enc = row.get('server_encrypted_key')
+                
+                nome_decrypted = encrypted_name
+                family_key = None
+                
+                # METODO 1: Uso chiave server diretta (Automazione attiva)
+                if srv_key_enc:
+                    try:
+                         family_key_b64 = decrypt_system_data(srv_key_enc)
+                         if family_key_b64:
+                             if isinstance(family_key_b64, str):
+                                 family_key = family_key_b64.encode()
+                             else:
+                                 family_key = family_key_b64
+                    except Exception:
+                        pass
+
+                # METODO 2: Fallback tramite utenti della famiglia (Recovery/Backup Key)
+                if not family_key:
+                    try:
+                        # Cerchiamo un utente di questa famiglia che abbia il backup server della master key
+                        cur.execute("""
+                            SELECT u.encrypted_master_key_backup, af.chiave_famiglia_criptata 
+                            FROM Appartenenza_Famiglia af
+                            JOIN Utenti u ON af.id_utente = u.id_utente
+                            WHERE af.id_famiglia = %s AND u.encrypted_master_key_backup IS NOT NULL
+                            LIMIT 1
+                        """, (row['id_famiglia'],))
+                        user_row = cur.fetchone()
+                        
+                        if user_row:
+                            # 1. Decrypt User Master Key using System Key
+                            user_mk_backup_enc = user_row['encrypted_master_key_backup']
+                            # encrypted_master_key_backup è cifrata con Fernet(SystemKey)
+                            # Quindi usiamo decrypt_system_data ma attenzione:
+                            # In crea_utente: encrypted_mk_backup = crypto.encrypt_master_key(master_key, srv_fernet_key)
+                            # encrypt_master_key usa Fernet.
+                            # Quindi decrypt_system_data (che usa Fernet(SYSTEM_FERNET_KEY)) dovrebbe funzionare se srv_fernet_key == SYSTEM_FERNET_KEY.
+                            # Verifichiamo _get_system_keys: Sì, è la stessa chiave.
+                            
+                            user_mk_bytes = None
+                            try:
+                                # decrypt_system_data ritorna stringa, ma qui ci aspettiamo bytes (la master key raw) oppure stringa b64?
+                                # crypto.encrypt_master_key ritorna bytes. decrypt_system_data fa .decode().
+                                # Quindi otteniamo la stringa b64 della chiave o i bytes raw?
+                                # Fernet.encrypt ritorna bytes. decrypt_system_data fa .decode() -> Ritorna stringa.
+                                # Ma encrypt_master_key potrebbe ritornare i bytes del contenuto cifrato.
+                                # Vediamo crea_utente: encrypted_mk_backup_b64 = base64.urlsafe_b64encode(encrypted_mk_backup).decode()
+                                # Quindi nel DB c'è B64(Fernet(MK)). 
+                                # decrypt_system_data fa: Fernet.decrypt(value.encode()).decode()
+                                # Se passiamo la stringa B64 dal DB, decrypt_system_data fallirà perché si aspetta Token Fernet (gAAAA...), non B64(Token).
+                                # WAIT. encrypted_mk_backup è IL token fernet (bytes).
+                                # encrypted_mk_backup_b64 è il base64 di tale token.
+                                # decrypt_system_data si aspetta una stringa che sia un token Fernet valido.
+                                # Se nel DB ho salvato B64(Token), devo prima fare b64decode per ottenere il Token stringa?
+                                # Fernet token è url-safe base64 per definizione.
+                                # Se ho fatto base64.urlsafe_b64encode su un token fernet, ho fatto doppio encoding?
+                                # crypto.encrypt_master_key(master_key, key) -> f.encrypt(data) -> ritorna bytes (il token).
+                                # base64.urlsafe_b64encode(...) -> bytes.
+                                # .decode() -> stringa.
+                                # QUINDI nel DB c'è B64(Token).
+                                # decrypt_system_data prende stringa, fa .encode() -> bytes. E lo passa a decrypt().
+                                # decrypt() vuole il Token bytes.
+                                # Se passo B64(Token), non è un Token valido.
+                                
+                                # FIX: Dobbiamo decodificare il B64 esterno per ottenere il Token Fernet.
+                                token_fernet_b64 = user_row['encrypted_master_key_backup']
+                                token_fernet_bytes = base64.urlsafe_b64decode(token_fernet_b64)
+                                # Ora token_fernet_bytes è il token fernet vero e proprio.
+                                # Usiamo la chiave di sistema per decifrarlo.
+                                from cryptography.fernet import Fernet
+                                cipher = Fernet(SYSTEM_FERNET_KEY)
+                                user_mk_bytes = cipher.decrypt(token_fernet_bytes)
+                                # Ora user_mk_bytes è la Master Key dell'utente (bytes).
+                                
+                                # 2. Decrypt Family Key using User Master Key
+                                fk_encrypted_b64 = user_row['chiave_famiglia_criptata']
+                                # decrypt_data vuole: encrypted_data (str o bytes), key (bytes)
+                                try:
+                                    # decrypt_data gestisce input b64
+                                    family_key_b64 = crypto.decrypt_data(fk_encrypted_b64, user_mk_bytes)
+                                    if family_key_b64:
+                                         family_key = family_key_b64.encode() if isinstance(family_key_b64, str) else family_key_b64
+                                except:
+                                    pass
+                            except Exception as e_inner:
+                                # logger.warning(f"Decryption fallback failed step 1: {e_inner}")
+                                pass
+                    except Exception as e_outer:
+                        # logger.warning(f"Decryption fallback failed: {e_outer}")
+                        pass
+                
+                # Se abbiamo la chiave famiglia (da Metodo 1 o 2), decriptiamo il nome
+                if family_key:
+                    try:
+                        nome_decrypted = crypto.decrypt_data(encrypted_name, family_key, silent=True)
+                    except:
+                        pass
+                
+                d['nome_famiglia'] = nome_decrypted
+                rows.append(d)
+                
+            return rows
+    except Exception as e:
+        logger.error(f"Errore get_all_families: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Errore get_all_families: {e}")
+        return []
+
+
+def delete_family(family_id: int) -> Tuple[bool, str]:
+    """Elimina una famiglia dal database. Impedisce cancellazione se ci sono utenti."""
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # Check for existing users
+            cur.execute("""
+                SELECT COUNT(*) as count 
+                FROM Appartenenza_Famiglia 
+                WHERE id_famiglia = %s
+            """, (family_id,))
+            count = cur.fetchone()['count']
+            
+            if count > 0:
+                return False, f"Impossibile eliminare: ci sono {count} utenti associati."
+            
+            # Delete related data first (cascade should handle most, but safer to be explicit if needed)
+            # Assuming cascade handles it or manual cleanup
+            
+            cur.execute("DELETE FROM Famiglie WHERE id_famiglia = %s", (family_id,))
+            con.commit()
+            return True, "Famiglia eliminata con successo."
+    except Exception as e:
+        logger.error(f"Errore delete_family {family_id}: {e}")
+        return False, f"Errore interno: {e}" 
+
+def toggle_user_suspension(user_id: int, suspend: bool) -> bool:
+    """Attiva o sospende un utente."""
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("UPDATE Utenti SET sospeso = %s WHERE id_utente = %s", (suspend, user_id))
+            con.commit()
+            return True
+    except Exception as e:
+        logger.error(f"Errore toggle_user_suspension {user_id}: {e}")
+        return False
+
+
+def verify_admin_password(password: str) -> bool:
+    """Verifica se la password fornita corrisponde alla password admin."""
+    admin_password = os.getenv("ADMIN_PASSWORD")
+    if not admin_password:
+        return False
+    return password == admin_password
+
+def reset_user_password(user_id: int) -> Tuple[bool, str]:
+    """
+    Resetta la password dell'utente e invia un'email con la nuova password.
+    
+    Returns:
+        Tuple[bool, str]: (Successo, Messaggio di errore o conferma)
+    """
+    from utils.email_sender import send_email
+    
+    try:
+        # Recupera email utente (usando campi di sistema criptati)
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT email_enc, username_enc FROM Utenti WHERE id_utente = %s", (user_id,))
+            user_data = cur.fetchone()
+            
+        if not user_data:
+            return False, "Utente non trovato."
+            
+        # Decrypt system data
+        email = decrypt_system_data(user_data.get('email_enc'))
+        username = decrypt_system_data(user_data.get('username_enc'))
+        
+        if not email:
+             return False, "Email utente non disponibile (crittografia mancante o errore)."
+             
+        if not username:
+             username = "Utente"
+        
+        # Genera nuova password
+        new_password = generate_token(12)
+        password_hash = hash_password(new_password)
+        
+        # Aggiorna DB e imposta flag forza cambio password
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("""
+                UPDATE Utenti 
+                SET password_hash = %s, forza_cambio_password = TRUE 
+                WHERE id_utente = %s
+            """, (password_hash, user_id))
+            con.commit()
+            
+        # Invia Email
+        subject = "BudgetAmico - Reset Password"
+        body = f"""
+        <h2>Ciao {username},</h2>
+        <p>Un amministratore ha richiesto il reset della tua password.</p>
+        <p>Ecco le tue nuove credenziali:</p>
+        <ul>
+            <li><b>Username:</b> {username}</li>
+            <li><b>Nuova Password:</b> {new_password}</li>
+        </ul>
+        <p>Ti verrà chiesto di cambiare questa password al primo accesso.</p>
+        <br>
+        <p>Saluti,<br>Team BudgetAmico</p>
+        """
+        
+        if send_email(email, subject, body):
+            return True, f"Password resettata e email inviata a {email}"
+        else:
+            return False, "Password resettata ma errore invio email."
+
+    except Exception as e:
+        logger.error(f"Errore reset_user_password: {e}")
+        return False, f"Errore generico: {e}"
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -357,6 +644,14 @@ def set_configurazione(chiave: str, valore: str, id_famiglia: Optional[str] = No
     except Exception as e:
         logger.error(f"Errore salvataggio configurazione {chiave}: {e}")
         return False
+
+
+def save_system_config(key: str, value: str) -> bool:
+    """
+    Salva una configurazione di sistema (globale).
+    Alias per set_configurazione con id_famiglia=None.
+    """
+    return set_configurazione(key, value, id_famiglia=None)
 
 def get_smtp_config(id_famiglia: Optional[str] = None, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> Dict[str, Optional[str]]:
     """
@@ -1135,13 +1430,13 @@ def verifica_login(login_identifier: str, password: str) -> Optional[Dict[str, A
 
                 return {
                     'id': risultato['id_utente'],
-
-                     'nome': nome,
+                    'nome': nome,
                     'cognome': cognome,
                     'username': decrypt_system_data(risultato['username_enc']) or risultato['username'],
                     'email': decrypt_system_data(risultato['email_enc']) or risultato['email'],
                     'master_key': master_key.decode() if master_key else None,
-                    'forza_cambio_password': risultato['forza_cambio_password']
+                    'forza_cambio_password': risultato['forza_cambio_password'],
+                    'sospeso': risultato.get('sospeso', False)
                 }
             
             print("[DEBUG] Login fallito o password errata.")
