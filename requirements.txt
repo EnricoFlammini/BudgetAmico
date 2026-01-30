@@ -1,123 +1,123 @@
-aiohappyeyeballs 2.6.1
-aiohttp 3.13.3
-aiosignal 1.4.0
-annotated-doc 0.0.4
-annotated-types 0.7.0
-anyio 4.11.0
-asn1crypto 1.5.1
-attrs 25.4.0
-beautifulsoup4 4.14.2
-bidict 0.23.1
-cachetools 6.2.2
-certifi 2025.10.5
-cffi 2.0.0
-cfgv 3.5.0
-charset-normalizer 3.4.4
-click 8.3.1
-colorama 0.4.6
-contourpy 1.3.3
-cryptography 46.0.4
-curl-cffi 0.13.0
-cycler 0.12.1
-distlib 0.4.0
-et-xmlfile 2.0.0
-fastapi 0.128.0
-filelock 3.20.0
-flet 0.28.3
-flet-desktop 0.28.3
-flet-web 0.28.3
-fonttools 4.61.1
-frozendict 2.4.7
-frozenlist 1.8.0
-google-api-core 2.28.1
-google-api-python-client 2.187.0
-google-auth 2.41.1
-google-auth-httplib2 0.2.1
-google-auth-oauthlib 1.2.3
-googleapis-common-protos 1.72.0
-h11 0.16.0
-httpcore 1.0.9
-httplib2 0.31.0
-httptools 0.7.1
-httpx 0.28.1
-identify 2.6.15
-idna 3.11
-iniconfig 2.3.0
-jinja2 3.1.6
-kiwisolver 1.4.9
-markdown 3.10
-markupsafe 3.0.3
-matplotlib 3.10.8
-multidict 6.7.0
-multitasking 0.0.12
-nodeenv 1.9.1
-numpy 2.3.4
-oauthlib 3.3.1
-openpyxl 3.1.5
-packaging 25.0
-pandas 2.3.3
-peewee 3.18.3
-pg8000 1.31.5
-pillow 11.3.0
-pip 25.2
-platformdirs 4.5.0
-pluggy 1.6.0
-pre-commit 4.5.0
-propcache 0.4.1
-proto-plus 1.26.1
-protobuf 6.33.1
-psycopg2-binary 2.9.11
-pyasn1 0.6.1
-pyasn1-modules 0.4.2
-pycparser 2.23
-pydantic 2.12.4
-pydantic-core 2.41.5
-pygments 2.19.2
-pyparsing 3.2.5
-pytest 9.0.2
-pytest-asyncio 1.3.0
-python-barcode 0.16.1
-python-dateutil 2.9.0.post0
-python-dotenv 1.2.1
-python-engineio 4.13.0
-python-socketio 5.16.0
-pytz 2025.2
-pyyaml 6.0.3
-qrcode 8.2
-repath 0.9.0
-requests 2.32.5
-requests-oauthlib 2.0.0
-rsa 4.9.1
-schedule 1.2.2
-scramp 1.4.6
-setuptools 80.9.0
-simple-websocket 1.1.0
-six 1.17.0
-sniffio 1.3.1
-soupsieve 2.8
-starlette 0.50.0
-typing-extensions 4.15.0
-typing-inspection 0.4.2
-tzdata 2025.2
-uritemplate 4.2.0
-urllib3 2.6.3
-uvicorn 0.40.0
-virtualenv 20.35.4
-watchfiles 1.1.1
-websockets 15.0.1
-wsproto 1.3.2
-yarl 1.22.0
-yfinance 0.2.66
-autocommand 2.2.2
-backports.tarfile 1.2.0
-importlib-metadata 8.0.0
-inflect 7.3.1
-jaraco.collections 5.1.0
-jaraco.context 5.3.0
-jaraco.functools 4.0.1
-jaraco.text 3.12.1
-more-itertools 10.3.0
-tomli 2.0.1
-typeguard 4.3.0
-wheel 0.45.1
-zipp 3.19.2
+aiohappyeyeballs==2.6.1
+aiohttp==3.13.3
+aiosignal==1.4.0
+annotated-doc==0.0.4
+annotated-types==0.7.0
+anyio==4.11.0
+asn1crypto==1.5.1
+attrs==25.4.0
+beautifulsoup4==4.14.2
+bidict==0.23.1
+cachetools==6.2.2
+certifi==2025.10.5
+cffi==2.0.0
+cfgv==3.5.0
+charset-normalizer==3.4.4
+click==8.3.1
+colorama==0.4.6
+contourpy==1.3.3
+cryptography==46.0.4
+curl-cffi==0.13.0
+cycler==0.12.1
+distlib==0.4.0
+et-xmlfile==2.0.0
+fastapi==0.128.0
+filelock==3.20.0
+flet==0.28.3
+flet-desktop==0.28.3
+flet-web==0.28.3
+fonttools==4.61.1
+frozendict==2.4.7
+frozenlist==1.8.0
+google-api-core==2.28.1
+google-api-python-client==2.187.0
+google-auth==2.41.1
+google-auth-httplib2==0.2.1
+google-auth-oauthlib==1.2.3
+googleapis-common-protos==1.72.0
+h11==0.16.0
+httpcore==1.0.9
+httplib2==0.31.0
+httptools==0.7.1
+httpx==0.28.1
+identify==2.6.15
+idna==3.11
+iniconfig==2.3.0
+jinja2==3.1.6
+kiwisolver==1.4.9
+markdown==3.10
+markupsafe==3.0.3
+matplotlib==3.10.8
+multidict==6.7.0
+multitasking==0.0.12
+nodeenv==1.9.1
+numpy==2.3.4
+oauthlib==3.3.1
+openpyxl==3.1.5
+packaging==25.0
+pandas==2.3.3
+peewee==3.18.3
+pg8000==1.31.5
+pillow==11.3.0
+pip==25.2
+platformdirs==4.5.0
+pluggy==1.6.0
+pre-commit==4.5.0
+propcache==0.4.1
+proto-plus==1.26.1
+protobuf==6.33.1
+psycopg2-binary==2.9.11
+pyasn1==0.6.1
+pyasn1-modules==0.4.2
+pycparser==2.23
+pydantic==2.12.4
+pydantic-core==2.41.5
+pygments==2.19.2
+pyparsing==3.2.5
+pytest==9.0.2
+pytest-asyncio==1.3.0
+python-barcode==0.16.1
+python-dateutil==2.9.0.post0
+python-dotenv==1.2.1
+python-engineio==4.13.0
+python-socketio==5.16.0
+pytz==2025.2
+pyyaml==6.0.3
+qrcode==8.2
+repath==0.9.0
+requests==2.32.5
+requests-oauthlib==2.0.0
+rsa==4.9.1
+schedule==1.2.2
+scramp==1.4.6
+setuptools==80.9.0
+simple-websocket==1.1.0
+six==1.17.0
+sniffio==1.3.1
+soupsieve==2.8
+starlette==0.50.0
+typing-extensions==4.15.0
+typing-inspection==0.4.2
+tzdata==2025.2
+uritemplate==4.2.0
+urllib3==2.6.3
+uvicorn==0.40.0
+virtualenv==20.35.4
+watchfiles==1.1.1
+websockets==15.0.1
+wsproto==1.3.2
+yarl==1.22.0
+yfinance==0.2.66
+autocommand==2.2.2
+backports.tarfile==1.2.0
+importlib-metadata==8.0.0
+inflect==7.3.1
+jaraco.collections==5.1.0
+jaraco.context==5.3.0
+jaraco.functools==4.0.1
+jaraco.text==3.12.1
+more-itertools==10.3.0
+tomli==2.0.1
+typeguard==4.3.0
+wheel==0.45.1
+zipp==3.19.2
