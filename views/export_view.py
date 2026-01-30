@@ -3,6 +3,9 @@ import datetime
 import traceback
 import pandas as pd
 import io
+from utils.logger import setup_logger
+
+logger = setup_logger("ExportView")
 
 # Importa le funzioni DB necessarie
 from db.gestione_db import (
@@ -292,6 +295,5 @@ class ExportView:
             )
 
         except Exception as ex:
-            print(f"Errore durante l'esportazione Excel: {ex}")
-            traceback.print_exc()
+            logger.error(f"Errore durante l'esportazione Excel: {ex}", exc_info=True)
             self.controller.show_snack_bar(f"❌ Errore imprevisto durante l'esportazione: {ex}", success=False)

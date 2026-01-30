@@ -1449,7 +1449,8 @@ def verifica_login(login_identifier: str, password: str) -> Optional[Dict[str, A
             cur.execute("""
                 SELECT id_utente, password_hash, password_algo, nome, cognome, username, email, 
                        forza_cambio_password, salt, encrypted_master_key, 
-                       username_enc, email_enc, nome_enc_server, cognome_enc_server
+                       username_enc, email_enc, nome_enc_server, cognome_enc_server,
+                       failed_login_attempts, lockout_until, sospeso
                 FROM Utenti 
                 WHERE username_bindex = %s OR email_bindex = %s
             """, (u_bindex, u_bindex))
@@ -1459,7 +1460,24 @@ def verifica_login(login_identifier: str, password: str) -> Optional[Dict[str, A
             if False: pass # Placeholder to minimize diff changes if needed, or simply remove
 
 
+            # Fallback removed - we rely on migration
+            if False: pass # Placeholder to minimize diff changes if needed, or simply remove
+
+
             if risultato:
+                # --- RATE LIMITING CHECK ---
+                if risultato.get('sospeso'):
+                    return None, "Account sospeso. Contatta il supporto."
+                
+                if risultato.get('lockout_until'):
+                    lockout_until = risultato['lockout_until']
+                    # Ensure lockout_until is offset-aware or consistent with datetime.now()
+                    # Supabase/Postgres returns TZ-aware datetime if column is TIMESTAMP WITH TIME ZONE
+                    now = datetime.datetime.now(datetime.timezone.utc)
+                    if lockout_until > now:
+                         minutes_left = int((lockout_until - now).total_seconds() / 60) + 1
+                         return None, f"Account temporaneamente bloccato. Riprova tra {minutes_left} minuti."
+
                 # --- PASSWORD VERIFICATION & LAZY MIGRATION ---
                 stored_hash = risultato['password_hash']
                 # Handle cases where password_algo might be NULL (if migration missed row or default issue)
@@ -1468,7 +1486,74 @@ def verifica_login(login_identifier: str, password: str) -> Optional[Dict[str, A
                 is_valid = verify_password_hash(password, stored_hash, algo)
                 
                 if not is_valid:
-                    return None
+                     # --- HANDLE FAILED ATTEMPT ---
+                     try:
+                         attempts = (risultato.get('failed_login_attempts') or 0) + 1
+                         now_utc = datetime.datetime.now(datetime.timezone.utc)
+                         
+                         updates = ["failed_login_attempts = %s", "last_failed_login = %s"]
+                         params = [attempts, now_utc]
+                         
+                         error_msg = "Password errata."
+                         
+                         # Check capabilities
+                         if attempts >= 15:
+                             updates.append("sospeso = TRUE")
+                             error_msg = "Account sospeso per troppi tentativi falliti. Controlla la tua email."
+                             
+                             # Send Email
+                             try:
+                                 from utils.email_sender import send_email
+                                 email_dest = decrypt_system_data(risultato.get('email_enc')) or risultato.get('email')
+                                 if email_dest:
+                                     subject = "BudgetAmico - Avviso di Sicurezza: Account Sospeso"
+                                     body = f"""
+                                     <h2>Account Sospeso</h2>
+                                     <p>Il tuo account è stato sospeso dopo {attempts} tentativi di accesso falliti consecutivi.</p>
+                                     <p>Se non sei stato tu, qualcuno potrebbe non autorizzato sta provando ad accedere.</p>
+                                     <p>Per riattivare l'account, contatta il supporto o l'amministratore di sistema.</p>
+                                     """
+                                     # Run email sending in background or just try-catch to not block DB op too long?
+                                     # Blocking for simplicity here.
+                                     send_email(email_dest, subject, body)
+                             except Exception as e_mail:
+                                 logger.error(f"Failed to send suspension email: {e_mail}")
+                                 
+                         elif attempts == 5 or attempts == 10:
+                             lockout_duration = datetime.timedelta(minutes=5)
+                             lockout_time = now_utc + lockout_duration
+                             updates.append("lockout_until = %s")
+                             params.append(lockout_time)
+                             error_msg = f"Troppi tentativi falliti. Account bloccato per 5 minuti."
+                         
+                         params.append(risultato['id_utente'])
+                         
+                         with get_db_connection() as con_fail:
+                             cur_fail = con_fail.cursor()
+                             sql = f"UPDATE Utenti SET {', '.join(updates)} WHERE id_utente = %s"
+                             cur_fail.execute(sql, tuple(params))
+                             con_fail.commit()
+                             
+                         return None, error_msg
+
+                     except Exception as e_fail:
+                         logger.error(f"Error handling failed login: {e_fail}")
+                         return None, "Errore durante login."
+
+                     return None # return None implicit for verify_login usually means valid=False
+
+                # --- SUCCESSFUL LOGIN ---
+                # Reset counters if needed
+                if (risultato.get('failed_login_attempts') or 0) > 0:
+                    try:
+                        with get_db_connection() as con_succ:
+                            cur_succ = con_succ.cursor()
+                            cur_succ.execute("UPDATE Utenti SET failed_login_attempts = 0, lockout_until = NULL WHERE id_utente = %s", (risultato['id_utente'],))
+                            con_succ.commit()
+                    except Exception as e_succ:
+                        logger.error(f"Error resetting login counters: {e_succ}")
+
+                # LAZY MIGRATION: If user is still on SHA256, upgrade to PBKDF2
 
                 # LAZY MIGRATION: If user is still on SHA256, upgrade to PBKDF2
                 if algo == 'sha256':
