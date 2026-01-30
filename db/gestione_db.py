@@ -510,7 +510,7 @@ def reset_user_password(user_id: int) -> Tuple[bool, str]:
             cur = con.cursor()
             cur.execute("""
                 UPDATE Utenti 
-                SET password_hash = %s, forza_cambio_password = TRUE 
+                SET password_hash = %s, password_algo = 'pbkdf2', forza_cambio_password = TRUE 
                 WHERE id_utente = %s
             """, (password_hash, user_id))
             con.commit()
@@ -538,8 +538,54 @@ def reset_user_password(user_id: int) -> Tuple[bool, str]:
     except Exception as e:
         logger.error(f"Errore reset_user_password: {e}")
         return False, f"Errore generico: {e}"
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+def hash_password(password, algo='pbkdf2'):
+    """
+    Genera l'hash della password.
+    Algo supportati: 'sha256' (legacy), 'pbkdf2' (secure).
+    Format PBKDF2: pbkdf2:sha256:iterations:salt_b64:hash_b64
+    """
+    if algo == 'sha256':
+        return hashlib.sha256(password.encode()).hexdigest()
+    
+    # Defaults to PBKDF2
+    salt = os.urandom(16)
+    iterations = 600000
+    hash_bytes = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, iterations)
+    
+    salt_b64 = base64.urlsafe_b64encode(salt).decode()
+    hash_b64 = base64.urlsafe_b64encode(hash_bytes).decode()
+    
+    return f"pbkdf2:sha256:{iterations}:{salt_b64}:{hash_b64}"
+
+def verify_password_hash(password, stored_hash, algo='sha256'):
+    """
+    Verifica una password contro un hash memorizzato.
+    """
+    if algo == 'sha256':
+        return stored_hash == hashlib.sha256(password.encode()).hexdigest()
+    
+    if algo == 'pbkdf2':
+        try:
+            # Parse: pbkdf2:sha256:iter:salt:hash
+            parts = stored_hash.split(':')
+            if len(parts) != 5:
+                # Fallback or error
+                return False
+            
+            _, _, iterations_str, salt_b64, hash_b64 = parts
+            iterations = int(iterations_str)
+            salt = base64.urlsafe_b64decode(salt_b64)
+            stored_bytes = base64.urlsafe_b64decode(hash_b64)
+            
+            computed = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, iterations)
+            
+            # Constant time check
+            return secrets.compare_digest(stored_bytes, computed)
+        except Exception as e:
+            logger.error(f"Error verifying PBKDF2 hash: {e}")
+            return False
+            
+    return False
 
 
 def valida_iban_semplice(iban):
@@ -1399,8 +1445,9 @@ def verifica_login(login_identifier: str, password: str) -> Optional[Dict[str, A
         with get_db_connection() as con:
             cur = con.cursor()
             # Try finding by Blind Index first
+            # Fetch also password_algo with fallback
             cur.execute("""
-                SELECT id_utente, password_hash, nome, cognome, username, email, 
+                SELECT id_utente, password_hash, password_algo, nome, cognome, username, email, 
                        forza_cambio_password, salt, encrypted_master_key, 
                        username_enc, email_enc, nome_enc_server, cognome_enc_server
                 FROM Utenti 
@@ -1412,7 +1459,29 @@ def verifica_login(login_identifier: str, password: str) -> Optional[Dict[str, A
             if False: pass # Placeholder to minimize diff changes if needed, or simply remove
 
 
-            if risultato and risultato['password_hash'] == hash_password(password):
+            if risultato:
+                # --- PASSWORD VERIFICATION & LAZY MIGRATION ---
+                stored_hash = risultato['password_hash']
+                # Handle cases where password_algo might be NULL (if migration missed row or default issue)
+                algo = risultato.get('password_algo') or 'sha256' 
+                
+                is_valid = verify_password_hash(password, stored_hash, algo)
+                
+                if not is_valid:
+                    return None
+
+                # LAZY MIGRATION: If user is still on SHA256, upgrade to PBKDF2
+                if algo == 'sha256':
+                    logger.info(f"LAZY MIGRATION: Upgrading password for user {risultato['id_utente']} to PBKDF2")
+                    new_hash = hash_password(password, algo='pbkdf2')
+                    try:
+                        with get_db_connection() as con_up:
+                            cur_up = con_up.cursor()
+                            cur_up.execute("UPDATE Utenti SET password_hash = %s, password_algo = 'pbkdf2' WHERE id_utente = %s", 
+                                          (new_hash, risultato['id_utente']))
+                            con_up.commit()
+                    except Exception as e:
+                        logger.error(f"Failed to migrate password for user {risultato['id_utente']}: {e}")
 
                 # Decrypt master key if encryption is enabled
                 master_key = None
@@ -1664,8 +1733,8 @@ def registra_utente(nome: str, cognome: str, username: str, password: str, email
             cur = con.cursor()
             # NOTA: username e email legacy sono NULL - usiamo solo le versioni _bindex e _enc
             cur.execute("""
-                INSERT INTO Utenti (nome, cognome, username, password_hash, email, data_nascita, codice_fiscale, indirizzo, salt, encrypted_master_key, recovery_key_hash, encrypted_master_key_recovery, encrypted_master_key_backup, username_bindex, email_bindex, username_enc, email_enc, nome_enc_server, cognome_enc_server)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO Utenti (nome, cognome, username, password_hash, password_algo, email, data_nascita, codice_fiscale, indirizzo, salt, encrypted_master_key, recovery_key_hash, encrypted_master_key_recovery, encrypted_master_key_backup, username_bindex, email_bindex, username_enc, email_enc, nome_enc_server, cognome_enc_server)
+                VALUES (%s, %s, %s, %s, 'pbkdf2', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id_utente
             """, (enc_nome, enc_cognome, None, password_hash, None, data_nascita, enc_cf, enc_indirizzo, 
                   base64.urlsafe_b64encode(salt).decode(), 
@@ -1751,6 +1820,7 @@ def imposta_password_temporanea(id_utente: str, temp_password_raw: str) -> bool:
             cur.execute("""
                 UPDATE Utenti 
                 SET password_hash = %s, 
+                    password_algo = 'pbkdf2',
                     encrypted_master_key = %s,
                     forza_cambio_password = TRUE 
                 WHERE id_utente = %s
@@ -2756,6 +2826,7 @@ def imposta_password_temporanea(id_utente, temp_password_raw):
             cur.execute("""
                 UPDATE Utenti 
                 SET password_hash = %s, 
+                    password_algo = 'pbkdf2',
                     forza_cambio_password = %s,
                     salt = %s,
                     encrypted_master_key = %s
