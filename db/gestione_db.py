@@ -798,6 +798,46 @@ def calcola_entrate_mensili_famiglia(id_famiglia: str, anno: int, mese: int, mas
             totale_condivise = cur.fetchone()['totale'] or 0.0
             
             return totale_personali + totale_condivise
+    except Exception as e:
+        logger.error(f"Errore calcola_entrate_mensili_famiglia: {e}")
+        return 0.0
+
+def get_database_statistics() -> Dict[str, Any]:
+    """
+    Recupera statistiche sulle tabelle del database (righe, dimensioni).
+    Utilizza pg_stat_user_tables e pg_class.
+    """
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            
+            # 1. Total Database Size
+            cur.execute("SELECT pg_database_size(current_database()) as total_size")
+            total_size = cur.fetchone()['total_size']
+            
+            # 2. Table Stats (Row count estimation & Size)
+            # n_live_tup is an estimate but much faster than COUNT(*)
+            # pg_total_relation_size includes indexes and toasted data
+            cur.execute("""
+                SELECT 
+                    stat.relname as table_name,
+                    stat.n_live_tup as row_count,
+                    pg_total_relation_size(c.oid) as size_bytes
+                FROM pg_stat_user_tables stat
+                JOIN pg_class c ON stat.relid = c.oid
+                ORDER BY size_bytes DESC
+            """)
+            tables = cur.fetchall()
+            
+            return {
+                "total_size_bytes": total_size,
+                "tables": tables
+            }
+            
+    except Exception as e:
+        logger.error(f"Errore get_database_statistics: {e}")
+        return {"total_size_bytes": 0, "tables": []}
+
             
     except Exception as e:
         logger.error(f"Errore calcolo entrate mensili: {e}")

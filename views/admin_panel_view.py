@@ -58,6 +58,7 @@ class AdminPanelView:
         self._init_users_tab_ui()
         self._init_families_tab_ui()
         self._init_config_tab_ui()
+        self._init_db_stats_tab_ui()
 
     def build_view(self) -> ft.View:
         """Costruisce la UI della pagina."""
@@ -71,6 +72,7 @@ class AdminPanelView:
         self._load_users()
         self._load_families()
         self._load_smtp_config()
+        self._load_db_stats()
 
         # Definisci le tabs
         self.tabs.tabs = [
@@ -88,6 +90,16 @@ class AdminPanelView:
                 text="Famiglie",
                 icon=ft.Icons.FAMILY_RESTROOM,
                 content=self._build_families_tab_content()
+            ),
+            ft.Tab(
+                text="DB Stats",
+                icon=ft.Icons.STORAGE,
+                content=self._build_db_stats_tab_content()
+            ),
+            ft.Tab(
+                text="Koyeb Status",
+                icon=ft.Icons.CLOUD_CIRCLE,
+                content=self._build_koyeb_tab_content()
             ),
             ft.Tab(
                 text="Configurazione",
@@ -683,6 +695,117 @@ class AdminPanelView:
              self.page.snack_bar = ft.SnackBar(ft.Text(f"Errore invio: {error}"), bgcolor=ft.Colors.RED)
         self.page.snack_bar.open = True
         self.page.update()
+
+
+    # =========================================================================
+    # --- DB STATS TAB LOGIC ---
+    # =========================================================================
+    def _init_db_stats_tab_ui(self):
+        self.db_stats_table = ft.DataTable(
+            columns=[
+                ft.DataColumn(ft.Text("Tabella", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Righe (Stima)", weight=ft.FontWeight.BOLD), numeric=True),
+                ft.DataColumn(ft.Text("Dimensione", weight=ft.FontWeight.BOLD), numeric=True),
+            ],
+            rows=[],
+            border=ft.border.all(1, ft.Colors.GREY_300),
+            border_radius=8,
+            heading_row_color=ft.Colors.BLUE_GREY_50,
+            sort_column_index=2,
+            sort_ascending=False,
+        )
+        self.total_db_size_text = ft.Text("Dimensione Totale DB: -", size=16, weight=ft.FontWeight.BOLD)
+
+    def _build_db_stats_tab_content(self):
+        return ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Text("Statistiche Database", size=20, weight=ft.FontWeight.BOLD),
+                    ft.IconButton(icon=ft.Icons.REFRESH, tooltip="Aggiorna Statistiche", on_click=lambda e: self._load_db_stats())
+                ]),
+                ft.Container(height=10),
+                ft.Container(
+                    content=self.total_db_size_text,
+                    bgcolor=ft.Colors.BLUE_50, padding=10, border_radius=5
+                ),
+                ft.Container(height=10),
+                ft.Container(
+                    content=self.db_stats_table,
+                    expand=True, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8,
+                    padding=5
+                )
+            ]),
+            padding=20, expand=True
+        )
+
+    def _load_db_stats(self):
+        from db.gestione_db import get_database_statistics
+        
+        self.page.snack_bar = ft.SnackBar(ft.Text("Caricamento statistiche DB..."), bgcolor=ft.Colors.BLUE_GREY_400, duration=1000)
+        self.page.snack_bar.open = True
+        self.page.update()
+        
+        stats = get_database_statistics()
+        
+        total_bytes = stats.get("total_size_bytes", 0)
+        self.total_db_size_text.value = f"Dimensione Totale DB: {self._format_bytes(total_bytes)}"
+        
+        tables = stats.get("tables", [])
+        self.db_stats_table.rows = []
+        
+        for t in tables:
+            name = t.get("table_name", "-")
+            rows = t.get("row_count", 0)
+            size = t.get("size_bytes", 0)
+            
+            self.db_stats_table.rows.append(
+                ft.DataRow(cells=[
+                    ft.DataCell(ft.Text(name)),
+                    ft.DataCell(ft.Text(f"{rows:,}")),
+                    ft.DataCell(ft.Text(self._format_bytes(size))),
+                ])
+            )
+            
+        self.page.update()
+
+    def _format_bytes(self, size):
+        power = 2**10
+        n = 0
+        power_labels = {0 : '', 1: 'KB', 2: 'MB', 3: 'GB', 4: 'TB'}
+        while size > power:
+            size /= power
+            n += 1
+        return f"{size:.2f} {power_labels.get(n, 'PB')}"
+
+    # =========================================================================
+    # --- KOYEB STATUS TAB LOGIC ---
+    # =========================================================================
+    def _build_koyeb_tab_content(self):
+        # Nessuna API Key disponibile, usiamo link diretto
+        koyeb_url = "https://app.koyeb.com/services"
+        
+        return ft.Container(
+            content=ft.Column([
+                ft.Text("Stato Servizi Koyeb", size=20, weight=ft.FontWeight.BOLD),
+                ft.Text("Monitoraggio performance e stato del servizio web.", size=14, color=ft.Colors.GREY_700),
+                ft.Divider(),
+                ft.Container(height=20),
+                ft.Column([
+                    ft.Icon(ft.Icons.CLOUD_DONE, size=64, color=ft.Colors.BLUE_GREY),
+                    ft.Text("Gestione Cloud Platform", size=16, weight=ft.FontWeight.BOLD),
+                    ft.Text("Per visualizzare metriche dettagliate (CPU, RAM, Latenza), accedi alla dashboard di Koyeb.", text_align=ft.TextAlign.CENTER),
+                    ft.Container(height=10),
+                    ft.ElevatedButton(
+                        "Apri Dashboard Koyeb", 
+                        icon=ft.Icons.OPEN_IN_NEW,
+                        on_click=lambda e: self.page.launch_url(koyeb_url),
+                        style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.BLUE_800)
+                    )
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
+                
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            padding=40, expand=True
+        )
 
 
 class AdminLoginView:

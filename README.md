@@ -10,7 +10,10 @@
 ---
 
 ## 📅 Changelog
-### v0.41.00 (29/01/2026)
+### v0.41.00 (30/01/2026)
+- **Monitoraggio e Statistiche**:
+    - **Statistiche Database**: Nuova tab nel pannello Admin per visualizzare dimensioni e righe delle tabelle e la dimensione totale del DB.
+    - **Stato Koyeb**: Collegamento diretto alla dashboard di monitoraggio Koyeb per controllare le performance del servizio.
 - **Controlli Admin Avanzati**:
     - **Sospensione Utenti**: Nuova funzionalità per sospendere temporaneamente l'accesso agli utenti. Colonna "Sospeso" e azioni dedicate nel pannello admin.
     - **Protezione Cancellazione Famiglia**: Impedita la cancellazione accidentale di famiglie che hanno ancora membri associati.
@@ -25,11 +28,7 @@
     - **Autenticazione Admin**: Accesso protetto con credenziali configurabili via variabili d'ambiente (`ADMIN_USERNAME`, `ADMIN_PASSWORD`).
     - **Pulizia Automatica**: Eliminazione automatica log più vecchi di 30 giorni (schedulata ogni 24 ore).
     - **Integrazione BackgroundService**: Tutti i job automatici (spese fisse, aggiornamento asset) ora loggano su database.
-- **Logger Configurabili**:
-    - **Selezione Componenti**: Possibilità di abilitare/disabilitare il logging per singoli componenti (YFinanceManager, AppController, GestioneDB, ecc.) direttamente dal pannello admin.
-    - **Chip Toggle**: Interfaccia intuitiva con chip selezionabili per ogni componente.
-    - **DBLogHandler**: Nuovo handler che intercetta i log Python standard e li scrive su database in base alla configurazione.
-    - **Livello Minimo**: Configurazione del livello minimo di log da catturare (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+    - **Logger Configurabili**: Possibilità di abilitare/disabilitare il logging per singoli componenti.
 ### v0.39.00 (28/01/2026)
 - **Web App - Navigazione Completa**:
     - **Allineamento Desktop**: La sidebar Web ora include tutte le pagine disponibili su Desktop (Prestiti, Immobili, Contatti, Calcolatrice).
