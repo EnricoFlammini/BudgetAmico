@@ -582,6 +582,21 @@ class AdminPanelView:
         )
         self.page.open(dlg)
 
+    def _confirm_delete_user(self, user_id, username):
+        def do_delete():
+            from db.gestione_db import delete_user
+            success, msg = delete_user(user_id)
+            if success:
+                self.page.snack_bar = ft.SnackBar(ft.Text(f"Utente {username} eliminato correttamente: {msg}"), bgcolor=ft.Colors.GREEN)
+                self.page.snack_bar.open = True
+                self._load_users_refresh()
+            else:
+                self.page.snack_bar = ft.SnackBar(ft.Text(f"Errore eliminazione: {msg}"), bgcolor=ft.Colors.RED)
+                self.page.snack_bar.open = True
+            self.page.update()
+
+        self._open_admin_auth_dialog(f"Conferma Eliminazione {username}", do_delete)
+
     def _confirm_user_suspension(self, user_id, username, is_suspended):
         action = "riattivare" if is_suspended else "sospendere"
         def do_suspend():

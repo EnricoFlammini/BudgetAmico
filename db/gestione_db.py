@@ -286,17 +286,43 @@ def get_all_users() -> List[Dict[str, Any]]:
         return []
 
 
-def delete_user(user_id: int) -> bool:
-    """Elimina un utente dal database."""
+def delete_user(user_id: int) -> tuple[bool, str]:
+    """Elimina un utente dal database e tutti i dati correlati."""
     try:
         with get_db_connection() as con:
             cur = con.cursor()
+            
+            # 1. Rimuovi appartenenza famiglie
+            cur.execute("DELETE FROM Appartenenza_Famiglia WHERE id_utente = %s", (user_id,))
+            
+            # 2. Elimina dati finanziari personali (Conti e cascata)
+            # NOTA: Assumiamo che Transazioni sia in CASCADE su Conti nel DB, altrimenti servirebbe delete esplicito.
+            # Per sicurezza eliminiamo prima le dipendenze note se non siamo sicuri delle FK.
+            # Eliminiamo SpeseFisse, Prestiti, Immobili collegati all'utente (se usano id_utente come FK diretta o tramite conto)
+            
+            # Recupera conti dell'utente
+            cur.execute("SELECT id_conto FROM Conti WHERE id_utente = %s", (user_id,))
+            conti_ids = [r['id_conto'] for r in cur.fetchall()]
+            
+            if conti_ids:
+                # Transazioni (se non cascade)
+                cur.execute("DELETE FROM Transazioni WHERE id_conto = ANY(%s)", (conti_ids,))
+                # Saldi/Salvadanaio
+                cur.execute("DELETE FROM Salvadanai WHERE id_conto = ANY(%s)", (conti_ids,))
+                # Conti
+                cur.execute("DELETE FROM Conti WHERE id_utente = %s", (user_id,))
+
+            # 3. Elimina Log relativi all'utente
+            cur.execute("DELETE FROM Log_Sistema WHERE id_utente = %s", (user_id,))
+
+            # 4. Infine elimina l'utente
             cur.execute("DELETE FROM Utenti WHERE id_utente = %s", (user_id,))
+            
             con.commit()
-            return True
+            return True, "Utente eliminato con successo."
     except Exception as e:
         logger.error(f"Errore delete_user {user_id}: {e}")
-        return False
+        return False, str(e)
 
 
 def get_all_families() -> List[Dict[str, Any]]:
