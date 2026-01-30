@@ -624,7 +624,7 @@ class AdminPanelView:
             content=ft.Text(f"Vuoi resettare la password per '{username}' e inviare le nuove credenziali via email?"),
             actions=[
                 ft.TextButton("Annulla", on_click=lambda e: self.page.close(dlg)),
-                ft.TextButton("Reset e Invia", on_click=reset),
+                ft.TextButton("Reset e Invia", on_click=lambda e: do_reset()),
             ]
         )
         self.page.open(dlg)
