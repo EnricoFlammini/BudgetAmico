@@ -902,3 +902,35 @@ class AppController:
     def get_users_without_family(self):
         """Restituisce la lista di username degli utenti senza famiglia."""
         return ottieni_utenti_senza_famiglia()
+
+    def open_info_dialog(self, e=None):
+        """Apre il dialog con le informazioni e l'email di supporto."""
+        from utils.styles import AppColors
+        
+        def close_dialog(e):
+            self.page.close(dialog)
+
+        content = ft.Column([
+            ft.Text(f"Budget Amico v{VERSION}", size=20, weight=ft.FontWeight.BOLD),
+            ft.Text("Il tuo assistente personale per la gestione delle finanze.", size=14),
+            ft.Divider(),
+            ft.Text("Risorse Utili:", weight=ft.FontWeight.BOLD),
+             ft.Row([
+                ft.TextButton("Manuale Utente", icon=ft.Icons.MENU_BOOK, url="https://github.com/EnricoFlammini/BudgetAmico/blob/main/docs/Manuale_Completo_Budget_Amico.md"),
+                ft.TextButton("GitHub", icon=ft.Icons.CODE, url="https://github.com/EnricoFlammini/BudgetAmico"),
+            ], wrap=True),
+            ft.Row([
+                 ft.TextButton("Segnala Problema", icon=ft.Icons.BUG_REPORT, url="https://github.com/EnricoFlammini/BudgetAmico/issues"),
+                 ft.TextButton("Supporto Email", icon=ft.Icons.EMAIL, url="mailto:budgetamico@gmail.com"),
+            ], wrap=True)
+        ], tight=True, width=500)
+
+        dialog = ft.AlertDialog(
+            title=ft.Text("Informazioni"),
+            content=content,
+            actions=[
+                ft.TextButton("Chiudi", on_click=close_dialog)
+            ],
+            on_dismiss=lambda e: logger.debug("Info dialog dismissed")
+        )
+        self.page.open(dialog)
