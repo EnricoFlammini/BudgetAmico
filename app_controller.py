@@ -40,7 +40,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 MAX_RECENT_FILES = 5
-VERSION = "0.42.03"
+VERSION = "0.42.04"
 
 
 class AppController:
@@ -92,8 +92,8 @@ class AppController:
     def _init_global_dialogs(self):
         # Aggiungi gli overlay globali una sola volta
         self.date_picker = ft.DatePicker(
-            first_date=datetime.datetime(2020, 1, 1),
-            last_date=datetime.datetime(2030, 12, 31),
+            first_date=datetime.datetime(1980, 1, 1),
+            last_date=datetime.datetime(2050, 12, 31),
             value=datetime.datetime.now()
         )
         self.file_picker_salva_excel = ft.FilePicker(on_result=self.on_file_picker_result)

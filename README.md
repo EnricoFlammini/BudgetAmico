@@ -1,4 +1,4 @@
-# Budget Amico v0.42.03
+# Budget Amico v0.42.04
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -10,6 +10,11 @@
 ---
 
 ## 📅 Changelog
+### v0.42.04 (30/01/2026)
+- **Miglioramenti UI**:
+    - **Date Picker Esteso**: Ampliato il range di date selezionabili (1980-2050) per permettere l'inserimento di mutui e prestiti storici.
+    - **Gestione Carte**: Corretto e migliorato il dialogo di conferma eliminazione carta (ora utilizza l'API nativa corretta).
+
 ### v0.42.03 (30/01/2026)
 - **Admin Panel Improvements**:
     - **Fix Eliminazione Utenti**: Risolto bug che impediva l'eliminazione degli utenti e implementata cancellazione a cascata sicura (rimozione dati correlati).
