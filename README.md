@@ -1,4 +1,4 @@
-# Budget Amico v0.42.02
+# Budget Amico v0.42.03
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -10,6 +10,12 @@
 ---
 
 ## 📅 Changelog
+### v0.42.03 (30/01/2026)
+- **Admin Panel Improvements**:
+    - **Fix Eliminazione Utenti**: Risolto bug che impediva l'eliminazione degli utenti e implementata cancellazione a cascata sicura (rimozione dati correlati).
+    - **Fix Reset Password**: Corretto errore "NameError" nella funzione di reset password admin.
+    - **Fix Carte**: Risolto errore nella firma del metodo di aggiornamento della vista Carte (TypeError).
+
 ### v0.42.02 (30/01/2026)
 - **Security Audit & Hardening**:
     - **Password Hashing**: Migrazione completa a **PBKDF2** (standard sicuro) con aggiornamento trasparente per gli utenti ("Lazy Migration").

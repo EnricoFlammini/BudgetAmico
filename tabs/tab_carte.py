@@ -26,7 +26,7 @@ class TabCarte(ft.Container):
         # Initial load
         self.load_cards()
 
-    def update_view_data(self):
+    def update_view_data(self, is_initial_load=False):
         """Metodo chiamato dal dashboard controller per aggiornare i dati della vista."""
         self.load_cards()
 
