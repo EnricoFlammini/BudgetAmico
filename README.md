@@ -1,4 +1,4 @@
-# Budget Amico v0.42.00
+# Budget Amico v0.42.02
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -10,6 +10,14 @@
 ---
 
 ## 📅 Changelog
+### v0.42.02 (30/01/2026)
+- **Security Audit & Hardening**:
+    - **Password Hashing**: Migrazione completa a **PBKDF2** (standard sicuro) con aggiornamento trasparente per gli utenti ("Lazy Migration").
+    - **Protezione Brute-Force**: Implementato **Rate Limiting** sui login.
+        - 5 tentativi falliti: Blocco temporaneo (5 minuti).
+        - 15 tentativi falliti: Sospensione account e notifica via email.
+    - **Sicurezza Codice**: Audit dipendenze (aggiornamento librerie critiche), rimozione log sensibili e sanitizzazione gestione errori.
+
 ### v0.42.00 (30/01/2026)
 - **Gestione Visibilità Funzioni**:
     - **Controllo Admin**: L'amministratore può ora abilitare o disabilitare specifiche funzionalità (es. Investimenti, Spese Fisse, Prestiti) per l'intera famiglia.
