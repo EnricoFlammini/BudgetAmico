@@ -575,6 +575,8 @@ class PrestitoDialogs:
         self.controller.page.update()
 
     def _apri_date_picker_inizio(self, e):
+        self.controller.date_picker.first_date = datetime.datetime(1980, 1, 1)
+        self.controller.date_picker.last_date = datetime.datetime(2050, 12, 31)
         self.controller.date_picker.on_change = lambda ev: self._on_date_picker_change(ev, self.txt_data_inizio)
         self.controller.date_picker.open = True
         self.controller.page.update()
