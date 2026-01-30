@@ -208,23 +208,24 @@ class TabCarte(ft.Container):
         def confirm_delete(e):
             if elimina_carta(id_carta):
                 self.load_cards()
-            self.page_ctrl.close_dialog() # Assuming page_ctrl has this helper or using local dlg
+                self.page.snack_bar = ft.SnackBar(ft.Text("Carta eliminata correttamente"), bgcolor=ft.Colors.GREEN)
+                self.page.snack_bar.open = True
+            else:
+                self.page.snack_bar = ft.SnackBar(ft.Text("Errore durante l'eliminazione"), bgcolor=ft.Colors.RED)
+                self.page.snack_bar.open = True
+            
+            self.page.close(self.dlg_delete)
+            self.page.update()
         
-        dlg = ft.AlertDialog(
+        self.dlg_delete = ft.AlertDialog(
             title=AppStyles.section_header_text("Conferma Eliminazione"),
-            content=AppStyles.body_text("Vuoi davvero eliminare questa carta?"),
+            content=AppStyles.body_text("Vuoi davvero eliminare questa carta? Le transazioni rimarranno visibili nello storico."),
             actions=[
-                ft.TextButton("Annulla", on_click=lambda e: self._close_dlg(dlg)),
-                ft.TextButton("Elimina", on_click=lambda e: [self._close_dlg(dlg), confirm_delete(e)], style=ft.ButtonStyle(color=ft.Colors.RED))
+                ft.TextButton("Annulla", on_click=lambda e: self.page.close(self.dlg_delete)),
+                ft.TextButton("Elimina", on_click=confirm_delete, style=ft.ButtonStyle(color=ft.Colors.RED))
             ]
         )
-        self.page.dialog = dlg
-        dlg.open = True
-        self.page.update()
-
-    def _close_dlg(self, dlg):
-        dlg.open = False
-        self.page.update()
+        self.page.open(self.dlg_delete)
 
     def _open_transactions_dialog(self, card_data):
         try:
