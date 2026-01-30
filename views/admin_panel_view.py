@@ -31,6 +31,20 @@ def verifica_admin_sistema(username: str, password: str) -> bool:
     
     return username == admin_username and password == admin_password
 
+    return username == admin_username and password == admin_password
+
+
+# Whitelist delle tabelle da mostrare nelle statistiche
+PROGRAM_TABLES = [
+    "appartenenza_famiglia", "risorsa", "budget", "budget_storico", "carte", 
+    "categorie", "condivisionecontatto", "config_logger", "configurazioni", 
+    "contatti", "conti", "conticondivisi", "famiglie", "immobili", "infodb", 
+    "inviti", "log_sistema", "obiettivi_risparmio", "partecipazionecontocondiviso", 
+    "pianoammortamento", "prestiti", "quoteimmobili", "quoteprestiti", 
+    "salvadanai", "sottocategorie", "spesefisse", "storico_asset", 
+    "storicoassetglobale", "storicomassimalicarte", "storicopagamentirate", 
+    "transazioni", "transazionicondivise", "utenti"
+]
 
 class AdminPanelView:
     """Vista del pannello di amministrazione di sistema."""
@@ -59,6 +73,18 @@ class AdminPanelView:
         self._init_families_tab_ui()
         self._init_config_tab_ui()
         self._init_db_stats_tab_ui()
+
+    def _sort_datatable(self, e, table: ft.DataTable, data_list: list, update_method):
+        """Helper generico per ordinare le tabelle."""
+        # Se clicco sulla stessa colonna, inverto l'ordine
+        if table.sort_column_index == e.column_index:
+            table.sort_ascending = not table.sort_ascending
+        else:
+            table.sort_column_index = e.column_index
+            table.sort_ascending = True
+
+        update_method()
+        self.page.update()
 
     def build_view(self) -> ft.View:
         """Costruisce la UI della pagina."""
@@ -407,21 +433,31 @@ class AdminPanelView:
     # --- USERS TAB LOGIC ---
     # =========================================================================
     def _init_users_tab_ui(self):
+        self.users_search = ft.TextField(
+            label="Cerca Utente...", 
+            prefix_icon=ft.Icons.SEARCH,
+            width=300,
+            on_change=lambda e: self._load_users(use_cache=True)
+        )
+
         self.users_table = ft.DataTable(
             columns=[
-                ft.DataColumn(ft.Text("ID", weight=ft.FontWeight.BOLD)),
-                ft.DataColumn(ft.Text("Famiglie ID", weight=ft.FontWeight.BOLD)),
-                ft.DataColumn(ft.Text("Sospeso", weight=ft.FontWeight.BOLD)),
-                ft.DataColumn(ft.Text("Username", weight=ft.FontWeight.BOLD)),
-                ft.DataColumn(ft.Text("Email", weight=ft.FontWeight.BOLD)),
-                ft.DataColumn(ft.Text("Nome", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("ID", weight=ft.FontWeight.BOLD), numeric=True, on_sort=self._on_users_sort),
+                ft.DataColumn(ft.Text("Famiglie ID", weight=ft.FontWeight.BOLD), on_sort=self._on_users_sort),
+                ft.DataColumn(ft.Text("Sospeso", weight=ft.FontWeight.BOLD), on_sort=self._on_users_sort),
+                ft.DataColumn(ft.Text("Username", weight=ft.FontWeight.BOLD), on_sort=self._on_users_sort),
+                ft.DataColumn(ft.Text("Email", weight=ft.FontWeight.BOLD), on_sort=self._on_users_sort),
+                ft.DataColumn(ft.Text("Nome", weight=ft.FontWeight.BOLD), on_sort=self._on_users_sort),
                 ft.DataColumn(ft.Text("Azioni", weight=ft.FontWeight.BOLD)),
             ],
             rows=[],
             border=ft.border.all(1, ft.Colors.GREY_300),
             border_radius=8,
             heading_row_color=ft.Colors.BLUE_GREY_50,
+            sort_column_index=0,
+            sort_ascending=True,
         )
+        self._cached_users = []
 
     def _build_users_tab_content(self):
         return ft.Container(
@@ -430,21 +466,50 @@ class AdminPanelView:
                     ft.Text("Gestione Utenti", size=20, weight=ft.FontWeight.BOLD),
                     ft.IconButton(icon=ft.Icons.REFRESH, tooltip="Ricarica Lista", on_click=lambda e: self._load_users_refresh())
                 ]),
+                ft.Row([self.users_search]),
                 ft.Container(content=self.users_table, expand=True, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8)
             ]),
             padding=20, expand=True
         )
 
-    def _load_users(self):
+    def _load_users(self, use_cache=False):
         # Lazy import to avoid circular dependency
         from db.gestione_db import get_all_users
-        users = get_all_users()
+        
+        if not use_cache or not self._cached_users:
+            self._cached_users = get_all_users()
+
+        # 1. Search Filter
+        search_query = self.users_search.value.lower() if self.users_search.value else ""
+        filtered_users = []
+        
+        for u in self._cached_users:
+            # Combine fields for search
+            full_text = f"{u['id_utente']} {u['username']} {u['email']} {u.get('nome','')} {u.get('cognome','')}".lower()
+            if search_query in full_text:
+                filtered_users.append(u)
+
+        # 2. Sorting
+        col_index = self.users_table.sort_column_index
+        ascending = self.users_table.sort_ascending
+        
+        # Keys for sorting based on column index
+        # 0:ID, 1:Famiglie, 2:Sospeso, 3:Username, 4:Email, 5:Nome
+        sort_keys = {0: 'id_utente', 1: 'famiglie', 2: 'sospeso', 3: 'username', 4: 'email', 5: 'nome'}
+        sort_key = sort_keys.get(col_index, 'id_utente')
+        
+        filtered_users.sort(
+            key=lambda x: (x.get(sort_key) if x.get(sort_key) is not None else "") if isinstance(x.get(sort_key), str) else (x.get(sort_key) or 0), 
+            reverse=not ascending
+        )
+
+        # 3. Build Rows
         self.users_table.rows = []
-        for u in users:
+        for u in filtered_users:
             self.users_table.rows.append(
                 ft.DataRow(cells=[
                     ft.DataCell(ft.Text(str(u['id_utente']))),
-                    ft.DataCell(ft.Text(u.get('famiglie', '-'))),
+                    ft.DataCell(ft.Text(str(u.get('famiglie', '-')))), # Ensure string
                     ft.DataCell(
                         ft.Container(
                             content=ft.Text("SI" if u.get('sospeso') else "NO", color=ft.Colors.WHITE, size=10, weight=ft.FontWeight.BOLD),
@@ -475,10 +540,14 @@ class AdminPanelView:
                     ]))
                 ])
             )
+            
+        self.page.update()
+
+    def _on_users_sort(self, e):
+        self._sort_datatable(e, self.users_table, [], lambda: self._load_users(use_cache=True))
 
     def _load_users_refresh(self):
-        self._load_users()
-        self.page.update()
+        self._load_users(use_cache=False) # Force reload from DB
 
     def _open_admin_auth_dialog(self, title, action_callback):
         """Apre un dialog che richiede la password admin per confermare un'azione."""
@@ -550,17 +619,27 @@ class AdminPanelView:
     # --- FAMILIES TAB LOGIC ---
     # =========================================================================
     def _init_families_tab_ui(self):
+        self.families_search = ft.TextField(
+            label="Cerca Famiglia...", 
+            prefix_icon=ft.Icons.SEARCH,
+            width=300,
+            on_change=lambda e: self._load_families(use_cache=True)
+        )
+
         self.families_table = ft.DataTable(
             columns=[
-                ft.DataColumn(ft.Text("ID", weight=ft.FontWeight.BOLD)),
-                ft.DataColumn(ft.Text("Nome Famiglia", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("ID", weight=ft.FontWeight.BOLD), numeric=True, on_sort=self._on_families_sort),
+                ft.DataColumn(ft.Text("Nome Famiglia", weight=ft.FontWeight.BOLD), on_sort=self._on_families_sort),
                 ft.DataColumn(ft.Text("Azioni", weight=ft.FontWeight.BOLD)),
             ],
             rows=[],
             border=ft.border.all(1, ft.Colors.GREY_300),
             border_radius=8,
             heading_row_color=ft.Colors.BLUE_GREY_50,
+            sort_column_index=0,
+            sort_ascending=True,
         )
+        self._cached_families = []
 
     def _build_families_tab_content(self):
         return ft.Container(
@@ -569,16 +648,44 @@ class AdminPanelView:
                     ft.Text("Gestione Famiglie", size=20, weight=ft.FontWeight.BOLD),
                     ft.IconButton(icon=ft.Icons.REFRESH, tooltip="Ricarica Lista", on_click=lambda e: self._load_families_refresh())
                 ]),
+                ft.Row([self.families_search]),
                 ft.Container(content=self.families_table, expand=True, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8)
             ]),
             padding=20, expand=True
         )
 
-    def _load_families(self):
+    def _load_families(self, use_cache=False):
         from db.gestione_db import get_all_families
-        families = get_all_families()
+        
+        if not use_cache or not self._cached_families:
+            self._cached_families = get_all_families()
+
+        # 1. Search Filter
+        search_query = self.families_search.value.lower() if self.families_search.value else ""
+        filtered_families = []
+        
+        for f in self._cached_families:
+             # Combine fields for search
+            full_text = f"{f['id_famiglia']} {f['nome_famiglia']}".lower()
+            if search_query in full_text:
+                filtered_families.append(f)
+
+        # 2. Sorting
+        col_index = self.families_table.sort_column_index
+        ascending = self.families_table.sort_ascending
+        
+        # 0:ID, 1:Nome
+        sort_keys = {0: 'id_famiglia', 1: 'nome_famiglia'}
+        sort_key = sort_keys.get(col_index, 'id_famiglia')
+        
+        filtered_families.sort(
+            key=lambda x: (x.get(sort_key) if x.get(sort_key) is not None else "") if isinstance(x.get(sort_key), str) else (x.get(sort_key) or 0), 
+            reverse=not ascending
+        )
+
+        # 3. Build Rows
         self.families_table.rows = []
-        for f in families:
+        for f in filtered_families:
             self.families_table.rows.append(
                 ft.DataRow(cells=[
                     ft.DataCell(ft.Text(str(f['id_famiglia']))),
@@ -599,9 +706,14 @@ class AdminPanelView:
                     )
                 ])
             )
+            
+        self.page.update()
+
+    def _on_families_sort(self, e):
+         self._sort_datatable(e, self.families_table, [], lambda: self._load_families(use_cache=True))
 
     def _load_families_refresh(self):
-        self._load_families()
+        self._load_families(use_cache=False)
         self.page.update()
 
     def _confirm_delete_family(self, family_id, family_name):
@@ -772,20 +884,30 @@ class AdminPanelView:
     # --- DB STATS TAB LOGIC ---
     # =========================================================================
     def _init_db_stats_tab_ui(self):
+        self.db_stats_search = ft.TextField(
+            label="Cerca Tabella...", 
+            prefix_icon=ft.Icons.SEARCH,
+            width=300,
+            on_change=lambda e: self._load_db_stats(use_cache=True)
+        )
+        
         self.db_stats_table = ft.DataTable(
             columns=[
-                ft.DataColumn(ft.Text("Tabella", weight=ft.FontWeight.BOLD)),
-                ft.DataColumn(ft.Text("Righe (Stima)", weight=ft.FontWeight.BOLD), numeric=True),
-                ft.DataColumn(ft.Text("Dimensione", weight=ft.FontWeight.BOLD), numeric=True),
+                ft.DataColumn(ft.Text("Tabella", weight=ft.FontWeight.BOLD), on_sort=self._on_db_stats_sort),
+                ft.DataColumn(ft.Text("Righe (Stima)", weight=ft.FontWeight.BOLD), numeric=True, on_sort=self._on_db_stats_sort),
+                ft.DataColumn(ft.Text("Dimensione", weight=ft.FontWeight.BOLD), numeric=True, on_sort=self._on_db_stats_sort),
             ],
             rows=[],
             border=ft.border.all(1, ft.Colors.GREY_300),
             border_radius=8,
             heading_row_color=ft.Colors.BLUE_GREY_50,
-            sort_column_index=2,
+            sort_column_index=2, # Default sort by Size
             sort_ascending=False,
         )
         self.total_db_size_text = ft.Text("Dimensione Totale DB: -", size=16, weight=ft.FontWeight.BOLD)
+        
+        # Cache locale per i dati grezzi (per evitare query continue su search/sort)
+        self._cached_db_stats_tables = []
 
     def _build_db_stats_tab_content(self):
         return ft.Container(
@@ -794,6 +916,7 @@ class AdminPanelView:
                     ft.Text("Statistiche Database", size=20, weight=ft.FontWeight.BOLD),
                     ft.IconButton(icon=ft.Icons.REFRESH, tooltip="Aggiorna Statistiche", on_click=lambda e: self._load_db_stats())
                 ]),
+                ft.Row([self.db_stats_search]),
                 ft.Container(height=10),
                 ft.Container(
                     content=self.total_db_size_text,
@@ -809,22 +932,54 @@ class AdminPanelView:
             padding=20, expand=True
         )
 
-    def _load_db_stats(self):
+    def _load_db_stats(self, use_cache=False):
         from db.gestione_db import get_database_statistics
         
-        self.page.snack_bar = ft.SnackBar(ft.Text("Caricamento statistiche DB..."), bgcolor=ft.Colors.BLUE_GREY_400, duration=1000)
-        self.page.snack_bar.open = True
-        self.page.update()
+        if not use_cache:
+            self.page.snack_bar = ft.SnackBar(ft.Text("Caricamento statistiche DB..."), bgcolor=ft.Colors.BLUE_GREY_400, duration=1000)
+            self.page.snack_bar.open = True
+            self.page.update()
+            
+            stats = get_database_statistics()
+            total_bytes = stats.get("total_size_bytes", 0)
+            self.total_db_size_text.value = f"Dimensione Totale DB: {self._format_bytes(total_bytes)}"
+            
+            # Filtra e salva in cache locale
+            raw_tables = stats.get("tables", [])
+            self._cached_db_stats_tables = []
+            
+            # NORMALIZZAZIONE: Crea set lowercase per controllo veloce
+            whitelist_set = set(t.lower() for t in PROGRAM_TABLES)
+            
+            for t in raw_tables:
+                t_name = t.get("table_name", "").lower()
+                # Verifica se il nome tabella è nella whitelist (o inizia con 'program_' se volgiamo essere laschi, ma qui usiamo exact match list)
+                if t_name in whitelist_set:
+                    self._cached_db_stats_tables.append(t)
         
-        stats = get_database_statistics()
+        # 1. Filtro Search
+        search_query = self.db_stats_search.value.lower() if self.db_stats_search.value else ""
+        filtered_tables = [
+            t for t in self._cached_db_stats_tables 
+            if search_query in t.get("table_name", "").lower()
+        ]
         
-        total_bytes = stats.get("total_size_bytes", 0)
-        self.total_db_size_text.value = f"Dimensione Totale DB: {self._format_bytes(total_bytes)}"
+        # 2. Ordinamento
+        col_index = self.db_stats_table.sort_column_index
+        ascending = self.db_stats_table.sort_ascending
         
-        tables = stats.get("tables", [])
+        # Mappa indice colonna -> chiave dizionario
+        sort_keys = {0: "table_name", 1: "row_count", 2: "size_bytes"}
+        sort_key = sort_keys.get(col_index, "size_bytes")
+        
+        filtered_tables.sort(
+            key=lambda x: x.get(sort_key, 0) if sort_key != "table_name" else x.get(sort_key, "").lower(), 
+            reverse=not ascending
+        )
+        
+        # 3. Costruzione Righe
         self.db_stats_table.rows = []
-        
-        for t in tables:
+        for t in filtered_tables:
             name = t.get("table_name", "-")
             rows = t.get("row_count", 0)
             size = t.get("size_bytes", 0)
@@ -838,6 +993,9 @@ class AdminPanelView:
             )
             
         self.page.update()
+
+    def _on_db_stats_sort(self, e):
+        self._sort_datatable(e, self.db_stats_table, [], lambda: self._load_db_stats(use_cache=True))
 
     def _format_bytes(self, size):
         power = 2**10

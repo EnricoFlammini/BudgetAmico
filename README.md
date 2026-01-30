@@ -19,6 +19,9 @@
     - **Etichette Corrette**: Rinominata la voce "Nuovo Salvadanaio" in "Nuovo Piano di Risparmio" per maggiore chiarezza.
 - **Info & Supporto**:
     - Aggiunto indirizzo email di supporto ufficiale: `budgetamico@gmail.com`.
+- **Miglioramenti Admin Panel**:
+    - **DB Stats**: Nuova "whitelist" per mostrare solo le tabelle rilevanti e nascondere quelle di sistema. Aggiunta ricerca e ordinamento.
+    - **Gestione Utenti e Famiglie**: Aggiunte funzionalità di ricerca (testuale) e ordinamento colonne per facilitare la gestione.
 
 ### v0.41.00 (30/01/2026)
 - **Monitoraggio e Statistiche**:
