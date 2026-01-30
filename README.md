@@ -1,4 +1,4 @@
-# Budget Amico v0.41.00
+# Budget Amico v0.42.00
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -10,6 +10,16 @@
 ---
 
 ## 📅 Changelog
+### v0.42.00 (30/01/2026)
+- **Gestione Visibilità Funzioni**:
+    - **Controllo Admin**: L'amministratore può ora abilitare o disabilitare specifiche funzionalità (es. Investimenti, Spese Fisse, Prestiti) per l'intera famiglia.
+    - **Menu Dinamici**: Le voci disabilitate vengono automaticamente nascoste dalla barra laterale (Desktop/Web) e dal menu "Nuovo".
+- **Interfaccia Utente**:
+    - **Nome Utente nel Drawer**: Il menu laterale ora mostra correttamente il nome e cognome dell'utente (o l'username) invece del generico "Utente".
+    - **Etichette Corrette**: Rinominata la voce "Nuovo Salvadanaio" in "Nuovo Piano di Risparmio" per maggiore chiarezza.
+- **Info & Supporto**:
+    - Aggiunto indirizzo email di supporto ufficiale: `budgetamico@gmail.com`.
+
 ### v0.41.00 (30/01/2026)
 - **Monitoraggio e Statistiche**:
     - **Statistiche Database**: Nuova tab nel pannello Admin per visualizzare dimensioni e righe delle tabelle e la dimensione totale del DB.

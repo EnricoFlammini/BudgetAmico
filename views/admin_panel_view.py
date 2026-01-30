@@ -584,11 +584,18 @@ class AdminPanelView:
                     ft.DataCell(ft.Text(str(f['id_famiglia']))),
                     ft.DataCell(ft.Text(f['nome_famiglia'])),
                     ft.DataCell(
-                        ft.IconButton(
-                            icon=ft.Icons.DELETE, tooltip="Elimina Famiglia",
-                            icon_color=ft.Colors.RED,
-                            on_click=lambda e, fid=f['id_famiglia'], fname=f['nome_famiglia']: self._confirm_delete_family(fid, fname)
-                        )
+                        ft.Row([
+                            ft.IconButton(
+                                icon=ft.Icons.DELETE, tooltip="Elimina Famiglia",
+                                icon_color=ft.Colors.RED,
+                                on_click=lambda e, fid=f['id_famiglia'], fname=f['nome_famiglia']: self._confirm_delete_family(fid, fname)
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.VISIBILITY, tooltip="Gestisci Funzioni (Visibilità)",
+                                icon_color=ft.Colors.BLUE,
+                                on_click=lambda e, fid=f['id_famiglia'], fname=f['nome_famiglia']: self._open_feature_visibility_dialog(fid, fname)
+                            )
+                        ], spacing=0)
                     )
                 ])
             )
@@ -610,6 +617,70 @@ class AdminPanelView:
             self.page.update()
             
         self._open_admin_auth_dialog(f"Elimina Famiglia {family_name}", do_delete)
+
+    def _open_feature_visibility_dialog(self, family_id, family_name):
+        """Apre il dialogo per gestire la visibilità delle funzioni per una famiglia."""
+        from db.gestione_db import get_disabled_features, set_disabled_features, CONTROLLABLE_FEATURES
+        
+        # Recupera feature disabilitate correnti
+        disabled_features = get_disabled_features(family_id)
+        
+        # Dizionario per tracciare lo stato dei checkbox (True = ABILITATO, False = DISABILITATO)
+        # Nota: Nel DB salviamo quelle DISABILITATE. Quindi Checkbox CHECKED = Feature ABILITATA (non presente nella lista disabled)
+        checkboxes = {}
+        
+        content_column = ft.Column(scroll=ft.ScrollMode.AUTO, height=400)
+        
+        for feature in CONTROLLABLE_FEATURES:
+            key = feature['key']
+            label = feature['label']
+            icon_name = feature.get('icon', 'CIRCLE')
+            
+            is_enabled = key not in disabled_features
+            
+            cb = ft.Checkbox(label=label, value=is_enabled)
+            checkboxes[key] = cb
+            
+            row = ft.Row([
+                ft.Icon(getattr(ft.Icons, icon_name, ft.Icons.CIRCLE), size=20, color=ft.Colors.BLUE_GREY),
+                cb
+            ])
+            content_column.controls.append(row)
+            
+        def on_save(e):
+            # Calcola la nuova lista di feature DISABILITATE (checkbox deselezionati)
+            new_disabled_list = []
+            for key, cb in checkboxes.items():
+                if not cb.value:
+                    new_disabled_list.append(key)
+            
+            if set_disabled_features(family_id, new_disabled_list):
+                 self.page.snack_bar = ft.SnackBar(ft.Text(f"Visibilità funzioni aggiornata per {family_name}"), bgcolor=ft.Colors.GREEN)
+                 self.page.close(dlg)
+            else:
+                 self.page.snack_bar = ft.SnackBar(ft.Text(f"Errore salvataggio."), bgcolor=ft.Colors.RED)
+            
+            self.page.snack_bar.open = True
+            self.page.update()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text(f"Gestione Funzioni - {family_name}", size=18, weight=ft.FontWeight.BOLD),
+            content=ft.Container(
+                content=ft.Column([
+                    ft.Text("Seleziona le funzioni da rendere visibili per questa famiglia:", size=12, color=ft.Colors.GREY),
+                    ft.Divider(),
+                    content_column
+                ], tight=True),
+                width=400
+            ),
+            actions=[
+                ft.TextButton("Annulla", on_click=lambda e: self.page.close(dlg)),
+                ft.ElevatedButton("Salva Modifiche", on_click=on_save, bgcolor=ft.Colors.BLUE, color=ft.Colors.WHITE),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.page.open(dlg)
 
 
 

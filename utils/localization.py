@@ -16,7 +16,7 @@ STRINGS = {
         "new_transfer": "Nuovo Giroconto",
         "new_account": "Nuovo Conto",
         "new_card": "Nuova Carta",
-        "new_savings": "Nuovo Salvadanaio",
+        "new_savings": "Nuovo Piano di Risparmio",
         "new_fixed_expense": "Nuova Spesa Fissa",
         "new_loan": "Nuovo Prestito",
         "new_property": "Nuovo Immobile",

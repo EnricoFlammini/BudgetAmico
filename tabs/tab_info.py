@@ -43,6 +43,7 @@ class InfoTab(ft.Container):
                         ft.TextButton("Manuale Utente", icon=ft.Icons.MENU_BOOK, url="https://github.com/EnricoFlammini/BudgetAmico/blob/main/docs/Manuale_Completo_Budget_Amico.md"),
                         ft.TextButton("Repository GitHub", icon=ft.Icons.CODE, url="https://github.com/EnricoFlammini/BudgetAmico"),
                         ft.TextButton("Segnala un Problema", icon=ft.Icons.BUG_REPORT, url="https://github.com/EnricoFlammini/BudgetAmico/issues"),
+                        ft.TextButton("Supporto Email", icon=ft.Icons.EMAIL, url="mailto:budgetamico@gmail.com"),
                     ], wrap=True),
                     
                 ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),

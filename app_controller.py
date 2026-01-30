@@ -40,7 +40,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 MAX_RECENT_FILES = 5
-VERSION = "0.41.00"
+VERSION = "0.42.00"
 
 
 class AppController:
@@ -597,6 +597,15 @@ class AppController:
 
             self.page.session.set("id_famiglia", id_famiglia)
             self.page.session.set("ruolo_utente", ottieni_ruolo_utente(id_utente, id_famiglia))
+            
+             # Set display name for UI
+            display_name = "Utente"
+            if utente.get("nome") and utente.get("cognome"):
+                display_name = f"{utente['nome']} {utente['cognome']}"
+            elif utente.get("username"):
+                display_name = utente['username']
+            
+            self.page.session.set("nome_visualizzato", display_name)
             
             # --- Auto-Update History Snapshot & Credit Card Settlement on Login ---
             # SKIP if Server Automation is active

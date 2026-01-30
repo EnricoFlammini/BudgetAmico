@@ -69,20 +69,59 @@ class WebDashboardView:
         ruolo = self.controller.get_user_role()
         
         # Define available tabs: (View, Icon, Label)
+        # Define available tabs: (View, Icon, Label)
+        # Filtro visibilità
+        from db.gestione_db import get_disabled_features
+        id_famiglia = self.controller.get_family_id()
+        disabled = get_disabled_features(id_famiglia) if id_famiglia else []
+
         possible_tabs = [
             (self.tab_personale, ft.Icons.HOME, "Home"),
-            (self.tab_budget, ft.Icons.PIE_CHART, "Budget"),
-            (self.tab_conti, ft.Icons.ACCOUNT_BALANCE_WALLET, "Conti"),
-            (self.tab_carte, ft.Icons.CREDIT_CARD, "Carte"),
-            (self.tab_spese_fisse, ft.Icons.CALENDAR_MONTH, "Spese Fisse"),
-            (self.tab_investimenti, ft.Icons.TRENDING_UP, "Investimenti"),
-            (self.tab_prestiti, ft.Icons.MONEY_OFF, "Prestiti"),
-            (self.tab_immobili, ft.Icons.HOME_WORK, "Immobili"),
-            (self.tab_accantonamenti, ft.Icons.SAVINGS, "Risparmi"),
-            (self.tab_famiglia, ft.Icons.DIVERSITY_3, "Famiglia"),
-            (self.tab_divisore_pro, ft.Icons.CALCULATE, "Divisore"),
-            (self.tab_contatti, ft.Icons.CONTACT_PHONE, "Contatti"), # Ora visibile a tutti
         ]
+        
+        # Budget
+        if "budget" not in disabled:
+            possible_tabs.append((self.tab_budget, ft.Icons.PIE_CHART, "Budget"))
+            
+        # Conti
+        possible_tabs.append((self.tab_conti, ft.Icons.ACCOUNT_BALANCE_WALLET, "Conti"))
+        
+        # Carte
+        if "carte" not in disabled:
+            possible_tabs.append((self.tab_carte, ft.Icons.CREDIT_CARD, "Carte"))
+            
+        # Spese Fisse
+        if "spese_fisse" not in disabled:
+            possible_tabs.append((self.tab_spese_fisse, ft.Icons.CALENDAR_MONTH, "Spese Fisse"))
+            
+        # Investimenti
+        if "investimenti" not in disabled:
+             possible_tabs.append((self.tab_investimenti, ft.Icons.TRENDING_UP, "Investimenti"))
+        
+        # Prestiti
+        if "prestiti" not in disabled:
+             possible_tabs.append((self.tab_prestiti, ft.Icons.MONEY_OFF, "Prestiti"))
+        
+        # Immobili
+        if "immobili" not in disabled:
+             possible_tabs.append((self.tab_immobili, ft.Icons.HOME_WORK, "Immobili"))
+        
+        # Risparmi
+        if "accantonamenti" not in disabled:
+             possible_tabs.append((self.tab_accantonamenti, ft.Icons.SAVINGS, "Risparmi"))
+        
+        # Famiglia
+        if "famiglia" not in disabled:
+             possible_tabs.append((self.tab_famiglia, ft.Icons.DIVERSITY_3, "Famiglia"))
+        
+        # Divisore
+        if "divisore" not in disabled:
+             possible_tabs.append((self.tab_divisore_pro, ft.Icons.CALCULATE, "Divisore"))
+        
+        # Contatti
+        if "contatti" not in disabled:
+             possible_tabs.append((self.tab_contatti, ft.Icons.CONTACT_PHONE, "Contatti"))
+        
         
         # Add Calcolatrice (Solo ID 16)
         if str(self.controller.get_user_id()) == '16':
@@ -222,6 +261,11 @@ class WebDashboardView:
         """Apre un BottomSheet con le opzioni di aggiunta."""
         logger.info("[WEB] FAB '+' clicked: Opening add menu")
         loc = self.controller.loc
+        
+        # Filtro visibilità
+        from db.gestione_db import get_disabled_features
+        id_famiglia = self.controller.get_family_id()
+        disabled = get_disabled_features(id_famiglia) if id_famiglia else []
 
         def go_to_action(action_callback):
             """Helper to close sheet and run action"""
@@ -230,53 +274,64 @@ class WebDashboardView:
             if action_callback:
                 action_callback()
 
+        items = [
+             ft.ListTile(
+                title=ft.Text(loc.get("new_transaction", "Nuova Transazione")),
+                leading=ft.Icon(ft.Icons.PAYMENT),
+                on_click=lambda _: go_to_action(self.controller.open_new_transaction_dialog)
+            ),
+            ft.ListTile(
+                title=ft.Text(loc.get("new_account", "Nuovo Conto")),
+                leading=ft.Icon(ft.Icons.ACCOUNT_BALANCE_WALLET),
+                on_click=lambda _: go_to_action(self.controller.open_new_account_dialog)
+            ),
+        ]
+        
+        if "carte" not in disabled:
+             items.append(ft.ListTile(
+                title=ft.Text(loc.get("new_card", "Nuova Carta")),
+                leading=ft.Icon(ft.Icons.CREDIT_CARD),
+                on_click=lambda _: go_to_action(self.controller.open_new_card_dialog)
+            ))
+
+        if "accantonamenti" not in disabled:
+             items.append(ft.ListTile(
+                title=ft.Text(loc.get("new_savings", "Nuovo Risparmio")),
+                leading=ft.Icon(ft.Icons.SAVINGS),
+                on_click=lambda _: go_to_action(self.controller.open_new_savings_dialog)
+            ))
+            
+        if "spese_fisse" not in disabled:
+             items.append(ft.ListTile(
+                title=ft.Text(loc.get("new_fixed_expense", "Nuova Spesa Fissa")),
+                leading=ft.Icon(ft.Icons.REPEAT),
+                on_click=lambda _: go_to_action(self.controller.open_new_fixed_expense_dialog)
+            ))
+
+        if "prestiti" not in disabled:
+             items.append(ft.ListTile(
+                title=ft.Text(loc.get("new_loan", "Nuovo Prestito")),
+                leading=ft.Icon(ft.Icons.MONEY_OFF),
+                on_click=lambda _: go_to_action(self.controller.open_new_loan_dialog)
+            ))
+
+        if "immobili" not in disabled:
+             items.append(ft.ListTile(
+                title=ft.Text(loc.get("new_property", "Nuovo Immobile")),
+                leading=ft.Icon(ft.Icons.HOME_WORK),
+                on_click=lambda _: go_to_action(self.controller.open_new_property_dialog)
+            ))
+
+        if "contatti" not in disabled:
+             items.append(ft.ListTile(
+                title=ft.Text(loc.get("new_contact", "Nuovo Contatto")),
+                leading=ft.Icon(ft.Icons.CONTACT_PHONE),
+                on_click=lambda _: go_to_action(self.controller.open_new_contact_dialog)
+            ))
+
         bs = ft.BottomSheet(
             ft.Container(
-                ft.Column(
-                    [
-                        ft.ListTile(
-                            title=ft.Text(loc.get("new_transaction", "Nuova Transazione")),
-                            leading=ft.Icon(ft.Icons.PAYMENT),
-                            on_click=lambda _: go_to_action(self.controller.open_new_transaction_dialog)
-                        ),
-                        ft.ListTile(
-                            title=ft.Text(loc.get("new_account", "Nuovo Conto")),
-                            leading=ft.Icon(ft.Icons.ACCOUNT_BALANCE_WALLET),
-                            on_click=lambda _: go_to_action(self.controller.open_new_account_dialog)
-                        ),
-                        ft.ListTile(
-                            title=ft.Text(loc.get("new_card", "Nuova Carta")),
-                            leading=ft.Icon(ft.Icons.CREDIT_CARD),
-                            on_click=lambda _: go_to_action(self.controller.open_new_card_dialog)
-                        ),
-                        ft.ListTile(
-                            title=ft.Text(loc.get("new_savings", "Nuovo Risparmio")),
-                            leading=ft.Icon(ft.Icons.SAVINGS),
-                            on_click=lambda _: go_to_action(self.controller.open_new_amortization_dialog)
-                        ),
-                        ft.ListTile(
-                            title=ft.Text(loc.get("new_fixed_expense", "Nuova Spesa Fissa")),
-                            leading=ft.Icon(ft.Icons.REPEAT),
-                            on_click=lambda _: go_to_action(self.controller.open_new_fixed_expense_dialog)
-                        ),
-                        ft.ListTile(
-                            title=ft.Text(loc.get("new_loan", "Nuovo Prestito")),
-                            leading=ft.Icon(ft.Icons.MONEY_OFF),
-                            on_click=lambda _: go_to_action(self.controller.open_new_loan_dialog)
-                        ),
-                        ft.ListTile(
-                            title=ft.Text(loc.get("new_property", "Nuovo Immobile")),
-                            leading=ft.Icon(ft.Icons.HOME_WORK),
-                            on_click=lambda _: go_to_action(self.controller.open_new_property_dialog)
-                        ),
-                        ft.ListTile(
-                            title=ft.Text(loc.get("new_contact", "Nuovo Contatto")),
-                            leading=ft.Icon(ft.Icons.CONTACT_PHONE),
-                            on_click=lambda _: go_to_action(self.controller.open_new_contact_dialog)
-                        ),
-                    ],
-                    tight=True,
-                ),
+                ft.Column(items, tight=True),
                 padding=20, 
                 border_radius=ft.border_radius.only(top_left=20, top_right=20)
             ),

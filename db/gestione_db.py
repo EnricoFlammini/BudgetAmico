@@ -13,6 +13,7 @@ import base64
 from utils.crypto_manager import CryptoManager
 from utils.cache_manager import cache_manager
 from utils.logger import setup_logger
+import json
 
 # --- BLOCCO DI CODICE PER CORREGGERE IL PERCORSO ---
 script_dir = os.path.dirname(__file__)
@@ -718,6 +719,48 @@ def set_impostazioni_budget_famiglia(id_famiglia: str, entrate_mensili: float, r
         return True
     except Exception as e:
         logger.error(f"Errore salvataggio impostazioni budget: {e}")
+        return False
+
+        return False
+
+# --- Funzioni Gestione Visibilità Funzioni (Feature Flags per Famiglia) ---
+
+CONTROLLABLE_FEATURES = [
+    {"key": "investimenti", "label": "Investimenti", "icon": "TRENDING_UP"},
+    {"key": "spese_fisse", "label": "Spese Fisse", "icon": "CALENDAR_MONTH"},
+    {"key": "prestiti", "label": "Prestiti", "icon": "MONEY_OFF"},
+    {"key": "immobili", "label": "Immobili", "icon": "HOME_WORK"},
+    {"key": "budget", "label": "Budget (Analisi)", "icon": "PIE_CHART"},
+    {"key": "famiglia", "label": "Gestione Famiglia", "icon": "DIVERSITY_3"},
+    {"key": "accantonamenti", "label": "Risparmi/Accantonamenti", "icon": "SAVINGS"},
+    {"key": "divisore", "label": "Divisore Spese", "icon": "CALCULATE"},
+    {"key": "carte", "label": "Carte di Credito/Debito", "icon": "CREDIT_CARD"},
+    {"key": "contatti", "label": "Rubrica Contatti", "icon": "CONTACT_PHONE"},
+]
+
+def get_disabled_features(id_famiglia: str) -> List[str]:
+    """
+    Recupera la lista delle funzioni disabilitate per una famiglia.
+    Restituisce una lista di stringhe (chiavi delle feature).
+    """
+    try:
+        val_str = get_configurazione('disabled_features', id_famiglia)
+        if not val_str:
+            return []
+        return json.loads(val_str)
+    except Exception as e:
+        logger.error(f"Errore get_disabled_features: {e}")
+        return []
+
+def set_disabled_features(id_famiglia: str, features_list: List[str]) -> bool:
+    """
+    Salva la lista delle funzioni disabilitate per una famiglia.
+    """
+    try:
+        val_str = json.dumps(features_list)
+        return set_configurazione('disabled_features', val_str, id_famiglia)
+    except Exception as e:
+        logger.error(f"Errore set_disabled_features: {e}")
         return False
 
 def calcola_entrate_mensili_famiglia(id_famiglia: str, anno: int, mese: int, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> float:

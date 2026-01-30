@@ -286,6 +286,11 @@ class DashboardView:
         """Apre un BottomSheet con le opzioni di aggiunta."""
         logger.info("[ACTION] FAB '+' clicked: Opening add menu")
         loc = self.controller.loc
+        
+        # Filtro visibilità
+        from db.gestione_db import get_disabled_features
+        id_famiglia = self.controller.get_family_id()
+        disabled = get_disabled_features(id_famiglia) if id_famiglia else []
 
         def go_to_action(action_callback):
             """Helper to close sheet and run action"""
@@ -294,53 +299,64 @@ class DashboardView:
             if action_callback:
                 action_callback()
 
+        items = [
+            ft.ListTile(
+                title=ft.Text(loc.get("new_transaction", "Nuova Transazione")),
+                leading=ft.Icon(ft.Icons.PAYMENT),
+                on_click=lambda _: go_to_action(self.controller.open_new_transaction_dialog)
+            ),
+             ft.ListTile(
+                title=ft.Text(loc.get("new_account", "Nuovo Conto")),
+                leading=ft.Icon(ft.Icons.ACCOUNT_BALANCE_WALLET),
+                on_click=lambda _: go_to_action(self.controller.open_new_account_dialog)
+            ),
+        ]
+        
+        if "carte" not in disabled:
+             items.append(ft.ListTile(
+                title=ft.Text(loc.get("new_card", "Nuova Carta")),
+                leading=ft.Icon(ft.Icons.CREDIT_CARD),
+                on_click=lambda _: go_to_action(self.controller.open_new_card_dialog)
+            ))
+            
+        if "accantonamenti" not in disabled:
+             items.append(ft.ListTile(
+                title=ft.Text(loc.get("new_savings", "Nuovo Risparmio")),
+                leading=ft.Icon(ft.Icons.SAVINGS),
+                on_click=lambda _: go_to_action(self.controller.open_new_savings_dialog)
+            ))
+        
+        if "spese_fisse" not in disabled:
+             items.append(ft.ListTile(
+                title=ft.Text(loc.get("new_fixed_expense", "Nuova Spesa Fissa")),
+                leading=ft.Icon(ft.Icons.REPEAT),
+                on_click=lambda _: go_to_action(self.controller.open_new_fixed_expense_dialog)
+            ))
+
+        if "prestiti" not in disabled:
+             items.append(ft.ListTile(
+                title=ft.Text(loc.get("new_loan", "Nuovo Prestito")),
+                leading=ft.Icon(ft.Icons.MONEY_OFF),
+                on_click=lambda _: go_to_action(self.controller.open_new_loan_dialog)
+            ))
+
+        if "immobili" not in disabled:
+             items.append(ft.ListTile(
+                title=ft.Text(loc.get("new_property", "Nuovo Immobile")),
+                leading=ft.Icon(ft.Icons.HOME_WORK),
+                on_click=lambda _: go_to_action(self.controller.open_new_property_dialog)
+            ))
+
+        if "contatti" not in disabled:
+             items.append(ft.ListTile(
+                title=ft.Text(loc.get("new_contact", "Nuovo Contatto")),
+                leading=ft.Icon(ft.Icons.CONTACT_PHONE),
+                on_click=lambda _: go_to_action(self.controller.open_new_contact_dialog)
+            ))
+
         bs = ft.BottomSheet(
             ft.Container(
-                ft.Column(
-                    [
-                        ft.ListTile(
-                            title=ft.Text(loc.get("new_transaction", "Nuova Transazione")),
-                            leading=ft.Icon(ft.Icons.PAYMENT),
-                            on_click=lambda _: go_to_action(self.controller.open_new_transaction_dialog)
-                        ),
-                        ft.ListTile(
-                            title=ft.Text(loc.get("new_account", "Nuovo Conto")),
-                            leading=ft.Icon(ft.Icons.ACCOUNT_BALANCE_WALLET),
-                            on_click=lambda _: go_to_action(self.controller.open_new_account_dialog)
-                        ),
-                        ft.ListTile(
-                            title=ft.Text(loc.get("new_card", "Nuova Carta")),
-                            leading=ft.Icon(ft.Icons.CREDIT_CARD),
-                            on_click=lambda _: go_to_action(self.controller.open_new_card_dialog)
-                        ),
-                        ft.ListTile(
-                            title=ft.Text(loc.get("new_savings", "Nuovo Risparmio")),
-                            leading=ft.Icon(ft.Icons.SAVINGS),
-                            on_click=lambda _: go_to_action(self.controller.open_new_savings_dialog)
-                        ),
-                        ft.ListTile(
-                            title=ft.Text(loc.get("new_fixed_expense", "Nuova Spesa Fissa")),
-                            leading=ft.Icon(ft.Icons.REPEAT),
-                            on_click=lambda _: go_to_action(self.controller.open_new_fixed_expense_dialog)
-                        ),
-                        ft.ListTile(
-                            title=ft.Text(loc.get("new_loan", "Nuovo Prestito")),
-                            leading=ft.Icon(ft.Icons.MONEY_OFF),
-                            on_click=lambda _: go_to_action(self.controller.open_new_loan_dialog)
-                        ),
-                        ft.ListTile(
-                            title=ft.Text(loc.get("new_property", "Nuovo Immobile")),
-                            leading=ft.Icon(ft.Icons.HOME_WORK),
-                            on_click=lambda _: go_to_action(self.controller.open_new_property_dialog)
-                        ),
-                        ft.ListTile(
-                            title=ft.Text(loc.get("new_contact", "Nuovo Contatto")),
-                            leading=ft.Icon(ft.Icons.CONTACT_PHONE),
-                            on_click=lambda _: go_to_action(self.controller.open_new_contact_dialog)
-                        ),
-                    ],
-                    tight=True,
-                ),
+                ft.Column(items, tight=True),
                 padding=20, # Add padding for aesthetics
                 border_radius=ft.border_radius.only(top_left=20, top_right=20) # Modern rounded corners
             ),
@@ -357,6 +373,11 @@ class DashboardView:
         """
         loc = self.controller.loc
         ruolo = self.controller.get_user_role()
+        
+        # Filtro visibilità
+        from db.gestione_db import get_disabled_features
+        id_famiglia = self.controller.get_family_id()
+        disabled = get_disabled_features(id_famiglia) if id_famiglia else []
         
         # Costruisci la lista di voci
         self.sidebar_items = []
@@ -375,7 +396,7 @@ class DashboardView:
         index += 1
         
         # 2. Budget (Livello 2+)
-        if ruolo in ['admin', 'livello1', 'livello2']:
+        if ruolo in ['admin', 'livello1', 'livello2'] and "budget" not in disabled:
             self.sidebar_items.append({
                 'icon': ft.Icons.PIE_CHART_OUTLINE,
                 'selected_icon': ft.Icons.PIE_CHART,
@@ -396,27 +417,29 @@ class DashboardView:
         index += 1
         
         # 3b. Carte (Cards)
-        self.sidebar_items.append({
-            'icon': ft.Icons.CREDIT_CARD_OUTLINED,
-            'selected_icon': ft.Icons.CREDIT_CARD,
-            'label': "Carte", # Localization needed ideally
-            'view': self.tab_carte,
-            'index': index
-        })
-        index += 1
+        if "carte" not in disabled:
+            self.sidebar_items.append({
+                'icon': ft.Icons.CREDIT_CARD_OUTLINED,
+                'selected_icon': ft.Icons.CREDIT_CARD,
+                'label': "Carte", # Localization needed ideally
+                'view': self.tab_carte,
+                'index': index
+            })
+            index += 1
 
         # 5. Spese Fisse
-        self.sidebar_items.append({
-            'icon': ft.Icons.CALENDAR_MONTH_OUTLINED,
-            'selected_icon': ft.Icons.CALENDAR_MONTH,
-            'label': loc.get("fixed_expenses"),
-            'view': self.tab_spese_fisse,
-            'index': index
-        })
-        index += 1
+        if "spese_fisse" not in disabled:
+            self.sidebar_items.append({
+                'icon': ft.Icons.CALENDAR_MONTH_OUTLINED,
+                'selected_icon': ft.Icons.CALENDAR_MONTH,
+                'label': loc.get("fixed_expenses"),
+                'view': self.tab_spese_fisse,
+                'index': index
+            })
+            index += 1
 
         # 6. Investimenti (Livello 2+)
-        if ruolo in ['admin', 'livello1', 'livello2']:
+        if ruolo in ['admin', 'livello1', 'livello2'] and "investimenti" not in disabled:
             self.sidebar_items.append({
                 'icon': ft.Icons.TRENDING_UP_OUTLINED,
                 'selected_icon': ft.Icons.TRENDING_UP,
@@ -427,7 +450,7 @@ class DashboardView:
             index += 1
 
         # 7. Prestiti (Livello 2+)
-        if ruolo in ['admin', 'livello1', 'livello2']:
+        if ruolo in ['admin', 'livello1', 'livello2'] and "prestiti" not in disabled:
             self.sidebar_items.append({
                 'icon': ft.Icons.MONEY_OFF_OUTLINED,
                 'selected_icon': ft.Icons.MONEY_OFF,
@@ -438,7 +461,7 @@ class DashboardView:
             index += 1
 
         # 8. Immobili (Livello 2+)
-        if ruolo in ['admin', 'livello1', 'livello2']:
+        if ruolo in ['admin', 'livello1', 'livello2'] and "immobili" not in disabled:
             self.sidebar_items.append({
                 'icon': ft.Icons.HOME_WORK_OUTLINED,
                 'selected_icon': ft.Icons.HOME_WORK,
@@ -449,17 +472,18 @@ class DashboardView:
             index += 1
 
         # 8b. Accantonamenti (Tutti)
-        self.sidebar_items.append({
-            'icon': ft.Icons.SAVINGS_OUTLINED,
-            'selected_icon': ft.Icons.SAVINGS,
-            'label': "Accantonamenti",
-            'view': self.tab_accantonamenti,
-            'index': index
-        })
-        index += 1
+        if "accantonamenti" not in disabled:
+            self.sidebar_items.append({
+                'icon': ft.Icons.SAVINGS_OUTLINED,
+                'selected_icon': ft.Icons.SAVINGS,
+                'label': "Accantonamenti",
+                'view': self.tab_accantonamenti,
+                'index': index
+            })
+            index += 1
 
         # 9. Famiglia (Livello 2+)
-        if ruolo in ['admin', 'livello1', 'livello2']:
+        if ruolo in ['admin', 'livello1', 'livello2'] and "famiglia" not in disabled:
             self.sidebar_items.append({
                 'icon': ft.Icons.DIVERSITY_3_OUTLINED,
                 'selected_icon': ft.Icons.DIVERSITY_3,
@@ -470,14 +494,15 @@ class DashboardView:
             index += 1
 
         # 9b. Contatti (Tutti)
-        self.sidebar_items.append({
-            'icon': ft.Icons.CONTACT_PHONE_OUTLINED,
-            'selected_icon': ft.Icons.CONTACT_PHONE,
-            'label': "Contatti",
-            'view': self.tab_contatti,
-            'index': index
-        })
-        index += 1
+        if "contatti" not in disabled:
+            self.sidebar_items.append({
+                'icon': ft.Icons.CONTACT_PHONE_OUTLINED,
+                'selected_icon': ft.Icons.CONTACT_PHONE,
+                'label': "Contatti",
+                'view': self.tab_contatti,
+                'index': index
+            })
+            index += 1
 
         # 10. Admin (Solo Admin)
         if ruolo == 'admin':

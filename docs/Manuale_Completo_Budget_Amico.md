@@ -1,6 +1,14 @@
-# Manuale Completo Budget Amico v0.39.00
+# Manuale Completo Budget Amico v0.42.00
 
 ## Indice
+...
+
+### Non vedo alcune sezioni
+- Verifica il tuo ruolo (visibile in Impostazioni)
+- **Funzioni Disabilitate**: L'amministratore della famiglia potrebbe aver disabilitato alcune funzioni (es. Investimenti, Prestiti) per semplificare l'interfaccia.
+- Contatta l'Admin per modificare i permessi o riabilitare le funzioni.
+
+### L'app si avvia lentamente
 
 1. [Introduzione](#1-introduzione)
 2. [Registrazione e Accesso](#2-registrazione-e-accesso)
