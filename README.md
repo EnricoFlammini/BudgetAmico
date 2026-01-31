@@ -1,4 +1,4 @@
-# Budget Amico v0.43.04
+# Budget Amico v0.43.05
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -10,6 +10,10 @@
 ---
 
 ## 📅 Changelog
+### v0.43.05 (31/01/2026)
+- **Fix Download Web**:
+    - **Compatibilità**: Migliorato il sistema di download per supportare versioni precedenti delle librerie grafiche (Flet). Se `run_js` non è disponibile, il sistema tenta automaticamente metodi alternativi (`javascript:` URL o Data URI diretto).
+
 ### v0.43.04 (31/01/2026)
 - **Fix Universale Download**:
     - **Web**: Implementato nuovo sistema di download lato client (JS injection) che risolve problemi con popup blocker e garantisce privacy totale (nessun salvataggio su server).
