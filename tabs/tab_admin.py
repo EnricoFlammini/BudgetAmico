@@ -784,20 +784,16 @@ class AdminTab(ft.Container):
 
             # 2. Gestione WEB vs DESKTOP
             if self.controller.page.web:
-                # WEB: Usa Data URI per evitare salvataggio su server (Privacy)
-                import base64
-                b64_data = base64.b64encode(file_data).decode('utf-8')
-                # Mime type for JSON
-                mime_type = "application/json"
+                # WEB: JS Download (Client Side)
+                from utils.file_downloader import download_file_web
                 
-                # Construct Data URI
-                data_uri = f"data:{mime_type};base64,{b64_data}"
+                print(f"[DEBUG] [WEB] Launching JS Download for {filename}...")
+                success = download_file_web(self.controller.page, filename, file_data, "application/json")
                 
-                print(f"[DEBUG] [WEB] Launching Client-Side Download via Data URI (Length: {len(data_uri)})")
-                
-                # Launch download
-                self.controller.page.launch_url(data_uri)
-                self.controller.show_snack_bar("Download avviato! Controlla i download del browser.", AppColors.SUCCESS)
+                if success:
+                    self.controller.show_snack_bar("Download avviato!", AppColors.SUCCESS)
+                else:
+                    self.controller.show_snack_bar("Errore avvio download web.", AppColors.ERROR)
                 
                 # Cleanup session
                 self.controller.page.session.remove("excel_export_data")
@@ -807,7 +803,7 @@ class AdminTab(ft.Container):
                 self.page.update()
                 
             else:
-                # DESKTOP: Salva in Downloads
+                # DESKTOP: Salva in Downloads (Robust Fallback)
                 import os
                 from pathlib import Path
                 docs_dir = Path.home() / "Downloads"

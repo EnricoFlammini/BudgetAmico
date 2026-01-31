@@ -142,7 +142,7 @@ class TabCarte(ft.Container):
 
             spending_info.extend([
                 AppStyles.small_text(f"Speso: € {speso:.2f} / € {massimale:.2f}", color=ft.Colors.WHITE),
-                ft.ProgressBar(value=percent, color=ft.Colors.ORANGE if percent > 0.8 else ft.Colors.GREEN, bgcolor=ft.Colors.WHITE24),
+                ft.ProgressBar(value=percent, color=ft.Colors.AMBER if percent > 0.8 else ft.Colors.WHITE, bgcolor=ft.Colors.BLACK26),
                 AppStyles.small_text(extra_info, color=ft.Colors.WHITE70)
             ])
         else:

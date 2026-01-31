@@ -241,12 +241,47 @@ class PianoAmmortamentoDialog:
         writer.writerow(["1", "2024-01-31", "500.00", "400.00", "100.00", "5.00"])
         writer.writerow(["2", "2024-02-29", "500.00", "405.00", "95.00", "5.00"])
         
-        csv_data = output.getvalue().encode("utf-8")
-        
-        # Usa il meccanismo di export file del controller o salva direttamente
-        # Qui salvo in sessione e chiamo il file picker di salvataggio del controller se disponibile
-        self.controller.page.session.set("excel_export_data", csv_data)
-        self.controller.file_picker_salva_excel.save_file(file_name="template_piano_ammortamento.csv")
+        # Encode to bytes
+        csv_str = output.getvalue()
+        csv_data = csv_str.encode("utf-8")
+        filename = "template_piano_ammortamento.csv"
+
+        try:
+            # 2. Gestione WEB vs DESKTOP
+            if self.controller.page.web:
+                # WEB: JS Download
+                from utils.file_downloader import download_file_web
+                
+                success = download_file_web(self.controller.page, filename, csv_data, "text/csv")
+                
+                if success:
+                    self.controller.show_snack_bar("Download template avviato!", success=True)
+                else:
+                    self.controller.show_snack_bar("Errore download web.", success=False)
+            else:
+                # DESKTOP: Salva in Downloads (Fallback robusto)
+                import os
+                from pathlib import Path
+                docs_dir = Path.home() / "Downloads"
+                os.makedirs(docs_dir, exist_ok=True)
+                
+                full_path = docs_dir / filename
+                
+                with open(full_path, "wb") as f:
+                    f.write(csv_data)
+                
+                self.controller.show_snack_bar(f"Template salvato in: {full_path}", success=True)
+                
+                # Open folder
+                import subprocess
+                if os.name == 'nt':
+                     os.startfile(str(docs_dir))
+                elif os.name == 'posix':
+                     subprocess.run(['xdg-open', str(docs_dir)])
+
+        except Exception as ex:
+            print(f"Errore download template: {ex}")
+            self.controller.show_error_dialog(f"Errore download: {ex}")
 
     def _on_csv_picked(self, e):
         if not e.files: return

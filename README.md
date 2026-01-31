@@ -1,4 +1,4 @@
-# Budget Amico v0.43.03
+# Budget Amico v0.43.04
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -10,6 +10,12 @@
 ---
 
 ## 📅 Changelog
+### v0.43.04 (31/01/2026)
+- **Fix Universale Download**:
+    - **Web**: Implementato nuovo sistema di download lato client (JS injection) che risolve problemi con popup blocker e garantisce privacy totale (nessun salvataggio su server).
+    - **Desktop**: Risolti problemi con i file picker. I file (Backup e Template) vengono ora salvati automaticamente nella cartella **Downloads** dell'utente e aperti subito dopo.
+    - **Carte**: Migliorato contrasto barra avanzamento (Bianco/Ambra su sfondo scuro) per massima leggibilità su carte colorate.
+
 ### v0.43.03 (31/01/2026)
 - **Privacy & Download**:
     - **Backup Serverless**: L'esportazione del backup sulla versione Web ora avviene interamente tramite Data URI, evitando qualsiasi salvataggio temporaneo del file sui dischi del server, per garantire la massima privacy e sicurezza.
