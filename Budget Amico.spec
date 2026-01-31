@@ -1,6 +1,6 @@
     # -*- mode: python ; coding: utf-8 -*-
 
-VERSION = '0.43.01'
+VERSION = '0.43.02'
 
 a = Analysis(
     ['main.py'],

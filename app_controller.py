@@ -40,7 +40,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 MAX_RECENT_FILES = 5
-VERSION = "0.43.01"
+VERSION = "0.43.02"
 
 
 class AppController:
@@ -597,18 +597,16 @@ class AppController:
         theme = self._get_current_theme_scheme() or ft.ColorScheme()
         self.confirm_delete_dialog.actions[0].style = ft.ButtonStyle(color=theme.error)
         self.page.session.set("delete_callback", delete_callback)
-        if self.confirm_delete_dialog not in self.page.overlay:
-            self.page.overlay.append(self.confirm_delete_dialog)
-        self.confirm_delete_dialog.open = True
+        self.page.open(self.confirm_delete_dialog)
         self.page.update()
 
     def _chiudi_dialog_conferma_eliminazione(self, e):
-        self.confirm_delete_dialog.open = False
+        self.page.close(self.confirm_delete_dialog)
         self.page.update()
 
     def _esegui_eliminazione_confermata(self, e):
         # Prima chiudo il dialog
-        self.confirm_delete_dialog.open = False
+        self.page.close(self.confirm_delete_dialog)
         self.page.update()
         # Poi mostro lo spinner per l'operazione
         self.show_loading("Eliminazione in corso...")

@@ -125,16 +125,11 @@ class AdminDialogs:
             self.txt_nome_categoria.value = ""
             self.id_categoria_in_modifica = None
 
-        if self.dialog_modifica_cat not in self.controller.page.overlay:
-            self.controller.page.overlay.append(self.dialog_modifica_cat)
-        self.dialog_modifica_cat.open = True
+        self.controller.page.open(self.dialog_modifica_cat)
         self.controller.page.update()
 
     def _chiudi_dialog_categoria(self, e):
-        self.dialog_modifica_cat.open = False
-        self.controller.page.update()
-        if self.dialog_modifica_cat in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_modifica_cat)
+        self.controller.page.close(self.dialog_modifica_cat)
         self.controller.page.update()
 
     def _salva_categoria_cliccato(self, e):
@@ -153,7 +148,7 @@ class AdminDialogs:
 
         if success:
             self.controller.show_snack_bar("Categoria salvata con successo!", success=True)
-            self.dialog_modifica_cat.open = False
+            self.controller.page.close(self.dialog_modifica_cat)
             self.controller.db_write_operation()
         else:
             self.controller.show_snack_bar("Errore: Categoria già esistente o errore DB.", success=False)
@@ -176,16 +171,11 @@ class AdminDialogs:
         else:
             return # Non fare nulla se non ci sono dati sufficienti
 
-        if self.dialog_sottocategoria not in self.controller.page.overlay:
-            self.controller.page.overlay.append(self.dialog_sottocategoria)
-        self.dialog_sottocategoria.open = True
+        self.controller.page.open(self.dialog_sottocategoria)
         self.controller.page.update()
 
     def _chiudi_dialog_sottocategoria(self, e):
-        self.dialog_sottocategoria.open = False
-        self.controller.page.update()
-        if self.dialog_sottocategoria in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_sottocategoria)
+        self.controller.page.close(self.dialog_sottocategoria)
         self.controller.page.update()
 
     def _salva_sottocategoria_cliccato(self, e):
@@ -202,7 +192,7 @@ class AdminDialogs:
 
         if success:
             self.controller.show_snack_bar("Sottocategoria salvata con successo!", success=True)
-            self.dialog_sottocategoria.open = False
+            self.controller.page.close(self.dialog_sottocategoria)
             self.controller.db_write_operation()
         else:
             self.controller.show_snack_bar("Errore: Sottocategoria già esistente o errore DB.", success=False)

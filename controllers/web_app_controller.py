@@ -11,6 +11,7 @@ from dialogs.immobile_dialog import ImmobileDialog
 from dialogs.prestito_dialogs import PrestitoDialogs
 from dialogs.portafoglio_dialogs import PortafoglioDialogs
 from dialogs.card_dialog import CardDialog
+from dialogs.admin_dialogs import AdminDialogs
 from views.auth_view import AuthView
 from utils.logger import setup_logger
 
@@ -39,13 +40,13 @@ class WebAppController(AppController):
     def _init_dialogs_and_views(self):
         # We only init the dialogs we strictly need for the mobile Lite version
         self.transaction_dialog = TransactionDialog(self)
-        self.transaction_dialog = TransactionDialog(self)
         self.conto_dialog = ContoDialog(self) 
         self.card_dialog = CardDialog(page=self.page, callback=self.update_all_views) # Fixed: using callback directly
         self.spesa_fissa_dialog = SpesaFissaDialog(self)
         self.immobile_dialog = ImmobileDialog(self)
         self.prestito_dialogs = PrestitoDialogs(self)
         self.portafoglio_dialogs = PortafoglioDialogs(self)
+        self.admin_dialogs = AdminDialogs(self)
         
         # Init Views
         self.auth_view = AuthView(self)
