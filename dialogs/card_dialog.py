@@ -146,7 +146,9 @@ class CardDialog:
             conti = ottieni_tutti_i_conti_utente(id_utente, master_key_b64=master_key)
             
             for c in conti:
-                if c['tipo'] in ['Fondo Pensione']: continue
+                # Filtra conti: Solo Conto Corrente (o Corrente) o Conto Risparmio possono essere collegati ad una carta
+                # Tipi supportati: 'Corrente', 'Conto Corrente', 'Risparmio', 'Conto Risparmio'
+                if c['tipo'] not in ['Conto Corrente', 'Conto Risparmio', 'Corrente', 'Risparmio']: continue
                 
                 # Format name based on type
                 prefix = "[Personale]" if not c['is_condiviso'] else "[Condiviso]"

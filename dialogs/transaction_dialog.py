@@ -15,7 +15,8 @@ from db.gestione_db import (
     ottieni_tutti_i_conti_famiglia,
     esegui_giroconto,
     ottieni_salvadanai_conto,
-    esegui_giroconto_salvadanaio
+    esegui_giroconto_salvadanaio,
+    ottieni_ids_conti_tecnici_carte
 )
 from utils.logger import setup_logger
 
@@ -151,7 +152,22 @@ class TransactionDialog(ft.AlertDialog):
 
         # 2. Accounts (Caricati DOPO le carte)
         tutti_i_conti = ottieni_tutti_i_conti_utente(utente_id, master_key_b64=master_key_b64)
-        conti_filtrati = [c for c in tutti_i_conti if c['tipo'] not in []] # Removed 'Fondo Pensione' exclusion
+        
+        # Identifica ID conti tecnici delle carte da escludere (anche carte eliminate)
+        ids_conti_tecnici = ottieni_ids_conti_tecnici_carte(utente_id)
+        
+        # Filtra i conti: 
+        # 1. Non mostrare conti tecnici delle carte (si spende dalla carta, non dal conto tecnico diretto)
+        # 2. Non mostrare conti investimento/pensione (hanno UI dedicata)
+        tipi_esclusi = ['Fondo Pensione', 'Investimenti', 'Crypto', 'Azioni', 'Obbligazioni', 'ETF', 'Fondo']
+        
+        conti_filtrati = []
+        for c in tutti_i_conti:
+            if c['id_conto'] in ids_conti_tecnici:
+                continue
+            if c['tipo'] in tipi_esclusi:
+                continue
+            conti_filtrati.append(c)
 
         for c in conti_filtrati:
             suffix = " " + self.loc.get("shared_suffix") if c['is_condiviso'] else ""
@@ -177,9 +193,16 @@ class TransactionDialog(ft.AlertDialog):
              conti_famiglia = ottieni_tutti_i_conti_famiglia(famiglia_id, master_key_b64=master_key_b64, id_utente=utente_id)
              # Filtra tipi non validi (Ora includiamo tutto tranne null)
              conti_dest_filtrati = [c for c in conti_famiglia if c['tipo']]
+             
+             # FIX: Filtra anche qui i conti tecnici delle carte (bug "Saldo nuova" in destinazione)
+             ids_conti_tecnici_dest = ottieni_ids_conti_tecnici_carte(utente_id)
+             
              opzioni_dest = []
              
              for c in conti_dest_filtrati:
+                # Skip technical accounts
+                if c['id_conto'] in ids_conti_tecnici_dest: continue
+             
                 prefix = "C" if c['is_condiviso'] else "P"
                 suffix = " (Condiviso)" if c['is_condiviso'] else ""
                 opzioni_dest.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}{suffix}"))

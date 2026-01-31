@@ -234,7 +234,7 @@ class InvestimentiTab(ft.Container):
                         disabled=self.sincronizzazione_in_corso
                     )
                 ])
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, wrap=True, run_spacing=10),
             
             ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
             
@@ -312,28 +312,28 @@ class InvestimentiTab(ft.Container):
         
         valore_totale = asset['quantita'] * asset['prezzo_attuale_manuale']
         
-        # Layout responsive per mobile
+        # Layout responsive per mobile - Compacted
         return ft.Container(
             content=ft.ResponsiveRow([
                 # Riga 1: Nome asset completo (su tutta la larghezza su mobile)
                 ft.Column([
-                    AppStyles.data_text(asset['ticker']),
+                    AppStyles.data_text(asset['ticker'], size=13),
                     AppStyles.small_text(asset['nome_asset'], color=AppColors.TEXT_SECONDARY),
                     AppStyles.small_text(f"{loc.get('quantity')}: {asset['quantita']:.4f}", color=AppColors.TEXT_SECONDARY)
-                ], col={"xs": 12, "sm": 4, "md": 4}),
+                ], col={"xs": 12, "sm": 4, "md": 4}, spacing=2),
                 
                 # Colonna 2: Prezzo e valore
                 ft.Column([
-                    AppStyles.body_text(loc.format_currency(asset['prezzo_attuale_manuale']), size=13),
+                    AppStyles.body_text(loc.format_currency(asset['prezzo_attuale_manuale']), size=12),
                     AppStyles.small_text(f"{loc.get('value')}: {loc.format_currency(valore_totale)}", color=AppColors.TEXT_SECONDARY),
                     AppStyles.small_text(f"Agg: {asset['data_aggiornamento']}" if asset['data_aggiornamento'] else "", color=ft.Colors.GREY_500)
-                ], col={"xs": 5, "sm": 3, "md": 3}, horizontal_alignment=ft.CrossAxisAlignment.END),
+                ], col={"xs": 5, "sm": 3, "md": 3}, horizontal_alignment=ft.CrossAxisAlignment.END, spacing=2),
                 
                 # Colonna 3: Gain/Loss
                 ft.Column([
                     AppStyles.data_text(
                         loc.format_currency(asset['gain_loss_totale']),
-                        size=13,
+                        size=12,
                         color=AppColors.SUCCESS if asset['gain_loss_totale'] >= 0 else AppColors.ERROR
                     ),
                     AppStyles.small_text(
@@ -347,13 +347,14 @@ class InvestimentiTab(ft.Container):
                     ft.IconButton(
                         icon=ft.Icons.SYNC,
                         tooltip=loc.get("sync_prices"),
-                        icon_size=18,
+                        icon_size=16,
                         data={'asset': asset, 'conto': conto},
-                        on_click=self._sincronizza_prezzo_asset
+                        on_click=self._sincronizza_prezzo_asset,
+                        style=ft.ButtonStyle(padding=0)
                     )
                 ], col={"xs": 2, "sm": 2, "md": 2}, horizontal_alignment=ft.CrossAxisAlignment.END)
             ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            padding=10,
+            padding=5,
             bgcolor=theme.surface_variant,
             border_radius=8
         )

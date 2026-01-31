@@ -61,10 +61,10 @@ class AdminTab(ft.Container):
         self.lv_categorie = ft.Column(scroll=ft.ScrollMode.AUTO, expand=True)
         self.lv_membri = ft.Column(scroll=ft.ScrollMode.AUTO)
         
-        # Nuovo subtab Gestione Budget
+        # Subtab Budget Manager
         self.subtab_budget_manager = AdminSubTabBudgetManager(controller)
         
-        # Stato Automazione (inizializzato a False, aggiornato dopo fetch)
+        # Stato Automazione
         self.server_automation_enabled = False
         self.switch_automation = ft.Switch(
             value=False,
@@ -85,6 +85,103 @@ class AdminTab(ft.Container):
             [self.tabs_admin],
             expand=True
         )
+
+    def build_tabs(self):
+        # ... (unchanged)
+        return tabs
+
+    # ... (skipping unchanged methods until _on_export_ready)
+
+    def _esporta_dati_cliccato(self, e):
+        # 1. Disable button and show loading
+        btn = e.control
+        original_text = btn.text
+        original_icon = btn.icon
+        btn.text = "Generazione Backup..."
+        btn.icon = ft.Icons.HOURGLASS_EMPTY
+        btn.disabled = True
+        if self.page: self.page.update()
+
+        famiglia_id = self.controller.get_family_id()
+        master_key = self.controller.page.session.get("master_key")
+        user_id = self.controller.get_user_id()
+        
+        print("[DEBUG] Inizio export dati...")
+
+        def _generate_export():
+            try:
+                # Esegue export sincrono in background
+                return esporta_dati_famiglia(famiglia_id, user_id, master_key)
+            except Exception as ex:
+                return f"ERROR: {str(ex)}"
+
+        def _on_export_ready(result):
+            # Restore button state
+            btn.text = original_text
+            btn.icon = original_icon
+            btn.disabled = False
+            
+            # Unpack result
+            if isinstance(result, str) and result.startswith("ERROR:"):
+                 data_export = None
+                 error_msg = result
+            elif isinstance(result, tuple):
+                 data_export, error_msg = result
+            else:
+                 data_export = None
+                 error_msg = "Risultato imprevisto"
+
+            if error_msg:
+                print(f"[ERROR] Export fallito: {error_msg}")
+                if hasattr(self.controller, 'show_snack_bar'):
+                    self.controller.show_snack_bar(f"Errore export: {error_msg}", AppColors.ERROR)
+            
+            elif data_export:
+                import json
+                try:
+                    # Serialize to JSON
+                    json_str = json.dumps(data_export, indent=2, default=str)
+                    print(f"[DEBUG] Dati export pronti. Dimensione: {len(json_str)} chars")
+                    
+                    # Store data
+                    self.temp_export_data = json_str
+                    
+                    # Filename
+                    import datetime
+                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    filename = f"budget_amico_backup_{timestamp}.json"
+                    
+                    print(f"[DEBUG] Apro dialog salvataggio (Global Picker)...")
+                    
+                    # Usa il picker globale del controller
+                    picker = self.controller.file_picker_salva_excel
+                    
+                    # Ensure in overlay
+                    if picker not in self.page.overlay:
+                        self.page.overlay.append(picker)
+                        self.page.update()
+                        
+                    # Setup callback
+                    picker.on_result = self._on_export_file_result
+                    
+                    # Save File - Simplest call possible
+                    picker.save_file(
+                        dialog_title="Salva Backup",
+                        file_name=filename,
+                    )
+                except Exception as e_json:
+                    print(f"[ERROR] Export Dialog Error: {e_json}")
+                    self.controller.show_error_dialog(f"Errore: {e_json}")
+
+            else:
+                 if hasattr(self.controller, 'show_snack_bar'):
+                    self.controller.show_snack_bar("Nessun dato da esportare.", AppColors.ERROR)
+            
+            if self.page: self.page.update()
+
+        # Run async
+        task = AsyncTask(target=_generate_export, callback=_on_export_ready)
+        task.start()
 
     def build_tabs(self):
         loc = self.controller.loc
@@ -575,22 +672,171 @@ class AdminTab(ft.Container):
         task.start()
 
     def _esporta_dati_cliccato(self, e):
-        # Placeholder for export
+        # 1. Disable button and show loading
+        btn = e.control
+        # Store original handler/style to restore later if needed
+        if not hasattr(self, '_original_export_btn_data'):
+            self._original_export_btn_data = {
+                'text': btn.text,
+                'icon': btn.icon,
+                'on_click': btn.on_click,
+                'bgcolor': btn.bgcolor
+            }
+            
+        btn.text = "Generazione Backup..."
+        btn.icon = ft.Icons.HOURGLASS_EMPTY
+        btn.disabled = True
+        if self.page: self.page.update()
+
         famiglia_id = self.controller.get_family_id()
         master_key = self.controller.page.session.get("master_key")
         user_id = self.controller.get_user_id()
         
-        try:
-            data = esporta_dati_famiglia(famiglia_id, user_id, master_key)
-            if data:
-                 if hasattr(self.controller, 'show_snack_bar'):
-                    self.controller.show_snack_bar("Esportazione riuscita (Salvataggio file non implementato).", AppColors.SUCCESS)
+        print("[DEBUG] Inizio export dati...")
+
+        def _generate_export():
+            try:
+                # Esegue export sincrono in background
+                return esporta_dati_famiglia(famiglia_id, user_id, master_key)
+            except Exception as ex:
+                return f"ERROR: {str(ex)}"
+
+        def _on_export_ready(result):
+            # Unpack result
+            data_export = None
+            error_msg = None
+            
+            if isinstance(result, str) and result.startswith("ERROR:"):
+                 error_msg = result
+            elif isinstance(result, tuple):
+                 data_export, error_msg = result
             else:
+                 error_msg = "Risultato imprevisto"
+
+            if error_msg:
+                # Restore original state on error
+                self._ripristina_bottone_export(btn)
+                print(f"[ERROR] Export fallito: {error_msg}")
+                if hasattr(self.controller, 'show_snack_bar'):
+                    self.controller.show_snack_bar(f"Errore export: {error_msg}", AppColors.ERROR)
+            
+            elif data_export:
+                import json
+                try:
+                    # Serialize to JSON string then bytes
+                    json_str = json.dumps(data_export, indent=2, default=str)
+                    json_bytes = json_str.encode('utf-8')
+                    print(f"[DEBUG] Dati export pronti. Dimensione: {len(json_bytes)} bytes")
+                    
+                    # Store data in SESSION
+                    self.controller.page.session.set("excel_export_data", json_bytes)
+                    
+                    # Transform button to "SAVE" button
+                    btn.text = "💾 Salva Backup"
+                    btn.icon = ft.Icons.SAVE_ALT
+                    btn.disabled = False
+                    btn.bgcolor = "green"
+                    btn.on_click = self._apri_dialog_salvataggio # New Handler
+                    
+                    self.controller.show_snack_bar("Backup generato! Clicca su 'Salva Backup' per scaricarlo.", AppColors.SUCCESS)
+
+                except Exception as e_json:
+                    self._ripristina_bottone_export(btn)
+                    print(f"[ERROR] Serialization Error: {e_json}")
+                    self.controller.show_error_dialog(f"Errore: {e_json}")
+
+            else:
+                 self._ripristina_bottone_export(btn)
                  if hasattr(self.controller, 'show_snack_bar'):
                     self.controller.show_snack_bar("Nessun dato da esportare.", AppColors.ERROR)
+            
+            if self.page: self.page.update()
+
+        # Run async
+        task = AsyncTask(target=_generate_export, callback=_on_export_ready)
+        task.start()
+
+    def _ripristina_bottone_export(self, btn):
+        if hasattr(self, '_original_export_btn_data'):
+            orig = self._original_export_btn_data
+            btn.text = orig['text']
+            btn.icon = orig['icon']
+            btn.on_click = orig['on_click']
+            btn.bgcolor = orig['bgcolor']
+            btn.disabled = False
+
+    def _apri_dialog_salvataggio(self, e):
+        """
+        Handler for the 'Save' button click.
+        FALLBACK: Dato che il FilePicker sta dando problemi, salviamo direttamente 
+        nella cartella Documenti dell'utente e apriamo la cartella.
+        """
+        print("[DEBUG] Direct Save Mode activated.")
+        
+        try:
+            # 1. Recupera dati dalla sessione
+            file_data = self.controller.page.session.get("excel_export_data")
+            if not file_data:
+                self.controller.show_snack_bar("Dati export non trovati!", AppColors.ERROR)
+                return
+
+            # 2. Costruisci percorso destinazione
+            import os
+            from pathlib import Path
+            
+            # Percorso: User/Downloads
+            docs_dir = Path.home() / "Downloads"
+            # os.makedirs(docs_dir, exist_ok=True) # Downloads esiste sempre, o quasi
+            
+            # Filename
+            import datetime
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"budget_amico_backup_{timestamp}.json"
+            full_path = docs_dir / filename
+            
+            # 3. Scrivi il file
+            with open(full_path, "wb") as f:
+                f.write(file_data)
+            
+            print(f"[DEBUG] File salvato correttamente in: {full_path}")
+            
+            # 4. Notifica e apri cartella
+            self.controller.show_snack_bar(f"Backup salvato in Download", AppColors.SUCCESS)
+            
+            # Apri la cartella (Solo Windows)
+            import platform
+            if platform.system() == "Windows":
+                os.startfile(docs_dir)
+            
+            # Clean session
+            self.controller.page.session.remove("excel_export_data")
+            
+            # Disable button again
+            e.control.disabled = True
+            e.control.text = "Salvato!"
+            e.control.bgcolor = "grey"
+            e.control.update()
+            
         except Exception as ex:
-             if hasattr(self.controller, 'show_snack_bar'):
-                self.controller.show_snack_bar(f"Errore esportazione: {ex}", AppColors.ERROR)
+            print(f"[ERROR] Direct Save failed: {ex}")
+            self.controller.show_error_dialog(f"Errore salvataggio diretto: {ex}")
+
+
+    def _on_export_file_result(self, e: ft.FilePickerResultEvent):
+        print(f"[DEBUG] _on_export_file_result: path={e.path}")
+        if e.path:
+            try:
+                with open(e.path, 'w', encoding='utf-8') as f:
+                    f.write(self.temp_export_data)
+                
+                self.controller.show_snack_bar(f"Backup salvato in: {e.path}", AppColors.SUCCESS)
+            except Exception as ex:
+                self.controller.show_snack_bar(f"Errore durante il salvataggio del file: {ex}", AppColors.ERROR)
+            finally:
+                self.temp_export_data = None
+        else:
+            # Create a clean up even if cancelled to free memory
+            self.temp_export_data = None
 
     def rimuovi_membro_cliccato(self, e):
         # When called via partial(request_delete, e), e is the control event

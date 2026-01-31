@@ -52,7 +52,7 @@ class TabCarte(ft.Container):
                 expand=1,
                 runs_count=5,
                 max_extent=400, # Increased for better fit
-                child_aspect_ratio=1.4,
+                child_aspect_ratio=1.0,
                 spacing=10,
                 run_spacing=10,
             )
@@ -119,7 +119,7 @@ class TabCarte(ft.Container):
         ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER)
         
         content_col = [
-            ft.Container(content=header_row, padding=5),
+            ft.Container(content=header_row, padding=0),
             ft.Divider(color=ft.Colors.WHITE24, height=1)
         ]
         
@@ -136,27 +136,27 @@ class TabCarte(ft.Container):
             
             # Subtitle/Extra Info differs by type
             if is_credit:
-                extra_info = f"Addebito il giorno: {card_data.get('giorno_addebito', '-')}"
+                extra_info = f"Addebito: {card_data.get('giorno_addebito', '-')}"
             else:
                 extra_info = "Addebito immediato"
 
             spending_info.extend([
-                AppStyles.small_text(f"Speso questo mese: € {speso:.2f} / € {massimale:.2f}", color=ft.Colors.WHITE),
+                AppStyles.small_text(f"Speso: € {speso:.2f} / € {massimale:.2f}", color=ft.Colors.WHITE),
                 ft.ProgressBar(value=percent, color=ft.Colors.ORANGE if percent > 0.8 else ft.Colors.GREEN, bgcolor=ft.Colors.WHITE24),
                 AppStyles.small_text(extra_info, color=ft.Colors.WHITE70)
             ])
         else:
             # No limit set
             if is_credit:
-                 spending_info.append(AppStyles.small_text("Nessun massimale impostato", color=ft.Colors.WHITE70))
+                 spending_info.append(AppStyles.small_text("Nessun massimale", color=ft.Colors.WHITE70))
             else:
                   # Debit without limit - just show spending
                   spending_info.extend([
-                     AppStyles.small_text(f"Speso questo mese: € {speso:.2f}", color=ft.Colors.WHITE),
+                     AppStyles.small_text(f"Speso: € {speso:.2f}", color=ft.Colors.WHITE),
                      AppStyles.small_text("Addebito immediato", color=ft.Colors.WHITE70)
                   ])
         
-        content_col.append(ft.Container(padding=10, content=ft.Column(spending_info)))
+        content_col.append(ft.Container(padding=5, content=ft.Column(spending_info, spacing=2)))
 
         # Azioni Modifica/Elimina
         actions_row = ft.Row([
@@ -165,14 +165,14 @@ class TabCarte(ft.Container):
                 ft.IconButton(icon=ft.Icons.LIST_ALT, icon_color=ft.Colors.WHITE, tooltip="Lista Movimenti", on_click=lambda e: self._open_transactions_dialog(card_data)),
                 ft.IconButton(icon=ft.Icons.EDIT, icon_color=ft.Colors.WHITE, tooltip="Modifica", on_click=lambda e: self._open_edit_dialog(card_data)),
                 ft.IconButton(icon=ft.Icons.DELETE, icon_color=ft.Colors.WHITE, tooltip="Elimina", on_click=lambda e: self._delete_card(card_data['id_carta']))
-            ])
+            ], spacing=0)
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
         
-        content_col.append(ft.Container(padding=10, content=actions_row))
+        content_col.append(ft.Container(padding=0, content=actions_row))
 
         return ft.Card(
             content=ft.Container(
-                content=ft.Column(content_col, spacing=5),
+                content=ft.Column(content_col, spacing=2, alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 padding=10,
                 bgcolor=bg_color,
                 border_radius=10, # Card radius

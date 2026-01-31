@@ -47,7 +47,7 @@ class ContiTab(ft.Container):
             expand=1,
             runs_count=5,
             max_extent=400,
-            child_aspect_ratio=1.4,
+            child_aspect_ratio=1.0,
             spacing=10,
             run_spacing=10,
         )
@@ -237,16 +237,7 @@ class ContiTab(ft.Container):
             ], spacing=0)
         )
         
-        # Progress/Breakdown if PBs exist
-        if pb_risparmio > 0:
-            perc_savings = pb_risparmio / total_worth if total_worth > 0 else 0
-            content_col.append(ft.Container(height=5))
-            content_col.append(
-                ft.Row([
-                   ft.Icon(ft.Icons.SAVINGS, size=12, color=ft.Colors.AMBER_200),
-                   AppStyles.small_text(f"Risparmio: € {pb_risparmio:,.2f}", color=ft.Colors.AMBER_200)
-                ], spacing=5)
-            )
+        # removed inline progress/breakdown to save space
 
         # Actions Section (Bottom)
         actions = []
@@ -274,13 +265,50 @@ class ContiTab(ft.Container):
 
         # Piggy Bank create
         if not is_investimento and not is_fondo:
+             # Menù salvadanai
+             menu_items = []
+             menu_items.append(ft.PopupMenuItem(content=ft.Text("Risparmi:", weight=ft.FontWeight.BOLD), disabled=True))
+             
+             if pb_risparmio > 0:
+                 for s in salvadanai_list:
+                     # Mostra solo i salvadanai di risparmio (non liquidità) che compongono la cifra risparmiata
+                     if not s.get('incide_su_liquidita', False):
+                        menu_items.append(
+                             ft.PopupMenuItem(
+                                 content=ft.Row([
+                                     ft.Icon(ft.Icons.SAVINGS, size=16, color=ft.Colors.AMBER),
+                                     ft.Text(f"{s['nome']}: € {s['importo']:,.2f}")
+                                 ], spacing=5)
+                             )
+                        )
+                 menu_items.append(ft.PopupMenuItem(content=ft.Divider(height=1), disabled=True))
+                 menu_items.append(
+                     ft.PopupMenuItem(
+                         content=ft.Row([
+                             ft.Icon(ft.Icons.MONETIZATION_ON, size=16, color=ft.Colors.GREEN),
+                             ft.Text(f"Totale: € {pb_risparmio:,.2f}", weight=ft.FontWeight.BOLD)
+                         ], spacing=5), disabled=True
+                     )
+                 )
+             else:
+                  menu_items.append(ft.PopupMenuItem(text="Nessun risparmio attivo", disabled=True))
+
+             menu_items.append(ft.PopupMenuItem(content=ft.Divider(height=1), disabled=True))
+             menu_items.append(
+                 ft.PopupMenuItem(
+                     text="Nuovo Salvadanaio",
+                     icon=ft.Icons.ADD,
+                     data=(id_conto, is_shared),
+                     on_click=self._apri_dialog_salvadanaio
+                 )
+             )
+
              actions.append(
-                ft.IconButton(
-                    icon=ft.Icons.SAVINGS, 
-                    tooltip="Crea Salvadanaio", 
-                    icon_color=ft.Colors.WHITE, 
-                    data=(id_conto, is_shared),
-                    on_click=self._apri_dialog_salvadanaio
+                ft.PopupMenuButton(
+                    icon=ft.Icons.SAVINGS,
+                    tooltip="Menu Salvadanai",
+                    icon_color=ft.Colors.WHITE,
+                    items=menu_items
                 )
              )
 

@@ -1,4 +1,4 @@
-# Budget Amico v0.42.04
+# Budget Amico v0.43.00
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -10,6 +10,14 @@
 ---
 
 ## 📅 Changelog
+### v0.43.00 (31/01/2026)
+- **Gestione Carte & Spese**:
+    - **Fix Conti Tecnici**: Risolto bug che manteneva visibile il conto "Saldo" delle carte eliminate nei menu a tendina.
+    - **Filtri Migliorati**:
+        - **Nuova Transazione**: Nascosti automaticamente i conti tecnici (Saldo carte), fondi pensione e investimenti dal menu di selezione conto.
+        - **Nuova Carta**: Il menu per collegare un conto di addebito ora mostra correttamente solo i Conti Correnti e di Risparmio (risolto problema di visualizzazione).
+        - **Giroconti**: Nascosti i conti tecnici delle carte anche dal menu di destinazione dei giroconti.
+
 ### v0.42.04 (30/01/2026)
 - **Miglioramenti UI**:
     - **Date Picker Esteso**: Ampliato il range di date selezionabili (1980-2050) per permettere l'inserimento di mutui e prestiti storici.

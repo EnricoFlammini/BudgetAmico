@@ -30,8 +30,8 @@ class ContattiTab(ft.Container):
         self.main_view = ft.Column([
             ft.Row([
                 AppStyles.title_text("Rubrica Contatti"),
-                self.fab_add
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                # self.fab_add # RIMOSSO pulsante ridondante
+            ], alignment=ft.MainAxisAlignment.START),
             AppStyles.page_divider(),
             self.grid_contatti
         ], expand=True)

@@ -109,8 +109,8 @@ class StoricoAssetSubTab(ft.Container):
                     self.periodo_dropdown,
                     self.btn_genera,
                     self.btn_aggiorna,
-                ], spacing=10)
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ], spacing=10, wrap=True)
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, wrap=True, run_spacing=10),
             
             ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
             
@@ -138,7 +138,7 @@ class StoricoAssetSubTab(ft.Container):
                     ft.Container(
                         content=self.grafico_container,
                         # expand=True, <-- Removed expand, controlled by Column
-                        height=500, # Give it a height so Image fit works well
+                        # height=500, <-- REMOVED fixed height to allow auto-sizing
                         border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
                         border_radius=8,
                         padding=10

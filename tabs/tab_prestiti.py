@@ -119,13 +119,7 @@ class PrestitiTab(ft.Container):
         loc = self.controller.loc
         return ft.Row([
             AppStyles.title_text(loc.get("loans_management")),
-            ft.IconButton(
-                icon=ft.Icons.ADD,
-                tooltip=loc.get("add_loan"),
-                icon_color=AppColors.PRIMARY,
-                on_click=lambda e: self.controller.prestito_dialogs.apri_dialog_prestito()
-            )
-        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+        ], alignment=ft.MainAxisAlignment.START)
 
     def build_controls(self):
         """Costruisce e restituisce la lista di controlli per la scheda."""

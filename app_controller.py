@@ -40,7 +40,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 MAX_RECENT_FILES = 5
-VERSION = "0.42.04"
+VERSION = "0.43.00"
 
 
 class AppController:
@@ -171,8 +171,35 @@ class AppController:
         try:
             file_data = self.page.session.get("excel_export_data")
             if e.path and file_data:
-                with open(e.path, "wb") as f: f.write(file_data)
-                self.show_snack_bar(f"File salvato in: {e.path}", success=True)
+                # Gestione specifica per WEB vs DESKTOP
+                if self.page.web:
+                    # Su Web, salviamo in una cartella temporanea pubblica 'assets/tmp'
+                    # e scateniamo il download tramite browser
+                    import pathlib
+                    
+                    # Assicurati che esista la cartella assets/tmp
+                    # Nota: 'assets' deve essere configurato in ft.app(assets_dir="assets")
+                    base_path = os.getcwd() # O determina il path in modo più robusto
+                    assets_tmp_dir = os.path.join(base_path, "assets", "tmp")
+                    os.makedirs(assets_tmp_dir, exist_ok=True)
+                    
+                    filename = os.path.basename(e.path)
+                    target_path = os.path.join(assets_tmp_dir, filename)
+                    
+                    with open(target_path, "wb") as f: 
+                        f.write(file_data)
+                    
+                    logger.info(f"[WEB] File salvato in tmp per download: {target_path}")
+                    
+                    # Lancia il download aprendo l'URL relativo
+                    self.page.launch_url(f"/tmp/{filename}")
+                    self.show_snack_bar("Download avviato!", success=True)
+                else:
+                    # Desktop: salva direttamente nel percorso locale scelto
+                    with open(e.path, "wb") as f: 
+                        f.write(file_data)
+                    self.show_snack_bar(f"File salvato in: {e.path}", success=True)
+                
                 self.page.session.remove("excel_export_data")
             else:
                 self.show_snack_bar("Salvataggio annullato.", success=False)
@@ -384,14 +411,15 @@ class AppController:
     
     def _mostra_banner_aggiornamento(self, update_info):
         """Mostra un banner nella dashboard per l'aggiornamento disponibile."""
-        import webbrowser
+        # import webbrowser # NO MORE WEBBROWSER ON WEB
         
         version = update_info.get('version', 'Nuova versione')
         download_url = update_info.get('download_url') or update_info.get('html_url')
         
         def _on_scarica(e):
             if download_url:
-                webbrowser.open(download_url)
+                # Su Web usiamo launch_url, su Desktop anche (funziona uguale)
+                self.page.launch_url(download_url)
                 self.show_snack_bar("Apertura pagina download...", success=True)
         
         def _on_ignora(e):
@@ -502,14 +530,33 @@ class AppController:
             
             if found_path:
                 logger.info(f"Apertura manuale: {found_path}")
-                # Apri con l'applicazione predefinita
-                if sys.platform == 'win32':
-                    os.startfile(found_path)
-                elif sys.platform == 'darwin':  # macOS
-                    subprocess.run(['open', found_path])
-                else:  # Linux
-                    subprocess.run(['xdg-open', found_path])
-                self.show_snack_bar(f"Apertura {found_filename}...", success=True)
+                
+                if self.page.web:
+                     # Web Logic
+                    try:
+                        base_path = os.getcwd()
+                        assets_tmp_dir = os.path.join(base_path, "assets", "tmp")
+                        os.makedirs(assets_tmp_dir, exist_ok=True)
+                        
+                        filename = os.path.basename(found_path)
+                        target_path = os.path.join(assets_tmp_dir, filename)
+                        
+                        shutil.copy(found_path, target_path)
+                        self.page.launch_url(f"/tmp/{filename}")
+                        self.show_snack_bar(f"Apertura {found_filename}...", success=True)
+                    except Exception as e:
+                        logger.error(f"Errore apertura manuale web: {e}")
+                        self.show_snack_bar(f"Errore apertura manuale: {e}", success=False)
+                else:
+                    # Desktop Logic
+                    # Apri con l'applicazione predefinita
+                    if sys.platform == 'win32':
+                        os.startfile(found_path)
+                    elif sys.platform == 'darwin':  # macOS
+                        subprocess.run(['open', found_path])
+                    else:  # Linux
+                        subprocess.run(['xdg-open', found_path])
+                    self.show_snack_bar(f"Apertura {found_filename}...", success=True)
             else:
                 self.show_snack_bar("Manuale non trovato. Verifica l'installazione.", success=False)
                 logger.warning(f"Manuale non trovato: {basename}")
@@ -518,9 +565,9 @@ class AppController:
             self.show_snack_bar(f"Errore apertura manuale: {ex}", success=False)
 
     def _apri_link(self, url):
-        import webbrowser
+        # import webbrowser # NO MORE WEBBROWSER ON WEB
         try:
-            webbrowser.open(url)
+            self.page.launch_url(url)
             self.show_snack_bar(f"Apertura link...", success=True)
         except Exception as e:
             logger.error(f"Errore apertura link {url}: {e}")

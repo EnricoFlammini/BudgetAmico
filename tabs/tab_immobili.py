@@ -123,13 +123,7 @@ class ImmobiliTab(ft.Container):
             header_controls = [
                 ft.Row([
                     AppStyles.title_text(self.controller.loc.get("properties_management")),
-                    ft.IconButton(
-                        icon=ft.Icons.ADD_HOME,
-                        tooltip=self.controller.loc.get("add_property"),
-                        icon_color=AppColors.PRIMARY,
-                        on_click=lambda e: self.controller.immobile_dialog.apri_dialog_immobile()
-                    )
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ], alignment=ft.MainAxisAlignment.START),
                 AppStyles.page_divider(),
             ]
             new_controls.extend(header_controls)

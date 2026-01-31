@@ -8774,20 +8774,58 @@ def modifica_carta(id_carta, nome_carta=None, tipo_carta=None, circuito=None,
 
 def elimina_carta(id_carta, soft_delete=True):
     """
-    Elimina una carta (soft delete di default per preservare storico).
+    Elimina una carta (soft delete di default per preservare storico)
+    e nasconde i conti contabili associati (Saldo Carta).
     """
     try:
         with get_db_connection() as con:
             cur = con.cursor()
+            
+            # 1. Recupera i conti contabili associati PRIMA di modificare la carta
+            cur.execute("SELECT id_conto_contabile, id_conto_contabile_condiviso FROM Carte WHERE id_carta = %s", (id_carta,))
+            row = cur.fetchone()
+            conti_da_nascondere = []
+            if row:
+                if row['id_conto_contabile']: conti_da_nascondere.append(row['id_conto_contabile'])
+                if row['id_conto_contabile_condiviso']: conti_da_nascondere.append(row['id_conto_contabile_condiviso'])
+            
+            # 2. Esegui eliminazione/soft-delete carta
             if soft_delete:
                 cur.execute("UPDATE Carte SET attiva = FALSE WHERE id_carta = %s", (id_carta,))
             else:
                 cur.execute("DELETE FROM Carte WHERE id_carta = %s", (id_carta,))
+            
+            # 3. Nascondi i conti associati
+            if conti_da_nascondere:
+                # Usa ANY(%s) per passare una lista in Postgres/Psycopg2
+                cur.execute("UPDATE Conti SET nascosto = TRUE WHERE id_conto = ANY(%s)", (conti_da_nascondere,))
+                
+            con.commit()
+            return True
             con.commit()
             return True
     except Exception as e:
         print(f"[ERRORE] Errore eliminazione carta: {e}")
         return False
+
+def ottieni_ids_conti_tecnici_carte(id_utente):
+    """
+    Recupera gli ID dei conti tecnici (saldo) associati a TUTTE le carte dell'utente (anche eliminate/inactive).
+    Utile per filtrare questi conti dalle liste di selezione.
+    """
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT id_conto_contabile, id_conto_contabile_condiviso FROM Carte WHERE id_utente = %s", (id_utente,))
+            rows = cur.fetchall()
+            ids = set()
+            for r in rows:
+                if r['id_conto_contabile']: ids.add(r['id_conto_contabile'])
+                if r['id_conto_contabile_condiviso']: ids.add(r['id_conto_contabile_condiviso'])
+            return ids
+    except Exception as e:
+        print(f"[ERRORE] Errore recupero ids conti tecnici carte: {e}")
+        return set()
 
 
 def calcola_totale_speso_carta(id_carta: int, mese: int, anno: int) -> float:

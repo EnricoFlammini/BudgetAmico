@@ -62,8 +62,8 @@ class WebAppController(AppController):
             last_date=datetime.datetime(2030, 12, 31),
             value=datetime.datetime.now()
         )
-        # We don't really need file pickers for web mobile usually, but keep for compatibility if needed
-        # self.file_picker_salva_excel = ... 
+        self.file_picker_salva_excel = ft.FilePicker()
+        self.file_picker = ft.FilePicker() # Generic file picker just in case 
 
         self.confirm_delete_dialog = ft.AlertDialog(
             modal=True, title=ft.Text("Conferma Eliminazione"),
@@ -93,6 +93,8 @@ class WebAppController(AppController):
             self.portafoglio_dialogs.dialog_operazione_asset,
             self.portafoglio_dialogs.dialog_aggiorna_prezzo,
             self.portafoglio_dialogs.dialog_modifica_asset,
+            self.file_picker,
+            self.file_picker_salva_excel,
             # self.loading_overlay is dynamic
         ])
 

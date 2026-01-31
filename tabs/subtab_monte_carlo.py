@@ -42,7 +42,7 @@ class MonteCarloSubTab(ft.Container):
         self.txt_sim = ft.Text("1000 Simulazioni", weight=ft.FontWeight.BOLD)
         
         # 2. Lista Asset & Ricerca
-        self.asset_list_col = ft.Column(scroll=ft.ScrollMode.AUTO, height=200, spacing=5)
+        self.asset_list_col = ft.Column(scroll=ft.ScrollMode.AUTO, spacing=5)
         self.txt_valore_simulato = ft.Text("Valore Iniziale: € 0,00", size=14, weight=ft.FontWeight.BOLD, color=AppColors.PRIMARY)
 
         # Search Field per aggiungere Asset
@@ -77,7 +77,7 @@ class MonteCarloSubTab(ft.Container):
                 ft.Icon(ft.Icons.INSIGHTS, size=48, color=ft.Colors.GREY_400),
                 ft.Text("Premi 'Avvia Simulazione' per vedere la proiezione", color=ft.Colors.GREY_500)
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
-            expand=True,
+            # expand=True,  <-- REMOVED to prevent gray box
             bgcolor=ft.Colors.WHITE,
             border_radius=10,
             padding=10,
@@ -108,7 +108,7 @@ class MonteCarloSubTab(ft.Container):
             bgcolor=ft.Colors.WHITE,
             border=ft.border.all(1, color),
             border_radius=8,
-            expand=True
+            # expand=True   <-- REMOVED to work better in ResponsiveRow
         )
 
     def _build_ui(self):
@@ -151,20 +151,19 @@ class MonteCarloSubTab(ft.Container):
         config_container = AppStyles.card_container(
             content=config_content,
             padding=20,
-            # width=380  <-- Removed fixed width
         )
         
-        # Right Results Panel
-        results_row = ft.Row([
-            self.card_pessimistic,
-            self.card_expected,
-            self.card_optimistic
-        ], spacing=10, wrap=True) # Wrap cards if needed
+        # Right Results Panel - Use ResponsiveRow for better stacking
+        results_row = ft.ResponsiveRow([
+            ft.Column([self.card_pessimistic], col={"xs": 12, "sm": 4}),
+            ft.Column([self.card_expected], col={"xs": 12, "sm": 4}),
+            ft.Column([self.card_optimistic], col={"xs": 12, "sm": 4}),
+        ])
         
         right_col = ft.Column([
             ft.Container(
                 content=self.chart_container,
-                height=500 # Fixed height for chart
+                # height=500 # Fixed height removed for responsiveness
             ),
             results_row,
             ft.Container(content=self.txt_info_storico, alignment=ft.Alignment(1, 0))
@@ -564,7 +563,9 @@ class MonteCarloSubTab(ft.Container):
             
             # Chart
             img_base64 = self._generrate_chart_image(results)
-            self.chart_container.content = ft.Image(src_base64=img_base64, fit=ft.ImageFit.CONTAIN, expand=True)
+            # Use aspect ratio matching figsize (10/6 ~= 1.66) to ensure correct height calculation
+            self.chart_container.content = ft.Image(src_base64=img_base64, fit=ft.ImageFit.CONTAIN, aspect_ratio=1.66)
+            
             
         if self.page: self.page.update()
 
