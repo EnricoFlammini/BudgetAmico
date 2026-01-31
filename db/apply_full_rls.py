@@ -36,9 +36,22 @@ def apply_rls():
         conn.autocommit = True
         cur = conn.cursor()
         
-        print("Applying Optimized RLS policies...")
+        print("Applying Optimized RLS policies (v2)...")
+        
+        # 1. Helper Function: auth_uid()
+        # This function wraps current_setting and is marked STABLE to allow optimization (InitPlan)
+        print("- Function: auth_uid")
+        cur.execute("""
+        CREATE OR REPLACE FUNCTION auth_uid()
+        RETURNS INTEGER AS $$
+        BEGIN
+            RETURN current_setting('app.current_user_id', true)::INTEGER;
+        END;
+        $$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '';
+        """)
 
-        # 1. Helper Function
+        # 2. Helper Function: get_current_user_family_id()
+        # Updated to use auth_uid() and marked STABLE
         print("- Function: get_current_user_family_id")
         cur.execute("""
         CREATE OR REPLACE FUNCTION get_current_user_family_id()
@@ -47,14 +60,14 @@ def apply_rls():
             RETURN (
                 SELECT id_famiglia 
                 FROM public.Appartenenza_Famiglia 
-                WHERE id_utente = (select current_setting('app.current_user_id', true)::INTEGER)
+                WHERE id_utente = auth_uid()
                 LIMIT 1
             );
         END;
-        $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
+        $$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '';
         """)
 
-        # 2. Enable RLS on ALL tables
+        # 3. Enable RLS on ALL tables
         tables = [
             "Famiglie", "Utenti", "Appartenenza_Famiglia", "Inviti",
             "Conti", "ContiCondivisi", "PartecipazioneContoCondiviso",
@@ -75,9 +88,8 @@ def apply_rls():
             except Exception as e:
                 print(f"  Warning enabling RLS on {table}: {e}")
 
-        # 3. Apply Policies (ALL policies dropped first to avoid conflicts)
-        # Optimized with (select current_setting...) and consolidated/split policies
-
+        # 4. Apply Policies (using auth_uid() and helper functions)
+        
         # InfoDB
         cur.execute("""
             DROP POLICY IF EXISTS "Everyone can read InfoDB" ON InfoDB;
@@ -87,23 +99,23 @@ def apply_rls():
         # Utenti
         cur.execute("""
             DROP POLICY IF EXISTS "Users can view own profile" ON Utenti;
-            CREATE POLICY "Users can view own profile" ON Utenti FOR SELECT USING (id_utente = (select current_setting('app.current_user_id', true)::INTEGER));
+            CREATE POLICY "Users can view own profile" ON Utenti FOR SELECT USING (id_utente = auth_uid());
             DROP POLICY IF EXISTS "Users can update own profile" ON Utenti;
-            CREATE POLICY "Users can update own profile" ON Utenti FOR UPDATE USING (id_utente = (select current_setting('app.current_user_id', true)::INTEGER));
+            CREATE POLICY "Users can update own profile" ON Utenti FOR UPDATE USING (id_utente = auth_uid());
         """)
 
         # Famiglie
         cur.execute("""
             DROP POLICY IF EXISTS "Users can view own family" ON Famiglie;
-            CREATE POLICY "Users can view own family" ON Famiglie FOR SELECT USING (id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = (select current_setting('app.current_user_id', true)::INTEGER)));
+            CREATE POLICY "Users can view own family" ON Famiglie FOR SELECT USING (id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = auth_uid()));
         """)
 
         # Appartenenza_Famiglia
         cur.execute("""
             DROP POLICY IF EXISTS "Users can view own memberships" ON Appartenenza_Famiglia;
             CREATE POLICY "Users can view own memberships" ON Appartenenza_Famiglia FOR SELECT USING (
-                id_utente = (select current_setting('app.current_user_id', true)::INTEGER) OR
-                id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = (select current_setting('app.current_user_id', true)::INTEGER))
+                id_utente = auth_uid() OR
+                id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = auth_uid())
             );
         """)
         
@@ -111,24 +123,24 @@ def apply_rls():
         cur.execute("""
             DROP POLICY IF EXISTS "Users can view own invitations" ON Inviti;
             CREATE POLICY "Users can view own invitations" ON Inviti FOR SELECT USING (
-                email_invitato = (SELECT email FROM Utenti WHERE id_utente = (select current_setting('app.current_user_id', true)::INTEGER)) OR
-                id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = (select current_setting('app.current_user_id', true)::INTEGER))
+                email_invitato = (SELECT email FROM Utenti WHERE id_utente = auth_uid()) OR
+                id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = auth_uid())
             );
         """)
 
         # Conti
         cur.execute("""
             DROP POLICY IF EXISTS "Users can view own accounts" ON Conti;
-            CREATE POLICY "Users can view own accounts" ON Conti FOR SELECT USING (id_utente = (select current_setting('app.current_user_id', true)::INTEGER));
+            CREATE POLICY "Users can view own accounts" ON Conti FOR SELECT USING (id_utente = auth_uid());
             
             DROP POLICY IF EXISTS "Users can create own accounts" ON Conti;
-            CREATE POLICY "Users can create own accounts" ON Conti FOR INSERT WITH CHECK (id_utente = (select current_setting('app.current_user_id', true)::INTEGER));
+            CREATE POLICY "Users can create own accounts" ON Conti FOR INSERT WITH CHECK (id_utente = auth_uid());
             
             DROP POLICY IF EXISTS "Users can update own accounts" ON Conti;
-            CREATE POLICY "Users can update own accounts" ON Conti FOR UPDATE USING (id_utente = (select current_setting('app.current_user_id', true)::INTEGER));
+            CREATE POLICY "Users can update own accounts" ON Conti FOR UPDATE USING (id_utente = auth_uid());
             
             DROP POLICY IF EXISTS "Users can delete own accounts" ON Conti;
-            CREATE POLICY "Users can delete own accounts" ON Conti FOR DELETE USING (id_utente = (select current_setting('app.current_user_id', true)::INTEGER));
+            CREATE POLICY "Users can delete own accounts" ON Conti FOR DELETE USING (id_utente = auth_uid());
         """)
 
         # ContiCondivisi
@@ -139,13 +151,13 @@ def apply_rls():
             DROP POLICY IF EXISTS "Admins can create shared accounts" ON ContiCondivisi;
             CREATE POLICY "Admins can create shared accounts" ON ContiCondivisi FOR INSERT WITH CHECK (
                 id_famiglia = get_current_user_family_id() AND
-                EXISTS (SELECT 1 FROM Appartenenza_Famiglia WHERE id_utente = (select current_setting('app.current_user_id', true)::INTEGER) AND id_famiglia = get_current_user_family_id() AND ruolo = 'admin')
+                EXISTS (SELECT 1 FROM Appartenenza_Famiglia WHERE id_utente = auth_uid() AND id_famiglia = get_current_user_family_id() AND ruolo = 'admin')
             );
             
             DROP POLICY IF EXISTS "Admins can update shared accounts" ON ContiCondivisi;
             CREATE POLICY "Admins can update shared accounts" ON ContiCondivisi FOR UPDATE USING (
                 id_famiglia = get_current_user_family_id() AND
-                EXISTS (SELECT 1 FROM Appartenenza_Famiglia WHERE id_utente = (select current_setting('app.current_user_id', true)::INTEGER) AND id_famiglia = get_current_user_family_id() AND ruolo = 'admin')
+                EXISTS (SELECT 1 FROM Appartenenza_Famiglia WHERE id_utente = auth_uid() AND id_famiglia = get_current_user_family_id() AND ruolo = 'admin')
             );
         """)
         
@@ -157,29 +169,28 @@ def apply_rls():
             );
         """)
 
-        # Carte - Splitting ALL to avoid multiple permissive with SELECT if any
-        # Actually Carte has distinct policies for CRUD, no generic ALL.
+        # Carte
         cur.execute("""
             DROP POLICY IF EXISTS "Users can view own cards" ON Carte;
-            CREATE POLICY "Users can view own cards" ON Carte FOR SELECT USING (id_utente = (select current_setting('app.current_user_id', true)::INTEGER));
+            CREATE POLICY "Users can view own cards" ON Carte FOR SELECT USING (id_utente = auth_uid());
             
             DROP POLICY IF EXISTS "Users can create own cards" ON Carte;
-            CREATE POLICY "Users can create own cards" ON Carte FOR INSERT WITH CHECK (id_utente = (select current_setting('app.current_user_id', true)::INTEGER));
+            CREATE POLICY "Users can create own cards" ON Carte FOR INSERT WITH CHECK (id_utente = auth_uid());
             
             DROP POLICY IF EXISTS "Users can update own cards" ON Carte;
-            CREATE POLICY "Users can update own cards" ON Carte FOR UPDATE USING (id_utente = (select current_setting('app.current_user_id', true)::INTEGER));
+            CREATE POLICY "Users can update own cards" ON Carte FOR UPDATE USING (id_utente = auth_uid());
             
             DROP POLICY IF EXISTS "Users can delete own cards" ON Carte;
-            CREATE POLICY "Users can delete own cards" ON Carte FOR DELETE USING (id_utente = (select current_setting('app.current_user_id', true)::INTEGER));
+            CREATE POLICY "Users can delete own cards" ON Carte FOR DELETE USING (id_utente = auth_uid());
         """)
         
-        # StoricoMassimaliCarte - Consolidated into one ALL policy to avoid "Multiple Permissive"
+        # StoricoMassimaliCarte
         cur.execute("""
             DROP POLICY IF EXISTS "Users view card history" ON StoricoMassimaliCarte;
             DROP POLICY IF EXISTS "Users manage card history" ON StoricoMassimaliCarte;
             
             CREATE POLICY "Users manage card history" ON StoricoMassimaliCarte FOR ALL USING (
-                 id_carta IN (SELECT id_carta FROM Carte WHERE id_utente = (select current_setting('app.current_user_id', true)::INTEGER))
+                 id_carta IN (SELECT id_carta FROM Carte WHERE id_utente = auth_uid())
             );
         """)
 
@@ -192,13 +203,13 @@ def apply_rls():
             CREATE POLICY "Users view family subcategories" ON Sottocategorie FOR SELECT USING ((SELECT id_famiglia FROM Categorie WHERE id_categoria = Sottocategorie.id_categoria) = get_current_user_family_id());
         """)
 
-        # Transazioni - Consolidated into one ALL policy
+        # Transazioni
         cur.execute("""
             DROP POLICY IF EXISTS "Users view own transactions" ON Transazioni;
             DROP POLICY IF EXISTS "Users manage own transactions" ON Transazioni;
             
             CREATE POLICY "Users manage own transactions" ON Transazioni FOR ALL USING (
-                id_conto IN (SELECT id_conto FROM Conti WHERE id_utente = (select current_setting('app.current_user_id', true)::INTEGER))
+                id_conto IN (SELECT id_conto FROM Conti WHERE id_utente = auth_uid())
             );
         """)
         
@@ -211,15 +222,15 @@ def apply_rls():
             
             DROP POLICY IF EXISTS "Users create shared transactions" ON TransazioniCondivise;
             CREATE POLICY "Users create shared transactions" ON TransazioniCondivise FOR INSERT WITH CHECK (
-                id_utente_autore = (select current_setting('app.current_user_id', true)::INTEGER) AND
+                id_utente_autore = auth_uid() AND
                 id_conto_condiviso IN (SELECT id_conto_condiviso FROM ContiCondivisi WHERE id_famiglia = get_current_user_family_id())
             );
             
             DROP POLICY IF EXISTS "Users manage own shared transactions" ON TransazioniCondivise;
-            CREATE POLICY "Users manage own shared transactions" ON TransazioniCondivise FOR UPDATE USING (id_utente_autore = (select current_setting('app.current_user_id', true)::INTEGER));
+            CREATE POLICY "Users manage own shared transactions" ON TransazioniCondivise FOR UPDATE USING (id_utente_autore = auth_uid());
             
             DROP POLICY IF EXISTS "Users delete own shared transactions" ON TransazioniCondivise;
-            CREATE POLICY "Users delete own shared transactions" ON TransazioniCondivise FOR DELETE USING (id_utente_autore = (select current_setting('app.current_user_id', true)::INTEGER));
+            CREATE POLICY "Users delete own shared transactions" ON TransazioniCondivise FOR DELETE USING (id_utente_autore = auth_uid());
         """)
 
         # Budget
@@ -263,38 +274,44 @@ def apply_rls():
             );
         """)
 
-        # Contatti - Splitting ALL policy into INSERT, UPDATE, DELETE to avoid overlapping SELECT with "Users view contacts"
+        # Contatti
         cur.execute("""
             DROP POLICY IF EXISTS "Users view contacts" ON Contatti;
             CREATE POLICY "Users view contacts" ON Contatti FOR SELECT USING (
-                id_utente = (select current_setting('app.current_user_id', true)::INTEGER) OR
-                id_contatto IN (SELECT id_contatto FROM CondivisioneContatto WHERE id_utente = (select current_setting('app.current_user_id', true)::INTEGER))
+                id_utente = auth_uid() OR
+                id_contatto IN (SELECT id_contatto FROM CondivisioneContatto WHERE id_utente = auth_uid())
             );
             
             DROP POLICY IF EXISTS "Users manage own contacts" ON Contatti;
             -- Splitted policies
-            CREATE POLICY "Users insert own contacts" ON Contatti FOR INSERT WITH CHECK (id_utente = (select current_setting('app.current_user_id', true)::INTEGER));
-            CREATE POLICY "Users update own contacts" ON Contatti FOR UPDATE USING (id_utente = (select current_setting('app.current_user_id', true)::INTEGER));
-            CREATE POLICY "Users delete own contacts" ON Contatti FOR DELETE USING (id_utente = (select current_setting('app.current_user_id', true)::INTEGER));
+            DROP POLICY IF EXISTS "Users insert own contacts" ON Contatti;
+            CREATE POLICY "Users insert own contacts" ON Contatti FOR INSERT WITH CHECK (id_utente = auth_uid());
+            DROP POLICY IF EXISTS "Users update own contacts" ON Contatti;
+            CREATE POLICY "Users update own contacts" ON Contatti FOR UPDATE USING (id_utente = auth_uid());
+            DROP POLICY IF EXISTS "Users delete own contacts" ON Contatti;
+            CREATE POLICY "Users delete own contacts" ON Contatti FOR DELETE USING (id_utente = auth_uid());
         """)
         
-        # Condivisione Contatto - Splitting ALL policy
+        # Condivisione Contatto
         cur.execute("""
             DROP POLICY IF EXISTS "Users view shared contacts" ON CondivisioneContatto;
             CREATE POLICY "Users view shared contacts" ON CondivisioneContatto FOR SELECT USING (
-                id_contatto IN (SELECT id_contatto FROM Contatti WHERE id_utente = (select current_setting('app.current_user_id', true)::INTEGER)) OR
-                id_utente = (select current_setting('app.current_user_id', true)::INTEGER)
+                id_contatto IN (SELECT id_contatto FROM Contatti WHERE id_utente = auth_uid()) OR
+                id_utente = auth_uid()
             );
              DROP POLICY IF EXISTS "Users manage shared contacts" ON CondivisioneContatto;
              -- Splitted policies (Only the owner of the contact can manage sharing)
+            DROP POLICY IF EXISTS "Users insert sharing" ON CondivisioneContatto;
             CREATE POLICY "Users insert sharing" ON CondivisioneContatto FOR INSERT WITH CHECK (
-                 id_contatto IN (SELECT id_contatto FROM Contatti WHERE id_utente = (select current_setting('app.current_user_id', true)::INTEGER))
+                 id_contatto IN (SELECT id_contatto FROM Contatti WHERE id_utente = auth_uid())
             );
+            DROP POLICY IF EXISTS "Users update sharing" ON CondivisioneContatto;
             CREATE POLICY "Users update sharing" ON CondivisioneContatto FOR UPDATE USING (
-                 id_contatto IN (SELECT id_contatto FROM Contatti WHERE id_utente = (select current_setting('app.current_user_id', true)::INTEGER))
+                 id_contatto IN (SELECT id_contatto FROM Contatti WHERE id_utente = auth_uid())
             );
+            DROP POLICY IF EXISTS "Users delete sharing" ON CondivisioneContatto;
             CREATE POLICY "Users delete sharing" ON CondivisioneContatto FOR DELETE USING (
-                 id_contatto IN (SELECT id_contatto FROM Contatti WHERE id_utente = (select current_setting('app.current_user_id', true)::INTEGER))
+                 id_contatto IN (SELECT id_contatto FROM Contatti WHERE id_utente = auth_uid())
             );
         """)
 
