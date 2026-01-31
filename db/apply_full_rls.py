@@ -274,6 +274,65 @@ def apply_rls():
             );
         """)
 
+        # Asset / Storico Asset
+        cur.execute("""
+            DROP POLICY IF EXISTS "Users view own assets" ON Asset;
+            CREATE POLICY "Users view own assets" ON Asset FOR SELECT USING (
+                id_conto IN (SELECT id_conto FROM Conti WHERE id_utente = auth_uid())
+            );
+            DROP POLICY IF EXISTS "Users manage own assets" ON Asset;
+            CREATE POLICY "Users manage own assets" ON Asset FOR ALL USING (
+                id_conto IN (SELECT id_conto FROM Conti WHERE id_utente = auth_uid())
+            );
+            
+            DROP POLICY IF EXISTS "Users view asset history" ON Storico_Asset;
+            CREATE POLICY "Users view asset history" ON Storico_Asset FOR SELECT USING (
+                id_conto IN (SELECT id_conto FROM Conti WHERE id_utente = auth_uid())
+            );
+            DROP POLICY IF EXISTS "Users manage asset history" ON Storico_Asset;
+            CREATE POLICY "Users manage asset history" ON Storico_Asset FOR ALL USING (
+                id_conto IN (SELECT id_conto FROM Conti WHERE id_utente = auth_uid())
+            );
+        """)
+
+        # Storico Pagamenti Rate (Linked to Prestiti -> Family)
+        cur.execute("""
+            DROP POLICY IF EXISTS "Users view loan payments" ON StoricoPagamentiRate;
+            CREATE POLICY "Users view loan payments" ON StoricoPagamentiRate FOR SELECT USING (
+                id_prestito IN (SELECT id_prestito FROM Prestiti WHERE id_famiglia = get_current_user_family_id())
+            );
+        """)
+
+        # Configurazioni (Linked to Family)
+        cur.execute("""
+            DROP POLICY IF EXISTS "Users view family configs" ON Configurazioni;
+            CREATE POLICY "Users view family configs" ON Configurazioni FOR SELECT USING (id_famiglia = get_current_user_family_id());
+            DROP POLICY IF EXISTS "Admins manage family configs" ON Configurazioni;
+            CREATE POLICY "Admins manage family configs" ON Configurazioni FOR ALL USING (
+                 id_famiglia = get_current_user_family_id() AND
+                 EXISTS (SELECT 1 FROM Appartenenza_Famiglia WHERE id_utente = auth_uid() AND id_famiglia = get_current_user_family_id() AND ruolo = 'admin')
+            );
+        """)
+
+        # Log Sistema
+        cur.execute("""
+            DROP POLICY IF EXISTS "Users view own logs" ON Log_Sistema;
+            CREATE POLICY "Users view own logs" ON Log_Sistema FOR SELECT USING (
+                id_utente = auth_uid() OR
+                id_famiglia = get_current_user_family_id()
+            );
+            DROP POLICY IF EXISTS "Users insert logs" ON Log_Sistema;
+            CREATE POLICY "Users insert logs" ON Log_Sistema FOR INSERT WITH CHECK (
+                auth_uid() IS NOT NULL 
+            );
+        """)
+
+        # Config Logger (Read-only for authenticated)
+        cur.execute("""
+             DROP POLICY IF EXISTS "Users view logger config" ON Config_Logger;
+             CREATE POLICY "Users view logger config" ON Config_Logger FOR SELECT USING (auth_uid() IS NOT NULL);
+        """)
+
         # Contatti
         cur.execute("""
             DROP POLICY IF EXISTS "Users view contacts" ON Contatti;
