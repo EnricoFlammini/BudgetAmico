@@ -14,7 +14,8 @@ def audit_schema():
         'recovery_key_hash', 'encrypted_master_key_recovery', 
         'encrypted_master_key_backup', 'username_bindex', 
         'email_bindex', 'username_enc', 'email_enc', 
-        'nome_enc_server', 'cognome_enc_server'
+        'nome_enc_server', 'cognome_enc_server',
+        'failed_login_attempts', 'lockout_until', 'last_failed_login', 'sospeso'
     ]
     
     missing_cols = []
