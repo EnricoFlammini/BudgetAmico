@@ -29,20 +29,21 @@ def download_file_web(page: ft.Page, filename: str, content_bytes: bytes, mime_t
             page.run_js(js_code)
             return True
             
-        # Strategy 2: launch_url with javascript: scheme (Older Flet)
-        print(f"[DEBUG] [WEB] page.run_js not found. Trying javascript: URL...")
+        # Strategy 2: Direct Data URI Launch (Fallback for older Flet)
+        # We force 'application/octet-stream' to ensure the browser treats it as a download
+        # rather than trying to display it (which might be blocked or open in tab).
+        print(f"[DEBUG] [WEB] page.run_js not found. Fallback to direct Data URI launch...")
+        
+        # Re-encode with forced download mime type
+        forced_mime = "application/octet-stream"
+        data_uri_forced = f"data:{forced_mime};base64,{b64_data}"
+        
         try:
-             # Minify JS slightly for URL safety
-             js_url = f"javascript:{js_code.replace(chr(10), '').replace('  ', '')}"
-             page.launch_url(js_url)
+             page.launch_url(data_uri_forced)
              return True
-        except Exception as e_js:
-            print(f"[WARNING] [WEB] javascript: launch failed: {e_js}")
-
-        # Strategy 3: launch_url with Data URI (Fallback)
-        print(f"[DEBUG] [WEB] Fallback to direct Data URI launch...")
-        page.launch_url(data_uri)
-        return True
+        except Exception as e_launch:
+             print(f"[WARNING] [WEB] Data URI launch failed: {e_launch}")
+             return False
 
     except Exception as e:
         print(f"[ERROR] [WEB] Download failed: {e}")

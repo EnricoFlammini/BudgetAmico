@@ -1,4 +1,4 @@
-# Budget Amico v0.43.05
+# Budget Amico v0.43.06
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -10,6 +10,10 @@
 ---
 
 ## 📅 Changelog
+### v0.43.06 (31/01/2026)
+- **Fix Download Web (Fallback)**:
+    - **Affidabilità**: Rimosso un metodo di fallback (Javascript URL) che risultava inaffidabile su alcuni browser. Ora, se il metodo principale non è disponibile, il sistema forza il download diretto del file (Data URI Stream), garantendo che il file venga salvato correttamente nella cartella Download.
+
 ### v0.43.05 (31/01/2026)
 - **Fix Download Web**:
     - **Compatibilità**: Migliorato il sistema di download per supportare versioni precedenti delle librerie grafiche (Flet). Se `run_js` non è disponibile, il sistema tenta automaticamente metodi alternativi (`javascript:` URL o Data URI diretto).
