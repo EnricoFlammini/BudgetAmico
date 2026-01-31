@@ -768,8 +768,6 @@ class AdminTab(ft.Container):
     def _apri_dialog_salvataggio(self, e):
         """
         Handler for the 'Save' button click.
-        FALLBACK: Dato che il FilePicker sta dando problemi, salviamo direttamente 
-        nella cartella Documenti dell'utente e apriamo la cartella.
         """
         print("[DEBUG] Direct Save Mode activated.")
         
@@ -780,27 +778,26 @@ class AdminTab(ft.Container):
                 self.controller.show_snack_bar("Dati export non trovati!", AppColors.ERROR)
                 return
 
-            import os
             import datetime
-            
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"budget_amico_backup_{timestamp}.json"
 
             # 2. Gestione WEB vs DESKTOP
             if self.controller.page.web:
-                # WEB: Salva in assets/tmp e scarica
-                base_path = os.getcwd()
-                assets_tmp_dir = os.path.join(base_path, "assets", "tmp")
-                os.makedirs(assets_tmp_dir, exist_ok=True)
+                # WEB: Usa Data URI per evitare salvataggio su server (Privacy)
+                import base64
+                b64_data = base64.b64encode(file_data).decode('utf-8')
+                # Mime type for JSON
+                mime_type = "application/json"
                 
-                target_path = os.path.join(assets_tmp_dir, filename)
+                # Construct Data URI
+                data_uri = f"data:{mime_type};base64,{b64_data}"
                 
-                with open(target_path, "wb") as f:
-                    f.write(file_data)
+                print(f"[DEBUG] [WEB] Launching Client-Side Download via Data URI (Length: {len(data_uri)})")
                 
-                print(f"[DEBUG] [WEB] File saved to: {target_path}")
-                self.controller.page.launch_url(f"/tmp/{filename}")
-                self.controller.show_snack_bar("Download avviato!", AppColors.SUCCESS)
+                # Launch download
+                self.controller.page.launch_url(data_uri)
+                self.controller.show_snack_bar("Download avviato! Controlla i download del browser.", AppColors.SUCCESS)
                 
                 # Cleanup session
                 self.controller.page.session.remove("excel_export_data")
@@ -811,6 +808,7 @@ class AdminTab(ft.Container):
                 
             else:
                 # DESKTOP: Salva in Downloads
+                import os
                 from pathlib import Path
                 docs_dir = Path.home() / "Downloads"
                 os.makedirs(docs_dir, exist_ok=True) # Ensure it exists
@@ -838,7 +836,7 @@ class AdminTab(ft.Container):
                 self.page.update()
 
         except Exception as ex:
-            print(f"[ERROR] Direct Save failed: {ex}")
+            print(f"[ERROR] Save failed: {ex}")
             self.controller.show_error_dialog(f"Errore salvataggio: {ex}")
             
             print(f"[DEBUG] File salvato correttamente in: {full_path}")

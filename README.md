@@ -1,4 +1,4 @@
-# Budget Amico v0.43.02
+# Budget Amico v0.43.03
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -10,6 +10,10 @@
 ---
 
 ## 📅 Changelog
+### v0.43.03 (31/01/2026)
+- **Privacy & Download**:
+    - **Backup Serverless**: L'esportazione del backup sulla versione Web ora avviene interamente tramite Data URI, evitando qualsiasi salvataggio temporaneo del file sui dischi del server, per garantire la massima privacy e sicurezza.
+
 ### v0.43.02 (31/01/2026)
 - **HOTFIX Admin Web**:
     - **Gestione Categorie**: Risolto crash (`AttributeError`) che impediva l'apertura dei dialoghi di gestione categorie/sottocategorie sulla versione Web/Cloud.
