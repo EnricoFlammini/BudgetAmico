@@ -5,11 +5,16 @@
 <img width="500" height="500" alt="Budget Amico" src="https://github.com/user-attachments/assets/ed2e29d2-c8a4-4e95-82b0-c6b40e125179" />
 
 
-> Il tuo assistente personale per la gestione delle finanze familiari. Semplice, sicuro, multipiattaforma. in Python con framework Flet.
+> Il tuo assistente personale per la gestione delle finanze familiari. Semplice, sicuro, multipiattaforma. Web App in Python con framework Flet.
 
 ---
 
 ## 📅 Changelog
+### v0.43.07 (31/01/2026)
+- **Dismissione Desktop**:
+    - **Focus Web**: Il progetto è ora ufficialmente una **Web Application**. La versione desktop è stata dismessa per concentrare lo sviluppo sulla versatilità e accessibilità via browser.
+    - **Nuovo Entry Point**: L'esecuzione locale (`python main.py`) ora avvia direttamente l'interfaccia web nel browser predefinito.
+
 ### v0.43.06 (31/01/2026)
 - **Fix Download Web (Fallback)**:
     - **Affidabilità**: Rimosso un metodo di fallback (Javascript URL) che risultava inaffidabile su alcuni browser. Ora, se il metodo principale non è disponibile, il sistema forza il download diretto del file (Data URI Stream), garantendo che il file venga salvato correttamente nella cartella Download.
@@ -201,7 +206,7 @@
 - **Info**: Aggiunti link diretti alla Versione Web e al repository GitHub nel pannello Informazioni.
 
 ### v0.28.00 (30/12/2025)
-Budget Amico è un'applicazione cross-platform costruita con Python e Flet che ti aiuta a tenere traccia delle tue finanze, a monitorare le spese, a gestire i budget e a pianificare il tuo futuro finanziario, da solo o con la tua famiglia.
+Budget Amico è un'applicazione web costruita con Python e Flet che ti aiuta a tenere traccia delle tue finanze, a monitorare le spese, a gestire i budget e a pianificare il tuo futuro finanziario, da solo o con la tua famiglia.
 
 ---
 
@@ -294,11 +299,11 @@ pip install -r requirements.txt
 
 **Opzione 2 - Installazione manuale:**
 ```bash
-pip install flet flet-desktop openpyxl pandas
+pip install flet openpyxl pandas
 ```
 
 **Dipendenze principali:**
-- `flet` - Framework GUI
+- `flet` - Framework GUI (Web)
 - `openpyxl` e `pandas` - Esportazione Excel
 - `requests` - Chiamate HTTP per recupero prezzi asset (v0.10+)
 - `python-dotenv` - Gestione variabili d'ambiente (opzionale)
@@ -327,7 +332,7 @@ L'applicazione gestirà automaticamente la creazione delle tabelle al primo avvi
 
 ## ▶️ Esecuzione
 
-### Modalità Sviluppo
+### Server Web Locale
 
 Con l'ambiente virtuale attivato:
 
@@ -335,24 +340,7 @@ Con l'ambiente virtuale attivato:
 python main.py
 ```
 
-L'applicazione si avvierà in una finestra desktop e tenterà la connessione al database configurato nel `.env`.
-
-### Build dell'Eseguibile
-
-Per creare un eseguibile standalone usando PyInstaller:
-
-**Windows:**
-```powershell
-.\build.ps1
-```
-
-**Manuale:**
-```bash
-pyinstaller --name "Budget Amico" --windowed --onedir --clean --noconfirm --add-data "assets;assets" --icon "assets/icon.ico" --hidden-import=yfinance --hidden-import=python_dotenv main.py
-```
-
-L'eseguibile sarà disponibile in `dist\Budget Amico_0.26.00.exe`.
-**Importante**: Assicurati che il file `.env` sia presente nella stessa cartella dell'eseguibile o configurato nel sistema target.
+L'applicazione avvierà un server web locale e aprirà automaticamente il browser all'indirizzo `http://localhost:8556`.
 
 ### Build per Mobile (Android/iOS)
 
