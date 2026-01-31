@@ -780,23 +780,66 @@ class AdminTab(ft.Container):
                 self.controller.show_snack_bar("Dati export non trovati!", AppColors.ERROR)
                 return
 
-            # 2. Costruisci percorso destinazione
             import os
-            from pathlib import Path
-            
-            # Percorso: User/Downloads
-            docs_dir = Path.home() / "Downloads"
-            # os.makedirs(docs_dir, exist_ok=True) # Downloads esiste sempre, o quasi
-            
-            # Filename
             import datetime
+            
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"budget_amico_backup_{timestamp}.json"
-            full_path = docs_dir / filename
-            
-            # 3. Scrivi il file
-            with open(full_path, "wb") as f:
-                f.write(file_data)
+
+            # 2. Gestione WEB vs DESKTOP
+            if self.controller.page.web:
+                # WEB: Salva in assets/tmp e scarica
+                base_path = os.getcwd()
+                assets_tmp_dir = os.path.join(base_path, "assets", "tmp")
+                os.makedirs(assets_tmp_dir, exist_ok=True)
+                
+                target_path = os.path.join(assets_tmp_dir, filename)
+                
+                with open(target_path, "wb") as f:
+                    f.write(file_data)
+                
+                print(f"[DEBUG] [WEB] File saved to: {target_path}")
+                self.controller.page.launch_url(f"/tmp/{filename}")
+                self.controller.show_snack_bar("Download avviato!", AppColors.SUCCESS)
+                
+                # Cleanup session
+                self.controller.page.session.remove("excel_export_data")
+                
+                # Restore button
+                self._ripristina_bottone_export(e.control)
+                self.page.update()
+                
+            else:
+                # DESKTOP: Salva in Downloads
+                from pathlib import Path
+                docs_dir = Path.home() / "Downloads"
+                os.makedirs(docs_dir, exist_ok=True) # Ensure it exists
+                
+                full_path = docs_dir / filename
+                
+                with open(full_path, "wb") as f:
+                    f.write(file_data)
+                
+                print(f"[DEBUG] [DESKTOP] File saved to: {full_path}")
+                self.controller.show_snack_bar(f"Backup salvato in: {full_path}", AppColors.SUCCESS)
+                
+                # Open folder
+                import subprocess
+                if os.name == 'nt':
+                     os.startfile(str(docs_dir))
+                elif os.name == 'posix':
+                     subprocess.run(['xdg-open', str(docs_dir)])
+                
+                # Cleanup session
+                self.controller.page.session.remove("excel_export_data")
+                
+                # Restore button
+                self._ripristina_bottone_export(e.control)
+                self.page.update()
+
+        except Exception as ex:
+            print(f"[ERROR] Direct Save failed: {ex}")
+            self.controller.show_error_dialog(f"Errore salvataggio: {ex}")
             
             print(f"[DEBUG] File salvato correttamente in: {full_path}")
             

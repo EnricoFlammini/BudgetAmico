@@ -1,4 +1,4 @@
-# Budget Amico v0.43.00
+# Budget Amico v0.43.01
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -10,6 +10,10 @@
 ---
 
 ## 📅 Changelog
+### v0.43.01 (31/01/2026)
+- **HOTFIX Web/Cloud**:
+    - **Export Backup**: Risolto errore "No such file or directory" durante il salvataggio del backup su versioni Web/Cloud. Il sistema ora utilizza correttamente la cartella temporanea per avviare il download nel browser.
+
 ### v0.43.00 (31/01/2026)
 - **Gestione Carte & Spese**:
     - **Fix Conti Tecnici**: Risolto bug che manteneva visibile il conto "Saldo" delle carte eliminate nei menu a tendina.
