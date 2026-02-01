@@ -92,6 +92,7 @@ class SupabaseManager:
                 'ssl_context': True
             }
             cls._pool = queue.Queue(maxsize=cls.MAX_POOL_SIZE)
+            logger.info(f"Pool Supabase inizializzato su HOST: {result.hostname}")
             logger.info(f"Pool Supabase inizializzato (Max: {cls.MAX_POOL_SIZE})")
         except Exception as e:
             logger.error(f"Errore inizializzazione pool: {e}")
