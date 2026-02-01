@@ -3224,7 +3224,7 @@ def ottieni_dettagli_conti_utente(id_utente, master_key_b64=None):
                                C.iban,
                                C.borsa_default,
                                CASE
-                                   WHEN C.tipo = 'Fondo Pensione' THEN COALESCE(C.valore_manuale, '0.0')
+                                   WHEN C.tipo = 'Fondo Pensione' THEN COALESCE(CAST(C.valore_manuale AS TEXT), '0.0')
                                    WHEN C.tipo = 'Investimento'
                                        THEN CAST((SELECT COALESCE(SUM(A.quantita * A.prezzo_attuale_manuale), 0.0)
                                              FROM Asset A
