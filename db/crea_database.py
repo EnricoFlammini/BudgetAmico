@@ -71,7 +71,8 @@ TABLES = {
             iban TEXT,
             valore_manuale REAL DEFAULT 0.0,
             rettifica_saldo REAL DEFAULT 0.0,
-            borsa_default TEXT
+            borsa_default TEXT,
+            nascosto BOOLEAN DEFAULT 0
         );
     """,
     "ContiCondivisi": """

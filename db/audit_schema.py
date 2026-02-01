@@ -18,8 +18,13 @@ def audit_schema():
         'failed_login_attempts', 'lockout_until', 'last_failed_login', 'sospeso'
     ]
     
-    # Check Appartenenza_Famiglia columns as well
-    family_cols = ['chiave_famiglia_criptata']
+    # Check Appartenenza_Famiglia (and others) columns 
+    # Adding Conti.nascosto check here for simplicity or separate it?
+    # Let's verify 'nascosto' in Conti.
+    additional_cols = {
+        'appartenenza_famiglia': ['chiave_famiglia_criptata'],
+        'conti': ['nascosto']
+    }
     
     missing_cols = []
     nullable_issues = []
@@ -35,14 +40,15 @@ def audit_schema():
             if col not in existing_info:
                 missing_cols.append(f"Utenti.{col}")
                 
-        # 2. Check Appartenenza_Famiglia Columns
-        cur.execute("SELECT column_name, is_nullable FROM information_schema.columns WHERE table_name='appartenenza_famiglia'")
-        fam_info = {row['column_name']: row['is_nullable'] for row in cur.fetchall()}
-        
-        for col in family_cols:
-             if col not in fam_info:
-                 missing_cols.append(f"Appartenenza_Famiglia.{col}")
-                
+        # 2. Check Additional Columns (Famiglia, Conti)
+        for table, cols in additional_cols.items():
+            cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name=%s", (table,))
+            existing = {row['column_name'] for row in cur.fetchall()}
+            for col in cols:
+                if col not in existing:
+                    missing_cols.append(f"{table}.{col}")
+                    
+        # 3. Check Nullable Username/Email                
         # 2. Check Nullable Username/Email
         if existing_info.get('username') == 'NO':
             nullable_issues.append('username is NOT NULL (should be nullable)')

@@ -1,4 +1,8 @@
--- Migrazione: Aggiungere colonna nascosto alla tabella Conti
--- Eseguire su Supabase SQL Editor
+DO $$
+BEGIN
+    -- nascosto in Conti
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='conti' AND column_name='nascosto') THEN
+        ALTER TABLE Conti ADD COLUMN nascosto BOOLEAN DEFAULT FALSE;
+    END IF;
 
-ALTER TABLE Conti ADD COLUMN IF NOT EXISTS nascosto BOOLEAN DEFAULT FALSE;
+END $$;
