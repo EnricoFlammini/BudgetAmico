@@ -18,19 +18,30 @@ def audit_schema():
         'failed_login_attempts', 'lockout_until', 'last_failed_login', 'sospeso'
     ]
     
+    # Check Appartenenza_Famiglia columns as well
+    family_cols = ['chiave_famiglia_criptata']
+    
     missing_cols = []
     nullable_issues = []
 
     with get_db_connection() as conn:
         cur = conn.cursor()
         
-        # 1. Check Columns exist
+        # 1. Check Utenti Columns
         cur.execute("SELECT column_name, is_nullable FROM information_schema.columns WHERE table_name='utenti'")
         existing_info = {row['column_name']: row['is_nullable'] for row in cur.fetchall()}
         
         for col in expected_columns:
             if col not in existing_info:
-                missing_cols.append(col)
+                missing_cols.append(f"Utenti.{col}")
+                
+        # 2. Check Appartenenza_Famiglia Columns
+        cur.execute("SELECT column_name, is_nullable FROM information_schema.columns WHERE table_name='appartenenza_famiglia'")
+        fam_info = {row['column_name']: row['is_nullable'] for row in cur.fetchall()}
+        
+        for col in family_cols:
+             if col not in fam_info:
+                 missing_cols.append(f"Appartenenza_Famiglia.{col}")
                 
         # 2. Check Nullable Username/Email
         if existing_info.get('username') == 'NO':
