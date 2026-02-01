@@ -354,6 +354,41 @@ TABLES = {
             abilitato BOOLEAN DEFAULT FALSE,
             livello_minimo TEXT DEFAULT 'INFO' CHECK(livello_minimo IN ('DEBUG','INFO','WARNING','ERROR','CRITICAL'))
         );
+    """,
+    "Salvadanai": """
+        CREATE TABLE Salvadanai (
+            id_salvadanaio INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_famiglia INTEGER NOT NULL REFERENCES Famiglie(id_famiglia) ON DELETE CASCADE,
+            id_conto INTEGER REFERENCES Conti(id_conto) ON DELETE SET NULL,
+            nome TEXT NOT NULL,
+            importo_assegnato TEXT NOT NULL,
+            incide_su_liquidita BOOLEAN DEFAULT 0,
+            note TEXT,
+            data_creazione TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            id_conto_condiviso INTEGER REFERENCES ContiCondivisi(id_conto_condiviso) ON DELETE SET NULL,
+            usa_saldo_totale BOOLEAN DEFAULT 0
+        );
+    """,
+    "Obiettivi_Risparmio": """
+        CREATE TABLE Obiettivi_Risparmio (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_famiglia INTEGER REFERENCES Famiglie(id_famiglia) ON DELETE CASCADE,
+            nome TEXT NOT NULL,
+            importo_obiettivo TEXT NOT NULL,
+            data_obiettivo DATE NOT NULL,
+            note TEXT,
+            data_creazione TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            mostra_suggerimento_mensile BOOLEAN DEFAULT 1
+        );
+    """,
+    "StoricoAssetGlobale": """
+        CREATE TABLE StoricoAssetGlobale (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker TEXT NOT NULL,
+            data DATE NOT NULL,
+            prezzo_chiusura REAL NOT NULL,
+            data_aggiornamento TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
     """
 }
 
