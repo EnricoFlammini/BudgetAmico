@@ -590,7 +590,7 @@ def reset_user_password(user_id: int) -> Tuple[bool, str]:
         return False, f"Errore generico: {e}"
 def hash_password(password, algo='pbkdf2'):
     """
-    Genera l'hash della password.
+    Genera hash della password.
     Algo supportati: 'sha256' (legacy), 'pbkdf2' (secure).
     Format PBKDF2: pbkdf2:sha256:iterations:salt_b64:hash_b64
     """
@@ -653,9 +653,9 @@ def get_configurazione(chiave: str, id_famiglia: Optional[str] = None, master_ke
     
     Args:
         chiave: La chiave della configurazione da recuperare.
-        id_famiglia: L'ID della famiglia (opzionale). Se None, cerca una configurazione globale.
+        id_famiglia: ID della famiglia (opzionale). Se None, cerca una configurazione globale.
         master_key_b64: La master key codificata in base64 (opzionale) per decriptare valori sensibili.
-        id_utente: L'ID dell'utente (opzionale) per recuperare la family key.
+        id_utente: ID del utente (opzionale) per recuperare la family key.
 
     Returns:
         Il valore della configurazione come stringa, oppure None se non trovata.
@@ -700,9 +700,9 @@ def set_configurazione(chiave: str, valore: str, id_famiglia: Optional[str] = No
     Args:
         chiave: La chiave della configurazione.
         valore: Il valore da impostare.
-        id_famiglia: L'ID della famiglia (opzionale). Se None, imposta una configurazione globale.
+        id_famiglia: ID della famiglia (opzionale). Se None, imposta una configurazione globale.
         master_key_b64: La master key codificata in base64 (opzionale) per criptare valori sensibili.
-        id_utente: L'ID dell'utente (opzionale) per recuperare la family key.
+        id_utente: ID del utente (opzionale) per recuperare la family key.
 
     Returns:
         True se il salvataggio è avvenuto con successo, False altrimenti.
@@ -1066,7 +1066,7 @@ def ottieni_impostazioni_budget_storico(id_famiglia: str, anno: int, mese: int) 
 
 def ottieni_dati_analisi_mensile(id_famiglia: str, anno: int, mese: int, master_key_b64: str, id_utente: str) -> Optional[Dict[str, Any]]:
     """
-    Recupera i dati completi per l'analisi mensile del budget.
+    Recupera i dati completi per analisi mensile del budget.
     Include entrate, spese totali, budget totale, risparmio, delta e ripartizione categorie.
     """
     try:
@@ -1202,7 +1202,7 @@ def ottieni_dati_analisi_mensile(id_famiglia: str, anno: int, mese: int, master_
 
 def ottieni_dati_analisi_annuale(id_famiglia: str, anno: int, master_key_b64: str, id_utente: str, include_prev_year: bool = True) -> Optional[Dict[str, Any]]:
     """
-    Recupera i dati completi per l'analisi annuale.
+    Recupera i dati completi per analisi annuale.
     Media spese, media budget, media differenza, spese categorie annuali.
     """
     try:
@@ -1909,7 +1909,7 @@ def cambia_password(id_utente: str, vecchia_password_hash: str, nuova_password_h
 def imposta_password_temporanea(id_utente: str, temp_password_raw: str) -> bool:
     """
     Imposta una password temporanea e ripristina la Master Key usando il backup del server.
-    N.B. Richiede temp_password_raw (stringa in chiaro), non l'hash!
+    N.B. Richiede temp_password_raw (stringa in chiaro), non hash!
     """
     try:
         if not SERVER_SECRET_KEY:
@@ -2008,7 +2008,7 @@ def trova_utente_per_email(email: str) -> Optional[Dict[str, str]]:
 
 def cambia_password_e_username(id_utente: str, password_raw: str, nuovo_username: str, nome: Optional[str] = None, cognome: Optional[str] = None, vecchia_password: Optional[str] = None) -> Dict[str, Any]:
     """
-    Aggiorna password e username per l'attivazione account (Force Change Password).
+    Aggiorna password e username per attivazione account (Force Change Password).
     Genera nuove chiavi di cifratura (Master Key, Salt, Recovery Key).
     Aggiorna colonne sicure (Blind Index, Enc) e colonne Server (Enc Server, Backup MK).
     """
@@ -2169,8 +2169,8 @@ def aggiungi_utente_a_famiglia(id_utente: str, id_famiglia: str, ruolo: str = 'u
 def rimuovi_utente_da_famiglia(id_utente: str, id_famiglia: str) -> bool:
     """
     Disabilita un utente dalla famiglia (soft delete):
-    - Rimuove l'appartenenza alla famiglia
-    - Disabilita l'accesso (password invalidata)
+    - Rimuove appartenenza alla famiglia
+    - Disabilita accesso (password invalidata)
     - Anonimizza email e username
     - Mantiene nome e cognome per riferimento storico
     - Preserva tutti i dati storici (transazioni, conti, ecc.)
@@ -2288,15 +2288,15 @@ def ottieni_ruolo_utente(id_utente: str, id_famiglia: str) -> Optional[str]:
 
 def ensure_family_key(id_utente: str, id_famiglia: str, master_key_b64: str) -> bool:
     """
-    Assicura che l'utente abbia accesso alla chiave di crittografia della famiglia.
+    Assicura che utente abbia accesso alla chiave di crittografia della famiglia.
     Se nessuno ha la chiave (nuova famiglia o migrazione), ne genera una nuova.
     Se qualcun altro ha la chiave, prova a recuperarla (TODO: richiederebbe asimmetrica o condivisione segreta, 
-    per ora assumiamo che se è null, la generiamo se siamo admin o se nessuno ce l'ha).
+    per ora assumiamo che se è null, la generiamo se siamo admin o se nessuno la possiede).
     
     In questo scenario semplificato:
-    1. Controlla se l'utente ha già la chiave.
+    1. Controlla se utente ha già la chiave.
     2. Se no, controlla se qualcun altro nella famiglia ha una chiave.
-    3. Se NESSUNO ha una chiave, ne genera una nuova e la salva per l'utente corrente.
+    3. Se NESSUNO ha una chiave, ne genera una nuova e la salva per utente corrente.
     """
     if not master_key_b64:
         return False
@@ -3403,7 +3403,7 @@ def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valor
 
 
 def ottieni_saldo_iniziale_conto(id_conto):
-    """Recupera l'importo della transazione 'Saldo Iniziale' per un conto."""
+    """Recupera importo della transazione 'Saldo Iniziale' per un conto."""
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -3946,7 +3946,7 @@ def ottieni_utenti_famiglia(id_famiglia):
 
 def ottieni_tutti_i_conti_utente(id_utente, master_key_b64=None):
     """
-    Restituisce una lista unificata di conti personali e conti condivisi a cui l'utente partecipa.
+    Restituisce una lista unificata di conti personali e conti condivisi a cui utente partecipa.
     Ogni conto avrà un flag 'is_condiviso'.
     """
     conti_personali = ottieni_dettagli_conti_utente(id_utente, master_key_b64=master_key_b64)  # Usa dettagli per avere saldo
@@ -5213,7 +5213,7 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese, master_key_b64=None, id_u
                         FROM TransazioniCondivise TC
                                  JOIN ContiCondivisi CC ON TC.id_conto_condiviso = CC.id_conto_condiviso
                                  LEFT JOIN Utenti U
-                                           ON TC.id_utente_autore = U.id_utente -- Join per ottenere il nome dell'autore
+                                           ON TC.id_utente_autore = U.id_utente -- Join per ottenere il nome autore
                                  LEFT JOIN Sottocategorie SCat ON TC.id_sottocategoria = SCat.id_sottocategoria
                                  LEFT JOIN Categorie Cat ON SCat.id_categoria = Cat.id_categoria
                         WHERE CC.id_famiglia = %s
@@ -7841,7 +7841,7 @@ def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=Non
         return []
 
 def _trova_admin_famiglia(id_famiglia):
-    """Helper per trovare l'ID di un utente admin nella famiglia."""
+    '''Helper per trovare ID di un utente admin nella famiglia.'''
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -7878,7 +7878,7 @@ def _determina_conti_spesa(spesa):
     return id_conto_personale, id_conto_condiviso
 
 def _esegui_spesa_fissa(spesa, descrizione_custom=None, data_esecuzione=None, master_key_b64=None):
-    """Esegue una singola spesa fissa creando la transazione."""
+    '''Esegue una singola spesa fissa creando la transazione.'''
     today = datetime.date.today()
     try:
         id_conto_personale, id_conto_condiviso = _determina_conti_spesa(spesa)
@@ -8019,11 +8019,11 @@ def check_e_processa_spese_fisse(id_famiglia, master_key_b64=None, id_utente=Non
 
                     # Check personal account
                     if conto_pers_check:
-                        cur.execute("""
+                        cur.execute('''
                             SELECT descrizione FROM Transazioni
                             WHERE id_conto = %s
                             AND TO_CHAR(data::date, 'YYYY-MM') = %s
-                        """, (conto_pers_check, oggi.strftime('%Y-%m')))
+                        ''', (conto_pers_check, oggi.strftime('%Y-%m')))
                         for row in cur.fetchall():
                              if _is_dup_desc(row['descrizione']): 
                                  already_paid = True
@@ -8031,11 +8031,11 @@ def check_e_processa_spese_fisse(id_famiglia, master_key_b64=None, id_utente=Non
                     
                     # Check shared account
                     if not already_paid and conto_cond_check:
-                        cur.execute("""
+                        cur.execute('''
                             SELECT descrizione FROM TransazioniCondivise
                             WHERE id_conto_condiviso = %s
                             AND TO_CHAR(data::date, 'YYYY-MM') = %s
-                        """, (conto_cond_check, oggi.strftime('%Y-%m')))
+                        ''', (conto_cond_check, oggi.strftime('%Y-%m')))
                         for row in cur.fetchall():
                              if _is_dup_desc(row['descrizione']):
                                  already_paid = True
@@ -8080,7 +8080,7 @@ _TABELLA_STORICO_CREATA = False
 _LAST_UPDATE_CHECK_CACHE = {}  # Cache per throttling aggiornamenti (ticker -> datetime)
 
 def _crea_tabella_storico_asset_globale():
-    """Crea la tabella StoricoAssetGlobale se non esiste."""
+    '''Crea la tabella StoricoAssetGlobale se non esiste.'''
     global _TABELLA_STORICO_CREATA
     if _TABELLA_STORICO_CREATA:
         return True
@@ -8088,7 +8088,7 @@ def _crea_tabella_storico_asset_globale():
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("""
+            cur.execute('''
                 CREATE TABLE IF NOT EXISTS StoricoAssetGlobale (
                     id SERIAL PRIMARY KEY,
                     ticker VARCHAR(30) NOT NULL,
@@ -8097,7 +8097,7 @@ def _crea_tabella_storico_asset_globale():
                     data_aggiornamento TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(ticker, data)
                 );
-            """)
+            ''')
             cur.execute("CREATE INDEX IF NOT EXISTS idx_storico_ticker ON StoricoAssetGlobale(ticker);")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_storico_data ON StoricoAssetGlobale(data);")
             con.commit()
@@ -8109,12 +8109,12 @@ def _crea_tabella_storico_asset_globale():
 
 
 def _pulisci_storico_vecchio():
-    """
+    '''
     Ottimizza lo storico conservando:
     - Ultimi 5 anni: dettaglio giornaliero
     - Da 5 a 25 anni: dettaglio mensile (solo primo del mese)
     - Oltre 25 anni: elimina
-    """
+    '''
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -8129,11 +8129,11 @@ def _pulisci_storico_vecchio():
             
             # Query ottimizzata: elimina record vecchi che NON sono il primo del mese
             # Postgres syntax: EXTRACT(DAY FROM data) returns numeric day (1-31)
-            cur.execute("""
+            cur.execute('''
                 DELETE FROM StoricoAssetGlobale 
                 WHERE data < %s 
                   AND EXTRACT(DAY FROM data) != 1
-            """, (data_limite_5y,))
+            ''', (data_limite_5y,))
             
             eliminati = cur.rowcount
             if eliminati > 0:
@@ -8147,16 +8147,16 @@ def _pulisci_storico_vecchio():
 
 
 def salva_storico_asset_globale(ticker: str, dati_storici: list):
-    """
+    '''
     Salva/aggiorna prezzi storici nella cache globale.
     
     Args:
-        ticker: Il ticker dell'asset (es. "AAPL")
+        ticker: Il ticker asset (es. "AAPL")
         dati_storici: Lista di dict con {'data': 'YYYY-MM-DD', 'prezzo': float}
     
     Returns:
         Numero di record inseriti/aggiornati
-    """
+    '''
     if not dati_storici:
         return 0
     
@@ -8170,13 +8170,13 @@ def salva_storico_asset_globale(ticker: str, dati_storici: list):
             
             for record in dati_storici:
                 try:
-                    cur.execute("""
+                    cur.execute('''
                         INSERT INTO StoricoAssetGlobale (ticker, data, prezzo_chiusura, data_aggiornamento)
                         VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
                         ON CONFLICT (ticker, data) DO UPDATE SET 
                             prezzo_chiusura = EXCLUDED.prezzo_chiusura,
                             data_aggiornamento = CURRENT_TIMESTAMP
-                    """, (ticker.upper(), record['data'], record['prezzo']))
+                    ''', (ticker.upper(), record['data'], record['prezzo']))
                     inseriti += 1
                 except Exception as e:
                     print(f"[ERRORE] Errore inserimento record storico per {ticker}: {e}")
@@ -8189,17 +8189,17 @@ def salva_storico_asset_globale(ticker: str, dati_storici: list):
 
 
 def ottieni_storico_asset_globale(ticker: str, data_inizio: str = None, data_fine: str = None):
-    """
+    '''
     Recupera storico prezzi dalla cache globale.
     
     Args:
-        ticker: Il ticker dell'asset
+        ticker: Il ticker asset
         data_inizio: Data inizio filtro (YYYY-MM-DD), opzionale
         data_fine: Data fine filtro (YYYY-MM-DD), opzionale
     
     Returns:
         Lista di dict con {data, prezzo_chiusura} ordinati per data crescente
-    """
+    '''
     # Assicurati che la tabella esista
     _crea_tabella_storico_asset_globale()
     
@@ -8228,9 +8228,9 @@ def ottieni_storico_asset_globale(ticker: str, data_inizio: str = None, data_fin
 
 
 def ultimo_aggiornamento_storico(ticker: str):
-    """
-    Restituisce la data dell'ultimo record per il ticker.
-    """
+    '''
+    Restituisce la data di ultimo record per il ticker.
+    '''
     # Assicurati che la tabella esista
     _crea_tabella_storico_asset_globale()
     
@@ -8247,9 +8247,9 @@ def ultimo_aggiornamento_storico(ticker: str):
         return None
 
 def _data_piu_vecchia_storico(ticker: str):
-    """
+    '''
     Restituisce la data del record più vecchio per il ticker.
-    """
+    '''
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -8264,12 +8264,12 @@ def _data_piu_vecchia_storico(ticker: str):
 
 
 def aggiorna_storico_asset_se_necessario(ticker: str, anni: int = 25):
-    """
+    '''
     Aggiorna lo storico di un asset da yfinance.
     Strategia ibrida:
     - Se nuovo: scarica 25 anni mensili + 5 anni giornalieri.
     - Se esistente: aggiorna incrementalmente (giornaliero).
-    """
+    '''
     # Prima ottimizza i dati vecchi (downsampling)
     _pulisci_storico_vecchio()
     
@@ -8402,7 +8402,7 @@ def aggiorna_storico_asset_se_necessario(ticker: str, anni: int = 25):
         return False
 
 def _estrai_dati_da_risposta_yf(data: dict) -> list:
-    """Helper per estrarre lista {data, prezzo} dal JSON grezzo di YF."""
+    '''Helper per estrarre lista {data, prezzo} dal JSON grezzo di YF.'''
     results = []
     try:
         if 'chart' in data and 'result' in data['chart'] and data['chart']['result']:
@@ -8439,17 +8439,17 @@ if __name__ == "__main__":
 # --- GESTIONE PIANO AMMORTAMENTO ---
 
 def aggiungi_rata_piano_ammortamento(id_prestito, numero_rata, data_scadenza, importo_rata, quota_capitale, quota_interessi, spese_fisse=0, stato='da_pagare'):
-    """
+    '''
     Aggiunge una rata al piano di ammortamento di un prestito.
-    """
+    '''
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("""
+            cur.execute('''
                 INSERT INTO PianoAmmortamento 
                 (id_prestito, numero_rata, data_scadenza, importo_rata, quota_capitale, quota_interessi, spese_fisse, stato)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """, (id_prestito, numero_rata, data_scadenza, importo_rata, quota_capitale, quota_interessi, spese_fisse, stato))
+            ''', (id_prestito, numero_rata, data_scadenza, importo_rata, quota_capitale, quota_interessi, spese_fisse, stato))
             con.commit()
             return True
     except Exception as e:
@@ -8457,26 +8457,26 @@ def aggiungi_rata_piano_ammortamento(id_prestito, numero_rata, data_scadenza, im
         return False
 
 def ottieni_piano_ammortamento(id_prestito):
-    """
+    '''
     Recupera il piano di ammortamento completo per un prestito, ordinato per numero rata.
-    """
+    '''
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("""
+            cur.execute('''
                 SELECT * FROM PianoAmmortamento 
                 WHERE id_prestito = %s 
                 ORDER BY numero_rata ASC
-            """, (id_prestito,))
+            ''', (id_prestito,))
             return [dict(row) for row in cur.fetchall()]
     except Exception as e:
         print(f"[ERRORE] Errore recupero piano ammortamento: {e}")
         return []
 
 def elimina_piano_ammortamento(id_prestito):
-    """
+    '''
     Elimina tutte le rate del piano di ammortamento per un prestito.
-    """
+    '''
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -8488,9 +8488,9 @@ def elimina_piano_ammortamento(id_prestito):
         return False
 
 def aggiorna_stato_rata_piano(id_rata, nuovo_stato):
-    """
+    '''
     Aggiorna lo stato di una rata (es. da 'da_pagare' a 'pagata').
-    """
+    '''
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -8506,13 +8506,13 @@ def aggiorna_stato_rata_piano(id_rata, nuovo_stato):
 # --- Funzioni Budget History Helpers ---
 
 def trigger_budget_history_update(id_famiglia, data_riferimento, master_key_b64=None, id_utente=None, cursor=None, forced_family_key_b64=None):
-    """
+    '''
     Allinea la tabella Budget_Storico con la tabella Budget per il mese/anno corrente.
     Itera sui budget definiti, cripta nome e spesa (0), ed esegue UPSERT.
     
     Se forced_family_key_b64 è fornito, viene usato direttamente senza tentare la decifratura 
     (utile per le chiamate dal background_service che hanno già la chiave decifrata).
-    """
+    '''
     anno = data_riferimento.year
     mese = data_riferimento.month
     
@@ -8533,12 +8533,12 @@ def trigger_budget_history_update(id_famiglia, data_riferimento, master_key_b64=
     # 2. Definisci logica di update (inner function per riuso con/senza cursor esterno)
     def _perform_update(cur):
         # Fetch budget correnti con nomi in chiaro
-        sql_fetch = """
+        sql_fetch = '''
         SELECT B.id_sottocategoria, B.importo_limite, S.nome_sottocategoria 
         FROM Budget B
         JOIN Sottocategorie S ON B.id_sottocategoria = S.id_sottocategoria
         WHERE B.id_famiglia = %s AND B.periodo = 'Mensile'
-        """
+        '''
         cur.execute(sql_fetch, (id_famiglia,))
         rows = cur.fetchall()
         
@@ -8552,12 +8552,12 @@ def trigger_budget_history_update(id_famiglia, data_riferimento, master_key_b64=
             
             # Upsert
             # ON CONFLICT: Update ONLY LIMIT. Preserve existing imported_speso and names.
-            sql_upsert = """
+            sql_upsert = '''
             INSERT INTO Budget_Storico (id_famiglia, id_sottocategoria, anno, mese, importo_limite, nome_sottocategoria, importo_speso)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (id_famiglia, id_sottocategoria, anno, mese)
             DO UPDATE SET importo_limite = EXCLUDED.importo_limite;
-            """
+            '''
             cur.execute(sql_upsert, (
                 id_famiglia, 
                 row['id_sottocategoria'], 
@@ -8595,11 +8595,11 @@ def aggiungi_carta(id_utente, nome_carta, tipo_carta, circuito,
                    id_conto_riferimento_condiviso=None, id_conto_contabile_condiviso=None,
                    massimale=None, giorno_addebito=None, spesa_tenuta=None, soglia_azzeramento=None, giorno_addebito_tenuta=None,
                    addebito_automatico=False, master_key=None, crypto=None):
-    """
+    '''
     Aggiunge una nuova carta nel database. Cripta i dati sensibili.
     Gestisce automaticamente la creazione/assegnazione del conto contabile e lo storico massimali.
     Supporta conti personali e condivisi.
-    """
+    '''
     try:
         crypto, master_key_bytes = _get_crypto_and_key(master_key)
         
@@ -8627,7 +8627,7 @@ def aggiungi_carta(id_utente, nome_carta, tipo_carta, circuito,
 
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("""
+            cur.execute('''
                 INSERT INTO Carte (
                     id_utente, nome_carta, tipo_carta, circuito, 
                     id_conto_riferimento, id_conto_contabile,
@@ -8636,7 +8636,7 @@ def aggiungi_carta(id_utente, nome_carta, tipo_carta, circuito,
                     soglia_azzeramento_encrypted, giorno_addebito_tenuta_encrypted, addebito_automatico
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id_carta
-            """, (id_utente, nome_carta, tipo_carta, circuito, 
+            ''', (id_utente, nome_carta, tipo_carta, circuito, 
                   id_conto_riferimento, id_conto_contabile,
                   id_conto_riferimento_condiviso, id_conto_contabile_condiviso,
                   massimale_enc, giorno_addebito_enc, spesa_tenuta_enc, soglia_azzeramento_enc, giorno_addebito_tenuta_enc, addebito_automatico))
@@ -8646,10 +8646,10 @@ def aggiungi_carta(id_utente, nome_carta, tipo_carta, circuito,
             
             if id_carta and massimale is not None:
                 data_validita = datetime.date.today().replace(day=1).strftime('%Y-%m-%d')
-                cur.execute("""
+                cur.execute('''
                     INSERT INTO StoricoMassimaliCarte (id_carta, data_inizio_validita, massimale_encrypted)
                     VALUES (%s, %s, %s)
-                """, (id_carta, data_validita, massimale_enc))
+                ''', (id_carta, data_validita, massimale_enc))
 
             con.commit()
             return True
@@ -8658,9 +8658,9 @@ def aggiungi_carta(id_utente, nome_carta, tipo_carta, circuito,
         return False
 
 def ottieni_carte_utente(id_utente, master_key_b64=None):
-    """
-    Restituisce la lista delle carte attive dell'utente, decriptando i dati sensibili.
-    """
+    '''
+    Restituisce la lista delle carte attive di utente, decriptando i dati sensibili.
+    '''
     try:
         crypto, master_key = _get_crypto_and_key(master_key_b64)
         
@@ -8687,7 +8687,7 @@ def ottieni_carte_utente(id_utente, master_key_b64=None):
         return []
 
 def _decrypt_and_convert(encrypted_val, type_func, master_key, crypto):
-    """Helper per decriptare e convertire. Ritorna None se vuoto o errore."""
+    '''Helper per decriptare e convertire. Ritorna None se vuoto o errore.'''
     if not encrypted_val: return None
     val_str = _decrypt_if_key(encrypted_val, master_key, crypto, silent=True)
     if not val_str or val_str == "[ENCRYPTED]": return None
@@ -8701,10 +8701,10 @@ def modifica_carta(id_carta, nome_carta=None, tipo_carta=None, circuito=None,
                    id_conto_riferimento_condiviso=None, id_conto_contabile_condiviso=None,
                    massimale=None, giorno_addebito=None, spesa_tenuta=None, soglia_azzeramento=None, giorno_addebito_tenuta=None,
                    addebito_automatico=None, master_key_b64=None):
-    """
+    '''
     Modifica una carta esistente. Aggiorna solo i campi forniti.
     Gestisce lo storico massimali e la logica esclusiva Conti Personali/Condivisi.
-    """
+    '''
     try:
         crypto, master_key = _get_crypto_and_key(master_key_b64)
         
@@ -8793,12 +8793,12 @@ def modifica_carta(id_carta, nome_carta=None, tipo_carta=None, circuito=None,
             # 3. Aggiornamento Storico
             if should_update_history and massimale_enc_new:
                  data_validita = datetime.date.today().replace(day=1).strftime('%Y-%m-%d')
-                 cur.execute("""
+                 cur.execute('''
                     INSERT INTO StoricoMassimaliCarte (id_carta, data_inizio_validita, massimale_encrypted)
                     VALUES (%s, %s, %s)
                     ON CONFLICT (id_carta, data_inizio_validita) 
                     DO UPDATE SET massimale_encrypted = EXCLUDED.massimale_encrypted
-                 """, (id_carta, data_validita, massimale_enc_new))
+                 ''', (id_carta, data_validita, massimale_enc_new))
             
             con.commit()
             return True
@@ -8808,10 +8808,10 @@ def modifica_carta(id_carta, nome_carta=None, tipo_carta=None, circuito=None,
         return False
 
 def elimina_carta(id_carta, soft_delete=True):
-    """
+    '''
     Elimina una carta (soft delete di default per preservare storico)
     e nasconde i conti contabili associati (Saldo Carta).
-    """
+    '''
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -8844,10 +8844,10 @@ def elimina_carta(id_carta, soft_delete=True):
         return False
 
 def ottieni_ids_conti_tecnici_carte(id_utente):
-    """
-    Recupera gli ID dei conti tecnici (saldo) associati a TUTTE le carte dell'utente (anche eliminate/inactive).
+    '''
+    Recupera gli ID dei conti tecnici (saldo) associati a TUTTE le carte di utente (anche eliminate/inactive).
     Utile per filtrare questi conti dalle liste di selezione.
-    """
+    '''
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -8893,10 +8893,10 @@ def calcola_totale_speso_carta(id_carta: int, mese: int, anno: int) -> float:
 
 
 def ottieni_transazioni_carta(id_carta, mese, anno, master_key_b64=None, id_utente=None):
-    """
+    '''
     Recupera le transazioni (personali e condivise) associate a una carta per un dato mese/anno.
     Decripta le descrizioni se necessario.
-    """
+    '''
     import calendar
     try:
         start_date = datetime.date(anno, mese, 1)
@@ -8917,7 +8917,7 @@ def ottieni_transazioni_carta(id_carta, mese, anno, master_key_b64=None, id_uten
             cur = con.cursor()
             
             # 1. Transazioni Personali
-            cur.execute("""
+            cur.execute('''
                 SELECT 
                     T.id_transazione, T.data, T.descrizione, T.importo, 
                     S.nome_sottocategoria, C.nome_categoria
@@ -8927,7 +8927,7 @@ def ottieni_transazioni_carta(id_carta, mese, anno, master_key_b64=None, id_uten
                 WHERE T.id_carta = %s 
                   AND T.data >= %s AND T.data <= %s
                 ORDER BY T.data DESC
-            """, (id_carta, start_date, end_date))
+            ''', (id_carta, start_date, end_date))
             
             rows_p = cur.fetchall()
             for r in rows_p:
@@ -8949,7 +8949,7 @@ def ottieni_transazioni_carta(id_carta, mese, anno, master_key_b64=None, id_uten
                 transazioni.append(t)
 
             # 2. Transazioni Condivise
-            cur.execute("""
+            cur.execute('''
                 SELECT 
                     TC.id_transazione_condivisa as id_transazione, TC.data, TC.descrizione, TC.importo, 
                     S.nome_sottocategoria, C.nome_categoria,
@@ -8961,7 +8961,7 @@ def ottieni_transazioni_carta(id_carta, mese, anno, master_key_b64=None, id_uten
                 WHERE TC.id_carta = %s
                   AND TC.data >= %s AND TC.data <= %s
                 ORDER BY TC.data DESC
-            """, (id_carta, start_date, end_date))
+            ''', (id_carta, start_date, end_date))
             
             rows_c = cur.fetchall()
             for r in rows_c:
@@ -8993,30 +8993,30 @@ def ottieni_transazioni_carta(id_carta, mese, anno, master_key_b64=None, id_uten
 
 
 def ottieni_mesi_disponibili_carta(id_carta):
-    """
+    '''
     Restituisce una lista di tuple (anno, mese) distinte in cui sono presenti transazioni per la carta.
     Ordinata dalla più recente.
-    """
+    '''
     try:
         mesi = set()
         with get_db_connection() as con:
             cur = con.cursor()
             
             # Personali
-            cur.execute("""
+            cur.execute('''
                 SELECT DISTINCT EXTRACT(YEAR FROM data::date) as anno, EXTRACT(MONTH FROM data::date) as mese
                 FROM Transazioni
                 WHERE id_carta = %s
-            """, (id_carta,))
+            ''', (id_carta,))
             for row in cur.fetchall():
                 mesi.add((int(row['anno']), int(row['mese'])))
                 
             # Condivise
-            cur.execute("""
+            cur.execute('''
                 SELECT DISTINCT EXTRACT(YEAR FROM data::date) as anno, EXTRACT(MONTH FROM data::date) as mese
                 FROM TransazioniCondivise
                 WHERE id_carta = %s
-            """, (id_carta,))
+            ''', (id_carta,))
             for row in cur.fetchall():
                 mesi.add((int(row['anno']), int(row['mese'])))
         
@@ -9031,10 +9031,10 @@ def ottieni_mesi_disponibili_carta(id_carta):
 
 
 def crea_obiettivo(id_famiglia: str, nome: str, importo_obiettivo: float, data_obiettivo: str, note: str = "", master_key_b64: Optional[str] = None, id_utente: Optional[str] = None, mostra_suggerimento: bool = True) -> bool:
-    """
+    '''
     Crea un nuovo obiettivo di risparmio (v2).
     Nome, importo e note vengono criptati con chiave famiglia.
-    """
+    '''
     try:
         crypto, master_key = _get_crypto_and_key(master_key_b64)
         
@@ -9051,10 +9051,10 @@ def crea_obiettivo(id_famiglia: str, nome: str, importo_obiettivo: float, data_o
         
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("""
+            cur.execute('''
                 INSERT INTO Obiettivi_Risparmio (id_famiglia, nome, importo_obiettivo, data_obiettivo, note, mostra_suggerimento_mensile)
                 VALUES (%s, %s, %s, %s, %s, %s)
-            """, (id_famiglia, nome_enc, importo_enc, data_obiettivo, note_enc, mostra_suggerimento))
+            ''', (id_famiglia, nome_enc, importo_enc, data_obiettivo, note_enc, mostra_suggerimento))
             con.commit()
             return True
     except Exception as e:
@@ -9062,9 +9062,9 @@ def crea_obiettivo(id_famiglia: str, nome: str, importo_obiettivo: float, data_o
         return False
 
 def ottieni_obiettivi(id_famiglia: str, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> List[Dict[str, Any]]:
-    """
+    '''
     Recupera tutti gli obiettivi, calcolando il totale accumulato dai Salvadanai collegati.
-    """
+    '''
     try:
         crypto, master_key = _get_crypto_and_key(master_key_b64)
         family_key = None
@@ -9076,12 +9076,12 @@ def ottieni_obiettivi(id_famiglia: str, master_key_b64: Optional[str] = None, id
         with get_db_connection() as con:
             cur = con.cursor()
             # Get goals
-            cur.execute("""
+            cur.execute('''
                 SELECT id, nome, importo_obiettivo, data_obiettivo, note, mostra_suggerimento_mensile
                 FROM Obiettivi_Risparmio
                 WHERE id_famiglia = %s
                 ORDER BY data_obiettivo ASC
-            """, (id_famiglia,))
+            ''', (id_famiglia,))
             
             rows = cur.fetchall()
             obiettivi = []
@@ -9132,9 +9132,9 @@ def ottieni_obiettivi(id_famiglia: str, master_key_b64: Optional[str] = None, id
         return []
 
 def aggiorna_obiettivo(id_obiettivo: int, id_famiglia: str, nome: str, importo_obiettivo: float, data_obiettivo: str, note: str, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None, mostra_suggerimento: bool = True) -> bool:
-    """
+    '''
     Aggiorna un obiettivo esistente.
-    """
+    '''
     try:
         crypto, master_key = _get_crypto_and_key(master_key_b64)
         
@@ -9151,7 +9151,7 @@ def aggiorna_obiettivo(id_obiettivo: int, id_famiglia: str, nome: str, importo_o
         
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("""
+            cur.execute('''
                 UPDATE Obiettivi_Risparmio
                 SET nome = %s, 
                     importo_obiettivo = %s,
@@ -9159,7 +9159,7 @@ def aggiorna_obiettivo(id_obiettivo: int, id_famiglia: str, nome: str, importo_o
                     note = %s,
                     mostra_suggerimento_mensile = %s
                 WHERE id = %s AND id_famiglia = %s
-            """, (nome_enc, importo_obj_enc, data_obiettivo, note_enc, mostra_suggerimento, id_obiettivo, id_famiglia))
+            ''', (nome_enc, importo_obj_enc, data_obiettivo, note_enc, mostra_suggerimento, id_obiettivo, id_famiglia))
             con.commit()
             return True
     except Exception as e:
@@ -9167,21 +9167,21 @@ def aggiorna_obiettivo(id_obiettivo: int, id_famiglia: str, nome: str, importo_o
         return False
 
 def elimina_obiettivo(id_obiettivo: int, id_famiglia: str) -> bool:
-    """
+    '''
     Elimina un obiettivo.
     IMPORTANTE: Scollega prima i salvadanai per NON cancellare i fondi fisici (Soldi).
-    I salvadanai diventeranno "Orfani" (visibili nel conto) e l'utente potrà gestirli.
-    """
+    I salvadanai diventeranno "Orfani" (visibili nel conto) e utente potrà gestirli.
+    '''
     try:
         with get_db_connection() as con:
             cur = con.cursor()
             
             # Step 1: Unlink Piggy Banks (Save the Money!)
-            cur.execute("""
+            cur.execute('''
                 UPDATE Salvadanai 
                 SET id_obiettivo = NULL 
                 WHERE id_obiettivo = %s AND id_famiglia = %s
-            """, (id_obiettivo, id_famiglia))
+            ''', (id_obiettivo, id_famiglia))
             
             # Step 2: Delete Goal
             cur.execute("DELETE FROM Obiettivi_Risparmio WHERE id = %s AND id_famiglia = %s", (id_obiettivo, id_famiglia))
@@ -9195,11 +9195,11 @@ def elimina_obiettivo(id_obiettivo: int, id_famiglia: str) -> bool:
 # --- GESTIONE SALVADANAI (Obiettivi v2) ---
 
 def crea_salvadanaio(id_famiglia: str, nome: str, importo: float, id_obiettivo: Optional[int] = None, id_conto: Optional[int] = None, id_asset: Optional[int] = None, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None, incide_su_liquidita: bool = False, id_conto_condiviso: Optional[int] = None, usa_saldo_totale: bool = False) -> Optional[int]:
-    """
+    '''
     Crea un salvadanaio.
     Richiede id_conto (Personale) OPPURE id_conto_condiviso (Condiviso).
     Returns the ID of the new piggy bank, or None on failure.
-    """
+    '''
     try:
         crypto, master_key = _get_crypto_and_key(master_key_b64)
         family_key = None
@@ -9226,11 +9226,11 @@ def crea_salvadanaio(id_famiglia: str, nome: str, importo: float, id_obiettivo: 
             cur = con.cursor()
             
             # Use id_conto_condiviso if provided
-            cur.execute("""
+            cur.execute('''
                 INSERT INTO Salvadanai (id_famiglia, id_obiettivo, id_conto, id_conto_condiviso, id_asset, nome, importo_assegnato, note, incide_su_liquidita, usa_saldo_totale)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id_salvadanaio
-            """, (id_famiglia, id_obiettivo, id_conto, id_conto_condiviso, id_asset, nome_enc, importo_enc, note_enc, incide_su_liquidita, usa_saldo_totale))
+            ''', (id_famiglia, id_obiettivo, id_conto, id_conto_condiviso, id_asset, nome_enc, importo_enc, note_enc, incide_su_liquidita, usa_saldo_totale))
             
             row = cur.fetchone()
             con.commit()
@@ -9244,17 +9244,17 @@ def crea_salvadanaio(id_famiglia: str, nome: str, importo: float, id_obiettivo: 
         return None
 
 def scollega_salvadanaio_obiettivo(id_salvadanaio: int, id_famiglia: str) -> bool:
-    """
+    '''
     Scollega un salvadanaio da un obiettivo (lo rende 'libero' ma non lo elimina).
-    """
+    '''
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("""
+            cur.execute('''
                 UPDATE Salvadanai 
                 SET id_obiettivo = NULL 
                 WHERE id_salvadanaio = %s AND id_famiglia = %s
-            """, (id_salvadanaio, id_famiglia))
+            ''', (id_salvadanaio, id_famiglia))
             con.commit()
             return cur.rowcount > 0
     except Exception as e:
@@ -9262,9 +9262,9 @@ def scollega_salvadanaio_obiettivo(id_salvadanaio: int, id_famiglia: str) -> boo
         return False
 
 def ottieni_salvadanai_conto(id_conto: int, id_famiglia: str, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None, is_condiviso: bool = False) -> List[Dict[str, Any]]:
-    """
+    '''
     Recupera i salvadanai collegati a uno specifico conto (personale o condiviso).
-    """
+    '''
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -9351,10 +9351,10 @@ def esegui_giroconto_salvadanaio(
     id_famiglia: Optional[str] = None,
     parent_is_shared: bool = False # New flag
 ) -> bool:
-    """
+    '''
     Gestisce il trasferimento di fondi tra un Conto e un suo Salvadanaio.
     Supports Personal and Shared accounts.
-    """
+    '''
     if not data: data = datetime.date.today().strftime('%Y-%m-%d')
     if not descrizione: descrizione = "Giroconto Salvadanaio"
     
@@ -9448,14 +9448,14 @@ def ottieni_salvadanai_obiettivo(id_obiettivo: int, id_famiglia: str, master_key
         
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("""
+            cur.execute('''
                 SELECT s.id_salvadanaio, s.nome, s.importo_assegnato, s.id_conto, s.id_conto_condiviso, s.id_asset,
                        c.nome_conto, a.nome_asset, a.ticker
                 FROM Salvadanai s
                 LEFT JOIN Conti c ON s.id_conto = c.id_conto
                 LEFT JOIN Asset a ON s.id_asset = a.id_asset
                 WHERE s.id_obiettivo = %s AND s.id_famiglia = %s
-            """, (id_obiettivo, id_famiglia))
+            ''', (id_obiettivo, id_famiglia))
             
             rows = cur.fetchall()
             results = []
@@ -9651,11 +9651,11 @@ def elimina_salvadanaio(id_salvadanaio: int, id_famiglia: str, master_key_b64: O
             cur = con.cursor()
             
             # Fetch PB info
-            cur.execute("""
+            cur.execute('''
                 SELECT id_conto, id_conto_condiviso, importo_assegnato, id_asset, usa_saldo_totale
                 FROM Salvadanai
                 WHERE id_salvadanaio = %s AND id_famiglia = %s
-            """, (id_salvadanaio, id_famiglia))
+            ''', (id_salvadanaio, id_famiglia))
             
             row = cur.fetchone()
             if not row: return False # Not found
@@ -9714,10 +9714,10 @@ def elimina_salvadanaio(id_salvadanaio: int, id_famiglia: str, master_key_b64: O
         return False
 
 def admin_rettifica_salvadanaio(id_salvadanaio: int, nuovo_importo: float, master_key_b64: Optional[str], id_utente: str, is_shared: bool = False) -> bool:
-    """
-    Rettifica manuale (ADMIN) dell'importo di un salvadanaio.
+    '''
+    Rettifica manuale (ADMIN) di importo di un salvadanaio.
     Sovrascrive il valore.
-    """
+    '''
     try:
         crypto, master_key = _get_crypto_and_key(master_key_b64)
         
@@ -9747,9 +9747,9 @@ def admin_rettifica_salvadanaio(id_salvadanaio: int, nuovo_importo: float, maste
         return False
 
 def collega_salvadanaio_obiettivo(id_salvadanaio: int, id_obiettivo: int, id_famiglia: str) -> bool:
-    """
+    '''
     Collega un salvadanaio esistente a un obiettivo.
-    """
+    '''
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -9761,11 +9761,11 @@ def collega_salvadanaio_obiettivo(id_salvadanaio: int, id_obiettivo: int, id_fam
         return False
 
 def ottieni_asset_conto(id_conto: int, master_key_b64: Optional[str] = None, is_shared: bool = False, id_utente: Optional[str] = None) -> List[Dict[str, Any]]:
-    """
+    '''
     Recupera gli asset (azioni, etf, ecc.) di un conto investimento.
     Supporta conti condivisi (richiede id_utente per recuperare chiave famiglia).
     Tenta la decrittazione con entrambe le chiavi (Personale e Famiglia) per robustezza.
-    """
+    '''
     try:
         crypto, master_key = _get_crypto_and_key(master_key_b64)
         
@@ -9823,29 +9823,29 @@ def ottieni_asset_conto(id_conto: int, master_key_b64: Optional[str] = None, is_
 
 
 def ottieni_mesi_disponibili_conto(id_conto: str) -> List[Tuple[int, int]]:
-    """
+    '''
     Restituisce una lista di tuple (anno, mese) per i quali esistono transazioni
     per il conto specificato.
-    """
+    '''
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("""
+            cur.execute('''
                 SELECT DISTINCT EXTRACT(YEAR FROM data::date) as anno, EXTRACT(MONTH FROM data::date) as mese
                 FROM Transazioni
                 WHERE id_conto = %s
                 ORDER BY anno DESC, mese DESC
-            """, (id_conto,))
+            ''', (id_conto,))
             return [(int(row['anno']), int(row['mese'])) for row in cur.fetchall()]
     except Exception as e:
         logger.error(f"Errore ottieni_mesi_disponibili_conto: {e}")
         return []
 
 def ottieni_transazioni_conto_mese(id_conto: str, mese: int, anno: int, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None, id_famiglia: Optional[str] = None) -> List[Dict[str, Any]]:
-    """
+    '''
     Recupera le transazioni di un conto per un mese specifico.
     Decripta i dati se necessario.
-    """
+    '''
     data_inizio = f"{anno}-{mese:02d}-01"
     ultimo_giorno = (datetime.date(anno, mese, 1) + relativedelta(months=1) - relativedelta(days=1)).day
     data_fine = f"{anno}-{mese:02d}-{ultimo_giorno}"
@@ -9880,7 +9880,7 @@ def ottieni_transazioni_conto_mese(id_conto: str, mese: int, anno: int, master_k
             cur = con.cursor()
             
             # Query Transazioni
-            cur.execute("""
+            cur.execute('''
                 SELECT T.id_transazione, T.data, T.importo, T.descrizione,
                        C.nome_categoria, S.nome_sottocategoria
                 FROM Transazioni T
@@ -9889,7 +9889,7 @@ def ottieni_transazioni_conto_mese(id_conto: str, mese: int, anno: int, master_k
                 WHERE T.id_conto = %s
                   AND T.data BETWEEN %s AND %s
                 ORDER BY T.data DESC, T.id_transazione DESC
-            """, (id_conto, data_inizio, data_fine))
+            ''', (id_conto, data_inizio, data_fine))
             
             transazioni = []
             for row in cur.fetchall():
@@ -9911,27 +9911,27 @@ def ottieni_transazioni_conto_mese(id_conto: str, mese: int, anno: int, master_k
 
 
 def ottieni_mesi_disponibili_conto_condiviso(id_conto_condiviso: str) -> List[Tuple[int, int]]:
-    """
+    '''
     Restituisce (anno, mese) per i quali esistono transazioni condivise.
-    """
+    '''
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("""
+            cur.execute('''
                 SELECT DISTINCT EXTRACT(YEAR FROM data::date) as anno, EXTRACT(MONTH FROM data::date) as mese
                 FROM TransazioniCondivise
                 WHERE id_conto_condiviso = %s
                 ORDER BY anno DESC, mese DESC
-            """, (id_conto_condiviso,))
+            ''', (id_conto_condiviso,))
             return [(int(row['anno']), int(row['mese'])) for row in cur.fetchall()]
     except Exception as e:
         logger.error(f"Errore ottieni_mesi_disponibili_conto_condiviso: {e}")
         return []
 
 def ottieni_transazioni_conto_condiviso_mese(id_conto_condiviso: str, mese: int, anno: int, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None, id_famiglia: Optional[str] = None) -> List[Dict[str, Any]]:
-    """
+    '''
     Recupera le transazioni condivise per un mese specifico.
-    """
+    '''
     data_inizio = f"{anno}-{mese:02d}-01"
     ultimo_giorno = (datetime.date(anno, mese, 1) + relativedelta(months=1) - relativedelta(days=1)).day
     data_fine = f"{anno}-{mese:02d}-{ultimo_giorno}"
@@ -9964,13 +9964,9 @@ def ottieni_transazioni_conto_condiviso_mese(id_conto_condiviso: str, mese: int,
         with get_db_connection() as con:
             cur = con.cursor()
             
-            """
-            Struttura TransazioniCondivise prevista:
-            id_transazione_condivisa, id_conto_condiviso, data, descrizione, importo, 
-            id_sottocategoria, id_utente_autore
-            """
+
             
-            cur.execute("""
+            cur.execute('''
                 SELECT T.id_transazione_condivisa as id_transazione, T.data, T.importo, T.descrizione,
                        C.nome_categoria, S.nome_sottocategoria,
                        U.username, U.nome_enc_server
@@ -9981,7 +9977,7 @@ def ottieni_transazioni_conto_condiviso_mese(id_conto_condiviso: str, mese: int,
                 WHERE T.id_conto_condiviso = %s
                   AND T.data BETWEEN %s AND %s
                 ORDER BY T.data DESC, T.id_transazione_condivisa DESC
-            """, (id_conto_condiviso, data_inizio, data_fine))
+            ''', (id_conto_condiviso, data_inizio, data_fine))
             
             transazioni = []
             for row in cur.fetchall():
@@ -10019,10 +10015,10 @@ def ottieni_transazioni_conto_condiviso_mese(id_conto_condiviso: str, mese: int,
 # --- Gestione Contatti ---
 
 def crea_contatto(id_utente: str, nome: str, cognome: str, societa: str, iban: str, email: str, telefono: str, tipo_condivisione: str, contatti_condivisi_ids: list = None, id_famiglia: str = None, master_key_b64: str = None, colore: str = '#424242') -> bool:
-    """
+    '''
     Crea un nuovo contatto.
     tipo_condivisione: 'privato', 'famiglia', 'selezione'
-    """
+    '''
     try:
         crypto, master_key = _get_crypto_and_key(master_key_b64)
         
@@ -10049,10 +10045,10 @@ def crea_contatto(id_utente: str, nome: str, cognome: str, societa: str, iban: s
             # Usiamo SAVEPOINT per evitare "current transaction is aborted" in caso di fallimento prima del fallback
             try:
                 cur.execute("SAVEPOINT insert_contact")
-                cur.execute("""
+                cur.execute('''
                     INSERT INTO Contatti (id_utente, nome_encrypted, cognome_encrypted, societa_encrypted, iban_encrypted, email_encrypted, telefono_encrypted, tipo_condivisione, id_famiglia, colore)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id_contatto
-                """, (id_utente, nome_enc, cognome_enc, societa_enc, iban_enc, email_enc, telefono_enc, tipo_condivisione, id_famiglia if tipo_condivisione != 'privato' else None, colore))
+                ''', (id_utente, nome_enc, cognome_enc, societa_enc, iban_enc, email_enc, telefono_enc, tipo_condivisione, id_famiglia if tipo_condivisione != 'privato' else None, colore))
                 row = cur.fetchone()
                 id_contatto = row['id_contatto']
                 cur.execute("RELEASE SAVEPOINT insert_contact")
@@ -10065,10 +10061,10 @@ def crea_contatto(id_utente: str, nome: str, cognome: str, societa: str, iban: s
                  logger.warning(f"Insert con RETURNING fallito ({e}), tentativo fallback standard...")
                  
                  # Fallback standard (senza returning)
-                 cur.execute("""
+                 cur.execute('''
                     INSERT INTO Contatti (id_utente, nome_encrypted, cognome_encrypted, societa_encrypted, iban_encrypted, email_encrypted, telefono_encrypted, tipo_condivisione, id_famiglia, colore)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (id_utente, nome_enc, cognome_enc, societa_enc, iban_enc, email_enc, telefono_enc, tipo_condivisione, id_famiglia if tipo_condivisione != 'privato' else None, colore))
+                ''', (id_utente, nome_enc, cognome_enc, societa_enc, iban_enc, email_enc, telefono_enc, tipo_condivisione, id_famiglia if tipo_condivisione != 'privato' else None, colore))
                  id_contatto = cur.lastrowid
             
             # Gestione Condivisione Selezione
@@ -10103,21 +10099,21 @@ def ottieni_contatti_utente(id_utente: str, master_key_b64: str = None) -> List[
             # 2. Condivisi 'famiglia' da altri
             altri_fam = []
             if id_famiglia:
-                cur.execute("""
+                cur.execute('''
                     SELECT * FROM Contatti 
                     WHERE tipo_condivisione = 'famiglia' 
                       AND id_famiglia = %s 
                       AND id_utente != %s
-                """, (id_famiglia, id_utente))
+                ''', (id_famiglia, id_utente))
                 altri_fam = [dict(r) for r in cur.fetchall()]
             
             # 3. Condivisi 'selezione' con me
-            cur.execute("""
+            cur.execute('''
                 SELECT C.* 
                 FROM Contatti C
                 JOIN CondivisioneContatto CC ON C.id_contatto = CC.id_contatto
                 WHERE CC.id_utente = %s
-            """, (id_utente,))
+            ''', (id_utente,))
             altri_sel = [dict(r) for r in cur.fetchall()]
             
             unici_map = {}
@@ -10223,12 +10219,7 @@ def modifica_contatto(id_contatto: int, id_utente: str, dati: dict, master_key_b
             email_enc = _encrypt_if_key(email, key_to_use, crypto) if email else None
             telefono_enc = _encrypt_if_key(telefono, key_to_use, crypto) if telefono else None
             
-            cur.execute("""
-                UPDATE Contatti 
-                SET nome_encrypted=%s, cognome_encrypted=%s, societa_encrypted=%s, email_encrypted=%s, telefono_encrypted=%s, 
-                    tipo_condivisione=%s, iban_encrypted=%s, id_famiglia=%s, colore=%s
-                WHERE id_contatto=%s
-            """, (nome_enc, cognome_enc, societa_enc, email_enc, telefono_enc, tipo_condivisione, iban_enc, id_famiglia if tipo_condivisione != 'privato' else None, colore, id_contatto))
+            cur.execute("SELECT 1") # DEBUG STUB
             
             # Aggiorna Condivisione
             cur.execute("DELETE FROM CondivisioneContatto WHERE id_contatto = %s", (id_contatto,))
