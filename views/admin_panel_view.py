@@ -97,7 +97,7 @@ class AdminPanelView:
         # Utenti e famiglie verranno caricati quando richiesto (o refresh per semplicità caricare tutto init)
         self._load_users()
         self._load_families()
-        self._load_smtp_config()
+        self._load_config()
         self._load_db_stats()
 
         # Definisci le tabs
@@ -445,6 +445,7 @@ class AdminPanelView:
                 ft.DataColumn(ft.Text("ID", weight=ft.FontWeight.BOLD), numeric=True, on_sort=self._on_users_sort),
                 ft.DataColumn(ft.Text("Famiglie ID", weight=ft.FontWeight.BOLD), on_sort=self._on_users_sort),
                 ft.DataColumn(ft.Text("Sospeso", weight=ft.FontWeight.BOLD), on_sort=self._on_users_sort),
+                ft.DataColumn(ft.Text("Algo", weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Username", weight=ft.FontWeight.BOLD), on_sort=self._on_users_sort),
                 ft.DataColumn(ft.Text("Email", weight=ft.FontWeight.BOLD), on_sort=self._on_users_sort),
                 ft.DataColumn(ft.Text("Nome", weight=ft.FontWeight.BOLD), on_sort=self._on_users_sort),
@@ -517,6 +518,7 @@ class AdminPanelView:
                             padding=5, border_radius=4, alignment=ft.alignment.center
                         )
                     ),
+                    ft.DataCell(ft.Text(u.get('algo', 'sha256'), size=11, color=ft.Colors.GREY_700)),
                     ft.DataCell(ft.Text(u['username'])),
                     ft.DataCell(ft.Text(u['email'])),
                     ft.DataCell(ft.Text(f"{(u.get('nome') or '')} {(u.get('cognome') or '')}")),
@@ -644,6 +646,7 @@ class AdminPanelView:
         self.families_table = ft.DataTable(
             columns=[
                 ft.DataColumn(ft.Text("ID", weight=ft.FontWeight.BOLD), numeric=True, on_sort=self._on_families_sort),
+                ft.DataColumn(ft.Text("Cloud", weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Nome Famiglia", weight=ft.FontWeight.BOLD), on_sort=self._on_families_sort),
                 ft.DataColumn(ft.Text("Azioni", weight=ft.FontWeight.BOLD)),
             ],
@@ -704,6 +707,8 @@ class AdminPanelView:
             self.families_table.rows.append(
                 ft.DataRow(cells=[
                     ft.DataCell(ft.Text(str(f['id_famiglia']))),
+                    ft.DataCell(ft.Icon(ft.Icons.CLOUD_QUEUE if f.get('cloud_enabled') else ft.Icons.CLOUD_OFF, 
+                                       color=ft.Colors.BLUE if f.get('cloud_enabled') else ft.Colors.GREY_400, size=20)),
                     ft.DataCell(ft.Text(f['nome_famiglia'])),
                     ft.DataCell(
                         ft.Row([
@@ -815,6 +820,10 @@ class AdminPanelView:
     # --- CONFIG TAB LOGIC (EMAIL) ---
     # =========================================================================
     def _init_config_tab_ui(self):
+        # General Config
+        self.switch_default_cloud = ft.Switch(label="Abilita Automazione Cloud per Nuove Famiglie (Default)")
+        
+        # Email Config
         self.smtp_server = ft.TextField(label="SMTP Server (es. smtp.gmail.com)")
         self.smtp_port = ft.TextField(label="SMTP Port (es. 587)")
         self.smtp_user = ft.TextField(label="SMTP User (Email)")
@@ -824,6 +833,13 @@ class AdminPanelView:
     def _build_config_tab_content(self):
         return ft.Container(
             content=ft.Column([
+                ft.Text("Impostazioni Generali", size=20, weight=ft.FontWeight.BOLD),
+                ft.Container(
+                    content=self.switch_default_cloud,
+                    bgcolor=ft.Colors.BLUE_50, padding=10, border_radius=5
+                ),
+                ft.Divider(height=40),
+                
                 ft.Text("Configurazione Email (SMTP)", size=20, weight=ft.FontWeight.BOLD),
                 ft.Text("Queste credenziali verranno usate per inviare notifiche e reset password.", size=12, color=ft.Colors.GREY),
                 ft.Divider(),
@@ -831,7 +847,7 @@ class AdminPanelView:
                 self.smtp_port,
                 self.smtp_user,
                 self.smtp_password,
-                ft.ElevatedButton("Salva Configurazione", icon=ft.Icons.SAVE, on_click=self._save_smtp),
+                ft.ElevatedButton("Salva Configurazione", icon=ft.Icons.SAVE, on_click=self._save_config),
                 ft.Divider(height=40),
                 ft.Text("Test Invio Email", size=16, weight=ft.FontWeight.BOLD),
                 ft.Row([
@@ -842,8 +858,14 @@ class AdminPanelView:
             padding=20, expand=True
         )
 
-    def _load_smtp_config(self):
-        from db.gestione_db import get_smtp_config
+    def _load_config(self):
+        from db.gestione_db import get_smtp_config, get_configurazione
+        
+        # Load Global Config
+        default_cloud = get_configurazione("system_default_cloud_automation")
+        self.switch_default_cloud.value = (default_cloud == "true")
+        
+        # Load SMTP Config
         config = get_smtp_config() # retrieves global config
         if config:
             self.smtp_server.value = config.get('server') or ""
@@ -851,11 +873,15 @@ class AdminPanelView:
             self.smtp_user.value = config.get('user') or ""
             self.smtp_password.value = config.get('password') or ""
 
-    def _save_smtp(self, e):
+    def _save_config(self, e):
         from db.gestione_db import save_system_config
         
         # Save each key using save_system_config
         try:
+             # Save Global Config
+             save_system_config('system_default_cloud_automation', 'true' if self.switch_default_cloud.value else 'false')
+        
+             # Save SMTP Config
              save_system_config('smtp_server', self.smtp_server.value)
              save_system_config('smtp_port', self.smtp_port.value)
              save_system_config('smtp_user', self.smtp_user.value)

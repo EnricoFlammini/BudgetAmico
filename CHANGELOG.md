@@ -6,6 +6,13 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.44.00 (01/02/2026)
+- **Admin Panel Enhancements**:
+    - **Automazione Cloud Default**: Nuovo switch globale in "Configurazione" per abilitare automaticamente l'automazione cloud (Server Key) per tutte le nuove famiglie create.
+    - **Security Audit UI**: Aggiunta la colonna "Algo" nella tabella Utenti per visualizzare l'algoritmo di hashing della password (utile per identificare account legacy).
+    - **Stato Cloud Famiglia**: Aggiunta icona di stato (Nuvola Blu/Grigia) nella tabella Famiglie per indicare se l'automazione server è attiva.
+    - **Backend**: Aggiornate funzioni di creazione famiglia e admin per rispettare il default di sistema e ottimizzare la gestione delle chiavi.
+
 ### v0.43.07 (31/01/2026)
 - **Dismissione Desktop**:
     - **Focus Web**: Il progetto è ora ufficialmente una **Web Application**. La versione desktop è stata dismessa per concentrare lo sviluppo sulla versatilità e accessibilità via browser.

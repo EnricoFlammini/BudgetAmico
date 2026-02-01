@@ -83,33 +83,47 @@ def get_server_family_key(id_famiglia):
         logger.error(f"Error retrieving server family key: {e}")
     return None
 
-def enable_server_automation(id_famiglia, master_key_b64, id_utente):
+def enable_server_automation(id_famiglia, master_key_b64, id_utente, forced_family_key=None):
     """
     Abilita l'automazione server salvando la Family Key criptata con la chiave di sistema.
+    Args:
+        forced_family_key: (Optional) bytes of family key if already known (avoids redundant decryption).
     """
     if not SERVER_SECRET_KEY:
         logger.error("SERVER_SECRET_KEY missing. Cannot enable automation.")
         return False
         
     try:
-        # 1. Get Family Key using User's Master Key
-        crypto = CryptoManager()
-        master_key = master_key_b64.encode()
+        fk_b64 = None
         
+        if forced_family_key:
+             # Use provided key directly
+             fk_b64 = base64.b64encode(forced_family_key).decode('utf-8') if isinstance(forced_family_key, bytes) else forced_family_key
+        else:
+            # 1. Get Family Key using User's Master Key
+            crypto = CryptoManager()
+            master_key = master_key_b64.encode()
+            
+            with get_db_connection() as con:
+                cur = con.cursor()
+                cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
+                row = cur.fetchone()
+                if not row or not row['chiave_famiglia_criptata']:
+                    logger.error("Family Key not found for user.")
+                    return False
+                    
+                fk_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+        
+        if not fk_b64:
+             logger.error("Failed to obtain family key for automation enablement.")
+             return False
+            
+        # 2. Encrypt Family Key with System Key
+        server_enc_key = encrypt_system_data(fk_b64)
+        
+        # 3. Save to Famiglie table
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
-            row = cur.fetchone()
-            if not row or not row['chiave_famiglia_criptata']:
-                logger.error("Family Key not found for user.")
-                return False
-                
-            fk_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
-            
-            # 2. Encrypt Family Key with System Key
-            server_enc_key = encrypt_system_data(fk_b64)
-            
-            # 3. Save to Famiglie table
             cur.execute("UPDATE Famiglie SET server_encrypted_key = %s WHERE id_famiglia = %s", (server_enc_key, id_famiglia))
             con.commit()
             return True
@@ -260,11 +274,18 @@ def get_all_users() -> List[Dict[str, Any]]:
             # USE ENCRYPTED SHADOW COLUMNS
             # USE ENCRYPTED SHADOW COLUMNS and JOIN for Families
             cur.execute("""
+            #         string_agg(af.id_famiglia::text, ', ') as famiglie
+            # FROM Utenti u
+            # LEFT JOIN Appartenenza_Famiglia af ON u.id_utente = af.id_utente
+            # GROUP BY u.id_utente
+            # ORDER BY u.id_utente
+            cur.execute("""
                 SELECT u.id_utente, u.username_enc, u.email_enc, u.nome_enc_server, u.cognome_enc_server, u.sospeso,
+                       u.password_algo,
                        string_agg(af.id_famiglia::text, ', ') as famiglie
                 FROM Utenti u
                 LEFT JOIN Appartenenza_Famiglia af ON u.id_utente = af.id_utente
-                GROUP BY u.id_utente
+                GROUP BY u.id_utente, u.password_algo
                 ORDER BY u.id_utente
             """)
             rows = []
@@ -273,6 +294,8 @@ def get_all_users() -> List[Dict[str, Any]]:
                 d['id_utente'] = row['id_utente']
                 d['famiglie'] = row['famiglie'] or "-"
                 d['sospeso'] = row.get('sospeso', False)
+                d['algo'] = row.get('password_algo', 'sha256') # Default to sha256 (legacy) if null
+                
                 # Decrypt sensitive fields using System Key
                 # Nota: usiamo .get() perché potrebbero essere NULL
                 d['username'] = decrypt_system_data(row.get('username_enc')) or row.get('username_enc', '-')
@@ -440,6 +463,7 @@ def get_all_families() -> List[Dict[str, Any]]:
                         pass
                 
                 d['nome_famiglia'] = nome_decrypted
+                d['cloud_enabled'] = bool(row.get('server_encrypted_key'))
                 rows.append(d)
                 
             return rows
@@ -2817,6 +2841,17 @@ def crea_famiglia_e_admin(nome_famiglia, id_admin, master_key_b64=None):
             id_famiglia = cur.fetchone()['id_famiglia']
             cur.execute("INSERT INTO Appartenenza_Famiglia (id_utente, id_famiglia, ruolo, chiave_famiglia_criptata) VALUES (%s, %s, %s, %s)",
                         (id_admin, id_famiglia, 'admin', chiave_famiglia_criptata))
+            
+            con.commit() # Commit insertion first
+
+            # Check Default Cloud Automation Setting
+            try:
+                default_cloud_auto = get_configurazione("system_default_cloud_automation")
+                if default_cloud_auto == "true":
+                     enable_server_automation(id_famiglia, master_key_b64, id_admin, forced_family_key=family_key_bytes)
+            except Exception as e_auto:
+                print(f"[WARNING] Failed to apply default cloud automation: {e_auto}")
+
             return id_famiglia
     except Exception as e:
         print(f"[ERRORE] Errore durante la creazione famiglia: {e}")

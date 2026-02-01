@@ -40,7 +40,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 MAX_RECENT_FILES = 5
-VERSION = "0.43.06"
+VERSION = "0.44.00"
 
 
 class AppController:
