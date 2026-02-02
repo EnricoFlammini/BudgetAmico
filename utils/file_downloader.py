@@ -48,3 +48,56 @@ def download_file_web(page: ft.Page, filename: str, content_bytes: bytes, mime_t
     except Exception as e:
         print(f"[ERROR] [WEB] Download failed: {e}")
         return False
+
+def download_file_desktop(page: ft.Page, filename: str, content_bytes: bytes):
+    """
+    Saves a file to the Downloads folder on Desktop and opens the folder.
+    Supports Windows, macOS, and Linux.
+    """
+    import os
+    import platform
+    import subprocess
+    from pathlib import Path
+
+    try:
+        # 1. Identifica la cartella Downloads in modo robusto
+        # Path.home() / "Downloads" funziona nella maggior parte dei sistemi.
+        # Se non esiste (es. lingua diversa), proviamo a creare o usare la home.
+        downloads_dir = Path.home() / "Downloads"
+        
+        # Fallback per sistemi con nomi cartelle localizzati se Downloads non esiste
+        if not downloads_dir.exists():
+            # Su Linux/macOS a volte è gestito da XDG_DOWNLOAD_DIR
+            # In assenza di standard, usiamo la Home come fallback sicuro
+            if not os.path.exists(downloads_dir):
+                 downloads_dir = Path.home()
+
+        # Assicuriamoci che la directory esista (se Downloads è sparito o troncato)
+        os.makedirs(downloads_dir, exist_ok=True)
+        
+        full_path = downloads_dir / filename
+        
+        # 2. Scrittura del file
+        with open(full_path, "wb") as f:
+            f.write(content_bytes)
+        
+        print(f"[DEBUG] [DESKTOP] File salvato in: {full_path}")
+        
+        # 3. Apertura della cartella in base al sistema operativo
+        current_os = platform.system()
+        try:
+            if current_os == "Windows":
+                os.startfile(downloads_dir)
+            elif current_os == "Darwin":  # macOS
+                subprocess.run(["open", str(downloads_dir)])
+            else:  # Linux e altri POSIX
+                # xdg-open è lo standard su Linux (freedesktop)
+                subprocess.run(["xdg-open", str(downloads_dir)], check=False)
+        except Exception as e_open:
+            print(f"[WARNING] [DESKTOP] Impossibile aprire la cartella: {e_open}")
+            
+        return True, str(full_path)
+
+    except Exception as e:
+        print(f"[ERROR] [DESKTOP] Download fallito: {e}")
+        return False, str(e)

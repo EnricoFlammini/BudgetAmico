@@ -6,6 +6,18 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.45.01 (02/02/2026)
+- **Fix Download Cross-Platform**:
+    - **Compatibilità Desktop**: Centralizzata la logica di download in `utils/file_downloader.py`. Risolti problemi di compatibilità su **macOS** e **Linux** (sostituito comando generico con comandi nativi `open`/`xdg-open`).
+    - **Robustezza**: Migliorato il sistema di individuazione della cartella "Downloads" per gestire nomi localizzati o percorsi non standard.
+
+### v0.45.00 (02/02/2026)
+- **Gestione Ambienti**:
+    - **Guida Operativa**: Aggiunto file `File/istruzioni_ambienti.txt` con le procedure complete per la gestione dei database (test/prod) e deploy su Koyeb.
+- **Account & Filtri**:
+    - **Filtro Conti Intelligente**: Affinata la logica nei dialoghi **Spese Fisse** e **Prestiti**. Ora i conti correnti associati a carte di debito rimangono visibili, filtrando solo i reali conti tecnici "Saldo" delle carte di credito.
+    - **Bugfix Regressioni**: Risolti errori `NameError` nelle logiche di popolazione dei dropdown.
+
 ### v0.44.00 (01/02/2026)
 - **Admin Panel Enhancements**:
     - **Automazione Cloud Default**: Nuovo switch globale in "Configurazione" per abilitare automaticamente l'automazione cloud (Server Key) per tutte le nuove famiglie create.

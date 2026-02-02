@@ -804,25 +804,15 @@ class AdminTab(ft.Container):
                 
             else:
                 # DESKTOP: Salva in Downloads (Robust Fallback)
-                import os
-                from pathlib import Path
-                docs_dir = Path.home() / "Downloads"
-                os.makedirs(docs_dir, exist_ok=True) # Ensure it exists
+                from utils.file_downloader import download_file_desktop
                 
-                full_path = docs_dir / filename
+                success, result = download_file_desktop(self.controller.page, filename, file_data)
                 
-                with open(full_path, "wb") as f:
-                    f.write(file_data)
-                
-                print(f"[DEBUG] [DESKTOP] File saved to: {full_path}")
-                self.controller.show_snack_bar(f"Backup salvato in: {full_path}", AppColors.SUCCESS)
-                
-                # Open folder
-                import subprocess
-                if os.name == 'nt':
-                     os.startfile(str(docs_dir))
-                elif os.name == 'posix':
-                     subprocess.run(['xdg-open', str(docs_dir)])
+                if success:
+                    print(f"[DEBUG] [DESKTOP] File saved via utility: {result}")
+                    self.controller.show_snack_bar(f"Backup salvato in: {result}", AppColors.SUCCESS)
+                else:
+                    self.controller.show_error_dialog(f"Errore salvataggio: {result}")
                 
                 # Cleanup session
                 self.controller.page.session.remove("excel_export_data")

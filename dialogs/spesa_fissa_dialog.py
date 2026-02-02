@@ -5,7 +5,8 @@ from db.gestione_db import (
     ottieni_categorie_e_sottocategorie,
     aggiungi_spesa_fissa,
     modifica_spesa_fissa,
-    ottieni_carte_utente
+    ottieni_carte_utente,
+    ottieni_ids_conti_tecnici_carte
 )
 
 
@@ -188,11 +189,25 @@ class SpesaFissaDialog(ft.AlertDialog):
         
         # Filtra i tipi di conto che non fanno parte della liquidità (per addebito)
         tipi_esclusi_addebito = ['Investimento', 'Fondo Pensione', 'Risparmio']
-        conti_filtrati_addebito = [c for c in conti if c.get('tipo') not in tipi_esclusi_addebito]
-
+        
         # Per beneficiario (giroconto), includiamo anche Risparmio
         tipi_esclusi_beneficiario = ['Investimento', 'Fondo Pensione']
-        conti_filtrati_beneficiario = [c for c in conti if c.get('tipo') not in tipi_esclusi_beneficiario]
+        
+        # Identifica ID conti tecnici delle carte da escludere
+        ids_conti_tecnici = ottieni_ids_conti_tecnici_carte(user_id)
+        
+        # Filtra i conti: escludiamo i conti tecnici delle carte di credito (che hanno solitamente "Saldo" nel nome)
+        # ma manteniamo i conti correnti che potrebbero essere marcati come tecnici per le carte di debito.
+        conti_filtrati_addebito = [
+            c for c in conti 
+            if c.get('tipo') not in tipi_esclusi_addebito 
+            and not (c['id_conto'] in ids_conti_tecnici and "Saldo" in (c.get('nome_conto') or ""))
+        ]
+        conti_filtrati_beneficiario = [
+            c for c in conti 
+            if c.get('tipo') not in tipi_esclusi_beneficiario 
+            and not (c['id_conto'] in ids_conti_tecnici and "Saldo" in (c.get('nome_conto') or ""))
+        ]
         
         options_conti_addebito = []
         options_conti_beneficiario = []

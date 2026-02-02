@@ -260,24 +260,14 @@ class PianoAmmortamentoDialog:
                     self.controller.show_snack_bar("Errore download web.", success=False)
             else:
                 # DESKTOP: Salva in Downloads (Fallback robusto)
-                import os
-                from pathlib import Path
-                docs_dir = Path.home() / "Downloads"
-                os.makedirs(docs_dir, exist_ok=True)
+                from utils.file_downloader import download_file_desktop
                 
-                full_path = docs_dir / filename
+                success, result = download_file_desktop(self.controller.page, filename, csv_data)
                 
-                with open(full_path, "wb") as f:
-                    f.write(csv_data)
-                
-                self.controller.show_snack_bar(f"Template salvato in: {full_path}", success=True)
-                
-                # Open folder
-                import subprocess
-                if os.name == 'nt':
-                     os.startfile(str(docs_dir))
-                elif os.name == 'posix':
-                     subprocess.run(['xdg-open', str(docs_dir)])
+                if success:
+                    self.controller.show_snack_bar(f"Template salvato in: {result}", success=True)
+                else:
+                    self.controller.show_error_dialog(f"Errore download: {result}")
 
         except Exception as ex:
             print(f"Errore download template: {ex}")

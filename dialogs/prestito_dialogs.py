@@ -10,7 +10,8 @@ from db.gestione_db import (
     ottieni_membri_famiglia,
     ottieni_quote_prestito,
     aggiungi_rata_piano_ammortamento,
-    ottieni_piano_ammortamento
+    ottieni_piano_ammortamento,
+    ottieni_ids_conti_tecnici_carte
 )
 from dialogs.piano_ammortamento_dialog import PianoAmmortamentoDialog
 
@@ -236,14 +237,26 @@ class PrestitoDialogs:
         id_utente = self.controller.get_user_id()
         master_key_b64 = self.controller.page.session.get("master_key")
 
-        # Popola dropdown con conti personali E condivisi
         from db.gestione_db import ottieni_conti_condivisi_utente, ottieni_dettagli_conti_utente
         
         conti_personali = ottieni_dettagli_conti_utente(id_utente, master_key_b64=master_key_b64)
-        conti_personali_filtrati = [c for c in conti_personali if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
-        
         conti_condivisi = ottieni_conti_condivisi_utente(id_utente, master_key_b64=master_key_b64)
-        conti_condivisi_filtrati = [c for c in conti_condivisi if c['tipo'] not in ['Investimento', 'Fondo Pensione']]
+        
+        # Identifica ID conti tecnici delle carte da escludere
+        ids_conti_tecnici = ottieni_ids_conti_tecnici_carte(id_utente)
+        
+        # Filtra i conti: escludiamo i conti tecnici delle carte di credito (che hanno solitamente "Saldo" nel nome)
+        # ma manteniamo i conti correnti che potrebbero essere marcati come tecnici per le carte di debito.
+        conti_personali_filtrati = [
+            c for c in conti_personali 
+            if c['tipo'] not in ['Investimento', 'Fondo Pensione'] 
+            and not (c['id_conto'] in ids_conti_tecnici and "Saldo" in (c.get('nome_conto') or ""))
+        ]
+        conti_condivisi_filtrati = [
+            c for c in conti_condivisi 
+            if c['tipo'] not in ['Investimento', 'Fondo Pensione'] 
+            and not (c['id_conto'] in ids_conti_tecnici and "Saldo" in (c.get('nome_conto') or ""))
+        ]
         
         opzioni_conti = []
         for c in conti_personali_filtrati:
@@ -499,8 +512,15 @@ class PrestitoDialogs:
         id_famiglia = self.controller.get_family_id()
         master_key_b64 = self.controller.page.session.get("master_key")
         conti = ottieni_tutti_i_conti_utente(id_utente, master_key_b64=master_key_b64)
-        conti_filtrati = [c for c in conti if
-                          c['tipo'] not in ['Investimento', 'Fondo Pensione']]
+        
+        # Identifica ID conti tecnici delle carte da escludere
+        ids_conti_tecnici = ottieni_ids_conti_tecnici_carte(id_utente)
+        
+        conti_filtrati = [
+            c for c in conti 
+            if c['tipo'] not in ['Investimento', 'Fondo Pensione'] 
+            and not (c['id_conto'] in ids_conti_tecnici and "Saldo" in (c.get('nome_conto') or ""))
+        ]
         opzioni_conti = []
         for c in conti_filtrati:
             is_condiviso = c.get('is_condiviso') or c.get('condiviso')
