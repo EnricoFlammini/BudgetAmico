@@ -782,30 +782,48 @@ def save_smtp_config(settings: Dict[str, Any], id_famiglia: Optional[str] = None
 
 # --- Funzioni Gestione Budget Famiglia ---
 
-def get_impostazioni_budget_famiglia(id_famiglia: str) -> Dict[str, Union[float, str]]:
+def get_impostazioni_budget_famiglia(id_famiglia: str, anno: int = None, mese: int = None) -> Dict[str, Union[float, str]]:
     """
-    Recupera le impostazioni del budget famiglia:
-    - entrate_mensili: valore inserito manualmente
-    - risparmio_tipo: 'percentuale' o 'importo'
-    - risparmio_valore: valore del risparmio
+    Recupera le impostazioni del budget famiglia.
+    Se anno e mese sono forniti, recupera dallo storico.
     """
-    return {
-        'entrate_mensili': float(get_configurazione('budget_entrate_mensili', id_famiglia) or 0),
-        'risparmio_tipo': get_configurazione('budget_risparmio_tipo', id_famiglia) or 'percentuale',
-        'risparmio_valore': float(get_configurazione('budget_risparmio_valore', id_famiglia) or 0)
-    }
+    import datetime
+    today = datetime.date.today()
+    is_current = (anno is None or (anno == today.year and mese == today.month))
+    
+    if is_current:
+        return {
+            'entrate_mensili': float(get_configurazione('budget_entrate_mensili', id_famiglia) or 0),
+            'risparmio_tipo': get_configurazione('budget_risparmio_tipo', id_famiglia) or 'percentuale',
+            'risparmio_valore': float(get_configurazione('budget_risparmio_valore', id_famiglia) or 0)
+        }
+    else:
+        chiave_base = f"budget_storico_{anno}_{mese:02d}"
+        return {
+            'entrate_mensili': float(get_configurazione(f"{chiave_base}_entrate", id_famiglia) or 0),
+            'risparmio_tipo': get_configurazione(f"{chiave_base}_risparmio_tipo", id_famiglia) or 'percentuale',
+            'risparmio_valore': float(get_configurazione(f"{chiave_base}_risparmio_valore", id_famiglia) or 0)
+        }
 
-def set_impostazioni_budget_famiglia(id_famiglia: str, entrate_mensili: float, risparmio_tipo: str, risparmio_valore: float) -> bool:
+def set_impostazioni_budget_famiglia(id_famiglia: str, entrate_mensili: float, risparmio_tipo: str, risparmio_valore: float, anno: int = None, mese: int = None) -> bool:
     """
     Salva le impostazioni del budget famiglia.
-    - entrate_mensili: valore delle entrate mensili
-    - risparmio_tipo: 'percentuale' o 'importo'
-    - risparmio_valore: valore del risparmio
+    Se anno e mese sono forniti, salva nello storico.
     """
     try:
-        set_configurazione('budget_entrate_mensili', str(entrate_mensili), id_famiglia)
-        set_configurazione('budget_risparmio_tipo', risparmio_tipo, id_famiglia)
-        set_configurazione('budget_risparmio_valore', str(risparmio_valore), id_famiglia)
+        import datetime
+        today = datetime.date.today()
+        is_current = (anno is None or (anno == today.year and mese == today.month))
+        
+        if is_current:
+            set_configurazione('budget_entrate_mensili', str(entrate_mensili), id_famiglia)
+            set_configurazione('budget_risparmio_tipo', risparmio_tipo, id_famiglia)
+            set_configurazione('budget_risparmio_valore', str(risparmio_valore), id_famiglia)
+        else:
+            chiave_base = f"budget_storico_{anno}_{mese:02d}"
+            set_configurazione(f"{chiave_base}_entrate", str(entrate_mensili), id_famiglia)
+            set_configurazione(f"{chiave_base}_risparmio_tipo", risparmio_tipo, id_famiglia)
+            set_configurazione(f"{chiave_base}_risparmio_valore", str(risparmio_valore), id_famiglia)
         return True
     except Exception as e:
         logger.error(f"Errore salvataggio impostazioni budget: {e}")
@@ -5458,60 +5476,82 @@ def esegui_operazione_fondo_pensione(id_fondo_pensione, tipo_operazione, importo
 
 
 # --- Funzioni Budget ---
-def imposta_budget(id_famiglia, id_sottocategoria, importo_limite, master_key_b64=None, id_utente=None):
+def imposta_budget(id_famiglia, id_sottocategoria, importo_limite, master_key_b64=None, id_utente=None, anno=None, mese=None):
     try:
+        import datetime
+        today = datetime.date.today()
+        is_current = (anno is None or (anno == today.year and mese == today.month))
+
         # Encrypt importo_limite with family_key
         crypto, master_key = _get_crypto_and_key(master_key_b64)
         
-        # Retrieve Family Key for encryption - REQUIRED for family data
         family_key = None
         if master_key and id_utente:
              family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
         
-        # Family data MUST be encrypted with family_key, NOT master_key
-        if not family_key:
-            print(f"[WARN] imposta_budget: Cannot encrypt without family_key. id_utente={id_utente}")
-            # Store as plain text if no key available (for backwards compatibility)
-            encrypted_importo = str(importo_limite)
-        else:
-            encrypted_importo = _encrypt_if_key(str(importo_limite), family_key, crypto)
+        key_to_use = family_key if family_key else master_key
+        encrypted_importo = _encrypt_if_key(str(importo_limite), key_to_use, crypto)
         
         with get_db_connection() as con:
             cur = con.cursor()
-            # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
-            cur.execute("""
-                        INSERT INTO Budget (id_famiglia, id_sottocategoria, importo_limite, periodo)
-                        VALUES (%s, %s, %s, 'Mensile') ON CONFLICT(id_famiglia, id_sottocategoria, periodo) DO
-                        UPDATE SET importo_limite = excluded.importo_limite
-                        """, (id_famiglia, id_sottocategoria, encrypted_importo))
             
-            # Auto-update history for current month
-            try:
-                import datetime
-                now = datetime.datetime.now()
-                # Pass existing cursor to reuse connection
-                trigger_budget_history_update(id_famiglia, now, master_key_b64, id_utente, cursor=cur)
-            except Exception as e:
-                print(f"[WARN] Failed auto-update in imposta_budget: {e}")
+            if is_current:
+                cur.execute("""
+                            INSERT INTO Budget (id_famiglia, id_sottocategoria, importo_limite, periodo)
+                            VALUES (%s, %s, %s, 'Mensile') ON CONFLICT(id_famiglia, id_sottocategoria, periodo) DO
+                            UPDATE SET importo_limite = excluded.importo_limite
+                            """, (id_famiglia, id_sottocategoria, encrypted_importo))
+                
+                # Auto-update history for current month
+                try:
+                    now = datetime.datetime.now()
+                    trigger_budget_history_update(id_famiglia, now, master_key_b64, id_utente, cursor=cur)
+                except Exception as e:
+                    print(f"[WARN] Failed auto-update in imposta_budget: {e}")
+            else:
+                # Recupera nome sottocategoria per lo storico (se possibile)
+                cur.execute("SELECT nome_sottocategoria FROM Sottocategorie WHERE id_sottocategoria = %s", (id_sottocategoria,))
+                row_sub = cur.fetchone()
+                nome_sub = row_sub['nome_sottocategoria'] if row_sub else "Sconosciuta"
+
+                cur.execute("""
+                            INSERT INTO Budget_Storico (id_famiglia, id_sottocategoria, nome_sottocategoria, anno, mese,
+                                                        importo_limite, importo_speso)
+                            VALUES (%s, %s, %s, %s, %s, %s, '0.0') ON CONFLICT(id_famiglia, id_sottocategoria, anno, mese) DO
+                            UPDATE SET importo_limite = excluded.importo_limite
+                            """, (id_famiglia, id_sottocategoria, nome_sub, anno, mese, encrypted_importo))
 
             return True
     except Exception as e:
         print(f"[ERRORE] Errore generico durante l'impostazione del budget: {e}")
         return False
 
-def ottieni_budget_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
+def ottieni_budget_famiglia(id_famiglia, master_key_b64=None, id_utente=None, anno=None, mese=None):
     try:
+        import datetime
+        today = datetime.date.today()
+        is_current = (anno is None or (anno == today.year and mese == today.month))
+
         with get_db_connection() as con:
-            # con.row_factory = sqlite3.Row # Removed for Supabase
             cur = con.cursor()
-            cur.execute("""
-                        SELECT B.id_budget, B.id_sottocategoria, C.nome_categoria, S.nome_sottocategoria, B.importo_limite
-                        FROM Budget B
-                                 JOIN Sottocategorie S ON B.id_sottocategoria = S.id_sottocategoria
-                                 JOIN Categorie C ON S.id_categoria = C.id_categoria
-                        WHERE B.id_famiglia = %s
-                          AND B.periodo = 'Mensile'
-                        """, (id_famiglia,))
+            if is_current:
+                cur.execute("""
+                            SELECT B.id_budget, B.id_sottocategoria, C.nome_categoria, S.nome_sottocategoria, B.importo_limite
+                            FROM Budget B
+                                     JOIN Sottocategorie S ON B.id_sottocategoria = S.id_sottocategoria
+                                     JOIN Categorie C ON S.id_categoria = C.id_categoria
+                            WHERE B.id_famiglia = %s
+                              AND B.periodo = 'Mensile'
+                            """, (id_famiglia,))
+            else:
+                cur.execute("""
+                            SELECT BS.id_storico as id_budget, BS.id_sottocategoria, C.nome_categoria, BS.nome_sottocategoria, BS.importo_limite
+                            FROM Budget_Storico BS
+                                     JOIN Sottocategorie S ON BS.id_sottocategoria = S.id_sottocategoria
+                                     JOIN Categorie C ON S.id_categoria = C.id_categoria
+                            WHERE BS.id_famiglia = %s AND BS.anno = %s AND BS.mese = %s
+                            """, (id_famiglia, anno, mese))
+            
             rows = [dict(row) for row in cur.fetchall()]
             
             # Decrypt
@@ -5522,27 +5562,20 @@ def ottieni_budget_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
                 family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
             
             for row in rows:
-                # Decrypt budget limit (Try Family Key, then Master Key)
-                if family_key:
-                    decrypted = _decrypt_if_key(row['importo_limite'], family_key, crypto, silent=True)
-                    # If decryption failed (returns [ENCRYPTED]) and it looks encrypted, try master_key
-                    if decrypted == "[ENCRYPTED]" and isinstance(row['importo_limite'], str) and row['importo_limite'].startswith("gAAAAA"):
-                         decrypted = _decrypt_if_key(row['importo_limite'], master_key, crypto)
-                else:
-                    decrypted = row['importo_limite'] # Cannot decrypt without family key
+                key_to_use = family_key if family_key else master_key
+                decrypted = _decrypt_if_key(row['importo_limite'], key_to_use, crypto, silent=True)
+                
                 try:
                     row['importo_limite'] = float(decrypted)
                 except (ValueError, TypeError):
                     row['importo_limite'] = 0.0
                 
-                # Decrypt category and subcategory names (always Family Key)
+                # Decrypt category and subcategory names (if encrypted)
                 if family_key:
                     row['nome_categoria'] = _decrypt_if_key(row['nome_categoria'], family_key, crypto)
                     row['nome_sottocategoria'] = _decrypt_if_key(row['nome_sottocategoria'], family_key, crypto)
             
-            # Sort in Python
             rows.sort(key=lambda x: (x['nome_categoria'] or "", x['nome_sottocategoria'] or ""))
-            
             return rows
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero budget: {e}")

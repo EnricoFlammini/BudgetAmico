@@ -75,31 +75,51 @@ class AdminSubTabBudgetManager(ft.Column):
         # --- Sezione 4: Lista Budget per Sottocategoria ---
         self.lv_budget_sottocategorie = ft.Column(spacing=10)
         
-        # --- Controlli Storicizzazione ---
+        # --- Controlli Periodo (Data) ---
         now = datetime.datetime.now()
         anno_attuale = now.year
         opzioni_mesi = [ft.dropdown.Option(str(i), f"{i:02d}") for i in range(1, 13)]
-        opzioni_anni = [ft.dropdown.Option(str(a)) for a in range(anno_attuale - 2, anno_attuale + 2)]
+        opzioni_anni = [ft.dropdown.Option(str(a)) for a in range(anno_attuale - 2, anno_attuale + 3)]
         
-        self.dd_storico_mese = ft.Dropdown(
+        self.dd_periodo_mese = ft.Dropdown(
             label="Mese",
             options=opzioni_mesi,
             value=str(now.month),
-            width=100
+            width=100,
+            on_change=self._on_periodo_change
         )
-        self.dd_storico_anno = ft.Dropdown(
+        self.dd_periodo_anno = ft.Dropdown(
             label="Anno",
             options=opzioni_anni,
             value=str(anno_attuale),
-            width=120
+            width=120,
+            on_change=self._on_periodo_change
+        )
+        self.btn_clona_corrente = ft.ElevatedButton(
+            "Copia dal Mese Corrente",
+            icon=ft.Icons.COPY_ALL,
+            on_click=self._clona_corrente_click,
+            visible=False, # Visibile solo se mese diverso da attuale
+            tooltip="Copia la configurazione (entrate, risparmio e limiti) dal mese attuale a quello selezionato"
         )
         
         # --- Layout della Scheda ---
         self.controls = [
             # Header
-            ft.Text("Gestione Budget", size=24, weight=ft.FontWeight.BOLD),
-            ft.Text("Configura entrate, risparmio e limiti di spesa mensili.", size=12, color=AppColors.TEXT_SECONDARY),
-            ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
+            ft.Row([
+                ft.Column([
+                    ft.Text("Gestione Budget", size=24, weight=ft.FontWeight.BOLD),
+                    ft.Text("Configura entrate, risparmio e limiti per il periodo selezionato.", size=12, color=AppColors.TEXT_SECONDARY),
+                ], expand=True),
+                ft.Row([
+                    self.dd_periodo_mese,
+                    self.dd_periodo_anno,
+                ], spacing=10)
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            
+            ft.Row([self.btn_clona_corrente], alignment=ft.MainAxisAlignment.END),
+            
+            ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
             
             # Sezione Entrate Mensili
             AppStyles.card_container(
@@ -114,7 +134,7 @@ class AdminSubTabBudgetManager(ft.Column):
                             "Calcola da Transazioni",
                             icon=ft.Icons.CALCULATE,
                             on_click=self._calcola_entrate_click,
-                            tooltip="Calcola automaticamente dalle transazioni categorizzate come 'Entrate'"
+                            tooltip="Calcola automaticamente dalle transazioni del periodo selezionato"
                         ),
                     ], spacing=10),
                     self.txt_entrate_display
@@ -171,29 +191,13 @@ class AdminSubTabBudgetManager(ft.Column):
             # Sezione Salvataggio
             ft.Row([
                 ft.ElevatedButton(
-                    "Salva Impostazioni",
+                    "Salva Tutto per Periodo Selezionato",
                     icon=ft.Icons.SAVE,
-                    on_click=self._salva_impostazioni_click,
+                    on_click=self._salva_tutto_click,
                     bgcolor=AppColors.PRIMARY,
                     color=AppColors.ON_PRIMARY
                 ),
             ]),
-            
-            ft.Divider(height=20),
-            
-            # Sezione Storicizzazione
-            ft.Text("Storicizzazione Manuale", size=18, weight=ft.FontWeight.BOLD),
-            ft.Text("Salva uno snapshot delle impostazioni budget per un mese specifico.", size=12, color=AppColors.TEXT_SECONDARY),
-            ft.Row([
-                self.dd_storico_mese,
-                self.dd_storico_anno,
-                ft.ElevatedButton(
-                    "Salva Snapshot",
-                    icon=ft.Icons.SAVE_AS,
-                    on_click=self._salva_storico_click,
-                    tooltip="Salva lo snapshot del mese e anno selezionati."
-                )
-            ], alignment=ft.MainAxisAlignment.START),
             
             ft.Container(height=80)
         ]
@@ -208,28 +212,37 @@ class AdminSubTabBudgetManager(ft.Column):
         if not famiglia_id:
             return
         
-        # Usa dati pre-fetchati se disponibili
-        if prefetched_data:
+        anno = int(self.dd_periodo_anno.value)
+        mese = int(self.dd_periodo_mese.value)
+        today = datetime.date.today()
+        is_current = (anno == today.year and mese == today.month)
+        
+        # Gestione visibilità pulsante clona
+        self.btn_clona_corrente.visible = not is_current
+
+        # Usa dati pre-fetchati se disponibili (e se è il mese corrente, dato che il prefetch di solito è per il corrente)
+        if prefetched_data and is_current:
             impostazioni = prefetched_data.get('impostazioni_budget')
             dati_categorie = prefetched_data.get('categorie')
             budget_impostati = prefetched_data.get('budget_impostati')
-            # Nota: totale_allocato viene ricalcolato in _aggiorna_display, 
-            # ma potremmo passarlo. Per ora va bene così.
         else:
-            # Fallback al caricamento sincrono (se necessario, ma eviteremo di usarlo)
-            impostazioni = get_impostazioni_budget_famiglia(famiglia_id)
-            dati_categorie = None # Verranno caricati da _popola_lista_budget se mancanti
-            budget_impostati = None
+            # Caricamento dinamico basato su anno/mese
+            master_key_b64 = self.controller.page.session.get("master_key")
+            id_utente = self.controller.get_user_id()
+            
+            impostazioni = get_impostazioni_budget_famiglia(famiglia_id, anno, mese)
+            dati_categorie = ottieni_categorie_e_sottocategorie(famiglia_id)
+            budget_impostati = ottieni_budget_famiglia(famiglia_id, master_key_b64, id_utente, anno, mese)
 
         if impostazioni:
             self.txt_entrate_mensili.value = f"{impostazioni['entrate_mensili']:.2f}"
             self.dd_risparmio_tipo.value = impostazioni['risparmio_tipo']
             self.txt_risparmio_valore.value = f"{impostazioni['risparmio_valore']:.2f}"
+        else:
+            self.txt_entrate_mensili.value = "0.00"
+            self.txt_risparmio_valore.value = "0.00"
         
-        # Aggiorna display (questo scatenerà un calcolo allocato sincrono leggero o possiamo ottimizzare anche questo)
         self._aggiorna_display()
-        
-        # Aggiorna lista budget sottocategorie
         self._popola_lista_budget(dati_categorie, budget_impostati)
 
     
@@ -265,7 +278,15 @@ class AdminSubTabBudgetManager(ft.Column):
             famiglia_id = self.controller.get_family_id()
             master_key_b64 = self.controller.page.session.get("master_key")
             id_utente = self.controller.get_user_id()
-            totale_allocato = ottieni_totale_budget_allocato(famiglia_id, master_key_b64, id_utente)
+            
+            anno = int(self.dd_periodo_anno.value)
+            mese = int(self.dd_periodo_mese.value)
+            today = datetime.date.today()
+            
+            if anno == today.year and mese == today.month:
+                totale_allocato = ottieni_totale_budget_allocato(famiglia_id, master_key_b64, id_utente)
+            else:
+                totale_allocato = ottieni_totale_budget_storico(famiglia_id, anno, mese, master_key_b64, id_utente)
             
             rimanente = budget_disponibile - totale_allocato
             
@@ -326,11 +347,14 @@ class AdminSubTabBudgetManager(ft.Column):
             master_key_b64 = self.controller.page.session.get("master_key")
             id_utente = self.controller.get_user_id()
             
+            anno = int(self.dd_periodo_anno.value)
+            mese = int(self.dd_periodo_mese.value)
+            
             # Recupera dati se non passati
             if not dati_categorie:
                 dati_categorie = ottieni_categorie_e_sottocategorie(famiglia_id)
             if not budget_impostati:
-                budget_impostati = ottieni_budget_famiglia(famiglia_id, master_key_b64, id_utente)
+                budget_impostati = ottieni_budget_famiglia(famiglia_id, master_key_b64, id_utente, anno, mese)
 
             
             # Mappa budget per sottocategoria
@@ -408,12 +432,13 @@ class AdminSubTabBudgetManager(ft.Column):
         master_key_b64 = self.controller.page.session.get("master_key")
         id_utente = self.controller.get_user_id()
         
-        now = datetime.datetime.now()
+        anno = int(self.dd_periodo_anno.value)
+        mese = int(self.dd_periodo_mese.value)
         
         self.controller.show_loading("Calcolo entrate...")
         try:
             entrate = calcola_entrate_mensili_famiglia(
-                famiglia_id, now.year, now.month, master_key_b64, id_utente
+                famiglia_id, anno, mese, master_key_b64, id_utente
             )
             self.txt_entrate_mensili.value = f"{entrate:.2f}"
             self._aggiorna_display()
@@ -441,14 +466,16 @@ class AdminSubTabBudgetManager(ft.Column):
         def salva(e_dialog):
             try:
                 nuovo_limite = float(txt_limite.value.replace(",", "."))
-                famiglia_id = self.controller.get_family_id()
-                master_key_b64 = self.controller.page.session.get("master_key")
-                id_utente = self.controller.get_user_id()
+                anno = int(self.dd_periodo_anno.value)
+                mese = int(self.dd_periodo_mese.value)
                 
-                success = imposta_budget(famiglia_id, id_sottocategoria, nuovo_limite, master_key_b64, id_utente)
+                success = imposta_budget(
+                    famiglia_id, id_sottocategoria, nuovo_limite, 
+                    master_key_b64, id_utente, anno=anno, mese=mese
+                )
                 
                 if success:
-                    self.controller.show_snack_bar(f"Budget per '{nome}' salvato!", success=True)
+                    self.controller.show_snack_bar(f"Budget per '{nome}' salvato per {anno}-{mese:02d}!", success=True)
                     self.controller.page.close(dialog)
                     self._popola_lista_budget()
                     self._aggiorna_display()
@@ -471,56 +498,66 @@ class AdminSubTabBudgetManager(ft.Column):
         
         self.controller.page.open(dialog)
     
-    def _salva_impostazioni_click(self, e):
-        """Salva le impostazioni budget correnti."""
+    def _on_periodo_change(self, e):
+        """Handler cambio mese/anno di riferimento."""
+        self.update_view_data()
+
+    def _clona_corrente_click(self, e):
+        """Clona la configurazione del mese attuale sul mese selezionato."""
         try:
-            entrate = float(self.txt_entrate_mensili.value.replace(",", ".") or 0)
-            risparmio_tipo = self.dd_risparmio_tipo.value
-            risparmio_valore = float(self.txt_risparmio_valore.value.replace(",", ".") or 0)
-            
             famiglia_id = self.controller.get_family_id()
+            master_key_b64 = self.controller.page.session.get("master_key")
+            id_utente = self.controller.get_user_id()
             
-            success = set_impostazioni_budget_famiglia(
-                famiglia_id, entrate, risparmio_tipo, risparmio_valore
+            anno_target = int(self.dd_periodo_anno.value)
+            mese_target = int(self.dd_periodo_mese.value)
+            
+            self.controller.show_loading(f"Clonazione budget su {anno_target}-{mese_target:02d}...")
+            
+            # 1. Recupera impostazioni correnti
+            imps = get_impostazioni_budget_famiglia(famiglia_id) 
+            
+            # 2. Salva su target
+            success1 = set_impostazioni_budget_famiglia(
+                famiglia_id, imps['entrate_mensili'], imps['risparmio_tipo'], 
+                imps['risparmio_valore'], anno=anno_target, mese=mese_target
             )
             
-            if success:
-                self.controller.show_snack_bar("Impostazioni salvate!", success=True)
+            # 3. Salva budget correnti su target
+            # Nota: usiamo salva_budget_mese_corrente che in realtà copia i limiti correnti su un mese storico
+            success2 = salva_budget_mese_corrente(famiglia_id, anno_target, mese_target, master_key_b64, id_utente)
+            
+            if success1 and success2:
+                self.controller.show_snack_bar(f"Budget clonato con successo su {anno_target}-{mese_target:02d}!", success=True)
+                self.update_view_data()
             else:
-                raise Exception("Errore salvataggio")
+                raise Exception("Errore durante la clonazione")
                 
         except Exception as ex:
             self.controller.show_snack_bar(f"Errore: {ex}", success=False)
-    
-    def _salva_storico_click(self, e):
-        """Salva snapshot impostazioni e budget per mese selezionato."""
+        finally:
+            self.controller.hide_loading()
+
+    def _salva_tutto_click(self, e):
+        """Salva entrate e risparmio per il periodo selezionato."""
         try:
-            anno = int(self.dd_storico_anno.value)
-            mese = int(self.dd_storico_mese.value)
-            
             entrate = float(self.txt_entrate_mensili.value.replace(",", ".") or 0)
             risparmio_tipo = self.dd_risparmio_tipo.value
             risparmio_valore = float(self.txt_risparmio_valore.value.replace(",", ".") or 0)
             
             famiglia_id = self.controller.get_family_id()
-            master_key_b64 = self.controller.page.session.get("master_key")
+            anno = int(self.dd_periodo_anno.value)
+            mese = int(self.dd_periodo_mese.value)
             
-            # Salva impostazioni budget
-            success1 = salva_impostazioni_budget_storico(
-                famiglia_id, anno, mese, entrate, risparmio_tipo, risparmio_valore
+            success = set_impostazioni_budget_famiglia(
+                famiglia_id, entrate, risparmio_tipo, risparmio_valore, 
+                anno=anno, mese=mese
             )
             
-            # Salva anche i limiti per sottocategoria
-            id_utente = self.controller.get_user_id()
-            success2 = salva_budget_mese_corrente(famiglia_id, anno, mese, master_key_b64, id_utente)
-            
-            if success1 and success2:
-                self.controller.show_snack_bar(
-                    f"Snapshot {anno}-{mese:02d} salvato!",
-                    success=True
-                )
+            if success:
+                self.controller.show_snack_bar(f"Configurazione salvata per {anno}-{mese:02d}!", success=True)
             else:
-                raise Exception("Errore durante il salvataggio")
+                raise Exception("Errore salvataggio")
                 
         except Exception as ex:
             self.controller.show_snack_bar(f"Errore: {ex}", success=False)
