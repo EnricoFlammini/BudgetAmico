@@ -241,6 +241,7 @@ class AdminSubTabBudgetManager(ft.Column):
         
         self._aggiorna_display()
         self._popola_lista_budget(dati_categorie, budget_impostati)
+        self._aggiorna_display_realtime()
 
     
     def _aggiorna_display(self):

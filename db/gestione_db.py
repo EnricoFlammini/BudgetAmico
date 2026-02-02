@@ -996,11 +996,12 @@ def get_database_statistics() -> Dict[str, Any]:
 
 def ottieni_totale_budget_allocato(id_famiglia: str, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> float:
     """
-    Ritorna il totale dei budget assegnati alle sottocategorie.
+    Ritorna il totale dei budget assegnati alle sottocategorie (escluse Entrate).
     """
     try:
         budget_list = ottieni_budget_famiglia(id_famiglia, master_key_b64, id_utente)
-        return sum(b.get('importo_limite', 0) for b in budget_list)
+        # Escludiamo esplicitamente le categorie di entrata dal totale budget
+        return sum(b.get('importo_limite', 0) for b in budget_list if "ENTRAT" not in (b.get('nome_categoria') or "").upper())
     except Exception as e:
         logger.error(f"Errore calcolo totale budget allocato: {e}")
         return 0.0
@@ -1020,7 +1021,7 @@ def ottieni_totale_budget_storico(id_famiglia: str, anno: int, mese: int, master
         with get_db_connection() as con:
             cur = con.cursor()
             cur.execute("""
-                SELECT importo_limite 
+                SELECT importo_limite, nome_categoria 
                 FROM Budget_Storico 
                 WHERE id_famiglia = %s AND anno = %s AND mese = %s
             """, (id_famiglia, anno, mese))
@@ -1032,11 +1033,21 @@ def ottieni_totale_budget_storico(id_famiglia: str, anno: int, mese: int, master
             totale = 0.0
             for row in rows:
                 enc_limite = row['importo_limite']
+                nome_cat = row['nome_categoria']
+                
+                # Decripta nome categoria per controllo esclusione
+                if family_key:
+                    try:
+                        nome_cat = _decrypt_if_key(nome_cat, family_key, crypto, silent=True)
+                    except: pass
+                
+                if nome_cat and "ENTRAT" in nome_cat.upper():
+                    continue
+
                 try:
                     limite_str = _decrypt_if_key(enc_limite, key_to_use, crypto)
                     totale += float(limite_str)
                 except Exception as e:
-                    # print(f"Errore decrypt budget storico row: {e}")
                     pass
             return totale
             
