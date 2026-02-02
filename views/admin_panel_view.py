@@ -877,20 +877,31 @@ class AdminPanelView:
         from db.gestione_db import save_system_config
         
         # Save each key using save_system_config
-        try:
-             # Save Global Config
-             save_system_config('system_default_cloud_automation', 'true' if self.switch_default_cloud.value else 'false')
+        success_all = True
+        errors = []
         
-             # Save SMTP Config
-             save_system_config('smtp_server', self.smtp_server.value)
-             save_system_config('smtp_port', self.smtp_port.value)
-             save_system_config('smtp_user', self.smtp_user.value)
-             save_system_config('smtp_password', self.smtp_password.value)
-             save_system_config('smtp_provider', 'custom')
+        try:
+             configs_to_save = [
+                 ('system_default_cloud_automation', 'true' if self.switch_default_cloud.value else 'false'),
+                 ('smtp_server', self.smtp_server.value),
+                 ('smtp_port', self.smtp_port.value),
+                 ('smtp_user', self.smtp_user.value),
+                 ('smtp_password', self.smtp_password.value),
+                 ('smtp_provider', 'custom')
+             ]
              
-             self.page.snack_bar = ft.SnackBar(ft.Text("Configurazione salvata con successo!"), bgcolor=ft.Colors.GREEN)
+             for key, value in configs_to_save:
+                 if not save_system_config(key, value):
+                     success_all = False
+                     errors.append(key)
+        
+             if success_all:
+                 self.page.snack_bar = ft.SnackBar(ft.Text("Configurazione salvata con successo!"), bgcolor=ft.Colors.GREEN)
+             else:
+                 self.page.snack_bar = ft.SnackBar(ft.Text(f"Errore salvataggio chiavi: {', '.join(errors)}"), bgcolor=ft.Colors.RED)
+                 
         except Exception as ex:
-             self.page.snack_bar = ft.SnackBar(ft.Text(f"Errore salvataggio configurazione: {ex}"), bgcolor=ft.Colors.RED)
+             self.page.snack_bar = ft.SnackBar(ft.Text(f"Errore imprevisto: {ex}"), bgcolor=ft.Colors.RED)
              
         self.page.snack_bar.open = True
         self.page.update()
