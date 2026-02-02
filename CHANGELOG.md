@@ -6,6 +6,17 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.46.00 (02/02/2026)
+- **Riprogettazione Sistema Budget**:
+    - **Auto-salvataggio**: Implementato il salvataggio automatico (on-blur) per entrate stimate, obiettivi di risparmio e limiti delle sottocategorie. Rimossi i pulsanti di salvataggio manuale per un'esperienza più fluida.
+    - **Calcolo Real-time**: I totali "Allocato" e "Rimanente" vengono ora ricalcolati istantaneamente durante la digitazione dei budget, con aggiornamento dinamico della barra di avanzamento.
+    - **Clonazione Avanzata**: Sostituito il pulsante di copia generico con un menu a tendina per selezionare specificamente da quale periodo passato o futuro copiare la configurazione.
+    - **Analisi Mensile Evoluta**: Nella pagina di analisi, le "Entrate" sono ora calcolate automaticamente sommando le transazioni effettive della categoria "Entrate", invece di usare il valore stimato.
+    - **Esclusione Categoria Entrate**: La categoria "Entrate" è stata esclusa dalla gestione dei budget di spesa per garantire la coerenza dei calcoli.
+- **Database & Sicurezza**:
+    - **Fix Type Mismatch**: Convertite le colonne degli importi budget da `REAL` a `TEXT` nel database per supportare correttamente la crittografia (risolto errore di salvataggio).
+    - **Script di Migrazione**: Aggiunto `db/apply_budget_encryption_migration.py` per l'aggiornamento sicuro dei database esistenti.
+
 ### v0.45.01 (02/02/2026)
 - **Fix Download Cross-Platform**:
     - **Compatibilità Desktop**: Centralizzata la logica di download in `utils/file_downloader.py`. Risolti problemi di compatibilità su **macOS** e **Linux** (sostituito comando generico con comandi nativi `open`/`xdg-open`).
