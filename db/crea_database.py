@@ -137,7 +137,7 @@ TABLES = {
             id_budget INTEGER PRIMARY KEY AUTOINCREMENT,
             id_famiglia INTEGER NOT NULL REFERENCES Famiglie(id_famiglia) ON DELETE CASCADE,
             id_sottocategoria INTEGER NOT NULL REFERENCES Sottocategorie(id_sottocategoria) ON DELETE CASCADE,
-            importo_limite REAL NOT NULL,
+            importo_limite TEXT NOT NULL,
             periodo TEXT NOT NULL DEFAULT 'Mensile',
             UNIQUE(id_famiglia, id_sottocategoria, periodo)
         );
@@ -150,8 +150,8 @@ TABLES = {
             nome_sottocategoria TEXT NOT NULL,
             anno INTEGER NOT NULL,
             mese INTEGER NOT NULL,
-            importo_limite REAL NOT NULL,
-            importo_speso REAL NOT NULL,
+            importo_limite TEXT NOT NULL,
+            importo_speso TEXT NOT NULL,
             UNIQUE(id_famiglia, id_sottocategoria, anno, mese)
         );
     """,
