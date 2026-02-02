@@ -5,6 +5,7 @@ from db.gestione_db import (
     set_impostazioni_budget_famiglia,
     calcola_entrate_mensili_famiglia,
     ottieni_totale_budget_allocato,
+    ottieni_totale_budget_storico,
     salva_impostazioni_budget_storico,
     ottieni_budget_famiglia,
     ottieni_categorie_e_sottocategorie,
