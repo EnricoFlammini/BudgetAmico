@@ -1082,14 +1082,15 @@ def ottieni_dati_analisi_mensile(id_famiglia: str, anno: int, mese: int, master_
     Include entrate, spese totali, budget totale, risparmio, delta e ripartizione categorie.
     """
     try:
-        # 1. Recupera Impostazioni (Storiche o Correnti)
+        # 1. Recupera Entrate REALI (somma transazioni categoria Entrate)
+        entrate = calcola_entrate_mensili_famiglia(id_famiglia, anno, mese, master_key_b64, id_utente)
+        
+        # 1b. Recupera Impostazioni (per risparmio)
         impostazioni_storico = ottieni_impostazioni_budget_storico(id_famiglia, anno, mese)
-        if impostazioni_storico:
-            entrate = impostazioni_storico['entrate_mensili']
-        else:
-            # Fallback a impostazioni correnti
-            imps = get_impostazioni_budget_famiglia(id_famiglia)
-            entrate = imps['entrate_mensili']
+        if not impostazioni_storico:
+            impostazioni_storico = get_impostazioni_budget_famiglia(id_famiglia)
+        
+        entrate_stimate = impostazioni_storico['entrate_mensili']
 
         # 2. Calcola Spese Totali e Spese per Categoria (con decriptazione)
         data_inizio = f"{anno}-{mese:02d}-01"
@@ -1199,10 +1200,11 @@ def ottieni_dati_analisi_mensile(id_famiglia: str, anno: int, mese: int, master_
 
         return {
             'entrate': entrate,
+            'entrate_stimate': entrate_stimate,
             'spese_totali': spese_totali,
             'budget_totale': budget_totale,
-            'risparmio': risparmio,
-            'delta_budget_spese': delta,
+            'risparmio': entrate - spese_totali,
+            'delta_budget_spese': budget_totale - spese_totali,
             'spese_per_categoria': sorted(spese_per_categoria, key=lambda x: x['importo'], reverse=True),
             'dati_confronto': dati_annuali
         }
@@ -5900,6 +5902,41 @@ def ottieni_anni_mesi_storicizzati(id_famiglia):
             return [dict(row) for row in cur.fetchall()]
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero periodi storici: {e}")
+        return []
+
+
+def ottieni_periodi_budget_disponibili(id_famiglia) -> List[Dict[str, int]]:
+    """
+    Ritorna la lista di anni e mesi in cui è presente una configurazione budget (impostazioni o limiti).
+    """
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            # 1. Da Budget_Storico e Configurazioni
+            cur.execute("""
+                SELECT DISTINCT anno, mese FROM (
+                    SELECT anno, mese FROM Budget_Storico WHERE id_famiglia = %s
+                    UNION
+                    SELECT 
+                        CAST(SPLIT_PART(chiave, '_', 3) AS INTEGER) as anno,
+                        CAST(SPLIT_PART(chiave, '_', 4) AS INTEGER) as mese
+                    FROM Configurazioni 
+                    WHERE id_famiglia = %s AND chiave LIKE 'budget_storico_%%_entrate'
+                ) AS periods 
+                ORDER BY anno DESC, mese DESC
+            """, (id_famiglia, id_famiglia))
+            
+            res = cur.fetchall()
+            periodi = [dict(row) for row in res]
+            
+            # Aggiungiamo il mese corrente se non c'è già
+            oggi = datetime.date.today()
+            if not any(p['anno'] == oggi.year and p['mese'] == oggi.month for p in periodi):
+                periodi.insert(0, {'anno': oggi.year, 'mese': oggi.month})
+            
+            return periodi
+    except Exception as e:
+        logger.error(f"Errore ottieni_periodi_budget_disponibili: {e}")
         return []
 
 
