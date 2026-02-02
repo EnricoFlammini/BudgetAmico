@@ -487,6 +487,22 @@ class AdminSubTabBudgetManager(ft.Column):
         """Handler cambio entrate."""
         self._aggiorna_display()
     
+    def _on_risparmio_tipo_change(self, e):
+        """Handler cambio tipo risparmio."""
+        if self.dd_risparmio_tipo.value == "percentuale":
+            self.txt_risparmio_valore.label = "Percentuale (%)"
+            self.txt_risparmio_valore.suffix_text = "%"
+            self.txt_risparmio_valore.prefix_text = None
+        else:
+            self.txt_risparmio_valore.label = "Importo (€)"
+            self.txt_risparmio_valore.prefix_text = "€ "
+            self.txt_risparmio_valore.suffix_text = None
+        self._aggiorna_display()
+    
+    def _on_risparmio_change(self, e):
+        """Handler cambio valore risparmio."""
+        self._aggiorna_display()
+    
     def _auto_save_impostazioni(self, e):
         """Salva automaticamente entrate e risparmio."""
         try:
