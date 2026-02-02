@@ -469,6 +469,10 @@ class AdminSubTabBudgetManager(ft.Column):
                 anno = int(self.dd_periodo_anno.value)
                 mese = int(self.dd_periodo_mese.value)
                 
+                famiglia_id = self.controller.get_family_id()
+                master_key_b64 = self.controller.page.session.get("master_key")
+                id_utente = self.controller.get_user_id()
+                
                 success = imposta_budget(
                     famiglia_id, id_sottocategoria, nuovo_limite, 
                     master_key_b64, id_utente, anno=anno, mese=mese
