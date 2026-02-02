@@ -880,6 +880,14 @@ class AdminPanelView:
         success_all = True
         errors = []
         
+        # Recupera ID utente per RLS context
+        try:
+            current_user_id = self.page.client_storage.get("user_id")
+            if not current_user_id:
+                current_user_id = 1 # Fallback admin
+        except:
+             current_user_id = 1
+        
         try:
              configs_to_save = [
                  ('system_default_cloud_automation', 'true' if self.switch_default_cloud.value else 'false'),
@@ -891,7 +899,7 @@ class AdminPanelView:
              ]
              
              for key, value in configs_to_save:
-                 if not save_system_config(key, value):
+                 if not save_system_config(key, value, id_utente=current_user_id):
                      success_all = False
                      errors.append(key)
         

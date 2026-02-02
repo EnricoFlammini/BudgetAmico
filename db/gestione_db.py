@@ -737,12 +737,12 @@ def set_configurazione(chiave: str, valore: str, id_famiglia: Optional[str] = No
         return False
 
 
-def save_system_config(key: str, value: str) -> bool:
+def save_system_config(key: str, value: str, id_utente: Optional[str] = None) -> bool:
     """
     Salva una configurazione di sistema (globale).
     Alias per set_configurazione con id_famiglia=None.
     """
-    return set_configurazione(key, value, id_famiglia=None)
+    return set_configurazione(key, value, id_famiglia=None, id_utente=id_utente)
 
 def get_smtp_config(id_famiglia: Optional[str] = None, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> Dict[str, Optional[str]]:
     """
