@@ -156,6 +156,11 @@ class TransactionDialog(ft.AlertDialog):
         # Identifica ID conti tecnici delle carte da escludere (anche carte eliminate)
         ids_conti_tecnici = ottieni_ids_conti_tecnici_carte(utente_id)
         
+        # Filtra i conti: 
+        # 1. Non mostrare conti tecnici delle carte (si spende dalla carta, non dal conto tecnico diretto)
+        # 2. Non mostrare conti investimento/pensione (hanno UI dedicata)
+        tipi_esclusi = ['Fondo Pensione', 'Investimenti', 'Crypto', 'Azioni', 'Obbligazioni', 'ETF', 'Fondo']
+        
         conti_filtrati = []
         for c in tutti_i_conti:
             # 1. Non mostrare conti tecnici delle carte (Filtro per ID)
