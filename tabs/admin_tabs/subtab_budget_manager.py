@@ -205,6 +205,8 @@ class AdminSubTabBudgetManager(ft.Column):
         
         anno = int(self.dd_periodo_anno.value)
         mese = int(self.dd_periodo_mese.value)
+        today = datetime.date.today()
+        is_current = (anno == today.year and mese == today.month)
         
         # Popola menu clona
         periodi = ottieni_periodi_budget_disponibili(famiglia_id)
