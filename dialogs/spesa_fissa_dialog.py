@@ -196,17 +196,19 @@ class SpesaFissaDialog(ft.AlertDialog):
         # Identifica ID conti tecnici delle carte da escludere
         ids_conti_tecnici = ottieni_ids_conti_tecnici_carte(user_id)
         
-        # Filtra i conti: escludiamo i conti tecnici delle carte di credito (che hanno solitamente "Saldo" nel nome)
-        # ma manteniamo i conti correnti che potrebbero essere marcati come tecnici per le carte di debito.
+        # Filtra i conti: escludiamo i conti tecnici delle carte di credito (Filtro per ID)
+        # E escludiamo categoricamente qualunque conto contenga "Saldo" nel nome (Filtro robusto per produzione)
         conti_filtrati_addebito = [
             c for c in conti 
             if c.get('tipo') not in tipi_esclusi_addebito 
-            and not (c['id_conto'] in ids_conti_tecnici and "Saldo" in (c.get('nome_conto') or ""))
+            and not (c['id_conto'] in ids_conti_tecnici)
+            and "Saldo" not in (c.get('nome_conto') or "")
         ]
         conti_filtrati_beneficiario = [
             c for c in conti 
             if c.get('tipo') not in tipi_esclusi_beneficiario 
-            and not (c['id_conto'] in ids_conti_tecnici and "Saldo" in (c.get('nome_conto') or ""))
+            and not (c['id_conto'] in ids_conti_tecnici)
+            and "Saldo" not in (c.get('nome_conto') or "")
         ]
         
         options_conti_addebito = []

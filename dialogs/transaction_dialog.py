@@ -156,15 +156,15 @@ class TransactionDialog(ft.AlertDialog):
         # Identifica ID conti tecnici delle carte da escludere (anche carte eliminate)
         ids_conti_tecnici = ottieni_ids_conti_tecnici_carte(utente_id)
         
-        # Filtra i conti: 
-        # 1. Non mostrare conti tecnici delle carte (si spende dalla carta, non dal conto tecnico diretto)
-        # 2. Non mostrare conti investimento/pensione (hanno UI dedicata)
-        tipi_esclusi = ['Fondo Pensione', 'Investimenti', 'Crypto', 'Azioni', 'Obbligazioni', 'ETF', 'Fondo']
-        
         conti_filtrati = []
         for c in tutti_i_conti:
+            # 1. Non mostrare conti tecnici delle carte (Filtro per ID)
             if c['id_conto'] in ids_conti_tecnici:
                 continue
+            # 1.1 Non mostrare conti tecnici delle carte (Filtro per NOME - Backup robusto per produzione)
+            if "Saldo" in (c.get('nome_conto') or ""):
+                continue
+            # 2. Non mostrare conti investimento/pensione (hanno UI dedicata)
             if c['tipo'] in tipi_esclusi:
                 continue
             conti_filtrati.append(c)
@@ -200,8 +200,9 @@ class TransactionDialog(ft.AlertDialog):
              opzioni_dest = []
              
              for c in conti_dest_filtrati:
-                # Skip technical accounts
+                # Skip technical accounts (ID filter and Name filter)
                 if c['id_conto'] in ids_conti_tecnici_dest: continue
+                if "Saldo" in (c.get('nome_conto') or ""): continue
              
                 prefix = "C" if c['is_condiviso'] else "P"
                 suffix = " (Condiviso)" if c['is_condiviso'] else ""

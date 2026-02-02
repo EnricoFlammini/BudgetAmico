@@ -245,17 +245,19 @@ class PrestitoDialogs:
         # Identifica ID conti tecnici delle carte da escludere
         ids_conti_tecnici = ottieni_ids_conti_tecnici_carte(id_utente)
         
-        # Filtra i conti: escludiamo i conti tecnici delle carte di credito (che hanno solitamente "Saldo" nel nome)
-        # ma manteniamo i conti correnti che potrebbero essere marcati come tecnici per le carte di debito.
+        # Filtra i conti: escludiamo i conti tecnici delle carte di credito (ID e Nome "Saldo")
+        # I conti correnti usati come tecnici per debito NON contengono "Saldo" nel nome, quindi rimangono visibili.
         conti_personali_filtrati = [
             c for c in conti_personali 
             if c['tipo'] not in ['Investimento', 'Fondo Pensione'] 
-            and not (c['id_conto'] in ids_conti_tecnici and "Saldo" in (c.get('nome_conto') or ""))
+            and not (c['id_conto'] in ids_conti_tecnici)
+            and "Saldo" not in (c.get('nome_conto') or "")
         ]
         conti_condivisi_filtrati = [
             c for c in conti_condivisi 
             if c['tipo'] not in ['Investimento', 'Fondo Pensione'] 
-            and not (c['id_conto'] in ids_conti_tecnici and "Saldo" in (c.get('nome_conto') or ""))
+            and not (c['id_conto'] in ids_conti_tecnici)
+            and "Saldo" not in (c.get('nome_conto') or "")
         ]
         
         opzioni_conti = []
