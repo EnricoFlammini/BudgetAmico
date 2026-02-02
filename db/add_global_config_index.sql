@@ -1,4 +1,16 @@
 -- Migrazione per la persistenza delle configurazioni globali
+
+-- 0. PULIZIA DUPLICATI GLOBALI (Necessaria per poter creare l'indice UNIQUE)
+-- Mantiene solo l'ultimo inserito (MAX id_configurazione) per ogni chiave globale.
+DELETE FROM Configurazioni
+WHERE id_configurazione NOT IN (
+    SELECT MAX(id_configurazione)
+    FROM Configurazioni
+    WHERE id_famiglia IS NULL
+    GROUP BY chiave
+)
+AND id_famiglia IS NULL;
+
 -- 1. Aggiunta indice univoco parziale per permettere ON CONFLICT su id_famiglia IS NULL
 CREATE UNIQUE INDEX IF NOT EXISTS idx_configurazioni_globali 
 ON Configurazioni (chiave) 

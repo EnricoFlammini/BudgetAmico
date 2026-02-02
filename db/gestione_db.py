@@ -720,7 +720,7 @@ def set_configurazione(chiave: str, valore: str, id_famiglia: Optional[str] = No
                 cur.execute("""
                     INSERT INTO Configurazioni (chiave, valore, id_famiglia) 
                     VALUES (%s, %s, NULL)
-                    ON CONFLICT (chiave, id_famiglia) WHERE id_famiglia IS NULL
+                    ON CONFLICT (chiave) WHERE id_famiglia IS NULL
                     DO UPDATE SET valore = EXCLUDED.valore
                 """, (chiave, encrypted_valore))
             else:
