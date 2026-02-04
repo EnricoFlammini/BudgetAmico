@@ -73,7 +73,7 @@ def send_email(to_email, subject, body, smtp_config=None, attachment_bytes=None,
 
         # Connessione al server SMTP
         server = smtplib.SMTP(smtp_server, int(smtp_port), timeout=15)
-        server.set_debuglevel(1) # Forza log smtplib su console
+        # server.set_debuglevel(1) # Forza log smtplib su console (diretto a stderr)
         server.starttls()
         server.login(smtp_user, smtp_password)
         

@@ -6,6 +6,9 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.47.02 (04/02/2026)
+- **Log Cleaning**: Disabilitati i log di debug di basso livello per l'invio email (SMTP) che causavano la visualizzazione di messaggi di successo come "errori" (stderr) nei log del server.
+
 ### v0.47.01 (04/02/2026) - HOTFIX
 - **Bugfix Login**: Risolto crash `AttributeError` quando veniva inserita una password errata. Standardizzato il ritorno della funzione di autenticazione per gestire correttamente i messaggi di errore del database.
 - **Ripristino UI Admin**: Reintrodotto il dialog di conferma email rimosso accidentalmente nella versione precedente, ripristinando la possibilità di inviare Family Key e credenziali membri.
