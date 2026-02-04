@@ -54,6 +54,9 @@ class AdminSubTabCategorie(ft.Column):
 
             for cat in categorie:
                 cat_nome_upper = cat['nome_categoria'].upper()
+                # La categoria ENTRATE è protetta (non modificabile né eliminabile)
+                is_protetta = (cat_nome_upper == "ENTRATE")
+                
                 self.lv_categorie.controls.append(
                     ft.Row(
                         [
@@ -62,14 +65,16 @@ class AdminSubTabCategorie(ft.Column):
                                 icon=ft.Icons.EDIT,
                                 tooltip="Rinomina",
                                 data=cat,
-                                on_click=self._on_edit_categoria_click
+                                on_click=self._on_edit_categoria_click,
+                                visible=not is_protetta
                             ),
                             ft.IconButton(
                                 icon=ft.Icons.DELETE,
                                 tooltip="Elimina",
                                 icon_color=ft.Colors.RED_400,
                                 data=cat['id_categoria'],
-                                on_click=self._elimina_categoria_cliccato
+                                on_click=self._elimina_categoria_cliccato,
+                                visible=not is_protetta
                             ),
                         ],
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
