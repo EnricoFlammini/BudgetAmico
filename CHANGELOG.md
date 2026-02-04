@@ -6,6 +6,12 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.47.14 (05/02/2026)
+- **Flet Stability Fix**: Risolto `AssertionError` causato da aggiornamenti UI prematuri e ridondanti durante l'apertura dei dialoghi.
+- **Optimization**: Ottimizzato il caricamento dei dropdown per evitare chiamate duplicate al database e al framework.
+- **Improved Option Keys**: Allineato l'uso delle chiavi nei dropdown per una sincronizzazione più robusta tra client e server.
+
+
 ### v0.47.13 (05/02/2026)
 - **Bug Fix**: Risolto `IndexError` nel dialogo transazioni durante la selezione delle carte.
 - **Improved Card Logic**: Allineato il formato delle chiavi delle carte tra database e UI per garantire il corretto recupero dei conti associati.

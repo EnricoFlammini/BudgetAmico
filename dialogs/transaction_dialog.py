@@ -206,7 +206,7 @@ class TransactionDialog(ft.AlertDialog):
 
         # 4. Categories Dropdown
         self.dd_sottocategoria_dialog.options = [
-            ft.dropdown.Option(key=None, text=self.loc.get("no_category")),
+            ft.dropdown.Option(key="", text=self.loc.get("no_category")),
             ft.dropdown.Option(key="INTERESSI", text="💰 Interessi")
         ]
         if famiglia_id:
@@ -232,7 +232,8 @@ class TransactionDialog(ft.AlertDialog):
         # Aggiorna label conto sorgente
         self.dd_conto_dialog.label = self.loc.get("from_account", "Da Conto") if is_giroconto else self.loc.get("account")
         
-        if self.page: self.page.update()
+        if self.page and e is not None:
+             self.page.update()
 
     def _reset_campi(self):
         self.txt_descrizione_dialog.error_text = None
@@ -246,7 +247,7 @@ class TransactionDialog(ft.AlertDialog):
         self.txt_importo_dialog.value = ""
         self.dd_conto_dialog.value = None
         self.dd_conto_destinazione_dialog.value = None
-        self.dd_sottocategoria_dialog.value = None
+        self.dd_sottocategoria_dialog.value = ""
         self.cb_importo_nascosto.value = False
         
         # Reset visibility state
@@ -257,7 +258,7 @@ class TransactionDialog(ft.AlertDialog):
         try:
             self._update_texts()
             self.controller.page.session.set("transazione_in_modifica", None)
-            self._popola_dropdowns()
+            # _popola_dropdowns viene già chiamato internamente da _reset_campi -> _on_tipo_transazione_change
             self._reset_campi()
 
             utente_id = self.controller.get_user_id()
@@ -290,7 +291,7 @@ class TransactionDialog(ft.AlertDialog):
         try:
             self._update_texts()
             self.title.value = self.loc.get("edit") + " " + self.loc.get("new_transaction")
-            self._popola_dropdowns()
+            # _popola_dropdowns viene già chiamato internamente da _reset_campi
             self._reset_campi()
 
             importo_assoluto = abs(transazione_dati['importo'])
@@ -310,7 +311,7 @@ class TransactionDialog(ft.AlertDialog):
                 prefix = "C" if transazione_dati.get('id_transazione_condivisa', 0) > 0 else "P"
                 self.dd_conto_dialog.value = f"{prefix}{transazione_dati['id_conto']}"
 
-            self.dd_sottocategoria_dialog.value = transazione_dati.get('id_sottocategoria')
+            self.dd_sottocategoria_dialog.value = transazione_dati.get('id_sottocategoria') or ""
             self.cb_importo_nascosto.value = transazione_dati.get('importo_nascosto', False)
 
             self.controller.page.session.set("transazione_in_modifica", transazione_dati)
