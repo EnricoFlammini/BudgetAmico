@@ -111,4 +111,5 @@ if __name__ == "__main__":
 
     port = int(os.environ.get("PORT", 8556))
     print(f"Avvio server web... Apri il browser su: http://localhost:{port}")
-    ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=port, host="0.0.0.0", assets_dir="assets", upload_dir="temp_uploads")
+    secret_key = os.environ.get("FLET_SECRET_KEY", "temporary_secret_key_if_missing")
+    ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=port, host="0.0.0.0", assets_dir="assets", upload_dir="temp_uploads", secret_key=secret_key)
