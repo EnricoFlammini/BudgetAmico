@@ -2311,14 +2311,9 @@ def ottieni_ruolo_utente(id_utente: str, id_famiglia: str) -> Optional[str]:
 def ensure_family_key(id_utente: str, id_famiglia: str, master_key_b64: str) -> bool:
     """
     Assicura che l'utente abbia accesso alla chiave di crittografia della famiglia.
-    Se nessuno ha la chiave (nuova famiglia o migrazione), ne genera una nuova.
-    Se qualcun altro ha la chiave, prova a recuperarla (TODO: richiederebbe asimmetrica o condivisione segreta, 
-    per ora assumiamo che se è null, la generiamo se siamo admin o se nessuno ce l'ha).
-    
-    In questo scenario semplificato:
-    1. Controlla se l'utente ha già la chiave.
-    2. Se no, controlla se qualcun altro nella famiglia ha una chiave.
-    3. Se NESSUNO ha una chiave, ne genera una nuova e la salva per l'utente corrente.
+    1. Se l'utente ha già la chiave, verifichiamo se è allineata con quella del server (se presente).
+    2. Se l'utente non ha la chiave, proviamo a recuperarla dal backup del server (Automation Cloud).
+    3. Se nessuno ha la chiave, ne genera una nuova (solo se admin o se la famiglia è nuova).
     """
     if not master_key_b64:
         return False
@@ -2331,38 +2326,64 @@ def ensure_family_key(id_utente: str, id_famiglia: str, master_key_b64: str) -> 
         with get_db_connection() as con:
             cur = con.cursor()
             
-            # 1. Controlla se l'utente ha già la chiave
+            # --- 1. Recupero Chiave di Sistema (Sorgente di verità se presente) ---
+            cur.execute("SELECT server_encrypted_key FROM Famiglie WHERE id_famiglia = %s", (id_famiglia,))
+            fam_row = cur.fetchone()
+            server_fk_b64 = None
+            if fam_row and fam_row['server_encrypted_key']:
+                server_fk_b64 = decrypt_system_data(fam_row['server_encrypted_key'])
+
+            # --- 2. Controlla chiave attuale dell'utente ---
             cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
             row = cur.fetchone()
+            
+            user_has_correct_key = False
             if row and row['chiave_famiglia_criptata']:
-                return True # L'utente ha già la chiave
+                if not server_fk_b64:
+                    return True # Nessun riferimento server, assumiamo che quella dell'utente sia ok
+                
+                # Se abbiamo una chiave server, verifichiamo coerenza
+                try:
+                    current_fk_b64 = crypto.decrypt_data(row['chiave_famiglia_criptata'], master_key)
+                    if current_fk_b64 == server_fk_b64:
+                        return True # Chiave allineata
+                except:
+                    pass # Chiave corrotta o master_key errata (improbabile qui)
 
-            # 2. Controlla se qualcun altro ha la chiave
-            cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_famiglia = %s AND chiave_famiglia_criptata IS NOT NULL LIMIT 1", (id_famiglia,))
-            existing_key_row = cur.fetchone()
-            
-            if existing_key_row:
-                # Qualcun altro ha la chiave. 
-                # In un sistema reale, bisognerebbe farsi inviare la chiave da un admin o usare crittografia asimmetrica.
-                # Per ora, non possiamo fare nulla se non abbiamo la chiave.
-                print(f"[WARN] La famiglia {id_famiglia} ha già una chiave, ma l'utente {id_utente} non ce l'ha.")
-                return False
-            
-            # 3. Nessuno ha la chiave: Generane una nuova
-            print(f"[INFO] Generazione nuova chiave famiglia per famiglia {id_famiglia}...")
-            new_family_key = secrets.token_bytes(32) # 32 bytes per AES-256
-            
-            # Cripta la chiave della famiglia con la master key dell'utente
-            encrypted_family_key = crypto.encrypt_data(base64.b64encode(new_family_key).decode('utf-8'), master_key)
-            
-            cur.execute("""
-                UPDATE Appartenenza_Famiglia 
-                SET chiave_famiglia_criptata = %s 
-                WHERE id_utente = %s AND id_famiglia = %s
-            """, (encrypted_family_key, id_utente, id_famiglia))
-            
-            con.commit()
-            print(f"[INFO] Chiave famiglia generata e salvata per utente {id_utente}.")
+            # --- 3. Recupero/Ripristino da Server ---
+            if server_fk_b64:
+                print(f"[INFO] Sincronizzazione chiave famiglia dal server per utente {id_utente}...")
+                new_enc_key = crypto.encrypt_data(server_fk_b64, master_key)
+                cur.execute("""
+                    UPDATE Appartenenza_Famiglia 
+                    SET chiave_famiglia_criptata = %s 
+                    WHERE id_utente = %s AND id_famiglia = %s
+                """, (new_enc_key, id_utente, id_famiglia))
+                con.commit()
+                return True
+
+            # --- 4. Fallback: Recupero da altri membri (Solo se l'utente non ha nulla) ---
+            if not (row and row['chiave_famiglia_criptata']):
+                cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_famiglia = %s AND chiave_famiglia_criptata IS NOT NULL LIMIT 1", (id_famiglia,))
+                existing_key_row = cur.fetchone()
+                if existing_key_row:
+                    print(f"[WARN] La famiglia {id_famiglia} ha già una chiave, ma non è possibile recuperarla senza l'intervento di un admin o Automazione Cloud.")
+                    return False
+
+                # --- 5. Generazione Nuova Chiave (Nessuno ha nulla) ---
+                print(f"[INFO] Generazione nuova chiave famiglia per famiglia {id_famiglia}...")
+                new_family_key = secrets.token_bytes(32)
+                fk_b64_new = base64.b64encode(new_family_key).decode('utf-8')
+                encrypted_family_key = crypto.encrypt_data(fk_b64_new, master_key)
+                
+                cur.execute("""
+                    UPDATE Appartenenza_Famiglia 
+                    SET chiave_famiglia_criptata = %s 
+                    WHERE id_utente = %s AND id_famiglia = %s
+                """, (encrypted_family_key, id_utente, id_famiglia))
+                con.commit()
+                return True
+
             return True
 
     except Exception as e:

@@ -6,6 +6,12 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.47.12 (05/02/2026)
+- **Security & Family Visibilty**: Risolto un bug di visibilità dati causato da chiavi di famiglia incoerenti.
+- **Auto-Sync**: Implementata la sincronizzazione automatica della chiave di famiglia tramite crittografia di sistema (Automation Cloud) per garantire coerenza tra tutti i membri.
+- **Database Logic**: Migliorata la funzione `ensure_family_key` in `gestione_db.py` per il recupero automatico delle chiavi dal backup del server.
+
+
 ### v0.47.11 (04/02/2026)
 - **Database Fix**: Corretto un errore nella migrazione del database che impediva l'applicazione del vincolo UNIQUE sullo storico asset (causato da un'errata gestione dei risultati del cursore).
 
