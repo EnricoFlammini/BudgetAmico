@@ -234,34 +234,38 @@ class PianoAmmortamentoDialog:
             self.controller.show_snack_bar("Dati non validi (controlla i numeri)", success=False)
 
     def _scarica_template(self, e):
-        # Genera un CSV in memoria
-        output = io.StringIO()
-        writer = csv.writer(output, delimiter=';')
-        writer.writerow(["Numero Rata", "Data Scadenza (YYYY-MM-DD)", "Importo Rata", "Quota Capitale", "Quota Interessi", "Spese Fisse"])
-        writer.writerow(["1", "2024-01-31", "500.00", "400.00", "100.00", "5.00"])
-        writer.writerow(["2", "2024-02-29", "500.00", "405.00", "95.00", "5.00"])
-        
-        # Encode to bytes
-        csv_str = output.getvalue()
-        csv_data = csv_str.encode("utf-8")
         filename = "template_piano_ammortamento.csv"
+        
+        # Percorso dell'asset relativo alla directory assets configurata in ft.app
+        # In Flet Web, gli asset sono accessibili tramite URL relativo
+        url_template = "/templates/template_piano_ammortamento.csv"
 
         try:
-            # 2. Gestione WEB vs DESKTOP
             if self.controller.page.web:
-                # WEB: JS Download
-                from utils.file_downloader import download_file_web
-                
-                success = download_file_web(self.controller.page, filename, csv_data, "text/csv")
-                
-                if success:
-                    self.controller.show_snack_bar("Download template avviato!", success=True)
-                else:
-                    self.controller.show_snack_bar("Errore download web.", success=False)
+                # WEB: Lanciamo il download tramite URL dell'asset
+                self.controller.page.launch_url(url_template)
+                self.controller.show_snack_bar("Download template avviato!", success=True)
             else:
-                # DESKTOP: Salva in Downloads (Fallback robusto)
-                from utils.file_downloader import download_file_desktop
+                # DESKTOP: Leggiamo il file locale e usiamo la logica esistente
+                import os
+                import sys
                 
+                # Determina il percorso base (stessa logica di main.py)
+                if getattr(sys, 'frozen', False):
+                    base_path = sys._MEIPASS
+                else:
+                    base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                
+                asset_path = os.path.join(base_path, "assets", "templates", filename)
+                
+                if not os.path.exists(asset_path):
+                    self.controller.show_snack_bar("Template non trovato sul server.", success=False)
+                    return
+
+                with open(asset_path, "rb") as f:
+                    csv_data = f.read()
+
+                from utils.file_downloader import download_file_desktop
                 success, result = download_file_desktop(self.controller.page, filename, csv_data)
                 
                 if success:

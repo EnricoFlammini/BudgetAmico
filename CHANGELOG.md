@@ -6,6 +6,10 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.47.03 (04/02/2026)
+- **UI Refinement**: Rimossa la sezione "Versione Desktop" dalla pagina Info per focalizzare l'esperienza sulla versione Web.
+- **Ottimizzazione Template**: Il template per il piano di ammortamento è ora un file statico pre-caricato sul server, velocizzando il download e garantendo maggiore consistenza.
+
 ### v0.47.02 (04/02/2026)
 - **Log Cleaning**: Disabilitati i log di debug di basso livello per l'invio email (SMTP) che causavano la visualizzazione di messaggi di successo come "errori" (stderr) nei log del server.
 

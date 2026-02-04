@@ -22,20 +22,6 @@ class InfoTab(ft.Container):
                     ft.Text(f"Budget Amico v{VERSION}", size=20, weight=ft.FontWeight.BOLD),
                     ft.Text("Il tuo assistente personale per la gestione delle finanze.", size=16),
                     ft.Container(height=20),
-                    
-                    ft.Text("Versione Desktop", weight=ft.FontWeight.BOLD),
-                    ft.Text("Scarica l'ultima versione completa per Windows dal nostro repository ufficiale.", size=14),
-                    ft.ElevatedButton(
-                        "Scarica e Installa",
-                        icon=ft.Icons.DOWNLOAD,
-                        url="https://github.com/EnricoFlammini/BudgetAmico/releases/latest",
-                        style=ft.ButtonStyle(
-                            color=ft.Colors.WHITE,
-                            bgcolor=ft.Colors.GREEN_600,
-                            padding=15
-                        )
-                    ),
-                    
                     ft.Divider(height=30),
                     
                     ft.Text("Risorse Utili", weight=ft.FontWeight.BOLD),
