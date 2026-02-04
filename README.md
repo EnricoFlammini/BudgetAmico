@@ -1,4 +1,4 @@
-# Budget Amico v0.47.00
+# Budget Amico v0.47.01
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 

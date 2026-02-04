@@ -339,7 +339,37 @@ class AdminTab(ft.Container):
                 ], vertical_alignment=ft.CrossAxisAlignment.CENTER)
                 
                 self.lv_membri.controls.append(AppStyles.card_container(content, padding=15))
+    def _mostra_confirm_email_dialog(self, title, default_email, on_confirm):
+        """Mostra un dialog per confermare/modificare l'email di destinazione."""
+        txt_confirm_email = ft.TextField(
+            label="E-mail destinatario",
+            value=default_email,
+            autofocus=True,
+            on_submit=lambda _: confirm_action(None)
+        )
 
+        def confirm_action(e):
+            email = txt_confirm_email.value.strip()
+            if not email or "@" not in email:
+                txt_confirm_email.error_text = "Inserisci un indirizzo email valido."
+                txt_confirm_email.update()
+                return
+            
+            self.page.close(dlg)
+            on_confirm(email)
+
+        dlg = ft.AlertDialog(
+            title=ft.Text(title),
+            content=ft.Column([
+                ft.Text("Verifica o modifica l'indirizzo email del destinatario prima di procedere:"),
+                txt_confirm_email
+            ], tight=True),
+            actions=[
+                ft.TextButton("Annulla", on_click=lambda _: self.page.close(dlg)),
+                ft.ElevatedButton("Conferma e Invia", icon=ft.Icons.SEND, on_click=confirm_action)
+            ],
+            actions_alignment=ft.MainAxisAlignment.END
+        )
         self.page.open(dlg)
 
     def _invia_backup_email_cliccato(self, e):

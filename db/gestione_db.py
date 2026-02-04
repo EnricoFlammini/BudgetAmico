@@ -1664,7 +1664,7 @@ def verifica_login(login_identifier: str, password: str) -> Optional[Dict[str, A
                         cognome = crypto.decrypt_data(risultato['cognome'], master_key)
                     except Exception as e:
                         print(f"[ERRORE] Errore decryption: {e}")
-                        return None
+                        return None, "Errore decriptazione dati protetti."
 
                 # --- BACKFILL CHECK ---
                 if SERVER_SECRET_KEY and master_key:
@@ -1746,13 +1746,13 @@ def verifica_login(login_identifier: str, password: str) -> Optional[Dict[str, A
                     'master_key': master_key.decode() if master_key else None,
                     'forza_cambio_password': risultato['forza_cambio_password'],
                     'sospeso': risultato.get('sospeso', False)
-                }
+                }, None
             
             print("[DEBUG] Login fallito o password errata.")
-            return None
+            return None, "Username o password errati."
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il login: {e}")
-        return None
+        return None, f"Errore di sistema: {str(e)}"
 
 
 

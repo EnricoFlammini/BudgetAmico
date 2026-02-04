@@ -6,6 +6,10 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.47.01 (04/02/2026) - HOTFIX
+- **Bugfix Login**: Risolto crash `AttributeError` quando veniva inserita una password errata. Standardizzato il ritorno della funzione di autenticazione per gestire correttamente i messaggi di errore del database.
+- **Ripristino UI Admin**: Reintrodotto il dialog di conferma email rimosso accidentalmente nella versione precedente, ripristinando la possibilità di inviare Family Key e credenziali membri.
+
 ### v0.47.00 (04/02/2026)
 - **Sicurezza e Conferma Invio**:
     - **Dialog di Verifica Email**: Implementato un nuovo sistema di sicurezza che richiede la conferma o la modifica dell'indirizzo email del destinatario prima di ogni invio (Backup e Credenziali).

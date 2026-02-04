@@ -188,17 +188,9 @@ class AuthView:
         
         try:
             from db.gestione_db import verifica_login
-            utente = verifica_login(username, password)
+            utente, errore = verifica_login(username, password)
+            
             if utente:
-                if utente.get('sospeso'):
-                    logger.warning(f"LOGIN BLOCCATO - Utente sospeso: {username}")
-                    self.txt_errore_login.value = "Account sospeso. Contatta l'amministratore."
-                    self.txt_errore_login.visible = True
-                    btn_login.disabled = False
-                    self.page.update()
-                    self.controller.hide_loading()
-                    return
-
                 logger.info(f"LOGIN RIUSCITO - Utente ID: {utente.get('id')}")
                 logger.info(f"  - Forza cambio password: {utente.get('forza_cambio_password')}")
                 logger.info(f"  - Master key presente: {'Si' if utente.get('master_key') else 'No'}")
@@ -208,8 +200,8 @@ class AuthView:
                     self.page.session.set("_temp_password_for_reencrypt", password)
                 self.controller.post_login_setup(utente)
             else:
-                logger.warning(f"LOGIN FALLITO - Credenziali non valide per: {username}")
-                self.txt_errore_login.value = "Username o password non validi."
+                logger.warning(f"LOGIN FALLITO per {username}: {errore}")
+                self.txt_errore_login.value = errore or "Username o password errati."
                 self.txt_errore_login.visible = True
                 btn_login.disabled = False
                 self.page.update()
