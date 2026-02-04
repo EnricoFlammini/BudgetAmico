@@ -94,16 +94,59 @@ def update_logger_config(componente: str, abilitato: bool, livello_minimo: str =
         return False
 
 
+# Lista dei logger "noti" nel sistema
+KNOWN_LOGGERS = [
+    'BackgroundService',
+    'YFinanceManager',
+    'AppController',
+    'GestioneDB',
+    'AuthView',
+    'SupabaseManager',
+    'CryptoManager',
+    'WebAppController',
+    'Main',
+    'WebDashboardView',
+    'DashboardView',
+    'TransactionDialog',
+    'PersonaleTab',
+    'ImpostazioniTab',
+    'CacheManager',
+    'ExportService',
+    'AdminPanel',
+    'DBLogger'
+]
+
+
 def get_all_components() -> list:
-    """Recupera tutti i componenti configurati."""
+    """
+    Recupera tutti i componenti configurati.
+    Ritorna SEMPRE tutti i componenti in KNOWN_LOGGERS, 
+    unendoli con lo stato presente nel database.
+    """
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute("SELECT componente, abilitato, livello_minimo FROM Config_Logger ORDER BY componente")
-            return [dict(row) for row in cur.fetchall()]
+            db_components = {row['componente']: dict(row) for row in cur.fetchall()}
+            
+            final_list = []
+            # Combina KNOWN_LOGGERS con i dati dal DB
+            for name in sorted(set(KNOWN_LOGGERS + list(db_components.keys()))):
+                if name in db_components:
+                    final_list.append(db_components[name])
+                else:
+                    # Default per componenti noti ma non ancora nel DB
+                    final_list.append({
+                        'componente': name,
+                        'abilitato': False,
+                        'livello_minimo': 'INFO'
+                    })
+            
+            return final_list
     except Exception as e:
         print(f"[DBLogHandler] Errore recupero componenti: {e}")
-        return []
+        # Fallback alla lista nota di base
+        return [{'componente': name, 'abilitato': False, 'livello_minimo': 'INFO'} for name in sorted(KNOWN_LOGGERS)]
 
 
 class DBLogHandler(logging.Handler):
@@ -205,23 +248,5 @@ def attach_db_handler_to_logger(logger_name: str):
 
 def attach_db_handler_to_all_loggers():
     """Aggiunge il DBLogHandler a tutti i logger noti."""
-    known_loggers = [
-        'BackgroundService',
-        'YFinanceManager', 
-        'AppController',
-        'GestioneDB',
-        'AuthView',
-        'SupabaseManager',
-        'CryptoManager',
-        'WebAppController',
-        'Main',
-        'WebDashboardView',
-        'DashboardView',
-        'TransactionDialog',
-        'PersonaleTab',
-        'ImpostazioniTab',
-        'CacheManager',
-    ]
-    
-    for name in known_loggers:
+    for name in KNOWN_LOGGERS:
         attach_db_handler_to_logger(name)

@@ -670,7 +670,7 @@ def get_configurazione(chiave: str, id_famiglia: Optional[str] = None, master_ke
             valore = res['valore']
             
             # Decrypt sensitive config values
-            sensitive_keys = ['smtp_server', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_from_email']
+            sensitive_keys = ['smtp_server', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_from_email', 'smtp_sender']
             
             if chiave in sensitive_keys:
                 # SMTP credentials are ALWAYS encrypted with SERVER_KEY (not family_key)
@@ -704,7 +704,7 @@ def set_configurazione(chiave: str, valore: str, id_famiglia: Optional[str] = No
     try:
         # Encrypt sensitive config values
         encrypted_valore = valore
-        sensitive_keys = ['smtp_server', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_from_email']
+        sensitive_keys = ['smtp_server', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_from_email', 'smtp_sender']
         
         if chiave in sensitive_keys and SERVER_SECRET_KEY:
             # SMTP credentials are ALWAYS encrypted with SERVER_KEY (not family_key)
@@ -757,6 +757,7 @@ def get_smtp_config(id_famiglia: Optional[str] = None, master_key_b64: Optional[
         'port': get_configurazione('smtp_port', id_famiglia, master_key_b64, id_utente),
         'user': get_configurazione('smtp_user', id_famiglia, master_key_b64, id_utente),
         'password': get_configurazione('smtp_password', id_famiglia, master_key_b64, id_utente),
+        'sender': get_configurazione('smtp_sender', id_famiglia, master_key_b64, id_utente),
         'provider': get_configurazione('smtp_provider', id_famiglia)  # provider is not sensitive
     }
 
@@ -773,6 +774,7 @@ def save_smtp_config(settings: Dict[str, Any], id_famiglia: Optional[str] = None
         set_configurazione('smtp_port', settings.get('port'), id_famiglia, master_key_b64, id_utente)
         set_configurazione('smtp_user', settings.get('user'), id_famiglia, master_key_b64, id_utente)
         set_configurazione('smtp_password', settings.get('password'), id_famiglia, master_key_b64, id_utente)
+        set_configurazione('smtp_sender', settings.get('sender'), id_famiglia, master_key_b64, id_utente)
         set_configurazione('smtp_provider', settings.get('provider'), id_famiglia)  # provider is not sensitive
         return True
     except Exception as e:
@@ -1464,18 +1466,13 @@ def esporta_dati_famiglia(id_famiglia: str, id_utente: str, master_key_b64: str)
                 family_key = base64.b64decode(family_key_b64)
                 nome_famiglia = _decrypt_if_key(nome_famiglia, family_key, crypto)
             
-            # Recupera configurazioni SMTP
-            smtp_config = get_smtp_config(id_famiglia, master_key_b64, id_utente)
-            
             export_data = {
                 'versione_export': '1.0',
                 'data_export': datetime.datetime.now().isoformat(),
                 'id_famiglia': id_famiglia,
                 'nome_famiglia': nome_famiglia,
                 'family_key_b64': family_key_b64,
-                'configurazioni': {
-                    'smtp': smtp_config
-                }
+                'configurazioni': {}
             }
             
             return export_data, None
@@ -2433,45 +2430,6 @@ def ottieni_conti(id_utente: str, master_key_b64: Optional[str] = None) -> List[
         print(f"[ERRORE] Errore recupero conti: {e}")
         return []
 
-def aggiungi_conto(id_utente: str, nome_conto: str, tipo: str, saldo_iniziale: float = 0.0, data_saldo_iniziale: Optional[str] = None, master_key_b64: Optional[str] = None, id_famiglia: Optional[str] = None) -> Optional[str]:
-    # Encrypt if key available
-    crypto, master_key = _get_crypto_and_key(master_key_b64)
-    
-    # Use family_key for account name encryption (so other family members can decrypt it)
-    encryption_key = master_key
-    if master_key and id_famiglia:
-        family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
-        if family_key:
-            encryption_key = family_key
-    
-    encrypted_nome = _encrypt_if_key(nome_conto, encryption_key, crypto)
-    encrypted_tipo = _encrypt_if_key(tipo, master_key, crypto)  # tipo can stay with master_key
-    encrypted_saldo = _encrypt_if_key(str(saldo_iniziale), master_key, crypto)
-    
-    if not data_saldo_iniziale:
-        data_saldo_iniziale = datetime.date.today().strftime('%Y-%m-%d')
-
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            cur.execute(
-                "INSERT INTO Conti (id_utente, nome_conto, tipo) VALUES (%s, %s, %s) RETURNING id_conto",
-                (id_utente, encrypted_nome, encrypted_tipo))
-            id_conto = cur.fetchone()['id_conto']
-            
-            # Add initial balance transaction
-            if saldo_iniziale != 0:
-                # Note: "Saldo Iniziale" is NOT encrypted to allow filtering in UI
-                cur.execute(
-                    "INSERT INTO Transazioni (id_conto, data, descrizione, importo) VALUES (%s, %s, %s, %s)",
-                    (id_conto, data_saldo_iniziale, "Saldo Iniziale", saldo_iniziale))
-            
-            con.commit()
-            return id_conto
-    except Exception as e:
-        print(f"[ERRORE] Errore aggiunta conto: {e}")
-        return None
-
 def modifica_conto(id_conto: str, nome_conto: str, tipo: str, saldo_iniziale: float, data_saldo_iniziale: str, master_key_b64: Optional[str] = None, id_famiglia: Optional[str] = None, id_utente: Optional[str] = None) -> bool:
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
@@ -3265,6 +3223,7 @@ def ottieni_conti_utente(id_utente, master_key_b64=None):
             if master_key:
                 for row in results:
                     row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
+                    row['tipo'] = _decrypt_if_key(row['tipo'], master_key, crypto)
             
             return results
     except Exception as e:
@@ -3317,9 +3276,11 @@ def ottieni_dettagli_conti_utente(id_utente, master_key_b64=None):
                 
                 if decrypted_nome and decrypted_nome != "[ENCRYPTED]" and not decrypted_nome.startswith("gAAAAA"):
                     row['nome_conto'] = decrypted_nome
+                    row['tipo'] = _decrypt_if_key(row['tipo'], family_key, crypto, silent=True)
                 elif master_key:
                     # Fallback to master_key for legacy data
                     row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto, silent=True)
+                    row['tipo'] = _decrypt_if_key(row['tipo'], master_key, crypto, silent=True)
                 
                 # IBAN always uses master_key (personal data)
                 if master_key:
@@ -3988,73 +3949,101 @@ def ottieni_tutti_i_conti_utente(id_utente, master_key_b64=None):
     return risultato_unificato
 
 
-def ottieni_tutti_i_conti_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
+def ottieni_tutti_i_conti_famiglia(id_famiglia, id_utente_richiedente, master_key_b64=None):
     """
-    Restituisce una lista unificata di TUTTI i conti (personali e condivisi)
-    di una data famiglia, escludendo quelli di investimento.
+    Restituisce TUTTI i conti di TUTTI i membri della famiglia, inclusi quelli condivisi e salvadanai.
+    Utile per la visibilità globale 'Altri Familiari'.
     """
     try:
+        # 1. Recupera tutti i membri della famiglia
+        utenti = ottieni_utenti_famiglia(id_famiglia)
+        
+        # Crypto context
+        crypto, master_key = _get_crypto_and_key(master_key_b64)
+        family_key = None
+        if master_key:
+            family_key = _get_family_key_for_user(id_famiglia, id_utente_richiedente, master_key, crypto)
+        
+        risultato = []
+        
         with get_db_connection() as con:
-            # con.row_factory = sqlite3.Row # Removed for Supabase
             cur = con.cursor()
-
-            # Conti Personali di tutti i membri della famiglia (esclude nascosti)
-            cur.execute("""
-                        SELECT C.id_conto, C.nome_conto, C.tipo, 0 as is_condiviso, U.username_enc as proprietario_enc, C.id_utente
-                        FROM Conti C
-                        JOIN Utenti U ON C.id_utente = U.id_utente
-                        JOIN Appartenenza_Famiglia AF ON U.id_utente = AF.id_utente
-                        WHERE AF.id_famiglia = %s AND C.tipo != 'Investimento' AND (C.nascosto = FALSE OR C.nascosto IS NULL)
-                        
-                        UNION ALL
-                        
-                        SELECT CC.id_conto_condiviso as id_conto, CC.nome_conto, CC.tipo, 1 as is_condiviso, 'Condiviso' as proprietario_enc, NULL as id_utente
-                        FROM ContiCondivisi CC
-                        WHERE CC.id_famiglia = %s AND CC.tipo != 'Investimento'
-                        """, (id_famiglia, id_famiglia))
             
-            results = [dict(row) for row in cur.fetchall()]
-            
-            # Decrypt loop
-            crypto, master_key = _get_crypto_and_key(master_key_b64)
-            
-            # Get family_key once for efficiency
-            family_key = None
-            if master_key and id_utente:
-                family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
-            
-            for row in results:
-                # Decrypt proprietario if it's a person
-                if row.get('proprietario_enc') and row['proprietario_enc'] != 'Condiviso':
-                     row['proprietario'] = decrypt_system_data(row['proprietario_enc']) or "Sconosciuto"
-                else:
-                     row['proprietario'] = row.get('proprietario_enc') # 'Condiviso'
-
-                # Try Family Key first for ALL accounts (shared and personal)
-                # This works for accounts created after the family_key encryption fix
-                decrypted = None
-                if family_key:
-                    decrypted = _decrypt_if_key(row['nome_conto'], family_key, crypto, silent=True)
+            for u in utenti:
+                uid = u['id_utente']
+                # Conti Personali di questo utente
+                cur.execute("""
+                    SELECT id_conto, nome_conto, tipo 
+                    FROM Conti 
+                    WHERE id_utente = %s AND (nascosto = FALSE OR nascosto IS NULL)
+                """, (uid,))
                 
-                # Check if decryption was successful
-                if decrypted and decrypted != "[ENCRYPTED]" and not decrypted.startswith("gAAAAA"):
-                    row['nome_conto'] = decrypted
-                else:
-                    # Fallback: For personal accounts belonging to the current user, try master_key (legacy data)
-                    if not row['is_condiviso'] and id_utente and row.get('id_utente') == id_utente:
-                        fallback = _decrypt_if_key(row['nome_conto'], master_key, crypto, silent=True)
-                        if fallback and fallback != "[ENCRYPTED]":
-                            row['nome_conto'] = fallback
-                    # For shared accounts, try master_key as legacy fallback
-                    elif row['is_condiviso'] and master_key:
-                        fallback = _decrypt_if_key(row['nome_conto'], master_key, crypto, silent=True)
-                        if fallback and fallback != "[ENCRYPTED]":
-                            row['nome_conto'] = fallback
-                    # Else: leave as-is (encrypted string will show for other members' legacy accounts)
-            
-            return results
+                for row in cur.fetchall():
+                    r = dict(row)
+                    r['is_condiviso'] = False
+                    r['id_utente_owner'] = uid
+                    r['nome_owner'] = u['nome_visualizzato']
+                    
+                    # Decrypt nome_conto and tipo
+                    # 1. Try family_key (most common for shared context)
+                    dec_nome = _decrypt_if_key(r['nome_conto'], family_key, crypto, silent=True)
+                    dec_tipo = _decrypt_if_key(r['tipo'], family_key, crypto, silent=True)
+                    
+                    # 2. Fallback to master_key if it's the owner's account and first attempt failed/skipped
+                    if uid == id_utente_richiedente and master_key:
+                        # Se è ancora criptato o ha fallito, prova master_key
+                        if dec_nome == "[ENCRYPTED]" or (isinstance(dec_nome, str) and dec_nome.startswith("gAAAAA")):
+                            dec_nome = _decrypt_if_key(r['nome_conto'], master_key, crypto, silent=True)
+                        if dec_tipo == "[ENCRYPTED]" or (isinstance(dec_tipo, str) and dec_tipo.startswith("gAAAAA")):
+                            dec_tipo = _decrypt_if_key(r['tipo'], master_key, crypto, silent=True)
+                    
+                    r['nome_conto'] = dec_nome
+                    r['tipo'] = dec_tipo
+                    risultato.append(r)
+                    
+                # Carte di questo utente
+                cur.execute("SELECT id_carta, nome_carta FROM Carte WHERE id_utente = %s", (uid,))
+                for row in cur.fetchall():
+                    dec_nome = _decrypt_if_key(row['nome_carta'], family_key, crypto, silent=True)
+                    if (dec_nome == "[ENCRYPTED]" or (isinstance(dec_nome, str) and dec_nome.startswith("gAAAAA"))) and uid == id_utente_richiedente and master_key:
+                        dec_nome = _decrypt_if_key(row['nome_carta'], master_key, crypto, silent=True)
+                        
+                    risultato.append({
+                        'id_conto': f"CARD_{row['id_carta']}",
+                        'nome_conto': dec_nome,
+                        'tipo': 'Carta',
+                        'id_utente_owner': uid,
+                        'nome_owner': u['nome_visualizzato'],
+                        'is_condiviso': False
+                    })
 
+            # 3. Conti Condivisi della famiglia
+            cur.execute("SELECT id_conto_condiviso as id_conto, nome_conto, tipo FROM ContiCondivisi WHERE id_famiglia = %s", (id_famiglia,))
+            for row in cur.fetchall():
+                r = dict(row)
+                r['is_condiviso'] = True
+                r['nome_conto'] = _decrypt_if_key(r['nome_conto'], family_key, crypto, silent=True)
+                r['tipo'] = _decrypt_if_key(r['tipo'], family_key, crypto, silent=True)
+                r['id_utente_owner'] = None
+                r['nome_owner'] = "Condiviso"
+                risultato.append(r)
+                
+            # 4. Salvadanai della famiglia
+            cur.execute("SELECT id_salvadanaio, nome FROM Salvadanai WHERE id_famiglia = %s", (id_famiglia,))
+            for row in cur.fetchall():
+                 risultato.append({
+                     'id_conto': f"PB_{row['id_salvadanaio']}",
+                     'nome_conto': _decrypt_if_key(row['nome'], family_key, crypto, silent=True),
+                     'tipo': 'Salvadanaio',
+                     'id_utente_owner': None,
+                     'nome_owner': "Famiglia",
+                     'is_condiviso': False
+                 })
+
+        return risultato
     except Exception as e:
+        print(f"[ERRORE] ottieni_tutti_i_conti_famiglia: {e}")
+        return []
         print(f"[ERRORE] Errore generico durante il recupero di tutti i conti famiglia: {e}")
         return []
 
@@ -8920,13 +8909,19 @@ def elimina_carta(id_carta, soft_delete=True):
 
 def ottieni_ids_conti_tecnici_carte(id_utente):
     """
-    Recupera gli ID dei conti tecnici (saldo) associati a TUTTE le carte dell'utente (anche eliminate/inactive).
+    Recupera gli ID dei conti tecnici (saldo) associati alle CARTE DI CREDITO dell'utente.
+    I conti delle carte di debito NON sono tecnici e devono essere visibili.
     Utile per filtrare questi conti dalle liste di selezione.
     """
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("SELECT id_conto_contabile, id_conto_contabile_condiviso FROM Carte WHERE id_utente = %s", (id_utente,))
+            # Solo carte di CREDITO hanno conti tecnici da nascondere
+            cur.execute("""
+                SELECT id_conto_contabile, id_conto_contabile_condiviso 
+                FROM Carte 
+                WHERE id_utente = %s AND tipo_carta = 'credito'
+            """, (id_utente,))
             rows = cur.fetchall()
             ids = set()
             for r in rows:

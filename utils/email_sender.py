@@ -8,60 +8,77 @@ from db.gestione_db import get_smtp_config
 # Configurazione logger
 logger = logging.getLogger(__name__)
 
-def send_email(to_email, subject, body, smtp_config=None):
+def send_email(to_email, subject, body, smtp_config=None, attachment_bytes=None, attachment_name=None):
     """
-    Invia un'email utilizzando le impostazioni SMTP.
+    Invia un'email utilizzando le impostazioni SMTP con supporto opzionale per allegati.
     
     Args:
         to_email (str): Indirizzo email del destinatario.
         subject (str): Oggetto dell'email.
         body (str): Corpo dell'email.
-        smtp_config (dict, optional): Dizionario con le impostazioni SMTP (server, port, user, password).
-                                      Se fornito, usa queste impostazioni invece di quelle salvate/env.
+        smtp_config (dict, optional): Dizionario con le impostazioni SMTP.
+        attachment_bytes (bytes, optional): Contenuto dell'allegato in byte.
+        attachment_name (str, optional): Nome del file allegato.
     """
+    settings = None
     if smtp_config and smtp_config.get('server'):
-        print(f"[DEBUG] send_email - Usando config fornita: {smtp_config.get('server')}:{smtp_config.get('port')} (User: {smtp_config.get('user')})")
         smtp_server = smtp_config.get('server')
         smtp_port = smtp_config.get('port')
         smtp_user = smtp_config.get('user')
         smtp_password = smtp_config.get('password')
     else:
-        # 1. Prova a caricare dal Database
         settings = get_smtp_config()
-        # Se settings ha valori validi (non None), usali. 
-        # get_smtp_config ritorna un dict con chiavi, ma i valori possono essere None.
         if settings and settings.get('server'): 
-            print("[DEBUG] send_email - Usando config globale DB")
             smtp_server = settings.get('server')
             smtp_port = settings.get('port')
             smtp_user = settings.get('user')
             smtp_password = settings.get('password')
         else:
-            print("[DEBUG] send_email - Usando Env Vars")
-            # 2. Fallback su variabili d'ambiente (opzionale, mantenuto per retrocompatibilità)
             smtp_server = os.getenv("SMTP_SERVER")
             smtp_port = os.getenv("SMTP_PORT")
             smtp_user = os.getenv("SMTP_USER")
             smtp_password = os.getenv("SMTP_PASSWORD")
 
     if not all([smtp_server, smtp_port, smtp_user, smtp_password]):
-        logger.error("Configurazione SMTP mancante.")
-        return False, "Configurazione SMTP mancante."
+        logger.error(f"Configurazione SMTP incompleta: server={bool(smtp_server)}, port={bool(smtp_port)}, user={bool(smtp_user)}, pass={bool(smtp_password)}")
+        return False, "Configurazione SMTP incompleta."
+
+    # Email Mittente (Sender): Alcuni provider (come Brevo) richiedono un mittente verificato
+    # che può essere diverso dall'utente SMTP.
+    from_email = smtp_config.get('sender') if smtp_config and smtp_config.get('sender') else \
+                (settings.get('sender') if (settings and settings.get('sender')) else smtp_user)
+
+    print(f"[DEBUG] [SMTP] Protocollo: {smtp_server}:{smtp_port}")
+    print(f"[DEBUG] [SMTP] Auth User: {smtp_user}")
+    print(f"[DEBUG] [SMTP] From Header: {from_email}")
+    print(f"[DEBUG] [SMTP] To: {to_email}")
 
     try:
-        msg = MIMEMultipart('alternative')
+        from email.mime.application import MIMEApplication
+        
+        msg = MIMEMultipart()
         msg['Subject'] = subject
-        msg['From'] = smtp_user
+        msg['From'] = from_email
         msg['To'] = to_email
 
-        part = MIMEText(body, 'html')
-        msg.attach(part)
+        # Corpo email (HTML)
+        msg.attach(MIMEText(body, 'html'))
+
+        # Aggiunta allegato se presente
+        if attachment_bytes and attachment_name:
+            print(f"[DEBUG] [SMTP] Allegato presente: {attachment_name} ({len(attachment_bytes)} bytes)")
+            part = MIMEApplication(attachment_bytes)
+            part.add_header('Content-Disposition', 'attachment', filename=attachment_name)
+            msg.attach(part)
 
         # Connessione al server SMTP
-        server = smtplib.SMTP(smtp_server, int(smtp_port), timeout=10)
-        server.starttls() # Sicurezza TLS
+        server = smtplib.SMTP(smtp_server, int(smtp_port), timeout=15)
+        server.set_debuglevel(1) # Forza log smtplib su console
+        server.starttls()
         server.login(smtp_user, smtp_password)
-        server.sendmail(smtp_user, to_email, msg.as_string())
+        
+        # USA from_email come mittente busta per massima compatibilità
+        server.sendmail(from_email, to_email, msg.as_string())
         server.quit()
 
         logger.info(f"Email inviata con successo a {to_email}")

@@ -515,12 +515,6 @@ class DashboardView:
             })
             index += 1
 
-
-
-            index += 1
-
-
-
         # 13. Calcolatrice (Solo ID 16)
         uid = str(self.controller.get_user_id())
         if uid == '16':

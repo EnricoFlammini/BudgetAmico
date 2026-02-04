@@ -163,7 +163,7 @@ class ContoDialog(ft.AlertDialog):
         self.dd_scope_conto.options[1].text = loc.get("shared_account") if loc.get("shared_account") else "Conto Condiviso"
         
         self.dd_conto_tipo.options = [
-            ft.dropdown.Option("Corrente"), ft.dropdown.Option("Risparmio"),
+            ft.dropdown.Option("Conto Corrente"), ft.dropdown.Option("Risparmio"),
             ft.dropdown.Option("Investimento"), ft.dropdown.Option("Fondo Pensione"),
             ft.dropdown.Option("Contanti"), ft.dropdown.Option("Altro"),
         ]
@@ -426,6 +426,12 @@ class ContoDialog(ft.AlertDialog):
         self.controller.page.update()
 
     def _salva_conto(self, e):
+        # Protezione anti doppio-click
+        if hasattr(self, '_saving_in_progress') and self._saving_in_progress:
+            print("[DEBUG] Salvataggio già in corso, ignoro doppio click")
+            return
+        self._saving_in_progress = True
+        
         self.controller.show_loading("Attendere...")
         try:
             # Get master_key from session for encryption
@@ -635,6 +641,7 @@ class ContoDialog(ft.AlertDialog):
             traceback.print_exc()
             self.controller.show_error_dialog(f"Errore inaspettato: {ex}")
         finally:
+            self._saving_in_progress = False  # Reset flag anti doppio-click
             self.controller.hide_loading()
             if self.controller.page: self.controller.page.update()
 

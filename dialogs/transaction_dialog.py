@@ -1,6 +1,7 @@
 import flet as ft
 import datetime
 import traceback
+import json
 from db.gestione_db import (
     aggiungi_transazione,
     modifica_transazione,
@@ -16,7 +17,8 @@ from db.gestione_db import (
     esegui_giroconto,
     ottieni_salvadanai_conto,
     esegui_giroconto_salvadanaio,
-    ottieni_ids_conti_tecnici_carte
+    ottieni_ids_conti_tecnici_carte,
+    get_configurazione
 )
 from utils.logger import setup_logger
 
@@ -114,74 +116,95 @@ class TransactionDialog(ft.AlertDialog):
         famiglia_id = self.controller.get_family_id()
         master_key_b64 = self.controller.page.session.get("master_key")
 
-        # 1. Cards (Caricate PRIMA dei conti)
-        carte = ottieni_carte_utente(utente_id, master_key_b64)
-        opzioni_conto = []
+        # 0. Recupera Matrice FOP Globale
+        tipo_op = self.radio_tipo_transazione.value or "Spesa"
+        raw_matrix = get_configurazione("global_fop_matrix")
         
-        # Store for filtering
-        self.all_source_options = []
+        matrix_source = {}
+        matrix_dest = {}
         
-        if carte:
-            # Aggiungi Carte all'inizio
-            for c in carte:
-                target_acc = c.get('id_conto_contabile')
-                is_shared_card = False
-                
-                if not target_acc:
-                     target_acc = c.get('id_conto_contabile_condiviso')
-                     if target_acc: is_shared_card = True
-                
-                if not target_acc:
-                    # Fallback
-                    target_acc = c.get('id_conto_riferimento')
-                    if not target_acc:
-                        target_acc = c.get('id_conto_riferimento_condiviso')
-                        if target_acc: is_shared_card = True
-                
-                logger.debug(f"[DEBUG_CARD] Card: {c.get('nome_carta')}, ID: {c.get('id_carta')}, "
-                             f"Contabile: {c.get('id_conto_contabile')}, Rif: {c.get('id_conto_riferimento')}, "
-                             f"TargetResolved: {target_acc}")
+        if raw_matrix:
+            try:
+                full_matrix = json.loads(raw_matrix)
+                if tipo_op == "Giroconto":
+                    matrix_source = full_matrix.get("Giroconto (Mittente)", {})
+                    matrix_dest = full_matrix.get("Giroconto (Ricevente)", {})
+                else:
+                    matrix_source = full_matrix.get(tipo_op, {})
+            except: logger.error("Errore parsing global_fop_matrix")
+        
+        # Se la matrice è vuota, usiamo dei default interni per sicurezza
+        if not matrix_source:
+            matrix_source = {
+                "Conto Corrente": {"Personale": True, "Condiviso": True, "Altri Familiari": (tipo_op == "Giroconto")},
+                "Carte": {"Personale": (tipo_op == "Spesa"), "Condiviso": (tipo_op == "Spesa"), "Altri Familiari": False},
+                "Salvadanaio": {"Personale": (tipo_op == "Giroconto"), "Condiviso": (tipo_op == "Giroconto"), "Altri Familiari": (tipo_op == "Giroconto")}
+            }
+        if tipo_op == "Giroconto" and not matrix_dest:
+             matrix_dest = matrix_source.copy()
 
-                if target_acc:
-                    flag = 'S' if is_shared_card else 'P'
-                    key = f"CARD_{c['id_carta']}_{target_acc}_{flag}"
-                    opzioni_conto.append(ft.dropdown.Option(key=key, text=f"💳 {c['nome_carta']}"))
-            
-            # Aggiungi separatore DOPO le carte
-            opzioni_conto.append(ft.dropdown.Option(key="DIVIDER", text="-- Conti --", disabled=True))
-
-        # 2. Accounts (Caricati DOPO le carte)
-        tutti_i_conti = ottieni_tutti_i_conti_utente(utente_id, master_key_b64=master_key_b64)
-        
-        # Identifica ID conti tecnici delle carte da escludere (anche carte eliminate)
+        # 1. Recupera tutti i conti della famiglia (necessario per Altri Familiari)
+        conti_famiglia = ottieni_tutti_i_conti_famiglia(famiglia_id, utente_id, master_key_b64=master_key_b64)
         ids_conti_tecnici = ottieni_ids_conti_tecnici_carte(utente_id)
-        
-        # Filtra i conti: 
-        # 1. Non mostrare conti tecnici delle carte (si spende dalla carta, non dal conto tecnico diretto)
-        # 2. Non mostrare conti investimento/pensione (hanno UI dedicata)
-        tipi_esclusi = ['Fondo Pensione', 'Investimenti', 'Crypto', 'Azioni', 'Obbligazioni', 'ETF', 'Fondo']
-        
-        conti_filtrati = []
-        for c in tutti_i_conti:
-            # 1. Non mostrare conti tecnici delle carte (Filtro per ID)
-            if c['id_conto'] in ids_conti_tecnici:
-                continue
-            # 1.1 Non mostrare conti tecnici delle carte (Filtro per NOME - Backup robusto per produzione)
-            if "Saldo" in (c.get('nome_conto') or ""):
-                continue
-            # 2. Non mostrare conti investimento/pensione (hanno UI dedicata)
-            if c['tipo'] in tipi_esclusi:
-                continue
-            conti_filtrati.append(c)
 
-        for c in conti_filtrati:
-            suffix = " " + self.loc.get("shared_suffix") if c['is_condiviso'] else ""
+        # Mappatura tipi matrice -> tipi DB
+        tipo_map = {
+            "Conto Corrente": ["Conto Corrente", "Conto", "Corrente"],
+            "Carte": ["Carta", "Carta di Credito", "Prepagata"],
+            "Risparmio": ["Risparmio", "Conto Deposito"],
+            "Investimenti": ["Investimenti", "Investimento", "Crypto", "Azioni", "Obbligazioni", "ETF", "Fondo"],
+            "Contanti": ["Contanti"],
+            "Fondo Pensione": ["Fondo Pensione"],
+            "Salvadanaio": ["Salvadanaio"]
+        }
+
+        def is_allowed(tipo_db, scope, matrix_to_check):
+            if not tipo_db: return False
+            tipo_clean = str(tipo_db).strip().lower()
+            cat_fop = None
+            for cat, db_list in tipo_map.items():
+                if any(tipo_clean == x.strip().lower() for x in db_list):
+                    cat_fop = cat
+                    break
+            if not cat_fop: return False
+            return matrix_to_check.get(cat_fop, {}).get(scope, False)
+
+        opzioni_sorgente = []
+        opzioni_destinazione = []
+
+        for c in conti_famiglia:
+            if c['id_conto'] in ids_conti_tecnici or "Saldo" in (c.get('nome_conto') or ""):
+                continue
+            
+            if c['is_condiviso']: scope = "Condiviso"
+            elif str(c['id_utente_owner']) == str(utente_id): scope = "Personale"
+            else: scope = "Altri Familiari"
+
             prefix = "C" if c['is_condiviso'] else "P"
-            opzioni_conto.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}{suffix}"))
+            suffix = ""
+            if scope == "Condiviso": suffix = " " + self.loc.get("shared_suffix")
+            elif scope == "Altri Familiari": suffix = f" ({c.get('nome_owner', 'Altro')})"
+            
+            icon = "🏦"
+            if c['tipo'] in tipo_map["Carte"]: icon = "💳"
+            elif c['tipo'] == "Salvadanaio": icon = "🐷"
+            elif c['tipo'] == "Contanti": icon = "💵"
+            
+            key = f"{prefix}{c['id_conto']}"
+            if c['tipo'] in tipo_map["Carte"]: key = c['id_conto'] 
 
-        self.all_source_options = opzioni_conto
-        self.dd_conto_dialog.options = list(self.all_source_options)
+            opt = ft.dropdown.Option(key=key, text=f"{icon} {c['nome_conto']}{suffix}")
+            
+            if is_allowed(c['tipo'], scope, matrix_source):
+                opzioni_sorgente.append(opt)
+            
+            if tipo_op == "Giroconto" and is_allowed(c['tipo'], scope, matrix_dest):
+                opzioni_destinazione.append(opt)
 
+        self.dd_conto_dialog.options = opzioni_sorgente
+        self.dd_conto_destinazione_dialog.options = opzioni_destinazione
+
+        # 4. Categories Dropdown
         self.dd_sottocategoria_dialog.options = [
             ft.dropdown.Option(key=None, text=self.loc.get("no_category")),
             ft.dropdown.Option(key="INTERESSI", text="💰 Interessi")
@@ -194,62 +217,22 @@ class TransactionDialog(ft.AlertDialog):
                         ft.dropdown.Option(key=sub_cat['id_sottocategoria'], text=f"{cat_data['nome_categoria']} - {sub_cat['nome_sottocategoria']}")
                     )
 
-        if famiglia_id:
-             conti_famiglia = ottieni_tutti_i_conti_famiglia(famiglia_id, master_key_b64=master_key_b64, id_utente=utente_id)
-             # Filtra tipi non validi (Ora includiamo tutto tranne null)
-             conti_dest_filtrati = [c for c in conti_famiglia if c['tipo']]
-             
-             # FIX: Filtra anche qui i conti tecnici delle carte (bug "Saldo nuova" in destinazione)
-             ids_conti_tecnici_dest = ottieni_ids_conti_tecnici_carte(utente_id)
-             
-             opzioni_dest = []
-             
-             for c in conti_dest_filtrati:
-                # Skip technical accounts (ID filter and Name filter)
-                if c['id_conto'] in ids_conti_tecnici_dest: continue
-                if "Saldo" in (c.get('nome_conto') or ""): continue
-             
-                prefix = "C" if c['is_condiviso'] else "P"
-                suffix = " (Condiviso)" if c['is_condiviso'] else ""
-                opzioni_dest.append(ft.dropdown.Option(key=f"{prefix}{c['id_conto']}", text=f"{c['nome_conto']}{suffix}"))
-                
-                # Salvadanai per destinazione
-                salvadanai = ottieni_salvadanai_conto(c['id_conto'], famiglia_id, master_key_b64, utente_id, is_condiviso=c['is_condiviso'])
-                for s in salvadanai:
-                     parent_key = f"{prefix}{c['id_conto']}"
-                     opzioni_dest.append(ft.dropdown.Option(
-                         key=f"S{s['id']}_{parent_key}", 
-                         text=f"  ↳ 🐷 {s['nome']} ({self.loc.format_currency(s['importo'])})"
-                     ))
-             self.dd_conto_destinazione_dialog.options = opzioni_dest
-
     def _on_tipo_transazione_change(self, e):
         tipo = self.radio_tipo_transazione.value
         is_giroconto = (tipo == "Giroconto")
         
+        # Ricarica dropdown per applicare i filtri specifici del tipo
+        self._popola_dropdowns()
+        
         # Toggle visibilità campi
         self.dd_conto_destinazione_dialog.visible = is_giroconto
         self.dd_sottocategoria_dialog.visible = not is_giroconto
-        self.cb_importo_nascosto.visible = not is_giroconto # Nascondi importo nascosto per giroconto (è condiviso di natura se tra conti)
+        self.cb_importo_nascosto.visible = not is_giroconto
         
-        # Filtra sorgente: se giroconto, nascondi carte
-        if is_giroconto:
-            self.dd_conto_dialog.options = [
-                opt for opt in getattr(self, 'all_source_options', []) 
-                if not str(opt.key).startswith("CARD_") and opt.key != "DIVIDER"
-            ]
-            # Reset se selezionato carta
-            if self.dd_conto_dialog.value and str(self.dd_conto_dialog.value).startswith("CARD_"):
-                self.dd_conto_dialog.value = None
-        else:
-             self.dd_conto_dialog.options = list(getattr(self, 'all_source_options', []))
-
         # Aggiorna label conto sorgente
         self.dd_conto_dialog.label = self.loc.get("from_account", "Da Conto") if is_giroconto else self.loc.get("account")
-        self.dd_conto_dialog.update()
-        self.dd_conto_destinazione_dialog.update()
-        self.dd_sottocategoria_dialog.update()
-        self.cb_importo_nascosto.update()
+        
+        if self.page: self.page.update()
 
     def _reset_campi(self):
         self.txt_descrizione_dialog.error_text = None

@@ -1,6 +1,7 @@
 import flet as ft
 import traceback
 import datetime
+import json
 from db.gestione_db import (
     aggiungi_prestito,
     modifica_prestito,
@@ -11,7 +12,10 @@ from db.gestione_db import (
     ottieni_quote_prestito,
     aggiungi_rata_piano_ammortamento,
     ottieni_piano_ammortamento,
-    ottieni_ids_conti_tecnici_carte
+    ottieni_ids_conti_tecnici_carte,
+    get_configurazione,
+    ottieni_tutti_i_conti_famiglia,
+    ottieni_carte_utente
 )
 from dialogs.piano_ammortamento_dialog import PianoAmmortamentoDialog
 
@@ -233,39 +237,67 @@ class PrestitoDialogs:
             field.error_text = None
 
     def _popola_dropdowns_prestito(self):
-        id_famiglia = self.controller.get_family_id()
         id_utente = self.controller.get_user_id()
+        id_famiglia = self.controller.get_family_id()
         master_key_b64 = self.controller.page.session.get("master_key")
 
-        from db.gestione_db import ottieni_conti_condivisi_utente, ottieni_dettagli_conti_utente
+        # 0. Recupera Matrice FOP Globale per Prestiti
+        raw_matrix = get_configurazione("global_fop_matrix")
+        matrix_prestiti = {}
+        if raw_matrix:
+            try: matrix_prestiti = json.loads(raw_matrix).get("Prestiti", {})
+            except: pass
         
-        conti_personali = ottieni_dettagli_conti_utente(id_utente, master_key_b64=master_key_b64)
-        conti_condivisi = ottieni_conti_condivisi_utente(id_utente, master_key_b64=master_key_b64)
-        
-        # Identifica ID conti tecnici delle carte da escludere
+        if not matrix_prestiti:
+            matrix_prestiti = {"Conto Corrente": {"Personale": True, "Condiviso": True, "Altri Familiari": False}}
+
+        # 1. Recupera tutti i conti della famiglia
+        conti_famiglia = ottieni_tutti_i_conti_famiglia(id_famiglia, id_utente, master_key_b64=master_key_b64)
         ids_conti_tecnici = ottieni_ids_conti_tecnici_carte(id_utente)
-        
-        # Filtra i conti: escludiamo i conti tecnici delle carte di credito (ID e Nome "Saldo")
-        # I conti correnti usati come tecnici per debito NON contengono "Saldo" nel nome, quindi rimangono visibili.
-        conti_personali_filtrati = [
-            c for c in conti_personali 
-            if c['tipo'] not in ['Investimento', 'Fondo Pensione'] 
-            and not (c['id_conto'] in ids_conti_tecnici)
-            and "Saldo" not in (c.get('nome_conto') or "")
-        ]
-        conti_condivisi_filtrati = [
-            c for c in conti_condivisi 
-            if c['tipo'] not in ['Investimento', 'Fondo Pensione'] 
-            and not (c['id_conto'] in ids_conti_tecnici)
-            and "Saldo" not in (c.get('nome_conto') or "")
-        ]
-        
+
+        tipo_map = {
+            "Conto Corrente": ["Conto Corrente", "Conto", "Corrente"],
+            "Carte": ["Carta", "Carta di Credito", "Prepagata"],
+            "Risparmio": ["Risparmio", "Conto Deposito"],
+            "Investimenti": ["Investimenti", "Investimento", "Crypto", "Azioni", "Obbligazioni", "ETF", "Fondo"],
+            "Contanti": ["Contanti"],
+            "Fondo Pensione": ["Fondo Pensione"],
+            "Salvadanaio": ["Salvadanaio"]
+        }
+
+        def is_allowed(tipo_db, scope):
+            if not tipo_db: return False
+            tipo_clean = str(tipo_db).strip().lower()
+            cat_fop = None
+            for cat, db_list in tipo_map.items():
+                if any(tipo_clean == x.strip().lower() for x in db_list):
+                    cat_fop = cat
+                    break
+            if not cat_fop: return False
+            return matrix_prestiti.get(cat_fop, {}).get(scope, False)
+
         opzioni_conti = []
-        for c in conti_personali_filtrati:
-            opzioni_conti.append(ft.dropdown.Option(key=f"p_{c['id_conto']}", text=c['nome_conto']))
-        for c in conti_condivisi_filtrati:
-            opzioni_conti.append(ft.dropdown.Option(key=f"s_{c['id_conto']}", text=f"{c['nome_conto']} (Condiviso)"))
-        
+        for c in conti_famiglia:
+            if c['id_conto'] in ids_conti_tecnici or "Saldo" in (c.get('nome_conto') or ""):
+                continue
+            
+            # Ambito
+            if c['is_condiviso']: scope = "Condiviso"
+            elif str(c['id_utente_owner']) == str(id_utente): scope = "Personale"
+            else: scope = "Altri Familiari"
+
+            if is_allowed(c['tipo'], scope):
+                prefix = "C" if c['is_condiviso'] else "P"
+                suffix = ""
+                if scope == "Condiviso": suffix = " (Condiviso)"
+                elif scope == "Altri Familiari": suffix = f" ({c.get('nome_owner', 'Altro')})"
+
+                icon = "🏦"
+                if c['tipo'] in tipo_map["Carte"]: icon = "💳"
+                
+                key = c['id_conto'] if c['tipo'] in tipo_map["Carte"] else f"{prefix}{c['id_conto']}"
+                opzioni_conti.append(ft.dropdown.Option(key=key, text=f"{icon} {c['nome_conto']}{suffix}"))
+
         self.dd_conto_default.options = opzioni_conti
 
         categorie_con_sottocategorie = ottieni_categorie_e_sottocategorie(id_famiglia)
@@ -510,24 +542,70 @@ class PrestitoDialogs:
         self.txt_data_pagamento.value = datetime.date.today().strftime('%Y-%m-%d')
 
         # Popola dropdown
+        self._popola_dropdowns_pagamento_rata()
+    
+    def _popola_dropdowns_pagamento_rata(self):
         id_utente = self.controller.get_user_id()
         id_famiglia = self.controller.get_family_id()
         master_key_b64 = self.controller.page.session.get("master_key")
-        conti = ottieni_tutti_i_conti_utente(id_utente, master_key_b64=master_key_b64)
+
+        # 0. Recupera Matrice FOP Globale per Prestiti (Pagamento)
+        raw_matrix = get_configurazione("global_fop_matrix")
+        matrix_prestiti = {}
+        if raw_matrix:
+            try: matrix_prestiti = json.loads(raw_matrix).get("Prestiti", {})
+            except: pass
         
-        # Identifica ID conti tecnici delle carte da escludere
+        if not matrix_prestiti:
+            matrix_prestiti = {"Conto Corrente": {"Personale": True, "Condiviso": True, "Altri Familiari": False}}
+
+        # 1. Recupera tutti i conti della famiglia
+        conti_famiglia = ottieni_tutti_i_conti_famiglia(id_famiglia, id_utente, master_key_b64=master_key_b64)
         ids_conti_tecnici = ottieni_ids_conti_tecnici_carte(id_utente)
-        
-        conti_filtrati = [
-            c for c in conti 
-            if c['tipo'] not in ['Investimento', 'Fondo Pensione'] 
-            and not (c['id_conto'] in ids_conti_tecnici and "Saldo" in (c.get('nome_conto') or ""))
-        ]
+
+        tipo_map = {
+            "Conto Corrente": ["Conto Corrente", "Conto", "Corrente"],
+            "Carte": ["Carta", "Carta di Credito", "Prepagata"],
+            "Risparmio": ["Risparmio", "Conto Deposito"],
+            "Investimenti": ["Investimenti", "Investimento", "Crypto", "Azioni", "Obbligazioni", "ETF", "Fondo"],
+            "Contanti": ["Contanti"],
+            "Fondo Pensione": ["Fondo Pensione"],
+            "Salvadanaio": ["Salvadanaio"]
+        }
+
+        def is_allowed(tipo_db, scope):
+            if not tipo_db: return False
+            tipo_clean = str(tipo_db).strip().lower()
+            cat_fop = None
+            for cat, db_list in tipo_map.items():
+                if any(tipo_clean == x.strip().lower() for x in db_list):
+                    cat_fop = cat
+                    break
+            if not cat_fop: return False
+            return matrix_prestiti.get(cat_fop, {}).get(scope, False)
+
         opzioni_conti = []
-        for c in conti_filtrati:
-            is_condiviso = c.get('is_condiviso') or c.get('condiviso')
-            suffix = " (Condiviso)" if is_condiviso else ""
-            opzioni_conti.append(ft.dropdown.Option(key=c['id_conto'], text=f"{c['nome_conto']}{suffix}"))
+        for c in conti_famiglia:
+            if c['id_conto'] in ids_conti_tecnici or "Saldo" in (c.get('nome_conto') or ""):
+                continue
+            
+            # Ambito
+            if c['is_condiviso']: scope = "Condiviso"
+            elif str(c['id_utente_owner']) == str(id_utente): scope = "Personale"
+            else: scope = "Altri Familiari"
+
+            if is_allowed(c['tipo'], scope):
+                prefix = "C" if c['is_condiviso'] else "P"
+                suffix = ""
+                if scope == "Condiviso": suffix = " (Condiviso)"
+                elif scope == "Altri Familiari": suffix = f" ({c.get('nome_owner', 'Altro')})"
+
+                icon = "🏦"
+                if c['tipo'] in tipo_map["Carte"]: icon = "💳"
+                
+                key = c['id_conto'] if c['tipo'] in tipo_map["Carte"] else f"{prefix}{c['id_conto']}"
+                opzioni_conti.append(ft.dropdown.Option(key=key, text=f"{icon} {c['nome_conto']}{suffix}"))
+
         self.dd_conto_pagamento.options = opzioni_conti
 
         categorie_con_sottocategorie = ottieni_categorie_e_sottocategorie(id_famiglia)

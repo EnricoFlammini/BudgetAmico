@@ -73,6 +73,7 @@ class AdminPanelView:
         self._init_families_tab_ui()
         self._init_config_tab_ui()
         self._init_db_stats_tab_ui()
+        self._init_fop_tab_ui()
 
     def _sort_datatable(self, e, table: ft.DataTable, data_list: list, update_method):
         """Helper generico per ordinare le tabelle."""
@@ -99,6 +100,7 @@ class AdminPanelView:
         self._load_families()
         self._load_config()
         self._load_db_stats()
+        self._load_fop_matrix()
 
         # Definisci le tabs
         self.tabs.tabs = [
@@ -131,6 +133,11 @@ class AdminPanelView:
                 text="Configurazione",
                 icon=ft.Icons.SETTINGS,
                 content=self._build_config_tab_content()
+            ),
+            ft.Tab(
+                text="Gestione FOP",
+                icon=ft.Icons.LIST_ALT,
+                content=self._build_fop_tab_content()
             ),
         ]
 
@@ -828,6 +835,7 @@ class AdminPanelView:
         self.smtp_port = ft.TextField(label="SMTP Port (es. 587)")
         self.smtp_user = ft.TextField(label="SMTP User (Email)")
         self.smtp_password = ft.TextField(label="SMTP Password", password=True, can_reveal_password=True)
+        self.smtp_sender = ft.TextField(label="SMTP Sender (Email Mittente Verificata)", hint_text="Es. flammini.enrico@gmail.it")
         self.smtp_test_email = ft.TextField(label="Email Destinatario Test")
 
     def _build_config_tab_content(self):
@@ -847,6 +855,7 @@ class AdminPanelView:
                 self.smtp_port,
                 self.smtp_user,
                 self.smtp_password,
+                self.smtp_sender,
                 ft.ElevatedButton("Salva Configurazione", icon=ft.Icons.SAVE, on_click=self._save_config),
                 ft.Divider(height=40),
                 ft.Text("Test Invio Email", size=16, weight=ft.FontWeight.BOLD),
@@ -857,6 +866,106 @@ class AdminPanelView:
             ], scroll=ft.ScrollMode.AUTO),
             padding=20, expand=True
         )
+
+    # =========================================================================
+    # --- FOP TAB LOGIC ---
+    # =========================================================================
+    def _init_fop_tab_ui(self):
+        self.fop_matrix = {} # operation -> {type -> {scope -> checkbox}}
+        self.fop_container = ft.Column(scroll=ft.ScrollMode.AUTO, expand=True)
+
+    def _build_fop_tab_content(self):
+        return ft.Container(
+            content=ft.Column([
+                ft.Text("Matrice Gestione Forme di Pagamento (FOP)", size=20, weight=ft.FontWeight.BOLD),
+                ft.Text("Definisci quali tipi di conto e quali ambiti sono visibili per ogni operazione.", size=12, color=ft.Colors.GREY),
+                ft.ElevatedButton("Salva Matrice FOP", icon=ft.Icons.SAVE, on_click=self._save_fop_matrix, bgcolor=ft.Colors.BLUE, color=ft.Colors.WHITE),
+                ft.Divider(),
+                self.fop_container
+            ], expand=True),
+            padding=20, expand=True
+        )
+
+    def _load_fop_matrix(self):
+        from db.gestione_db import get_configurazione
+        import json
+        
+        raw = get_configurazione("global_fop_matrix")
+        saved_data = {}
+        if raw:
+            try: saved_data = json.loads(raw)
+            except: logger.error("Errore parsing global_fop_matrix")
+
+        operations = ["Spesa", "Incasso", "Giroconto (Mittente)", "Giroconto (Ricevente)", "Spesa Fissa", "Prestiti"]
+        types = ["Conto Corrente", "Carte", "Risparmio", "Investimenti", "Contanti", "Fondo Pensione", "Salvadanaio"]
+        scopes = ["Personale", "Condiviso", "Altri Familiari"]
+        
+        self.fop_container.controls.clear()
+        self.fop_matrix = {}
+
+        for op in operations:
+            op_data = saved_data.get(op, {})
+            self.fop_matrix[op] = {}
+            
+            op_section = ft.Column([
+                ft.Text(f"📌 {op}", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_800),
+                ft.Divider(height=10)
+            ], spacing=5)
+            
+            # Header per gli ambiti
+            header_row = ft.Row([
+                ft.Container(width=150), # Spazio per il tipo
+                ft.Container(content=ft.Text("Personale", size=10, weight=ft.FontWeight.BOLD), width=80, alignment=ft.alignment.center),
+                ft.Container(content=ft.Text("Condiviso", size=10, weight=ft.FontWeight.BOLD), width=80, alignment=ft.alignment.center),
+                ft.Container(content=ft.Text("Altri", size=10, weight=ft.FontWeight.BOLD), width=80, alignment=ft.alignment.center),
+            ])
+            op_section.controls.append(header_row)
+
+            for t in types:
+                self.fop_matrix[op][t] = {}
+                row_controls = [ft.Container(content=ft.Text(t, size=12), width=150)]
+                
+                for s in scopes:
+                    # Default values if not in DB
+                    default = False
+                    if op == "Incasso" and t == "Conto Corrente" and s != "Altri Familiari": default = True
+                    if op == "Spesa" and t in ["Conto Corrente", "Carte"] and s != "Altri Familiari": default = True
+                    if op in ["Giroconto (Mittente)", "Giroconto (Ricevente)"] and t in ["Conto Corrente", "Salvadanaio"]: default = True
+                    
+                    val = op_data.get(t, {}).get(s, default)
+                    cb = ft.Checkbox(value=val, data={"op": op, "type": t, "scope": s})
+                    self.fop_matrix[op][t][s] = cb
+                    row_controls.append(ft.Container(content=cb, width=80, alignment=ft.alignment.center))
+                
+                op_section.controls.append(ft.Row(row_controls, vertical_alignment=ft.CrossAxisAlignment.CENTER))
+            
+            self.fop_container.controls.append(ft.Container(content=op_section, padding=15, bgcolor=ft.Colors.WHITE, border_radius=8, border=ft.border.all(1, ft.Colors.BLUE_GREY_100)))
+            self.fop_container.controls.append(ft.Container(height=20))
+
+    def _save_fop_matrix(self, e):
+        from db.gestione_db import save_system_config
+        import json
+        
+        matrix_to_save = {}
+        for op, types in self.fop_matrix.items():
+            matrix_to_save[op] = {}
+            for t, scopes in types.items():
+                matrix_to_save[op][t] = {}
+                for s, cb in scopes.items():
+                    matrix_to_save[op][t][s] = cb.value
+        
+        json_data = json.dumps(matrix_to_save)
+        
+        # User context for RLS
+        current_user_id = self.page.client_storage.get("user_id") or 1
+        
+        if save_system_config("global_fop_matrix", json_data, id_utente=current_user_id):
+            self.page.snack_bar = ft.SnackBar(ft.Text("Matrice FOP salvata con successo!"), bgcolor=ft.Colors.GREEN)
+        else:
+            self.page.snack_bar = ft.SnackBar(ft.Text("Errore durante il salvataggio."), bgcolor=ft.Colors.RED)
+        
+        self.page.snack_bar.open = True
+        self.page.update()
 
     def _load_config(self):
         from db.gestione_db import get_smtp_config, get_configurazione
@@ -872,6 +981,7 @@ class AdminPanelView:
             self.smtp_port.value = config.get('port') or ""
             self.smtp_user.value = config.get('user') or ""
             self.smtp_password.value = config.get('password') or ""
+            self.smtp_sender.value = config.get('sender') or ""
 
     def _save_config(self, e):
         from db.gestione_db import save_system_config
@@ -895,6 +1005,7 @@ class AdminPanelView:
                  ('smtp_port', self.smtp_port.value),
                  ('smtp_user', self.smtp_user.value),
                  ('smtp_password', self.smtp_password.value),
+                 ('smtp_sender', self.smtp_sender.value),
                  ('smtp_provider', 'custom')
              ]
              
@@ -929,7 +1040,14 @@ class AdminPanelView:
         success, error = send_email(
             to_email=self.smtp_test_email.value,
             subject="BudgetAmico - Test Email",
-            body="<h1>Test Riuscito</h1><p>Se leggi questa email, la configurazione SMTP è corretta.</p>"
+            body="<h1>Test Riuscito</h1><p>Se leggi questa email, la configurazione SMTP è corretta.</p>",
+            smtp_config={
+                'server': self.smtp_server.value,
+                'port': self.smtp_port.value,
+                'user': self.smtp_user.value,
+                'password': self.smtp_password.value,
+                'sender': self.smtp_sender.value
+            }
         )
         
         if success:

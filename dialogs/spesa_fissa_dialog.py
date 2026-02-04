@@ -1,12 +1,15 @@
 import flet as ft
 import traceback
+import json
 from db.gestione_db import (
     ottieni_tutti_i_conti_utente,
     ottieni_categorie_e_sottocategorie,
     aggiungi_spesa_fissa,
     modifica_spesa_fissa,
     ottieni_carte_utente,
-    ottieni_ids_conti_tecnici_carte
+    ottieni_ids_conti_tecnici_carte,
+    get_configurazione,
+    ottieni_tutti_i_conti_famiglia
 )
 
 
@@ -90,6 +93,7 @@ class SpesaFissaDialog(ft.AlertDialog):
     def _on_tipo_change(self, e):
         is_giro = (self.radio_tipo.value == "giroconto")
         self.container_beneficiario.visible = is_giro
+        self._popola_dropdowns() # Re-populate to apply specific filters
         self.content.update()
 
     def apri_dialog(self, spesa_fissa_data=None):
@@ -182,92 +186,97 @@ class SpesaFissaDialog(ft.AlertDialog):
         self.dd_conto_beneficiario.value = None
 
     def _popola_dropdowns(self):
-        # Popola conti - solo quelli accessibili all'utente corrente
         master_key = self.controller.page.session.get("master_key")
         user_id = self.controller.get_user_id()
-        conti = ottieni_tutti_i_conti_utente(user_id, master_key_b64=master_key)
+        famiglia_id = self.controller.get_family_id()
         
-        # Filtra i tipi di conto che non fanno parte della liquidità (per addebito)
-        tipi_esclusi_addebito = ['Investimento', 'Fondo Pensione', 'Risparmio']
+        # 0. Recupera Matrice FOP Globale per Spesa Fissa
+        raw_matrix = get_configurazione("global_fop_matrix")
+        matrix_all = {}
+        if raw_matrix:
+            try: matrix_all = json.loads(raw_matrix)
+            except: pass
         
-        # Per beneficiario (giroconto), includiamo anche Risparmio
-        tipi_esclusi_beneficiario = ['Investimento', 'Fondo Pensione']
-        
-        # Identifica ID conti tecnici delle carte da escludere
+        is_giro = (self.radio_tipo.value == "giroconto")
+        matrix_addebito = matrix_all.get("Spesa Fissa", {}) if not is_giro else matrix_all.get("Giroconto (Mittente)", {})
+        matrix_beneficiario = matrix_all.get("Giroconto (Ricevente)", {})
+
+        # Default fallback se matrici vuote
+        if not matrix_addebito:
+            matrix_addebito = {"Conto Corrente": {"Personale": True, "Condiviso": True, "Altri Familiari": False}, "Carte": {"Personale": True, "Condiviso": True, "Altri Familiari": False}}
+        if not matrix_beneficiario:
+            matrix_beneficiario = {"Conto Corrente": {"Personale": True, "Condiviso": True, "Altri Familiari": True}, "Salvadanaio": {"Personale": True, "Condiviso": True, "Altri Familiari": True}}
+
+        # 1. Recupera tutti i conti della famiglia
+        conti_famiglia = ottieni_tutti_i_conti_famiglia(famiglia_id, user_id, master_key_b64=master_key)
         ids_conti_tecnici = ottieni_ids_conti_tecnici_carte(user_id)
-        
-        # Filtra i conti: escludiamo i conti tecnici delle carte di credito (Filtro per ID)
-        # E escludiamo categoricamente qualunque conto contenga "Saldo" nel nome (Filtro robusto per produzione)
-        conti_filtrati_addebito = [
-            c for c in conti 
-            if c.get('tipo') not in tipi_esclusi_addebito 
-            and not (c['id_conto'] in ids_conti_tecnici)
-            and "Saldo" not in (c.get('nome_conto') or "")
-        ]
-        conti_filtrati_beneficiario = [
-            c for c in conti 
-            if c.get('tipo') not in tipi_esclusi_beneficiario 
-            and not (c['id_conto'] in ids_conti_tecnici)
-            and "Saldo" not in (c.get('nome_conto') or "")
-        ]
-        
+
+        # Mappatura tipi
+        tipo_map = {
+            "Conto Corrente": ["Conto Corrente", "Conto", "Corrente"],
+            "Carte": ["Carta", "Carta di Credito", "Prepagata"],
+            "Risparmio": ["Risparmio", "Conto Deposito"],
+            "Investimenti": ["Investimenti", "Investimento", "Crypto", "Azioni", "Obbligazioni", "ETF", "Fondo"],
+            "Contanti": ["Contanti"],
+            "Fondo Pensione": ["Fondo Pensione"],
+            "Salvadanaio": ["Salvadanaio"]
+        }
+
+        def is_allowed(tipo_db, scope, matrix):
+            if not tipo_db: return False
+            tipo_clean = str(tipo_db).strip().lower()
+            cat_fop = None
+            for cat, db_list in tipo_map.items():
+                if any(tipo_clean == x.strip().lower() for x in db_list):
+                    cat_fop = cat
+                    break
+            if not cat_fop: return False
+            return matrix.get(cat_fop, {}).get(scope, False)
+
         options_conti_addebito = []
         options_conti_beneficiario = []
-        
-        # 1. Carte (Prima per consistenza)
-        carte = ottieni_carte_utente(user_id, master_key_b64=master_key)
-        if carte:
-            for c in carte:
-                target_acc = c.get('id_conto_contabile')
-                is_shared_card = False
-                
-                if not target_acc:
-                     target_acc = c.get('id_conto_contabile_condiviso')
-                     if target_acc: is_shared_card = True
-                
-                if not target_acc:
-                     # Fallback
-                     target_acc = c.get('id_conto_riferimento')
-                     if not target_acc:
-                         target_acc = c.get('id_conto_riferimento_condiviso')
-                         if target_acc: is_shared_card = True
-                     
-                if target_acc:
-                    flag = 'S' if is_shared_card else 'P'
-                    key = f"CARD_{c['id_carta']}_{target_acc}_{flag}"
-                    options_conti_addebito.append(ft.dropdown.Option(key, f"💳 {c['nome_carta']}"))
 
-            options_conti_addebito.append(ft.dropdown.Option(key="DIVIDER", text="-- Conti --", disabled=True))
+        for c in conti_famiglia:
+            if c['id_conto'] in ids_conti_tecnici or "Saldo" in (c.get('nome_conto') or ""):
+                continue
+            
+            # Ambito
+            if c['is_condiviso']: scope = "Condiviso"
+            elif str(c['id_utente_owner']) == str(user_id): scope = "Personale"
+            else: scope = "Altri Familiari"
 
-        # Populate Debit Accounts
-        for conto in conti_filtrati_addebito:
-            is_condiviso = conto.get('is_condiviso') or conto.get('condiviso')
-            tipo_prefix = "C" if is_condiviso else "P"
-            key = f"{tipo_prefix}{conto['id_conto']}"
-            suffix = " (Condiviso)" if is_condiviso else ""
-            text = f"{conto['nome_conto']}{suffix}"
-            options_conti_addebito.append(ft.dropdown.Option(key, text))
+            prefix = "C" if c['is_condiviso'] else "P"
+            suffix = ""
+            if scope == "Condiviso": suffix = " (Condiviso)"
+            elif scope == "Altri Familiari": suffix = f" ({c.get('nome_owner', 'Altro')})"
+            
+            icon = "🏦"
+            if c['tipo'] in tipo_map["Carte"]: icon = "💳"
+            elif c['tipo'] == "Salvadanaio": icon = "🐷"
+            
+            key = c['id_conto'] if c['tipo'] in tipo_map["Carte"] else f"{prefix}{c['id_conto']}"
+            opt = ft.dropdown.Option(key=key, text=f"{icon} {c['nome_conto']}{suffix}")
+
+            # Filtro Addebito
+            if is_allowed(c['tipo'], scope, matrix_addebito):
+                options_conti_addebito.append(opt)
+            
+            # Filtro Beneficiario (solo se Giroconto)
+            if is_allowed(c['tipo'], scope, matrix_beneficiario):
+                options_conti_beneficiario.append(opt)
+
         self.dd_conto_addebito.options = options_conti_addebito
-        
-        # Populate Beneficiary Accounts (for Giroconto)
-        for conto in conti_filtrati_beneficiario:
-            is_condiviso = conto.get('is_condiviso') or conto.get('condiviso')
-            tipo_prefix = "C" if is_condiviso else "P"
-            key = f"{tipo_prefix}{conto['id_conto']}"
-            suffix = " (Condiviso)" if is_condiviso else ""
-            text = f"{conto['nome_conto']}{suffix}"
-            # Add Savings icon if saving
-            icon_str = "🐖 " if conto.get('tipo') == 'Risparmio' else ""
-            options_conti_beneficiario.append(ft.dropdown.Option(key, f"{icon_str}{text}"))
         self.dd_conto_beneficiario.options = options_conti_beneficiario
 
-        # Popola categorie
-        cats_subcats = ottieni_categorie_e_sottocategorie(self.controller.get_family_id())
-        options_subcats = []
-        for cat in cats_subcats:
-            for sub in cat['sottocategorie']:
-                options_subcats.append(ft.dropdown.Option(sub['id_sottocategoria'], f"{cat['nome_categoria']} - {sub['nome_sottocategoria']}"))
-        self.dd_sottocategoria.options = options_subcats
+        # 4. Categories Dropdown
+        self.dd_sottocategoria.options = []
+        if famiglia_id:
+            categorie = ottieni_categorie_e_sottocategorie(famiglia_id)
+            for cat_data in categorie:
+                for sub_cat in cat_data['sottocategorie']:
+                    self.dd_sottocategoria.options.append(
+                        ft.dropdown.Option(key=sub_cat['id_sottocategoria'], text=f"{cat_data['nome_categoria']} - {sub_cat['nome_sottocategoria']}")
+                    )
 
 
     def _salva_cliccato(self, e):

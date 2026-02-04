@@ -6,6 +6,19 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.47.00 (04/02/2026)
+- **Sicurezza e Conferma Invio**:
+    - **Dialog di Verifica Email**: Implementato un nuovo sistema di sicurezza che richiede la conferma o la modifica dell'indirizzo email del destinatario prima di ogni invio (Backup e Credenziali).
+    - **Protezione Dati**: Aumentata la consapevolezza dell'utente sulla sensibilità della Family Key durante l'invio via email.
+- **Ottimizzazione UI Admin**:
+    - **Semplificazione Web**: Rimossa l'interfaccia di "Abilita Logging" e il pulsante di "Download Locale" (divenuti rimpiazzati dall'invio email sicuro e centralizzato).
+    - **Ridenominazione Tasti**: Il pulsante di backup è ora più esplicito: "Invia Family key e configurazione via mail".
+    - **Cloud Automation**: Rimossa la dicitura "BETA" dall'automazione Cloud (Koyeb), ora considerata stabile.
+- **Privacy Backup**:
+    - **Rimozione SMTP**: I file di backup (.json) non contengono più i parametri SMTP della famiglia (ora gestiti globalmente), rendendo il file più leggero e sicuro.
+- **Bugfix Navigazione**:
+    - **Fix Sidebar Indexing**: Risolto un bug critico nel calcolo degli indici della sidebar che poteva causare il caricamento di tab errate dopo login o refresh.
+
 ### v0.46.00 (02/02/2026)
 - **Riprogettazione Sistema Budget**:
     - **Auto-salvataggio**: Implementato il salvataggio automatico (on-blur) per entrate stimate, obiettivi di risparmio e limiti delle sottocategorie. Rimossi i pulsanti di salvataggio manuale per un'esperienza più fluida.

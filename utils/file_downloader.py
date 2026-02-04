@@ -4,9 +4,14 @@ import base64
 def download_file_web(page: ft.Page, filename: str, content_bytes: bytes, mime_type: str = "application/octet-stream"):
     """
     Triggers a client-side download on Flet Web using JavaScript injection.
-    Handles 'run_js' attribute error for older Flet versions.
+    Handles different Flet version method names for JS execution.
     """
     try:
+        print(f"[DEBUG] [WEB] Preparing download for {filename} ({len(content_bytes)} bytes)")
+        # Debugging degli attributi disponibili sulla pagina a runtime
+        avail_methods = [m for m in dir(page) if not m.startswith("_")]
+        print(f"[DEBUG] [WEB] Page object attributes: {avail_methods}")
+        
         b64_data = base64.b64encode(content_bytes).decode('utf-8')
         data_uri = f"data:{mime_type};base64,{b64_data}"
         
@@ -23,18 +28,42 @@ def download_file_web(page: ft.Page, filename: str, content_bytes: bytes, mime_t
         }})();
         """
         
-        # Strategy 1: page.run_js (Newer Flet)
-        if hasattr(page, "run_js"):
-            print(f"[DEBUG] [WEB] Using page.run_js for {filename}")
-            page.run_js(js_code)
-            return True
+        # Try Strategy A: Standard JS execution method names in Flet
+        js_methods = ["run_javascript", "run_js", "execute_javascript", "execute_js"]
+        for method_name in js_methods:
+            if hasattr(page, method_name):
+                method = getattr(page, method_name)
+                print(f"[DEBUG] [WEB] Found method page.{method_name}. Invoking...")
+                method(js_code)
+                return True
             
-        # Strategy 2: Direct Data URI Launch (Fallback for older Flet)
-        # We force 'application/octet-stream' to ensure the browser treats it as a download
-        # rather than trying to display it (which might be blocked or open in tab).
-        print(f"[DEBUG] [WEB] page.run_js not found. Fallback to direct Data URI launch...")
+        # Try Strategy B: invoke_method (Low-level Flet call)
+        # Some versions use "runJavaScript" or "runJs" via invoke_method
+        print(f"[DEBUG] [WEB] Standard methods not found. Trying page.invoke_method...")
+        invoke_variants = ["run_javascript", "runJavaScript", "executeJavaScript"]
+        for variant in invoke_variants:
+            try:
+                print(f"[DEBUG] [WEB] Attempting page.invoke_method('{variant}')...")
+                page.invoke_method(variant, arguments={"value": js_code})
+                # We return True because if this fails, it usually raises an Exception 
+                return True
+            except Exception as e_invoke:
+                print(f"[DEBUG] [WEB] page.invoke_method('{variant}') failed: {e_invoke}")
+
+        # Try Strategy C: fallback via launch_url(javascript:...)
+        print(f"[DEBUG] [WEB] invoke_method attempts failed. Trying javascript: url fallback...")
+        try:
+            # Note: launch_url with javascript: might be blocked or have length limits
+            js_launch = f"javascript:{js_code.replace(chr(10), ' ').replace(chr(13), ' ')}"
+            page.launch_url(js_launch)
+            # No return here, might not have worked
+        except Exception as e_js:
+            print(f"[DEBUG] [WEB] javascript: fallback failed: {e_js}")
+            
+        # Strategy D: Direct Data URI Launch (Ultimate Fallback)
+        # Note: This often loses the filename in some browsers
+        print(f"[DEBUG] [WEB] Falling back to direct Data URI launch (filename might be lost)...")
         
-        # Re-encode with forced download mime type
         forced_mime = "application/octet-stream"
         data_uri_forced = f"data:{forced_mime};base64,{b64_data}"
         
