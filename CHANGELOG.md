@@ -6,6 +6,10 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.47.10 (04/02/2026)
+- **Database Fix**: Risolto l'errore `42P10` (missing unique constraint) per lo storico asset globale. Implementata migrazione automatica per pulire duplicati e aggiungere il vincolo `UNIQUE(ticker, data)` necessario per le operazioni di sincronizzazione.
+
+
 ### v0.47.09 (04/02/2026)
 - **Database Fix**: Risolto l'errore `25P02` (transaction aborted) durante l'aggiornamento dei prezzi storici degli asset. Introdotta validazione preventiva dei dati per escludere record nulli o non validi che interrompevano le transazioni batch.
 

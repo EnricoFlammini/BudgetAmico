@@ -8172,23 +8172,60 @@ def _crea_tabella_storico_asset_globale():
     try:
         with get_db_connection() as con:
             cur = con.cursor()
+            
+            # 1. Crea la tabella se non esiste
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS StoricoAssetGlobale (
                     id SERIAL PRIMARY KEY,
                     ticker VARCHAR(30) NOT NULL,
                     data DATE NOT NULL,
                     prezzo_chiusura DECIMAL(18, 6) NOT NULL,
-                    data_aggiornamento TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(ticker, data)
+                    data_aggiornamento TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
+            
+            # 2. Migrazione: verifica esistenza UNIQUE constraint (necessario per ON CONFLICT)
+            # Cerchiamo un indice unico su (ticker, data)
+            cur.execute("""
+                SELECT count(*) 
+                FROM pg_indexes 
+                WHERE tablename = 'storicoassetglobale' 
+                  AND indexdef LIKE '%(ticker, data)%'
+                  AND indexdef LIKE '%UNIQUE%'
+            """)
+            has_unique = cur.fetchone()[0] > 0
+            
+            if not has_unique:
+                print("[INFO] Migrazione: Aggiunta vincolo UNIQUE a StoricoAssetGlobale")
+                # A. Rimuovi eventuali duplicati prima di applicare il vincolo
+                cur.execute("""
+                    DELETE FROM StoricoAssetGlobale a USING (
+                        SELECT MIN(id) as min_id, ticker, data
+                        FROM StoricoAssetGlobale
+                        GROUP BY ticker, data
+                        HAVING COUNT(*) > 1
+                    ) b
+                    WHERE a.ticker = b.ticker 
+                      AND a.data = b.data 
+                      AND a.id <> b.min_id
+                """)
+                
+                # B. Aggiungi il vincolo UNIQUE
+                try:
+                    cur.execute("ALTER TABLE StoricoAssetGlobale ADD CONSTRAINT unique_ticker_data UNIQUE (ticker, data)")
+                except Exception as ex:
+                    # Se fallisce (es. se esiste già un'altro tipo di indice unico), logga e continua
+                    print(f"[WARNING] Impossibile aggiungere vincolo UNIQUE: {ex}")
+            
+            # 3. Indici aggiuntivi (non unici) per performance
             cur.execute("CREATE INDEX IF NOT EXISTS idx_storico_ticker ON StoricoAssetGlobale(ticker);")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_storico_data ON StoricoAssetGlobale(data);")
+            
             con.commit()
             _TABELLA_STORICO_CREATA = True
             return True
     except Exception as e:
-        print(f"[ERRORE] Errore creazione tabella StoricoAssetGlobale: {e}")
+        print(f"[ERRORE] Errore creazione/migrazione tabella StoricoAssetGlobale: {e}")
         return False
 
 
