@@ -178,7 +178,7 @@ class DivisoreProTab(ft.Container):
         except ValueError:
             shares = 1
             
-        if not name or amount <= 0:
+        if not name or amount < 0:
             self.controller.show_snack_bar("Inserisci nome e importo valido.", False)
             return
         

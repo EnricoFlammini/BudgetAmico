@@ -6,6 +6,12 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.47.06 (04/02/2026)
+- **Divisore Pro**: Abilitato l'inserimento di spese con importo pari a zero per gestire partecipanti che non hanno anticipato denaro.
+- **Database & Schema**: Allineati gli ambienti Test e Produzione alla versione 22. Consolidata la logica di migrazione per le colonne `id_asset` e `id_obiettivo` nella tabella `Salvadanai`.
+- **Sicurezza**: Implementata la protezione per la categoria di sistema "ENTRATE". Inibita la modifica e l'eliminazione sia a livello database che interfaccia utente per preservare l'integrità dei calcoli automatici.
+
+
 ### v0.47.05 (04/02/2026)
 - **Fix**: Risolto errore di avvio causato da un parametro non supportato in `ft.app()`. La configurazione della chiave di sicurezza ora avviene correttamente tramite variabili d'ambiente.
 
