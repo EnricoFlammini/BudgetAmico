@@ -8185,15 +8185,15 @@ def _crea_tabella_storico_asset_globale():
             """)
             
             # 2. Migrazione: verifica esistenza UNIQUE constraint (necessario per ON CONFLICT)
-            # Cerchiamo un indice unico su (ticker, data)
             cur.execute("""
-                SELECT count(*) 
+                SELECT count(*) as conteggio
                 FROM pg_indexes 
                 WHERE tablename = 'storicoassetglobale' 
                   AND indexdef LIKE '%(ticker, data)%'
                   AND indexdef LIKE '%UNIQUE%'
             """)
-            has_unique = cur.fetchone()[0] > 0
+            res = cur.fetchone()
+            has_unique = res['conteggio'] > 0 if res else False
             
             if not has_unique:
                 print("[INFO] Migrazione: Aggiunta vincolo UNIQUE a StoricoAssetGlobale")
