@@ -164,8 +164,7 @@ class ContoDialog(ft.AlertDialog):
         
         self.dd_conto_tipo.options = [
             ft.dropdown.Option("Conto Corrente"), ft.dropdown.Option("Risparmio"),
-            ft.dropdown.Option("Investimento"), ft.dropdown.Option("Fondo Pensione"),
-            ft.dropdown.Option("Contanti"), ft.dropdown.Option("Altro"),
+            ft.dropdown.Option("Fondo Pensione"), ft.dropdown.Option("Contanti"),
         ]
         self.txt_conto_iban.label = loc.get("iban_optional")
         self.container_saldo_iniziale.content.controls[0].value = loc.get("set_initial_balance")
@@ -327,7 +326,7 @@ class ContoDialog(ft.AlertDialog):
         self._update_texts()
         
         if escludi_investimento:
-            self.dd_conto_tipo.options = [opt for opt in self.dd_conto_tipo.options if opt.key != "Investimento"]
+            self.dd_conto_tipo.options = [opt for opt in self.dd_conto_tipo.options if opt.key != "Investimento" and opt.text != "Investimento"]
 
         # Reset errori
         self.txt_conto_nome.error_text = None
@@ -358,7 +357,14 @@ class ContoDialog(ft.AlertDialog):
                     conto_data = dettagli # Override with full details including participants
             
             self.txt_conto_nome.value = conto_data['nome_conto']
-            self.dd_conto_tipo.value = conto_data['tipo']
+            
+            # Retrocompatibilità per tipi rimossi
+            tipo_corrente = conto_data['tipo']
+            if tipo_corrente not in [opt.key for opt in self.dd_conto_tipo.options if opt.key]:
+                # Se è un tipo rimosso, aggiungilo temporaneamente alle opzioni
+                self.dd_conto_tipo.options.append(ft.dropdown.Option(tipo_corrente))
+            
+            self.dd_conto_tipo.value = tipo_corrente
             self.dd_conto_tipo.disabled = False
             self.txt_conto_iban.value = conto_data.get('iban', "")
 

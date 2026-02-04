@@ -6,6 +6,10 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.47.08 (04/02/2026)
+- **UI & UX**: Rimosse le opzioni "Investimento" e "Altro" dal dialogo di aggiunta nuovo conto per semplificare l'inserimento. I conti esistenti di questo tipo rimangono comunque gestibili e visibili.
+
+
 ### v0.47.07 (04/02/2026)
 - **Performance & UX**: Ottimizzata l'apertura di tutti i dialoghi di inserimento (Transazioni, Conti, ecc.).
 - **Feedback Caricamento**: Introdotto uno spinner di caricamento globale che appare istantaneamente al click, prevenendo doppi inserimenti accidentali e migliorando la percezione di velocità.
