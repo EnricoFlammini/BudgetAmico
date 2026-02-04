@@ -8470,8 +8470,9 @@ def aggiorna_storico_asset_se_necessario(ticker: str, anni: int = 25):
             if resp_long.status_code == 200:
                 dati_long = _estrai_dati_da_risposta_yf(resp_long.json())
                 if dati_long:
-                    inseriti_tot += salva_storico_asset_globale(ticker, dati_long)
-                    print(f"      - Salvati {len(dati_long)} punti mensili (base storica)")
+                    salvati_long = salva_storico_asset_globale(ticker, dati_long)
+                    inseriti_tot += salvati_long
+                    print(f"      - Salvati {salvati_long}/{len(dati_long)} punti mensili (base storica)")
         
             # 2. Scarica ultimi 5 anni a risoluzione GIORNALIERA (sovrascrive/dettaglia i recenti)
             # Solo se anni > 5, altrimenti il range è quello richiesto
@@ -8481,8 +8482,9 @@ def aggiorna_storico_asset_se_necessario(ticker: str, anni: int = 25):
                 if resp_short.status_code == 200:
                     dati_short = _estrai_dati_da_risposta_yf(resp_short.json())
                     if dati_short:
-                        inseriti_tot += salva_storico_asset_globale(ticker, dati_short)
-                        print(f"      - Salvati {len(dati_short)} punti giornalieri (dettaglio recente)")
+                        salvati_short = salva_storico_asset_globale(ticker, dati_short)
+                        inseriti_tot += salvati_short
+                        print(f"      - Salvati {salvati_short}/{len(dati_short)} punti giornalieri (dettaglio recente)")
             
             return inseriti_tot > 0
             
