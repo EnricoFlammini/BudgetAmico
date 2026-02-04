@@ -546,6 +546,39 @@ def _migra_da_v20_a_v21(con):
         return False
 
 
+def _migra_da_v21_a_v22(con):
+    """
+    Logica specifica per migrare un DB dalla versione 21 alla 22.
+    - Aggiunge id_asset e id_obiettivo alla tabella Salvadanai.
+    """
+    print("Esecuzione migrazione da v21 a v22...")
+    try:
+        cur = con.cursor()
+
+        # 1. Aggiungi colonna id_asset
+        print("  - Aggiunta colonna id_asset a Salvadanai...")
+        try:
+            cur.execute("ALTER TABLE Salvadanai ADD COLUMN id_asset INTEGER REFERENCES Asset(id_asset) ON DELETE SET NULL")
+        except Exception as e:
+            print(f"    Warning su id_asset (potrebbe già esistere): {e}")
+
+        # 2. Aggiungi colonna id_obiettivo
+        print("  - Aggiunta colonna id_obiettivo a Salvadanai...")
+        try:
+            cur.execute("ALTER TABLE Salvadanai ADD COLUMN id_obiettivo INTEGER REFERENCES Obiettivi_Risparmio(id) ON DELETE SET NULL")
+        except Exception as e:
+            print(f"    Warning su id_obiettivo (potrebbe già esistere): {e}")
+
+        con.commit()
+        print("Migrazione a v22 completata con successo.")
+        return True
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v21 a v22: {e}")
+        try: con.rollback() 
+        except: pass
+        return False
+
+
 def _migra_da_v7_a_v8(con: sqlite3.Connection):
     """
     Logica specifica per migrare un DB dalla versione 7 alla 8.

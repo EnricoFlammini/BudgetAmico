@@ -14,8 +14,8 @@ if not os.path.exists(APP_DATA_DIR):
 DB_FILE = os.path.join(APP_DATA_DIR, 'budget_amico.db')
 
 # --- SCHEMA DATABASE ---
-# Versione 21: Aggiunta tabella Config_Logger per configurazione logger selettivi
-SCHEMA_VERSION = 21
+# Versione 22: Aggiunta id_asset e id_obiettivo a Salvadanai per tracciamento fondi dedicati
+SCHEMA_VERSION = 22
 
 TABLES = {
     "Utenti": """
@@ -360,12 +360,14 @@ TABLES = {
             id_salvadanaio INTEGER PRIMARY KEY AUTOINCREMENT,
             id_famiglia INTEGER NOT NULL REFERENCES Famiglie(id_famiglia) ON DELETE CASCADE,
             id_conto INTEGER REFERENCES Conti(id_conto) ON DELETE SET NULL,
+            id_conto_condiviso INTEGER REFERENCES ContiCondivisi(id_conto_condiviso) ON DELETE SET NULL,
+            id_asset INTEGER REFERENCES Asset(id_asset) ON DELETE SET NULL,
+            id_obiettivo INTEGER REFERENCES Obiettivi_Risparmio(id) ON DELETE SET NULL,
             nome TEXT NOT NULL,
             importo_assegnato TEXT NOT NULL,
             incide_su_liquidita BOOLEAN DEFAULT 0,
             note TEXT,
             data_creazione TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            id_conto_condiviso INTEGER REFERENCES ContiCondivisi(id_conto_condiviso) ON DELETE SET NULL,
             usa_saldo_totale BOOLEAN DEFAULT 0
         );
     """,
