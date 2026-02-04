@@ -6,6 +6,9 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.47.05 (04/02/2026)
+- **Fix**: Risolto errore di avvio causato da un parametro non supportato in `ft.app()`. La configurazione della chiave di sicurezza ora avviene correttamente tramite variabili d'ambiente.
+
 ### v0.47.04 (04/02/2026)
 - **Bug Fix**: Risolto errore `NoneType` durante l'importazione di file CSV in modalità Web. Implementato sistema di upload temporaneo per permettere al server di elaborare i file selezionati nel browser.
 
