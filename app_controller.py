@@ -40,7 +40,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 MAX_RECENT_FILES = 5
-VERSION = "0.47.06"
+VERSION = "0.47.07"
 
 
 class AppController:
@@ -802,32 +802,41 @@ class AppController:
 
     def open_new_transaction_dialog(self):
         """Apre il dialogo Nuova Transazione."""
-        self.transaction_dialog.apri_dialog_nuova_transazione()
+        self.show_loading("Apertura dialogo...")
+        try:
+            self.transaction_dialog.apri_dialog_nuova_transazione()
+        finally:
+            self.hide_loading()
 
     def open_new_account_dialog(self):
         """Apre il dialogo Nuovo Conto."""
-        self.conto_dialog.apri_dialog_conto(None)
+        self.show_loading("Apertura dialogo...")
+        try:
+            self.conto_dialog.apri_dialog_conto(None)
+        finally:
+            self.hide_loading()
 
     def open_new_card_dialog(self):
         """Apre il dialogo Nuova Carta."""
-        def callback():
-            self.update_all_views()
-            
-        dlg = CardDialog(self.page, callback)
-        dlg.open()
+        self.show_loading("Apertura dialogo...")
+        try:
+            def callback():
+                self.update_all_views()
+                
+            dlg = CardDialog(self.page, callback)
+            dlg.open()
+        finally:
+            self.hide_loading()
 
     def open_new_savings_dialog(self):
         """
         Apre il dialogo Nuovo Obiettivo Accantonamento.
         Tenta di accedere alla tab Accantonamenti se disponibile.
         """
+        self.show_loading("Apertura dialogo...")
         try:
             # Per desktop dashboard
             if hasattr(self.dashboard_view, 'tab_accantonamenti'):
-                # Switch tab se necessario (opzionale, ma utile per contesto)
-                # self.dashboard_view.content_area.content = self.dashboard_view.tab_accantonamenti
-                # self.dashboard_view.update() # Forse troppo invasivo cambiare tab?
-                
                 # Apri il dialogo direttamente dall'istanza della tab
                 self.dashboard_view.tab_accantonamenti._apri_dialog_creazione(None)
             else:
@@ -835,26 +844,45 @@ class AppController:
         except Exception as e:
             logger.error(f"Errore apertura dialog risparmio: {e}")
             self.show_snack_bar("Errore apertura dialogo.", success=False)
+        finally:
+            self.hide_loading()
 
     def open_new_fixed_expense_dialog(self):
         """Apre il dialogo Nuova Spesa Fissa."""
-        self.spesa_fissa_dialog.apri_dialog()
+        self.show_loading("Apertura dialogo...")
+        try:
+            self.spesa_fissa_dialog.apri_dialog()
+        finally:
+            self.hide_loading()
 
     def open_new_loan_dialog(self):
         """Apre il dialogo Nuovo Prestito."""
-        self.prestito_dialogs.apri_dialog_prestito()
+        self.show_loading("Apertura dialogo...")
+        try:
+            self.prestito_dialogs.apri_dialog_prestito()
+        finally:
+            self.hide_loading()
 
     def open_new_property_dialog(self):
         """Apre il dialogo Nuovo Immobile."""
-        self.immobile_dialog.apri_dialog_immobile()
+        self.show_loading("Apertura dialogo...")
+        try:
+            self.immobile_dialog.apri_dialog_immobile()
+        finally:
+            self.hide_loading()
 
     def open_new_contact_dialog(self):
         """Apre il dialogo Nuovo Contatto."""
-        def callback():
-            self.update_all_views()
-        
-        dlg = ContactDialog(self.page, self, on_dismiss=callback)
-        self.page.open(dlg)
+        self.show_loading("Apertura dialogo...")
+        try:
+            def callback():
+                self.update_all_views()
+            
+            from dialogs.contatto_dialog import ContattoDialog
+            dlg = ContattoDialog(self.page, callback)
+            self.page.open(dlg)
+        finally:
+            self.hide_loading()
 
     def update_all_views(self, is_initial_load=False):
         if self.dashboard_view:

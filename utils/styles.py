@@ -239,6 +239,7 @@ class LoadingOverlay(ft.Container):
             alignment=ft.Alignment(0, 0),
             expand=True,
             visible=False,
+            bgcolor="#88000000",  # Semi-trasparente per bloccare i click
         )
     
     def show(self, messaggio: str = None):

@@ -6,6 +6,12 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.47.07 (04/02/2026)
+- **Performance & UX**: Ottimizzata l'apertura di tutti i dialoghi di inserimento (Transazioni, Conti, ecc.).
+- **Feedback Caricamento**: Introdotto uno spinner di caricamento globale che appare istantaneamente al click, prevenendo doppi inserimenti accidentali e migliorando la percezione di velocità.
+- **Sicurezza UI**: Rinforzato l'overlay di caricamento per bloccare l'interazione con l'interfaccia sottostante durante le operazioni di backend.
+
+
 ### v0.47.06 (04/02/2026)
 - **Divisore Pro**: Abilitato l'inserimento di spese con importo pari a zero per gestire partecipanti che non hanno anticipato denaro.
 - **Database & Schema**: Allineati gli ambienti Test e Produzione alla versione 22. Consolidata la logica di migrazione per le colonne `id_asset` e `id_obiettivo` nella tabella `Salvadanai`.
