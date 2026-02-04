@@ -6,6 +6,9 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.47.04 (04/02/2026)
+- **Bug Fix**: Risolto errore `NoneType` durante l'importazione di file CSV in modalità Web. Implementato sistema di upload temporaneo per permettere al server di elaborare i file selezionati nel browser.
+
 ### v0.47.03 (04/02/2026)
 - **UI Refinement**: Rimossa la sezione "Versione Desktop" dalla pagina Info per focalizzare l'esperienza sulla versione Web.
 - **Ottimizzazione Template**: Il template per il piano di ammortamento è ora un file statico pre-caricato sul server, velocizzando il download e garantendo maggiore consistenza.

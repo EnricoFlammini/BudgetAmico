@@ -277,11 +277,39 @@ class PianoAmmortamentoDialog:
             print(f"Errore download template: {ex}")
             self.controller.show_error_dialog(f"Errore download: {ex}")
 
-    def _on_csv_picked(self, e):
+    def _on_csv_picked(self, e: ft.FilePickerResultEvent):
         if not e.files: return
         
-        file_path = e.files[0].path
         try:
+            if self.controller.page.web:
+                # In modalità Web, dobbiamo caricare il file sul server prima di leggerlo
+                file = e.files[0]
+                upload_url = self.controller.page.get_upload_url(file.name, 600)
+                
+                # Eseguiamo l'upload
+                self.file_picker_csv.upload([
+                    ft.FilePickerUploadFile(file.name, upload_url=upload_url)
+                ])
+                
+                # Polling semplice finché il file non esiste (soluzione pragmatica per Flet)
+                import time
+                import os
+                upload_path = os.path.join("temp_uploads", file.name)
+                
+                max_retries = 20
+                while not os.path.exists(upload_path) and max_retries > 0:
+                    time.sleep(0.5)
+                    max_retries -= 1
+                
+                if not os.path.exists(upload_path):
+                    self.controller.show_snack_bar("Errore: Caricamento file non riuscito sul server.", success=False)
+                    return
+                
+                file_path = upload_path
+            else:
+                # Modalità Desktop
+                file_path = e.files[0].path
+
             temp_rows = []
             count = 0
             with open(file_path, 'r', encoding='utf-8') as f:
