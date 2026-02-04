@@ -4043,14 +4043,17 @@ def ottieni_tutti_i_conti_famiglia(id_famiglia, id_utente_richiedente, master_ke
                     risultato.append(r)
                     
                 # Carte di questo utente
-                cur.execute("SELECT id_carta, nome_carta FROM Carte WHERE id_utente = %s", (uid,))
+                cur.execute("SELECT id_carta, nome_carta, id_conto_contabile, id_conto_contabile_condiviso FROM Carte WHERE id_utente = %s", (uid,))
                 for row in cur.fetchall():
                     dec_nome = _decrypt_if_key(row['nome_carta'], family_key, crypto, silent=True)
                     if (dec_nome == "[ENCRYPTED]" or (isinstance(dec_nome, str) and dec_nome.startswith("gAAAAA"))) and uid == id_utente_richiedente and master_key:
                         dec_nome = _decrypt_if_key(row['nome_carta'], master_key, crypto, silent=True)
+                    
+                    id_acc = row['id_conto_contabile'] or row['id_conto_contabile_condiviso']
+                    flag = 'S' if row['id_conto_contabile_condiviso'] else 'P'
                         
                     risultato.append({
-                        'id_conto': f"CARD_{row['id_carta']}",
+                        'id_conto': f"CARD_{row['id_carta']}_{id_acc}_{flag}",
                         'nome_conto': dec_nome,
                         'tipo': 'Carta',
                         'id_utente_owner': uid,

@@ -6,6 +6,12 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.47.13 (05/02/2026)
+- **Bug Fix**: Risolto `IndexError` nel dialogo transazioni durante la selezione delle carte.
+- **Improved Card Logic**: Allineato il formato delle chiavi delle carte tra database e UI per garantire il corretto recupero dei conti associati.
+- **Safety**: Aggiunta validazione preventiva per evitare crash in caso di formati chiave imprevisti.
+
+
 ### v0.47.12 (05/02/2026)
 - **Security & Family Visibilty**: Risolto un bug di visibilità dati causato da chiavi di famiglia incoerenti.
 - **Auto-Sync**: Implementata la sincronizzazione automatica della chiave di famiglia tramite crittografia di sistema (Automation Cloud) per garantire coerenza tra tutti i membri.

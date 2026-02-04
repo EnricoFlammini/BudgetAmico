@@ -388,12 +388,20 @@ class TransactionDialog(ft.AlertDialog):
             
             if val.startswith("CARD_"):
                 parts = val.split("_")
-                id_carta = int(parts[1])
-                id_conto = int(parts[2])
-                if len(parts) > 3:
-                     is_condiviso = (parts[3] == 'S')
+                if len(parts) >= 3:
+                     id_carta = int(parts[1])
+                     id_conto = int(parts[2])
+                     if len(parts) > 3:
+                          is_condiviso = (parts[3] == 'S')
+                     else:
+                          is_condiviso = False
                 else:
-                     is_condiviso = False
+                     # Fallback per chiavi vecchie o malformate
+                     logger.warning(f"Formato chiave carta non valido: {val}")
+                     id_carta = int(parts[1])
+                     # Se manca l'id_conto, non crashare ma non possiamo procedere correttamente
+                     # In produzione, id_conto=0 causerà errore DB ma non crash python
+                     id_conto = 0 
             else:
                 id_conto = int(val[1:])
                 is_condiviso = val.startswith('C')
