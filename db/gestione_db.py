@@ -8253,22 +8253,33 @@ def salva_storico_asset_globale(ticker: str, dati_storici: list):
             inseriti = 0
             
             for record in dati_storici:
+                # Validazione base per evitare record corrotti/nulli che rompono la transazione
+                if not record.get('data') or record.get('prezzo') is None:
+                    continue
+                
                 try:
-                    cur.execute("""
-                        INSERT INTO StoricoAssetGlobale (ticker, data, prezzo_chiusura, data_aggiornamento)
-                        VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
-                        ON CONFLICT (ticker, data) DO UPDATE SET 
-                            prezzo_chiusura = EXCLUDED.prezzo_chiusura,
-                            data_aggiornamento = CURRENT_TIMESTAMP
-                    """, (ticker.upper(), record['data'], record['prezzo']))
-                    inseriti += 1
-                except Exception as e:
-                    print(f"[ERRORE] Errore inserimento record storico per {ticker}: {e}")
+                    prezzo = float(record['prezzo'])
+                    # Evita NaN o Inf se presenti (raro ma possibile con API finanziarie)
+                    if prezzo != prezzo or prezzo > 1e15: 
+                        continue
+                except (ValueError, TypeError):
+                    continue
+
+                cur.execute("""
+                    INSERT INTO StoricoAssetGlobale (ticker, data, prezzo_chiusura, data_aggiornamento)
+                    VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                    ON CONFLICT (ticker, data) DO UPDATE SET 
+                        prezzo_chiusura = EXCLUDED.prezzo_chiusura,
+                        data_aggiornamento = CURRENT_TIMESTAMP
+                """, (ticker.upper(), record['data'], prezzo))
+                inseriti += 1
             
             con.commit()
             return inseriti
     except Exception as e:
-        print(f"[ERRORE] Errore salvataggio storico asset globale: {e}")
+        # Se arriviamo qui, l'intera transazione per questo ticker è fallita
+        # Il context manager gestirà il rollback automatico della connessione
+        print(f"[ERRORE] Errore salvataggio storico asset globale per {ticker}: {e}")
         return 0
 
 

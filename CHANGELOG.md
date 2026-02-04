@@ -6,6 +6,10 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.47.09 (04/02/2026)
+- **Database Fix**: Risolto l'errore `25P02` (transaction aborted) durante l'aggiornamento dei prezzi storici degli asset. Introdotta validazione preventiva dei dati per escludere record nulli o non validi che interrompevano le transazioni batch.
+
+
 ### v0.47.08 (04/02/2026)
 - **UI & UX**: Rimosse le opzioni "Investimento" e "Altro" dal dialogo di aggiunta nuovo conto per semplificare l'inserimento. I conti esistenti di questo tipo rimangono comunque gestibili e visibili.
 
