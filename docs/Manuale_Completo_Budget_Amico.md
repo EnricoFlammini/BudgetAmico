@@ -1,4 +1,4 @@
-# Manuale Completo Budget Amico v0.42.04
+# Manuale Completo Budget Amico v0.47.15
 
 ## Indice
 ...
@@ -602,5 +602,5 @@ Il Divisore Pro è accessibile in due modi:
 
 ---
 
-*Budget Amico - *Versione documento: 0.42.04*
+*Budget Amico - *Versione documento: 0.47.15*
 *Sviluppato con ❤️ da Iscavar79*

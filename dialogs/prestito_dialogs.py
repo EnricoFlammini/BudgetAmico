@@ -172,9 +172,9 @@ class PrestitoDialogs:
             self.dd_giorno_scadenza.value = str(prestito_data['giorno_scadenza_rata'])
             # Imposta il valore del dropdown in base al tipo di conto
             if prestito_data.get('id_conto_pagamento_default'):
-                self.dd_conto_default.value = f"p_{prestito_data['id_conto_pagamento_default']}"
+                self.dd_conto_default.value = f"P{prestito_data['id_conto_pagamento_default']}"
             elif prestito_data.get('id_conto_condiviso_pagamento_default'):
-                self.dd_conto_default.value = f"s_{prestito_data['id_conto_condiviso_pagamento_default']}"
+                self.dd_conto_default.value = f"C{prestito_data['id_conto_condiviso_pagamento_default']}"
             else:
                 self.dd_conto_default.value = None
             
@@ -322,14 +322,15 @@ class PrestitoDialogs:
         if self.prestito_in_modifica:
             quote_list = ottieni_quote_prestito(self.prestito_in_modifica['id_prestito'])
             for q in quote_list:
-                quote_esistenti[q['id_utente']] = q['percentuale']
+                # Normalizziamo a stringa per confronto affidabile
+                quote_esistenti[str(q['id_utente'])] = q['percentuale']
         else:
             # Default: 100% all'utente corrente
             curr_user = self.controller.get_user_id()
             quote_esistenti[curr_user] = 100.0
             
         for membro in membri:
-            uid = membro['id_utente']
+            uid = str(membro['id_utente'])
             perc_val = quote_esistenti.get(uid, 0.0)
             
             # Text Field per la percentuale
@@ -390,10 +391,13 @@ class PrestitoDialogs:
             id_conto_default = None
             id_conto_condiviso_default = None
             if self.dd_conto_default.value:
-                if self.dd_conto_default.value.startswith('p_'):
-                    id_conto_default = int(self.dd_conto_default.value[2:])
-                elif self.dd_conto_default.value.startswith('s_'):
-                    id_conto_condiviso_default = int(self.dd_conto_default.value[2:])
+                val = str(self.dd_conto_default.value)
+                if val.startswith('P'):
+                    id_conto_default = int(val[1:])
+                elif val.startswith('C'):
+                    id_conto_condiviso_default = int(val[1:])
+                elif val.isdigit(): # Per le carte che hanno key solo numerica
+                    id_conto_default = int(val)
             
             id_sottocategoria_default = self.dd_sottocategoria_default.value
             addebito_automatico = self.cb_addebito_automatico.value
@@ -618,7 +622,13 @@ class PrestitoDialogs:
                         ft.dropdown.Option(key=sub['id_sottocategoria'], text=f"  - {sub['nome_sottocategoria']}"))
         self.dd_sottocategoria_pagamento.options = opzioni
 
-        self.dd_conto_pagamento.value = prestito_data.get('id_conto_pagamento_default')
+        if prestito_data.get('id_conto_pagamento_default'):
+            self.dd_conto_pagamento.value = f"P{prestito_data['id_conto_pagamento_default']}"
+        elif prestito_data.get('id_conto_condiviso_pagamento_default'):
+            self.dd_conto_pagamento.value = f"C{prestito_data['id_conto_condiviso_pagamento_default']}"
+        else:
+            self.dd_conto_pagamento.value = None
+            
         self.dd_sottocategoria_pagamento.value = prestito_data.get('id_sottocategoria_pagamento_default')
 
         if self.dialog_paga_rata not in self.controller.page.overlay:
@@ -642,20 +652,25 @@ class PrestitoDialogs:
         try:
             importo = float(self.txt_importo_pagamento.value.replace(",", "."))
             data = self.txt_data_pagamento.value
-            id_conto = self.dd_conto_pagamento.value
-            id_sottocategoria = self.dd_sottocategoria_pagamento.value
-
-            if not all([importo > 0, data, id_conto, id_sottocategoria]):
-                self.controller.show_snack_bar(self.loc.get("fill_all_fields"), success=False)
-                return
+            val = str(self.dd_conto_pagamento.value)
+            id_conto_pag = None
+            id_conto_cond = None
+            if val.startswith('P'):
+                id_conto_pag = int(val[1:])
+            elif val.startswith('C'):
+                id_conto_cond = int(val[1:])
+            else:
+                id_conto_pag = int(val)
 
             success = effettua_pagamento_rata(
                 id_prestito=self.prestito_per_pagamento['id_prestito'],
-                id_conto_pagamento=id_conto,
+                id_conto_pagamento=id_conto_pag,
                 importo_pagato=importo,
                 data_pagamento=data,
                 id_sottocategoria=id_sottocategoria,
-                nome_prestito=self.prestito_per_pagamento['nome']
+                nome_prestito=self.prestito_per_pagamento['nome'],
+                id_conto_condiviso=id_conto_cond,
+                id_utente_autore=self.controller.get_user_id()
             )
 
             if success:

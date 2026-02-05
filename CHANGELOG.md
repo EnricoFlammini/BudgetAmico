@@ -6,6 +6,10 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.47.15 (05/02/2026)
+- **Loan Dialog Fix**: Risolto il problema del caricamento del conto di pagamento predefinito e delle quote di competenza (normalizzazione prefissi P/C e ID utente).
+- **Stability**: Migliorata la gestione dei pagamenti rata distinguendo correttamente tra conti personali e condivisi.
+- **Database & Tests**: Rafforzati i test unitari per l'analisi mensile e migliorata la sincronizzazione dinamica dei mutui tra immobili e prestiti.
 ### v0.47.14 (05/02/2026)
 - **Flet Stability Fix**: Risolto `AssertionError` causato da aggiornamenti UI prematuri e ridondanti durante l'apertura dei dialoghi.
 - **Optimization**: Ottimizzato il caricamento dei dropdown per evitare chiamate duplicate al database e al framework.
@@ -19,7 +23,7 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 
 ### v0.47.12 (05/02/2026)
-- **Security & Family Visibilty**: Risolto un bug di visibilità dati causato da chiavi di famiglia incoerenti.
+- **Security & Family Visibility**: Risolto un bug di visibilità dati causato da chiavi di famiglia incoerenti.
 - **Auto-Sync**: Implementata la sincronizzazione automatica della chiave di famiglia tramite crittografia di sistema (Automation Cloud) per garantire coerenza tra tutti i membri.
 - **Database Logic**: Migliorata la funzione `ensure_family_key` in `gestione_db.py` per il recupero automatico delle chiavi dal backup del server.
 
