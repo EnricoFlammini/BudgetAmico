@@ -146,6 +146,7 @@ class TestGestioneDB(unittest.TestCase):
         # 1500 + 500 = 2000
         self.assertEqual(total, 2000.0)
 
+    @patch('db.gestione_db.calcola_entrate_mensili_famiglia')
     @patch('db.gestione_db.get_db_connection')
     @patch('db.gestione_db.ottieni_impostazioni_budget_storico')
     @patch('db.gestione_db.get_impostazioni_budget_famiglia')
@@ -155,11 +156,14 @@ class TestGestioneDB(unittest.TestCase):
     @patch('db.gestione_db._get_crypto_and_key')
     @patch('db.gestione_db._get_family_key_for_user')
     @patch('db.gestione_db._decrypt_if_key')
-    def test_ottieni_dati_analisi_mensile_workflow(self, mock_dec, mock_fam, mock_cry, mock_annuale, mock_budget, mock_budget_storico, mock_curr_imp, mock_hist_imp, mock_conn):
+    def test_ottieni_dati_analisi_mensile_workflow(self, mock_dec, mock_fam, mock_cry, mock_annuale, mock_budget, mock_budget_storico, mock_curr_imp, mock_hist_imp, mock_conn, mock_entrate):
         """
         Testa il flusso di ottieni_dati_analisi_mensile.
         Verifica che vengano chiamate le funzioni giuste e ritornata la struttura corretta.
         """
+        # 0. Mock Entrate
+        mock_entrate.return_value = 3000.0
+        
         # 1. Mock Impostazioni (facciamo finta non ci sia storico)
         mock_hist_imp.return_value = None
         mock_curr_imp.return_value = {'entrate_mensili': 3000.0}
