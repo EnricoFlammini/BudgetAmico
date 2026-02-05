@@ -6304,7 +6304,10 @@ def ottieni_prestiti_famiglia(id_famiglia, master_key_b64=None, id_utente=None, 
 
             crypto, master_key = _get_crypto_and_key(master_key_b64)
             family_key = None
-            if master_key and id_utente:
+            
+            if forced_family_key_b64:
+                family_key = base64.b64decode(forced_family_key_b64)
+            elif master_key and id_utente:
                 try:
                     cur.execute("SELECT chiave_famiglia_criptata FROM Appartenenza_Famiglia WHERE id_utente = %s AND id_famiglia = %s", (id_utente, id_famiglia))
                     row = cur.fetchone()
