@@ -13,7 +13,8 @@ from db.gestione_db import (
     ottieni_portafoglio,
     aggiorna_prezzo_manuale_asset,
     ottieni_membri_famiglia,
-    trigger_budget_history_update
+    trigger_budget_history_update,
+    check_e_paga_rate_scadute
 )
 from utils.yfinance_manager import ottieni_prezzi_multipli
 from utils.crypto_manager import CryptoManager
@@ -109,6 +110,14 @@ class BackgroundService:
                         logger.info(f"Eseguite {n_fixed} spese fisse.")
                         db_logger.info(f"Eseguite {n_fixed} spese fisse", 
                                       dettagli={"count": n_fixed}, id_famiglia=id_famiglia)
+
+                    # 1b. RATE PRESTITI
+                    logger.info(f"Checking Rate Prestiti per {id_famiglia}...")
+                    n_prestiti = check_e_paga_rate_scadute(id_famiglia, forced_family_key_b64=family_key, id_utente=admin_id)
+                    if n_prestiti > 0:
+                        logger.info(f"Eseguiti {n_prestiti} pagamenti rate.")
+                        db_logger.info(f"Eseguiti {n_prestiti} pagamenti rate", 
+                                      dettagli={"count": n_prestiti}, id_famiglia=id_famiglia)
 
                     # 2. STORICO BUDGET
                     membri = ottieni_membri_famiglia(id_famiglia, family_key, None)

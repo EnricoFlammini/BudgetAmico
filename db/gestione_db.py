@@ -6281,7 +6281,7 @@ def _applica_override_piani_ammortamento(results, cur):
             if pm['next_rata_found'] and 'importo_rata' in row:
                row['importo_rata'] = pm['next_rata_importo']
 
-def ottieni_prestiti_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
+def ottieni_prestiti_famiglia(id_famiglia, master_key_b64=None, id_utente=None, forced_family_key_b64=None):
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -6343,11 +6343,11 @@ def ottieni_prestiti_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
         print(f"[ERRORE] Errore generico durante il recupero prestiti: {e}")
         return []
 
-def check_e_paga_rate_scadute(id_famiglia, master_key_b64=None, id_utente=None):
+def check_e_paga_rate_scadute(id_famiglia, master_key_b64=None, id_utente=None, forced_family_key_b64=None):
     oggi = datetime.date.today()
     pagamenti_eseguiti = 0
     try:
-        prestiti_attivi = ottieni_prestiti_famiglia(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente)
+        prestiti_attivi = ottieni_prestiti_famiglia(id_famiglia, master_key_b64=master_key_b64, id_utente=id_utente, forced_family_key_b64=forced_family_key_b64)
         with get_db_connection() as con:
             cur = con.cursor()
             for p in prestiti_attivi:

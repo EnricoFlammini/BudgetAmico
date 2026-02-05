@@ -6,6 +6,12 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.47.16 (05/02/2026)
+- **Cloud Automation Fix**: Risolto il mancato pagamento automatico dei mutui (prestiti) quando è attiva l'automazione lato server.
+- **Background Service**: Integrata la funzione `check_e_paga_rate_scadute` nel servizio di background con supporto per le chiavi decriptate forzate.
+- **Database Improvement**: Esteso il supporto per `forced_family_key_b64` nelle funzioni di recupero e processamento rate prestiti.
+
+
 ### v0.47.15 (05/02/2026)
 - **Loan Dialog Fix**: Risolto il problema del caricamento del conto di pagamento predefinito e delle quote di competenza (normalizzazione prefissi P/C e ID utente).
 - **Stability**: Migliorata la gestione dei pagamenti rata distinguendo correttamente tra conti personali e condivisi.
