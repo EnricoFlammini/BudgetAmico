@@ -6,6 +6,10 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.47.17 (05/02/2026)
+- **Background Service Fix**: Risolto errore `UnboundLocalError: admin_id` nel servizio di background che causava il crash dell'automazione server.
+- **Improved Automation**: Riorganizzata la sequenza di recupero membri famiglia per garantire la disponibilità dell'ID amministratore prima di procedere ai pagamenti.
+
 ### v0.47.16 (05/02/2026)
 - **Cloud Automation Fix**: Risolto il mancato pagamento automatico dei mutui (prestiti) quando è attiva l'automazione lato server.
 - **Background Service**: Integrata la funzione `check_e_paga_rate_scadute` nel servizio di background con supporto per le chiavi decriptate forzate.

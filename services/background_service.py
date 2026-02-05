@@ -103,6 +103,17 @@ class BackgroundService:
                         
                     logger.info(f"--- Automazione per Famiglia {id_famiglia} ---")
                     
+                    # 0. CALCOLO ADMIN ID (per authorship transazioni)
+                    membri = ottieni_membri_famiglia(id_famiglia, family_key, None)
+                    admin_id = None
+                    if membri:
+                        for m in membri:
+                            if m.get('ruolo') == 'admin':
+                                admin_id = m['id_utente']
+                                break
+                        if not admin_id and membri: 
+                            admin_id = membri[0]['id_utente']
+
                     # 1. SPESE FISSE
                     logger.info(f"Checking Spese Fisse per {id_famiglia}...")
                     n_fixed = check_e_processa_spese_fisse(id_famiglia, forced_family_key_b64=family_key)
@@ -120,16 +131,6 @@ class BackgroundService:
                                       dettagli={"count": n_prestiti}, id_famiglia=id_famiglia)
 
                     # 2. STORICO BUDGET
-                    membri = ottieni_membri_famiglia(id_famiglia, family_key, None)
-                    admin_id = None
-                    if membri:
-                        for m in membri:
-                            if m.get('ruolo') == 'admin':
-                                admin_id = m['id_utente']
-                                break
-                        if not admin_id and membri: 
-                            admin_id = membri[0]['id_utente']
-                    
                     if admin_id:
                         logger.info(f"Updating Budget History per {id_famiglia}...")
                         now = datetime.datetime.now()
