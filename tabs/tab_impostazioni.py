@@ -175,9 +175,14 @@ class ImpostazioniTab(ft.Container):
         self.txt_data_nascita = ft.TextField(
             label=loc.get("date_of_birth"), 
             border_color=ft.Colors.OUTLINE,
-            suffix_icon=ft.Icons.CALENDAR_MONTH,
-            on_tap=lambda _: self.page.open(self.date_picker),
-            read_only=True
+            read_only=True,
+            expand=True
+        )
+        
+        self.btn_date_picker = ft.IconButton(
+            icon=ft.Icons.CALENDAR_MONTH,
+            on_click=lambda _: self.page.open(self.date_picker),
+            tooltip="Seleziona data"
         )
         
         self.txt_codice_fiscale = ft.TextField(label=loc.get("tax_code"), border_color=ft.Colors.OUTLINE, visible=False)
@@ -252,7 +257,7 @@ class ImpostazioniTab(ft.Container):
             ]),
             
             ft.ResponsiveRow([
-                ft.Column([self.txt_data_nascita], col={"xs": 12, "sm": 6}),
+                ft.Column([ft.Row([self.txt_data_nascita, self.btn_date_picker], spacing=0)], col={"xs": 12, "sm": 6}),
                 ft.Column([btn_extra], col={"xs": 12, "sm": 6}, horizontal_alignment=ft.CrossAxisAlignment.END),
             ]),
             
