@@ -560,9 +560,6 @@ class AuthView:
     def get_force_change_password_view(self) -> ft.View:
         """Costruisce la vista per impostare la nuova password."""
         loc = self.loc
-        self.txt_reset_username.value = ""
-        self.txt_reset_nome.value = ""
-        self.txt_reset_cognome.value = ""
         self.txt_reset_new_password.label = loc.get("new_password")
         self.txt_reset_confirm_password.label = loc.get("confirm_new_password")
         self.txt_reset_new_password.value = ""
@@ -572,23 +569,26 @@ class AuthView:
         return ft.View(
             "/force-change-password",
             [
-                ft.Column(
+                ft.Row(
                     [
-                        ft.Text(loc.get("set_new_password_title"), size=30, weight=ft.FontWeight.BOLD),
-                        ft.Text("Completa il tuo profilo", size=16),
-                        self.txt_reset_nome,
-                        self.txt_reset_cognome,
-                        self.txt_reset_username,
-                        self.txt_reset_new_password,
-                        self.txt_reset_confirm_password,
-                        self.reset_status_text,
-                        ft.ElevatedButton(loc.get("save_new_password"), icon=ft.Icons.SAVE,
-                                          on_click=self._salva_nuova_password),
+                        ft.Column(
+                            [
+                                ft.Text(loc.get("set_new_password_title"), size=30, weight=ft.FontWeight.BOLD),
+                                ft.Container(height=10),
+                                self.txt_reset_new_password,
+                                self.txt_reset_confirm_password,
+                                self.reset_status_text,
+                                ft.ElevatedButton(loc.get("save_new_password"), icon=ft.Icons.SAVE,
+                                                  on_click=self._salva_nuova_password),
+                            ],
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            alignment=ft.MainAxisAlignment.CENTER,
+                            width=350,
+                            spacing=15
+                        )
                     ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     alignment=ft.MainAxisAlignment.CENTER,
-                    expand=True,
-                    width=350
+                    expand=True
                 )
             ]
         )
@@ -599,14 +599,11 @@ class AuthView:
         btn_salva.disabled = True
         btn_salva.update()
 
-        nuovo_username = self.txt_reset_username.value.strip()
-        nome = self.txt_reset_nome.value.strip()
-        cognome = self.txt_reset_cognome.value.strip()
         nuova_pass = self.txt_reset_new_password.value
         conferma_pass = self.txt_reset_confirm_password.value
 
-        if not nuovo_username or not nome or not cognome or not nuova_pass or nuova_pass != conferma_pass:
-            self.reset_status_text.value = "Compila tutti i campi e verifica che le password coincidano."
+        if not nuova_pass or nuova_pass != conferma_pass:
+            self.reset_status_text.value = "Le password non coincidono o sono vuote."
             self.reset_status_text.color = ft.Colors.RED
             self.reset_status_text.visible = True
             btn_salva.disabled = False
@@ -627,7 +624,7 @@ class AuthView:
             vecchia_password = self.page.session.get("_temp_password_for_reencrypt")
             if vecchia_password:
                 self.page.session.remove("_temp_password_for_reencrypt")
-            result = cambia_password_e_username(id_utente, nuova_pass, nuovo_username, nome=nome, cognome=cognome, vecchia_password=vecchia_password)
+            result = cambia_password_e_username(id_utente, nuova_pass, vecchia_password=vecchia_password)
 
             self.controller.hide_loading()
 

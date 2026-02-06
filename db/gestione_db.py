@@ -2050,7 +2050,7 @@ def trova_utente_per_email(email: str) -> Optional[Dict[str, str]]:
         print(f"[ERRORE] Errore ricerca utente per email: {e}")
         return None
 
-def cambia_password_e_username(id_utente: str, password_raw: str, nuovo_username: str, nome: Optional[str] = None, cognome: Optional[str] = None, vecchia_password: Optional[str] = None) -> Dict[str, Any]:
+def cambia_password_e_username(id_utente: str, password_raw: str, nuovo_username: Optional[str] = None, nome: Optional[str] = None, cognome: Optional[str] = None, vecchia_password: Optional[str] = None) -> Dict[str, Any]:
     """
     Aggiorna password e username per l'attivazione account (Force Change Password).
     Genera nuove chiavi di cifratura (Master Key, Salt, Recovery Key).
@@ -2103,20 +2103,50 @@ def cambia_password_e_username(id_utente: str, password_raw: str, nuovo_username
              except Exception as ex:
                  print(f"[WARN] Failed to create Master Key Backup: {ex}")
 
+        # Fetch current data if needed
+        current_data = None
+        if not nuovo_username or not nome or not cognome:
+            with get_db_connection() as con:
+                cur = con.cursor()
+                cur.execute("SELECT username_enc, nome, cognome, nome_enc_server, cognome_enc_server FROM Utenti WHERE id_utente = %s", (id_utente,))
+                current_data = cur.fetchone()
+
         # 2. Hash password
         password_hash = hash_password(password_raw)
         
-        # 3. Encrypt User PII (Nome/Cognome) with Master Key
+        # 3. Handle PII (Nome/Cognome/Username)
+        # Se non abbiamo i nuovi, proviamo a recuperare i vecchi
+        if not nuovo_username and current_data:
+            nuovo_username = decrypt_system_data(current_data['username_enc'])
+        
+        if not nome and current_data:
+            if old_master_key and current_data['nome']:
+                nome = crypto.decrypt_data(current_data['nome'], old_master_key)
+            elif current_data['nome_enc_server']:
+                nome = decrypt_system_data(current_data['nome_enc_server'])
+        
+        if not cognome and current_data:
+            if old_master_key and current_data['cognome']:
+                cognome = crypto.decrypt_data(current_data['cognome'], old_master_key)
+            elif current_data['cognome_enc_server']:
+                cognome = decrypt_system_data(current_data['cognome_enc_server'])
+
+        # Se ancora non abbiamo i nomi (es. primo setup assoluto senza backup), usiamo placeholder o lasciamo None
+        
+        # 3.b Encrypt User PII for the new (or preserved) Master Key
         enc_nome = None
         enc_cognome = None
         if nome: enc_nome = crypto.encrypt_data(nome, master_key)
         if cognome: enc_cognome = crypto.encrypt_data(cognome, master_key)
         
-        # 3.b Secure Username (Blind Index + Enc System)
+        # 3.c Secure Username (Blind Index + Enc System)
+        if not nuovo_username:
+            raise ValueError("Username non disponibile e non fornito.")
+            
         u_bindex = compute_blind_index(nuovo_username)
         u_enc = encrypt_system_data(nuovo_username)
         
-        # 3.c Encrypt Server-Side Display Names (for Family Visibility)
+        # 3.d Encrypt Server-Side Display Names (for Family Visibility)
         n_enc_srv = encrypt_system_data(nome) if nome else None
         c_enc_srv = encrypt_system_data(cognome) if cognome else None
         
