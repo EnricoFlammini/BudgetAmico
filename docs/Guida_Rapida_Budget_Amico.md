@@ -1,4 +1,4 @@
-# Guida Rapida Budget Amico v0.39.00
+# Guida Rapida Budget Amico v0.48.00
 
 ## Benvenuto in Budget Amico! 🎉
 
@@ -16,10 +16,13 @@ Budget Amico è la tua app per la gestione del budget personale e familiare. Que
    - **Nome** e **Cognome**
    - **Username** (il nome con cui accederai)
    - **Email** (per il recupero password)
-   - **Password** (minimo 8 caratteri)
+   - **Password**: sistema di sicurezza avanzato. L'indicatore grafico ti aiuterà a creare una password robusta (obbligatorio: lunghezza minima e caratteri speciali se configurati).
 4. Clicca su **"Registrati"**
 
-> ⚠️ **Importante**: Conserva la **Recovery Key** che ti verrà mostrata dopo la registrazione. È l'unico modo per recuperare i tuoi dati se dimentichi la password!
+### Verifica Email
+Dopo la registrazione, riceverai un **codice di verifica a 6 cifre** al tuo indirizzo email. Inseriscilo nell'app per attivare definitivamente il tuo account.
+
+> ⚠️ **Importante**: Conserva la **Recovery Key** che ti verrà mostrata. È l'unico modo per recuperare i tuoi dati se dimentichi la password!
 
 ### Accesso Rapido (Divisore Pro)
 Puoi accedere al tool **Divisore Pro** (calcolo spese condivise) direttamente dalla pagina di login cliccando sull'icona della **Calcolatrice Verde**, senza bisogno di registrarti.
@@ -51,12 +54,12 @@ La barra a sinistra ti permette di navigare tra le sezioni:
 | 💳 | **Prestiti** | Mutui e finanziamenti |
 | 🏠 | **Immobili** | Proprietà immobiliari |
 | 👨‍👩‍👧‍👦 | **Famiglia** | Panoramica dati familiari |
+| 📋 | **Privacy** | Informativa sul trattamento dati |
 | ⚙️ | **Impostazioni** | Preferenze personali |
 
 ### Barra superiore (AppBar)
 - 🔄 **Aggiorna**: Ricarica i dati dal database
 - ℹ️ **Info**: Versione app e manuali
-- 📥 **Esporta**: Esporta dati in Excel
 - 🚪 **Esci**: Logout dall'applicazione
 
 ### Pulsante + (FAB)
@@ -104,8 +107,6 @@ Ora che hai un conto, puoi iniziare a registrare entrate e uscite:
 4. **Categoria/Sottocategoria**: seleziona la categoria appropriata
 5. Clicca su **"Salva"**
 
-> 💡 **Suggerimento**: Le categorie predefinite coprono la maggior parte delle esigenze. Come Admin, puoi personalizzarle nel Pannello Admin!
-
 ---
 
 ## 5. Prossimi Passi
@@ -121,17 +122,14 @@ Ora che hai completato i primi passi, ecco cosa puoi esplorare:
 ### Monitora Prestiti e Mutui 💳
 Tieni traccia dei tuoi finanziamenti caricando il **Piano di Ammortamento** per avere sempre sotto controllo il debito residuo reale.
 
-### Invita la Famiglia 👨‍👩‍👧‍👦
-Se sei l'Admin della famiglia:
-1. Vai nel **Pannello Admin** → **"Gestione Membri"**
-2. Clicca su **"Invita Membro"**
-3. Inserisci l'email del familiare
+### Visualizzazione Patrimoniale 📱
+Se utilizzi l'app da un dispositivo mobile, il riepilogo del tuo patrimonio sarà automaticamente compattato per una lettura ottimale.
+
+### Sicurezza e Privacy 📋
+I tuoi dati sono protetti da crittografia end-to-end. Consulta la nuova sezione **Privacy** per dettagli su come i tuoi dati vengono gestiti e su come eliminare definitivamente il tuo account se necessario.
 
 ### Configura le Impostazioni ⚙️
 Personalizza lingua, valuta e altre preferenze nella sezione **"Impostazioni"**.
-
-### Gestisci Carte di Credito 💳
-Utilizza il nuovo modulo **Carte** per tracciare le spese effettuate con carta di credito, monitorare il plafond e automatizzare i rimborsi.
 
 ---
 
@@ -143,5 +141,5 @@ Utilizza il nuovo modulo **Carte** per tracciare le spese effettuate con carta d
 
 ---
 
-*Budget Amico - *Versione documento: 0.39.00*
+*Budget Amico - *Versione documento: 0.48.00*
 *Sviluppato da Iscavar79*
