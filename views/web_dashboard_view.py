@@ -148,11 +148,11 @@ class WebDashboardView:
                         weight=ft.FontWeight.BOLD,
                         size=16
                     ),
-                    ft.Text(
-                        f"ID: {self.controller.get_user_id() or 'N/A'}",
-                        size=12,
-                        color=AppColors.TEXT_SECONDARY
-                    ),
+                    # ft.Text(
+                    #     f"ID: {self.controller.get_user_id() or 'N/A'}",
+                    #     size=12,
+                    #     color=AppColors.TEXT_SECONDARY
+                    # ),
                 ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=5),
                 padding=20,
                 bgcolor=AppColors.SURFACE_VARIANT,

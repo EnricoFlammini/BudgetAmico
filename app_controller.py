@@ -8,6 +8,8 @@ import subprocess
 import sys
 from urllib.parse import urlparse, parse_qs
 import threading
+import json
+from decimal import Decimal
 
 # Viste, Dialoghi e Utility
 from views.auth_view import AuthView
@@ -27,13 +29,16 @@ from dialogs.conto_condiviso_dialog import ContoCondivisoDialog
 from dialogs.spesa_fissa_dialog import SpesaFissaDialog
 from utils.localization import LocalizationManager
 from utils.styles import LoadingOverlay
+from utils.email_sender import send_email
+from utils.async_task import AsyncTask
 from db.gestione_db import (
     ottieni_prima_famiglia_utente, ottieni_ruolo_utente, check_e_paga_rate_scadute,
     check_e_processa_spese_fisse, get_user_count, crea_famiglia_e_admin,
     aggiungi_categorie_iniziali, cerca_utente_per_username, aggiungi_utente_a_famiglia,
     ottieni_versione_db, crea_invito, ottieni_invito_per_token,
     ottieni_utenti_senza_famiglia, ensure_family_key, trigger_budget_history_update,
-    is_server_automation_enabled
+    is_server_automation_enabled,
+    ottieni_backup_completo_famiglia
 )
 
 from utils.logger import setup_logger
@@ -41,7 +46,15 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 MAX_RECENT_FILES = 5
-VERSION = "0.48.0"
+VERSION = "0.48.00"
+
+class BackupEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, (datetime.datetime, datetime.date)):
+            return obj.isoformat()
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return super().default(obj)
 
 
 class AppController:
@@ -472,18 +485,82 @@ class AppController:
 
 
     def backup_dati_clicked(self):
-        self.show_snack_bar("Funzionalità di backup non disponibile con PostgreSQL.", success=False)
-
-    def _on_backup_dati_result(self, e):
-        if not e.path:
-            self.show_snack_bar("Operazione di backup annullata.", success=False)
+        utente = self.page.session.get("utente_loggato")
+        if not utente:
+            self.show_snack_bar("Errore: Utente non loggato.", success=False)
             return
-        try:
-            # shutil.copyfile(DB_FILE, e.path) # No direct file copy for Postgres
-             self.show_snack_bar(f"Backup creato con successo in: {e.path}", success=True)
-        except Exception as ex:
-            logger.error(f"Errore backup: {ex}")
-            self.show_error_dialog(f"Errore durante la creazione del backup: {ex}")
+
+        email_dest = utente.get('email')
+        if not email_dest:
+            self.show_snack_bar("Errore: Indirizzo email non trovato nel profilo.", success=False)
+            return
+
+        # Dialogo di conferma
+        def annulla(e):
+            self.page.close(dlg)
+
+        def conferma(e):
+            self.page.close(dlg)
+            self._esegui_backup_e_invio(email_dest)
+
+        dlg = ft.AlertDialog(
+            title=ft.Text("Conferma Backup"),
+            content=ft.Text(f"Il backup completo della famiglia verrà inviato a:\n{email_dest}\n\nSei sicuro di voler procedere?"),
+            actions=[
+                ft.TextButton("Annulla", on_click=annulla),
+                ft.ElevatedButton("Invia Backup", on_click=conferma, bgcolor=ft.Colors.PRIMARY, color=ft.Colors.ON_PRIMARY)
+            ]
+        )
+        self.page.open(dlg)
+
+    def _esegui_backup_e_invio(self, email_dest):
+        self.page.overlay.append(self.loading_overlay)
+        self.loading_overlay.visible = True
+        self.page.update()
+
+        id_famiglia = self.get_family_id()
+        id_utente = self.get_user_id()
+        master_key_b64 = self.page.session.get("master_key")
+
+        def task_backup():
+            try:
+                data = ottieni_backup_completo_famiglia(id_famiglia, master_key_b64, id_utente)
+                if not data:
+                    return False, "Errore durante la generazione dei dati di backup."
+
+                # Converti in JSON
+                json_str = json.dumps(data, indent=4, cls=BackupEncoder)
+                json_bytes = json_str.encode('utf-8')
+                
+                # Invia email
+                nome_famiglia = data['tabelle']['Famiglie'][0]['nome_famiglia']
+                subject = f"Backup Dati Famiglia: {nome_famiglia}"
+                body = f"""
+                <h2>Backup Dati BudgetAmico</h2>
+                <p>In allegato trovi il backup completo richiesto per la famiglia <b>{nome_famiglia}</b>.</p>
+                <p>Data generazione: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}</p>
+                <hr>
+                <p style='font-size: 12px; color: #666;'>Questo file contiene dati sensibili. Conservalo in un luogo sicuro.</p>
+                """
+                
+                filename = f"Backup_BudgetAmico_{nome_famiglia}_{datetime.date.today()}.json"
+                success, error = send_email(email_dest, subject, body, attachment_bytes=json_bytes, attachment_name=filename)
+                
+                return success, error
+            except Exception as ex:
+                logger.error(f"Errore backup task: {ex}")
+                return False, str(ex)
+
+        def on_done(result):
+            success, message = result
+            self.loading_overlay.visible = False
+            self.page.update()
+            if success:
+                self.show_snack_bar(f"Backup inviato con successo a {email_dest}!", success=True)
+            else:
+                self.show_error_dialog(f"Errore durante l'invio del backup: {message}")
+
+        AsyncTask(target=task_backup, callback=on_done).start()
 
     def ripristina_dati_clicked(self):
         self.show_snack_bar("Funzionalità di ripristino non disponibile con PostgreSQL.", success=False)
@@ -1025,9 +1102,35 @@ class AppController:
         def close_dialog(e):
             self.page.close(dialog)
 
+        # Recupera dettagli Utente e Famiglia
+        utente = self.page.session.get("utente_loggato") or {}
+        id_famiglia = self.page.session.get("id_famiglia")
+        
+        info_famiglia = None
+        if id_famiglia:
+            from db.gestione_db import get_family_summary
+            info_famiglia = get_family_summary(id_famiglia)
+
+        # Build Info Rows
+        info_rows = []
+        if info_famiglia:
+            info_rows.append(ft.Row([ft.Text("Famiglia:", weight=ft.FontWeight.BOLD), ft.Text(info_famiglia.get('nome', '-'))]))
+            info_rows.append(ft.Row([ft.Text("Codice Famiglia:", weight=ft.FontWeight.BOLD), ft.Text(info_famiglia.get('codice', '-'), color=ft.Colors.BLUE_900)]))
+        
+        info_rows.append(ft.Row([ft.Text("Nome Utente:", weight=ft.FontWeight.BOLD), ft.Text(f"{utente.get('nome', '-')} {utente.get('cognome', '')}")]))
+        info_rows.append(ft.Row([ft.Text("Username:", weight=ft.FontWeight.BOLD), ft.Text(utente.get('username', '-'))]))
+        info_rows.append(ft.Row([ft.Text("Codice Utente:", weight=ft.FontWeight.BOLD), ft.Text(utente.get('codice_utente', '-'), color=ft.Colors.BLUE_900)]))
+
         content = ft.Column([
             ft.Text(f"Budget Amico v{VERSION}", size=20, weight=ft.FontWeight.BOLD),
             ft.Text("Il tuo assistente personale per la gestione delle finanze.", size=14),
+            ft.Divider(),
+            ft.Container(
+                content=ft.Column(info_rows, spacing=5),
+                padding=10,
+                bgcolor=ft.Colors.BLUE_GREY_50,
+                border_radius=8
+            ),
             ft.Divider(),
             ft.Text("Risorse Utili:", weight=ft.FontWeight.BOLD),
              ft.Row([

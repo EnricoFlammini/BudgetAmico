@@ -608,6 +608,71 @@ def _migra_da_v22_a_v23(con):
         return False
 
 
+def _migra_da_v23_a_v24(con):
+    """
+    Logica specifica per migrare un DB dalla versione 23 alla 24.
+    - Aggiunge codice_utente_enc alla tabella Utenti.
+    - Aggiunge codice_famiglia_enc alla tabella Famiglie.
+    - Genera e cripta codici univoci per i record esistenti.
+    """
+    print("Esecuzione migrazione da v23 a v24...")
+    import secrets
+    from db.gestione_db import encrypt_system_data
+    
+    try:
+        cur = con.cursor()
+
+        # 1. Aggiungi colonna codice_utente_enc a Utenti
+        print("  - Aggiunta colonna codice_utente_enc a Utenti...")
+        try:
+            cur.execute("ALTER TABLE Utenti ADD COLUMN codice_utente_enc TEXT")
+        except Exception as e:
+            if "duplicate column" in str(e) or "already exists" in str(e):
+                print("    Colonna 'codice_utente_enc' già esistente.")
+            else:
+                raise e
+
+        # 2. Aggiungi colonna codice_famiglia_enc a Famiglie
+        print("  - Aggiunta colonna codice_famiglia_enc a Famiglie...")
+        try:
+            cur.execute("ALTER TABLE Famiglie ADD COLUMN codice_famiglia_enc TEXT")
+        except Exception as e:
+            if "duplicate column" in str(e) or "already exists" in str(e):
+                print("    Colonna 'codice_famiglia_enc' già esistente.")
+            else:
+                raise e
+
+        con.commit()
+
+        # 3. Popola record esistenti
+        print("  - Generazione codici univoci per record esistenti...")
+        
+        # Utenti
+        cur.execute("SELECT id_utente FROM Utenti WHERE codice_utente_enc IS NULL")
+        utenti = cur.fetchall()
+        for u in utenti:
+            codice = secrets.token_hex(4).upper() # 8 caratteri hex
+            codice_enc = encrypt_system_data(codice)
+            cur.execute("UPDATE Utenti SET codice_utente_enc = %s WHERE id_utente = %s", (codice_enc, u['id_utente']))
+        
+        # Famiglie
+        cur.execute("SELECT id_famiglia FROM Famiglie WHERE codice_famiglia_enc IS NULL")
+        famiglie = cur.fetchall()
+        for f in famiglie:
+            codice = f"FAM-{secrets.token_hex(3).upper()}" # FAM-XXXXXX
+            codice_enc = encrypt_system_data(codice)
+            cur.execute("UPDATE Famiglie SET codice_famiglia_enc = %s WHERE id_famiglia = %s", (codice_enc, f['id_famiglia']))
+
+        con.commit()
+        print("Migrazione a v24 completata con successo.")
+        return True
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v23 a v24: {e}")
+        try: con.rollback() 
+        except: pass
+        return False
+
+
 
 
 def _migra_da_v7_a_v8(con: sqlite3.Connection):
@@ -976,6 +1041,11 @@ def migra_database(con, versione_vecchia=None, versione_nuova=None):
             if not _migra_da_v22_a_v23(con):
                  raise Exception("Migrazione da v22 a v23 fallita.")
             versione_vecchia = 23
+
+        if versione_vecchia == 23 and versione_nuova >= 24:
+            if not _migra_da_v23_a_v24(con):
+                 raise Exception("Migrazione da v23 a v24 fallita.")
+            versione_vecchia = 24
 
         # Se tutto è andato bene, aggiorna la versione del DB
         # Per Postgres usiamo InfoDB, per SQLite PRAGMA

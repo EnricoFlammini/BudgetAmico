@@ -21,7 +21,11 @@ class InfoTab(ft.Container):
                     ft.Icon(ft.Icons.INFO_OUTLINE, size=64, color=AppColors.PRIMARY),
                     ft.Text(f"Budget Amico v{VERSION}", size=20, weight=ft.FontWeight.BOLD),
                     ft.Text("Il tuo assistente personale per la gestione delle finanze.", size=16),
-                    ft.Container(height=20),
+                    ft.Container(height=10),
+
+                    # Dettagli Utente e Famiglia
+                    self._build_personal_info_section(),
+
                     ft.Divider(height=30),
                     
                     ft.Text("Risorse Utili", weight=ft.FontWeight.BOLD),
@@ -40,5 +44,34 @@ class InfoTab(ft.Container):
             )
         ], scroll=ft.ScrollMode.AUTO, spacing=20)
 
+    def _build_personal_info_section(self):
+        utente = self.controller.page.session.get("utente_loggato") or {}
+        id_famiglia = self.controller.page.session.get("id_famiglia")
+        
+        info_famiglia = None
+        if id_famiglia:
+            from db.gestione_db import get_family_summary
+            info_famiglia = get_family_summary(id_famiglia)
+
+        info_rows = []
+        if info_famiglia:
+            info_rows.append(ft.Row([ft.Text("Famiglia:", weight=ft.FontWeight.BOLD), ft.Text(info_famiglia.get('nome', '-'))], alignment=ft.MainAxisAlignment.CENTER))
+            info_rows.append(ft.Row([ft.Text("Codice Famiglia:", weight=ft.FontWeight.BOLD), ft.Text(info_famiglia.get('codice', '-'), color=ft.Colors.BLUE_900)], alignment=ft.MainAxisAlignment.CENTER))
+        
+        info_rows.append(ft.Row([ft.Text("Nome Utente:", weight=ft.FontWeight.BOLD), ft.Text(f"{utente.get('nome', '-')} {utente.get('cognome', '')}")], alignment=ft.MainAxisAlignment.CENTER))
+        info_rows.append(ft.Row([ft.Text("Username:", weight=ft.FontWeight.BOLD), ft.Text(utente.get('username', '-'))], alignment=ft.MainAxisAlignment.CENTER))
+        info_rows.append(ft.Row([ft.Text("Codice Utente:", weight=ft.FontWeight.BOLD), ft.Text(utente.get('codice_utente', '-'), color=ft.Colors.BLUE_900)], alignment=ft.MainAxisAlignment.CENTER))
+
+        return ft.Container(
+            content=ft.Column(info_rows, spacing=5, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            padding=15,
+            bgcolor=ft.Colors.BLUE_GREY_50,
+            border_radius=10,
+            width=400
+        )
+
     def update_view_data(self, is_initial_load=False):
-        pass
+        # Ricostruisce la vista per aggiornare i dati se necessario
+        self.content = self._build_view()
+        if self.page:
+            self.update()

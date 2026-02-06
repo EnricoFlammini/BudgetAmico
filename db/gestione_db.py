@@ -64,6 +64,12 @@ def decrypt_system_data(value_enc):
     except Exception:
         return None
 
+def generate_unique_code(prefix="", length=8):
+    """Genera un codice randomico hex."""
+    import secrets
+    code = secrets.token_hex(length // 2).upper()
+    return f"{prefix}{code}"
+
 def get_server_family_key(id_famiglia):
     """
     Recupera la Family Key decriptata (usando SERVER_SECRET_KEY) per l'automazione background.
@@ -275,20 +281,31 @@ def get_all_users() -> List[Dict[str, Any]]:
             # USE ENCRYPTED SHADOW COLUMNS and JOIN for Families
             cur.execute("""
                 SELECT u.id_utente, u.username_enc, u.email_enc, u.nome_enc_server, u.cognome_enc_server, u.sospeso,
-                       u.password_algo,
-                       string_agg(af.id_famiglia::text, ', ') as famiglie
+                       u.password_algo, u.codice_utente_enc,
+                       string_agg(f.codice_famiglia_enc, '|') as codici_famiglie_enc
                 FROM Utenti u
                 LEFT JOIN Appartenenza_Famiglia af ON u.id_utente = af.id_utente
-                GROUP BY u.id_utente, u.password_algo
+                LEFT JOIN Famiglie f ON af.id_famiglia = f.id_famiglia
+                GROUP BY u.id_utente, u.password_algo, u.codice_utente_enc
                 ORDER BY u.id_utente
             """)
             rows = []
             for row in cur.fetchall():
                 d = {}
                 d['id_utente'] = row['id_utente']
-                d['famiglie'] = row['famiglie'] or "-"
+                
+                # Decrittazione Codici Famiglia
+                codici_lista = []
+                if row.get('codici_famiglie_enc'):
+                    for c_enc in row['codici_famiglie_enc'].split('|'):
+                        dec = decrypt_system_data(c_enc)
+                        if dec: codici_lista.append(dec)
+                
+                d['famiglie'] = ", ".join(codici_lista) if codici_lista else "-"
+                
                 d['sospeso'] = row.get('sospeso', False)
                 d['algo'] = row.get('password_algo', 'sha256') # Default to sha256 (legacy) if null
+                d['codice_utente'] = decrypt_system_data(row.get('codice_utente_enc')) or "-"
                 
                 # Decrypt sensitive fields using System Key
                 # Nota: usiamo .get() perché potrebbero essere NULL
@@ -309,30 +326,46 @@ def delete_user(user_id: int) -> tuple[bool, str]:
         with get_db_connection() as con:
             cur = con.cursor()
             
-            # 1. Rimuovi appartenenza famiglie
+            # 1. Rimuovi appartenenza famiglie e partecipazioni conti condivisi
             cur.execute("DELETE FROM Appartenenza_Famiglia WHERE id_utente = %s", (user_id,))
+            cur.execute("DELETE FROM PartecipazioneContoCondiviso WHERE id_utente = %s", (user_id,))
             
-            # 2. Elimina dati finanziari personali (Conti e cascata)
-            # NOTA: Assumiamo che Transazioni sia in CASCADE su Conti nel DB, altrimenti servirebbe delete esplicito.
-            # Per sicurezza eliminiamo prima le dipendenze note se non siamo sicuri delle FK.
-            # Eliminiamo SpeseFisse, Prestiti, Immobili collegati all'utente (se usano id_utente come FK diretta o tramite conto)
+            # 2. Elimina transazioni condivise di cui è autore
+            cur.execute("DELETE FROM TransazioniCondivise WHERE id_utente_autore = %s", (user_id,))
+
+            # 3. Elimina Carte dell'utente
+            cur.execute("DELETE FROM Carte WHERE id_utente = %s", (user_id,))
+
+            # 4. Elimina Contatti dell'utente (e relative condivisioni)
+            # CondivisioneContatto ha FK su id_utente e id_contatto (entrambi cascade teoricamente, ma meglio esplicito)
+            cur.execute("DELETE FROM CondivisioneContatto WHERE id_utente = %s", (user_id,))
+            cur.execute("DELETE FROM Contatti WHERE id_utente = %s", (user_id,))
             
+            # 5. Elimina Quote Immobili e Prestiti
+            cur.execute("DELETE FROM QuoteImmobili WHERE id_utente = %s", (user_id,))
+            cur.execute("DELETE FROM QuotePrestiti WHERE id_utente = %s", (user_id,))
+
+            # 6. Elimina dati finanziari personali (Conti e cascata)
             # Recupera conti dell'utente
             cur.execute("SELECT id_conto FROM Conti WHERE id_utente = %s", (user_id,))
-            conti_ids = [r['id_conto'] for r in cur.fetchall()]
+            res = cur.fetchall()
+            conti_ids = [r['id_conto'] for r in res] if res else []
             
             if conti_ids:
-                # Transazioni (se non cascade)
+                # Transazioni
                 cur.execute("DELETE FROM Transazioni WHERE id_conto = ANY(%s)", (conti_ids,))
                 # Saldi/Salvadanaio
                 cur.execute("DELETE FROM Salvadanai WHERE id_conto = ANY(%s)", (conti_ids,))
-                # Conti
+                # Asset / Storico Asset
+                cur.execute("DELETE FROM Asset WHERE id_conto = ANY(%s)", (conti_ids,))
+                cur.execute("DELETE FROM Storico_Asset WHERE id_conto = ANY(%s)", (conti_ids,))
+                # Infine i Conti
                 cur.execute("DELETE FROM Conti WHERE id_utente = %s", (user_id,))
 
-            # 3. Elimina Log relativi all'utente
+            # 7. Elimina Log relativi all'utente
             cur.execute("DELETE FROM Log_Sistema WHERE id_utente = %s", (user_id,))
 
-            # 4. Infine elimina l'utente
+            # 8. Infine elimina l'utente
             cur.execute("DELETE FROM Utenti WHERE id_utente = %s", (user_id,))
             
             con.commit()
@@ -376,7 +409,14 @@ def get_all_families() -> List[Dict[str, Any]]:
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("SELECT id_famiglia, nome_famiglia, server_encrypted_key FROM Famiglie ORDER BY id_famiglia")
+            cur.execute("""
+                SELECT f.id_famiglia, f.nome_famiglia, f.server_encrypted_key, f.codice_famiglia_enc,
+                       COUNT(af.id_utente) as num_membri
+                FROM Famiglie f
+                LEFT JOIN Appartenenza_Famiglia af ON f.id_famiglia = af.id_famiglia
+                GROUP BY f.id_famiglia, f.nome_famiglia, f.server_encrypted_key, f.codice_famiglia_enc
+                ORDER BY f.id_famiglia
+            """)
             families = cur.fetchall()
             
             rows = []
@@ -385,6 +425,8 @@ def get_all_families() -> List[Dict[str, Any]]:
             for row in families:
                 d = {}
                 d['id_famiglia'] = row['id_famiglia']
+                d['num_membri'] = row['num_membri']
+                d['codice_famiglia'] = decrypt_system_data(row.get('codice_famiglia_enc')) or "-"
                 encrypted_name = row['nome_famiglia']
                 srv_key_enc = row.get('server_encrypted_key')
                 
@@ -496,6 +538,44 @@ def get_all_families() -> List[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Errore get_all_families: {e}")
         return []
+
+
+def get_family_summary(id_famiglia):
+    """Restituisce un riassunto (nome e codice decriptati) per una famiglia."""
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT nome_famiglia, server_encrypted_key, codice_famiglia_enc FROM Famiglie WHERE id_famiglia = %s", (id_famiglia,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            
+            d = {}
+            # Decrypt Name
+            srv_key_enc = row.get('server_encrypted_key')
+            enc_name = row['nome_famiglia']
+            if srv_key_enc:
+                try:
+                    fk_b64 = decrypt_system_data(srv_key_enc)
+                    if fk_b64:
+                        fk_bytes = base64.b64decode(fk_b64.encode())
+                        crypto = CryptoManager()
+                        d['nome'] = _decrypt_if_key(enc_name, fk_bytes, crypto, silent=True)
+                    else:
+                        d['nome'] = enc_name
+                except:
+                    d['nome'] = enc_name
+            else:
+                d['nome'] = enc_name
+                
+            # Decrypt Code
+            cod_enc = row.get('codice_famiglia_enc')
+            d['codice'] = decrypt_system_data(cod_enc) or "-"
+            
+            return d
+    except Exception as e:
+        logger.error(f"Errore get_family_summary: {e}")
+        return None
 
 
 def delete_family(family_id: int) -> Tuple[bool, str]:
@@ -1567,7 +1647,7 @@ def verifica_login(login_identifier: str, password: str) -> Optional[Dict[str, A
                 SELECT id_utente, password_hash, password_algo, nome, cognome, username, email, 
                        forza_cambio_password, salt, encrypted_master_key, 
                        username_enc, email_enc, nome_enc_server, cognome_enc_server,
-                       failed_login_attempts, lockout_until, sospeso
+                       failed_login_attempts, lockout_until, sospeso, codice_utente_enc
                 FROM Utenti 
                 WHERE username_bindex = %s OR email_bindex = %s
             """, (u_bindex, u_bindex))
@@ -1788,6 +1868,7 @@ def verifica_login(login_identifier: str, password: str) -> Optional[Dict[str, A
                     'cognome': cognome,
                     'username': decrypt_system_data(risultato['username_enc']) or risultato['username'],
                     'email': decrypt_system_data(risultato['email_enc']) or risultato['email'],
+                    'codice_utente': decrypt_system_data(risultato.get('codice_utente_enc')) or "-",
                     'master_key': master_key.decode() if master_key else None,
                     'forza_cambio_password': risultato['forza_cambio_password'],
                     'sospeso': risultato.get('sospeso', False)
@@ -1861,10 +1942,12 @@ def crea_utente_invitato(email: str, ruolo: str, id_famiglia: str, id_admin: Opt
             e_enc = encrypt_system_data(email)
             n_enc_srv = encrypt_system_data("Nuovo")
             c_enc_srv = encrypt_system_data("Utente")
+            codice_utente = generate_unique_code()
+            cod_u_enc = encrypt_system_data(codice_utente)
             
             cur.execute("""
-                INSERT INTO Utenti (username, email, password_hash, nome, cognome, forza_cambio_password, salt, encrypted_master_key, recovery_key_hash, encrypted_master_key_recovery, encrypted_master_key_backup, username_bindex, email_bindex, username_enc, email_enc, nome_enc_server, cognome_enc_server)
-                VALUES (%s, %s, %s, %s, %s, TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO Utenti (username, email, password_hash, nome, cognome, forza_cambio_password, salt, encrypted_master_key, recovery_key_hash, encrypted_master_key_recovery, encrypted_master_key_backup, username_bindex, email_bindex, username_enc, email_enc, nome_enc_server, cognome_enc_server, codice_utente_enc)
+                VALUES (%s, %s, %s, %s, %s, TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id_utente
             """, (None, None, password_hash, None, None,
                   base64.urlsafe_b64encode(temp_salt).decode(),
@@ -1872,7 +1955,7 @@ def crea_utente_invitato(email: str, ruolo: str, id_famiglia: str, id_admin: Opt
                   recovery_key_hash,
                   base64.urlsafe_b64encode(encrypted_mk_recovery).decode(),
                   encrypted_mk_backup_b64,
-                  u_bindex, e_bindex, u_enc, e_enc, n_enc_srv, c_enc_srv))
+                  u_bindex, e_bindex, u_enc, e_enc, n_enc_srv, c_enc_srv, cod_u_enc))
             
             id_utente = cur.fetchone()['id_utente']
             
@@ -1940,9 +2023,12 @@ def registra_utente(nome: str, cognome: str, username: str, password: str, email
             cur.execute("DELETE FROM Utenti WHERE (username_bindex = %s OR email_bindex = %s) AND email_verificata = FALSE", (u_bindex, e_bindex))
             
             # NOTA: username e email legacy sono NULL - usiamo solo le versioni _bindex e _enc
+            codice_utente = generate_unique_code()
+            cod_u_enc = encrypt_system_data(codice_utente)
+
             cur.execute("""
-                INSERT INTO Utenti (nome, cognome, username, password_hash, password_algo, email, data_nascita, codice_fiscale, indirizzo, salt, encrypted_master_key, recovery_key_hash, encrypted_master_key_recovery, encrypted_master_key_backup, username_bindex, email_bindex, username_enc, email_enc, nome_enc_server, cognome_enc_server, email_verificata)
-                VALUES (%s, %s, %s, %s, 'pbkdf2', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
+                INSERT INTO Utenti (nome, cognome, username, password_hash, password_algo, email, data_nascita, codice_fiscale, indirizzo, salt, encrypted_master_key, recovery_key_hash, encrypted_master_key_recovery, encrypted_master_key_backup, username_bindex, email_bindex, username_enc, email_enc, nome_enc_server, cognome_enc_server, email_verificata, codice_utente_enc)
+                VALUES (%s, %s, %s, %s, 'pbkdf2', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, %s)
                 RETURNING id_utente
             """, (enc_nome, enc_cognome, None, password_hash, None, data_nascita, enc_cf, enc_indirizzo, 
                   base64.urlsafe_b64encode(salt).decode(), 
@@ -1952,7 +2038,7 @@ def registra_utente(nome: str, cognome: str, username: str, password: str, email
                   encrypted_mk_backup_b64,
                   u_bindex, e_bindex,
                   encrypt_system_data(username), encrypt_system_data(email),
-                  encrypt_system_data(nome.title()), encrypt_system_data(cognome.title())))
+                  encrypt_system_data(nome.title()), encrypt_system_data(cognome.title()), cod_u_enc))
 
             
             id_utente = cur.fetchone()['id_utente']
@@ -2943,7 +3029,11 @@ def crea_famiglia_e_admin(nome_famiglia, id_admin, master_key_b64=None):
         with get_db_connection() as con:
             cur = con.cursor()
             # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
-            cur.execute("INSERT INTO Famiglie (nome_famiglia) VALUES (%s) RETURNING id_famiglia", (encrypted_nome_famiglia,))
+            
+            codice_famiglia = generate_unique_code(prefix="FAM-", length=6)
+            cod_f_enc = encrypt_system_data(codice_famiglia)
+
+            cur.execute("INSERT INTO Famiglie (nome_famiglia, codice_famiglia_enc) VALUES (%s, %s) RETURNING id_famiglia", (encrypted_nome_famiglia, cod_f_enc))
             id_famiglia = cur.fetchone()['id_famiglia']
             cur.execute("INSERT INTO Appartenenza_Famiglia (id_utente, id_famiglia, ruolo, chiave_famiglia_criptata) VALUES (%s, %s, %s, %s)",
                         (id_admin, id_famiglia, 'admin', chiave_famiglia_criptata))
@@ -7809,6 +7899,170 @@ def ottieni_dati_spese_fisse_famiglia_per_export(id_famiglia, master_key_b64=Non
     except Exception as e:
         print(f"[ERRORE] Errore export spese fisse: {e}")
         return []
+
+def ottieni_backup_completo_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
+    """
+    Raccoglie TUTTI i dati della famiglia (e dei suoi membri) per un backup completo.
+    Decripta i dati sensibili se viene fornita la master_key.
+    """
+    try:
+        crypto, master_key = _get_crypto_and_key(master_key_b64)
+        family_key = None
+        if master_key and id_utente:
+            family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+
+        backup = {
+            "metadata": {
+                "id_famiglia": id_famiglia,
+                "data_backup": datetime.datetime.now().isoformat(),
+                "versione_db": ottieni_versione_db()
+            },
+            "tabelle": {}
+        }
+
+        with get_db_connection() as con:
+            cur = con.cursor()
+
+            # 1. Famiglia
+            cur.execute("SELECT * FROM Famiglie WHERE id_famiglia = %s", (id_famiglia,))
+            fam = cur.fetchone()
+            if not fam: return None
+            fam_dict = dict(fam)
+            if family_key:
+                decrypted_nome = _decrypt_if_key(fam_dict.get('nome_famiglia'), family_key, crypto, silent=True)
+                fam_dict['nome_famiglia'] = decrypted_nome or fam_dict['nome_famiglia']
+            backup["tabelle"]["Famiglie"] = [fam_dict]
+
+            # 2. Membri
+            cur.execute("SELECT * FROM Appartenenza_Famiglia WHERE id_famiglia = %s", (id_famiglia,))
+            membri = [dict(row) for row in cur.fetchall()]
+            backup["tabelle"]["Appartenenza_Famiglia"] = membri
+            id_utenti = [m['id_utente'] for m in membri]
+
+            # 3. Utenti
+            if id_utenti:
+                cur.execute("SELECT * FROM Utenti WHERE id_utente = ANY(%s)", (id_utenti,))
+                utenti = [dict(row) for row in cur.fetchall()]
+                for u in utenti:
+                    if u.get('username_enc'): u['username'] = decrypt_system_data(u['username_enc']) or u['username']
+                    if u.get('email_enc'): u['email'] = decrypt_system_data(u['email_enc']) or u['email']
+                    if u.get('nome_enc_server'): u['nome'] = decrypt_system_data(u['nome_enc_server']) or u['nome']
+                    if u.get('cognome_enc_server'): u['cognome'] = decrypt_system_data(u['cognome_enc_server']) or u['cognome']
+                backup["tabelle"]["Utenti"] = utenti
+
+            # 4. Conti & Carte
+            if id_utenti:
+                cur.execute("SELECT * FROM Conti WHERE id_utente = ANY(%s)", (id_utenti,))
+                backup["tabelle"]["Conti"] = [dict(row) for row in cur.fetchall()]
+                
+                cur.execute("SELECT * FROM Carte WHERE id_utente = ANY(%s)", (id_utenti,))
+                carte = [dict(row) for row in cur.fetchall()]
+                for c in carte:
+                    if family_key:
+                        for f in ['massimale_encrypted', 'giorno_addebito_encrypted', 'spesa_tenuta_encrypted', 'soglia_azzeramento_encrypted', 'giorno_addebito_tenuta_encrypted']:
+                            if c.get(f): c[f.replace('_encrypted', '')] = _decrypt_if_key(c[f], family_key, crypto, silent=True)
+                backup["tabelle"]["Carte"] = carte
+
+            cur.execute("SELECT * FROM ContiCondivisi WHERE id_famiglia = %s", (id_famiglia,))
+            backup["tabelle"]["ContiCondivisi"] = [dict(row) for row in cur.fetchall()]
+
+            # 5. Asset & Storico
+            if id_utenti:
+                cur.execute("SELECT * FROM Asset WHERE id_conto IN (SELECT id_conto FROM Conti WHERE id_utente = ANY(%s))", (id_utenti,))
+                backup["tabelle"]["Asset"] = [dict(row) for row in cur.fetchall()]
+                cur.execute("SELECT * FROM Storico_Asset WHERE id_conto IN (SELECT id_conto FROM Conti WHERE id_utente = ANY(%s))", (id_utenti,))
+                backup["tabelle"]["Storico_Asset"] = [dict(row) for row in cur.fetchall()]
+
+            # 6. Transazioni
+            if id_utenti:
+                cur.execute("SELECT * FROM Transazioni WHERE id_conto IN (SELECT id_conto FROM Conti WHERE id_utente = ANY(%s))", (id_utenti,))
+                backup["tabelle"]["Transazioni"] = [dict(row) for row in cur.fetchall()]
+
+            cur.execute("SELECT * FROM TransazioniCondivise WHERE id_conto_condiviso IN (SELECT id_conto_condiviso FROM ContiCondivisi WHERE id_famiglia = %s)", (id_famiglia,))
+            backup["tabelle"]["TransazioniCondivise"] = [dict(row) for row in cur.fetchall()]
+
+            # 7. Prestiti & Ammortamento
+            cur.execute("SELECT * FROM Prestiti WHERE id_famiglia = %s", (id_famiglia,))
+            prestiti = [dict(row) for row in cur.fetchall()]
+            backup["tabelle"]["Prestiti"] = prestiti
+            id_prestiti = [p['id_prestito'] for p in prestiti]
+            if id_prestiti:
+                cur.execute("SELECT * FROM PianoAmmortamento WHERE id_prestito = ANY(%s)", (id_prestiti,))
+                backup["tabelle"]["PianoAmmortamento"] = [dict(row) for row in cur.fetchall()]
+                cur.execute("SELECT * FROM StoricoPagamentiRate WHERE id_prestito = ANY(%s)", (id_prestiti,))
+                backup["tabelle"]["StoricoPagamentiRate"] = [dict(row) for row in cur.fetchall()]
+                cur.execute("SELECT * FROM QuotePrestiti WHERE id_prestito = ANY(%s)", (id_prestiti,))
+                backup["tabelle"]["QuotePrestiti"] = [dict(row) for row in cur.fetchall()]
+
+            # 8. Immobili
+            cur.execute("SELECT * FROM Immobili WHERE id_famiglia = %s", (id_famiglia,))
+            immobili = [dict(row) for row in cur.fetchall()]
+            backup["tabelle"]["Immobili"] = immobili
+            id_immobili = [i['id_immobile'] for i in immobili]
+            if id_immobili:
+                cur.execute("SELECT * FROM QuoteImmobili WHERE id_immobile = ANY(%s)", (id_immobili,))
+                backup["tabelle"]["QuoteImmobili"] = [dict(row) for row in cur.fetchall()]
+
+            # 9. Spese Fisse
+            cur.execute("SELECT * FROM SpeseFisse WHERE id_famiglia = %s", (id_famiglia,))
+            backup["tabelle"]["SpeseFisse"] = [dict(row) for row in cur.fetchall()]
+
+            # 1 category and subcategories
+            cur.execute("SELECT * FROM Categorie WHERE id_famiglia = %s", (id_famiglia,))
+            cats = [dict(row) for row in cur.fetchall()]
+            backup["tabelle"]["Categorie"] = cats
+            id_cats = [c['id_categoria'] for c in cats]
+            if id_cats:
+                cur.execute("SELECT * FROM Sottocategorie WHERE id_categoria = ANY(%s)", (id_cats,))
+                backup["tabelle"]["Sottocategorie"] = [dict(row) for row in cur.fetchall()]
+
+            # 10. Budget & Storico
+            cur.execute("SELECT * FROM Budget WHERE id_famiglia = %s", (id_famiglia,))
+            budgets = [dict(row) for row in cur.fetchall()]
+            for b in budgets:
+                if family_key: b['importo_limite'] = _decrypt_if_key(b['importo_limite'], family_key, crypto, silent=True)
+            backup["tabelle"]["Budget"] = budgets
+
+            cur.execute("SELECT * FROM Budget_Storico WHERE id_famiglia = %s", (id_famiglia,))
+            b_storico = [dict(row) for row in cur.fetchall()]
+            for bs in b_storico:
+                if family_key:
+                    bs['importo_limite'] = _decrypt_if_key(bs['importo_limite'], family_key, crypto, silent=True)
+                    bs['importo_speso'] = _decrypt_if_key(bs['importo_speso'], family_key, crypto, silent=True)
+            backup["tabelle"]["Budget_Storico"] = b_storico
+
+            # 11. Salvadanai & Obiettivi
+            cur.execute("SELECT * FROM Salvadanai WHERE id_famiglia = %s", (id_famiglia,))
+            salvadanai = [dict(row) for row in cur.fetchall()]
+            for s in salvadanai:
+                if family_key: s['importo_assegnato'] = _decrypt_if_key(s['importo_assegnato'], family_key, crypto, silent=True)
+            backup["tabelle"]["Salvadanai"] = salvadanai
+
+            cur.execute("SELECT * FROM Obiettivi_Risparmio WHERE id_famiglia = %s", (id_famiglia,))
+            obiettivi = [dict(row) for row in cur.fetchall()]
+            for o in obiettivi:
+                if family_key: o['importo_obiettivo'] = _decrypt_if_key(o['importo_obiettivo'], family_key, crypto, silent=True)
+            backup["tabelle"]["Obiettivi_Risparmio"] = obiettivi
+            
+            # 12. Contatti
+            cur.execute("SELECT * FROM Contatti WHERE id_famiglia = %s OR id_utente = ANY(%s)", (id_famiglia, id_utenti))
+            contatti = [dict(row) for row in cur.fetchall()]
+            for co in contatti:
+                if family_key:
+                    for f in ['nome_encrypted', 'cognome_encrypted', 'societa_encrypted', 'iban_encrypted', 'email_encrypted', 'telefono_encrypted']:
+                        if co.get(f): co[f.replace('_encrypted', '')] = _decrypt_if_key(co[f], family_key, crypto, silent=True)
+            backup["tabelle"]["Contatti"] = contatti
+
+            # 13. Configurazioni
+            cur.execute("SELECT * FROM Configurazioni WHERE id_famiglia = %s", (id_famiglia,))
+            backup["tabelle"]["Configurazioni"] = [dict(row) for row in cur.fetchall()]
+
+            return backup
+    except Exception as e:
+        print(f"[ERRORE] Backup dati fallito: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 
 def ottieni_prima_famiglia_utente(id_utente):

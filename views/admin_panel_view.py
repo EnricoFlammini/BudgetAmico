@@ -449,11 +449,11 @@ class AdminPanelView:
 
         self.users_table = ft.DataTable(
             columns=[
-                ft.DataColumn(ft.Text("ID", weight=ft.FontWeight.BOLD), numeric=True, on_sort=self._on_users_sort),
-                ft.DataColumn(ft.Text("Famiglie ID", weight=ft.FontWeight.BOLD), on_sort=self._on_users_sort),
                 ft.DataColumn(ft.Text("Sospeso", weight=ft.FontWeight.BOLD), on_sort=self._on_users_sort),
                 ft.DataColumn(ft.Text("Algo", weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Username", weight=ft.FontWeight.BOLD), on_sort=self._on_users_sort),
+                ft.DataColumn(ft.Text("Cod. Utente", weight=ft.FontWeight.BOLD), on_sort=self._on_users_sort),
+                ft.DataColumn(ft.Text("Cod. Famiglia", weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Email", weight=ft.FontWeight.BOLD), on_sort=self._on_users_sort),
                 ft.DataColumn(ft.Text("Nome", weight=ft.FontWeight.BOLD), on_sort=self._on_users_sort),
                 ft.DataColumn(ft.Text("Azioni", weight=ft.FontWeight.BOLD)),
@@ -501,10 +501,9 @@ class AdminPanelView:
         col_index = self.users_table.sort_column_index
         ascending = self.users_table.sort_ascending
         
-        # Keys for sorting based on column index
-        # 0:ID, 1:Famiglie, 2:Sospeso, 3:Username, 4:Email, 5:Nome
-        sort_keys = {0: 'id_utente', 1: 'famiglie', 2: 'sospeso', 3: 'username', 4: 'email', 5: 'nome'}
-        sort_key = sort_keys.get(col_index, 'id_utente')
+        # 0:Sospeso, 1:Algo, 2:Username, 3:Cod.Utente, 4:Cod.Famiglia (not sortable), 5:Email, 6:Nome
+        sort_keys = {0: 'sospeso', 2: 'username', 3: 'codice_utente', 5: 'email', 6: 'nome'}
+        sort_key = sort_keys.get(col_index, 'username')
         
         filtered_users.sort(
             key=lambda x: (x.get(sort_key) if x.get(sort_key) is not None else "") if isinstance(x.get(sort_key), str) else (x.get(sort_key) or 0), 
@@ -516,8 +515,6 @@ class AdminPanelView:
         for u in filtered_users:
             self.users_table.rows.append(
                 ft.DataRow(cells=[
-                    ft.DataCell(ft.Text(str(u['id_utente']))),
-                    ft.DataCell(ft.Text(str(u.get('famiglie', '-')))), # Ensure string
                     ft.DataCell(
                         ft.Container(
                             content=ft.Text("SI" if u.get('sospeso') else "NO", color=ft.Colors.WHITE, size=10, weight=ft.FontWeight.BOLD),
@@ -525,10 +522,12 @@ class AdminPanelView:
                             padding=5, border_radius=4, alignment=ft.alignment.center
                         )
                     ),
-                    ft.DataCell(ft.Text(u.get('algo', 'sha256'), size=11, color=ft.Colors.GREY_700)),
-                    ft.DataCell(ft.Text(u['username'])),
-                    ft.DataCell(ft.Text(u['email'])),
-                    ft.DataCell(ft.Text(f"{(u.get('nome') or '')} {(u.get('cognome') or '')}")),
+                    ft.DataCell(ft.Text(u.get('algo', 'sha256'), size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900)),
+                    ft.DataCell(ft.Text(u['username'], weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900)),
+                    ft.DataCell(ft.Text(u.get('codice_utente', '-'), weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900)),
+                    ft.DataCell(ft.Text(u.get('famiglie', '-'), size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900)),
+                    ft.DataCell(ft.Text(u['email'], weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900)),
+                    ft.DataCell(ft.Text(f"{(u.get('nome') or '')} {(u.get('cognome') or '')}", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900)),
                     ft.DataCell(ft.Row([
                         ft.IconButton(
                             icon=ft.Icons.LOCK_RESET, tooltip="Invia Credenziali / Reset Password",
@@ -592,19 +591,52 @@ class AdminPanelView:
         self.page.open(dlg)
 
     def _confirm_delete_user(self, user_id, username):
-        def do_delete():
-            from db.gestione_db import delete_user
-            success, msg = delete_user(user_id)
-            if success:
-                self.page.snack_bar = ft.SnackBar(ft.Text(f"Utente {username} eliminato correttamente: {msg}"), bgcolor=ft.Colors.GREEN)
+        from db.gestione_db import verify_admin_password, delete_user
+        
+        txt_password = ft.TextField(label="Password Admin per Confermare", password=True, width=300)
+        txt_error = ft.Text("", color=ft.Colors.RED, size=12, visible=False)
+        
+        def on_confirm(e):
+            if verify_admin_password(txt_password.value):
+                self.page.close(dlg)
+                success, msg = delete_user(user_id)
+                if success:
+                    self.page.snack_bar = ft.SnackBar(ft.Text(f"Utente {username} e tutti i suoi dati eliminati correttamente."), bgcolor=ft.Colors.GREEN)
+                    self._load_users_refresh()
+                else:
+                    self.page.snack_bar = ft.SnackBar(ft.Text(f"Errore eliminazione: {msg}"), bgcolor=ft.Colors.RED)
                 self.page.snack_bar.open = True
-                self._load_users_refresh()
+                self.page.update()
             else:
-                self.page.snack_bar = ft.SnackBar(ft.Text(f"Errore eliminazione: {msg}"), bgcolor=ft.Colors.RED)
-                self.page.snack_bar.open = True
-            self.page.update()
+                txt_error.value = "Password admin errata."
+                txt_error.visible = True
+                self.page.update()
 
-        self._open_admin_auth_dialog(f"Conferma Eliminazione {username}", do_delete)
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row([
+                ft.Icon(ft.Icons.WARNING, color=ft.Colors.RED),
+                ft.Text(f"Eliminazione Utente: {username}")
+            ]),
+            content=ft.Column([
+                ft.Text(f"Sei sicuro di voler eliminare permanentemente l'utente '{username}'?"),
+                ft.Text("Questa azione cancellerà tutti i suoi dati personali:", weight=ft.FontWeight.BOLD),
+                ft.Text("• Tutti i Conti e le relative Transazioni", size=12),
+                ft.Text("• Tutte le Carte e i massimali", size=12),
+                ft.Text("• Asset e Portafoglio investimenti", size=12),
+                ft.Text("• Contatti e Rubrica", size=12),
+                ft.Text("• Log di sistema dell'utente", size=12),
+                ft.Container(height=10),
+                txt_password,
+                txt_error
+            ], tight=True, spacing=5, width=400),
+            actions=[
+                ft.TextButton("Annulla", on_click=lambda e: self.page.close(dlg)),
+                ft.ElevatedButton("ELIMINA DEFINITIVAMENTE", on_click=on_confirm, color=ft.Colors.WHITE, bgcolor=ft.Colors.RED),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.page.open(dlg)
 
     def _confirm_user_suspension(self, user_id, username, is_suspended):
         action = "riattivare" if is_suspended else "sospendere"
@@ -658,9 +690,10 @@ class AdminPanelView:
 
         self.families_table = ft.DataTable(
             columns=[
-                ft.DataColumn(ft.Text("ID", weight=ft.FontWeight.BOLD), numeric=True, on_sort=self._on_families_sort),
-                ft.DataColumn(ft.Text("Cloud", weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Nome Famiglia", weight=ft.FontWeight.BOLD), on_sort=self._on_families_sort),
+                ft.DataColumn(ft.Text("Codice Famiglia", weight=ft.FontWeight.BOLD), on_sort=self._on_families_sort),
+                ft.DataColumn(ft.Text("Cloud", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Utenti", weight=ft.FontWeight.BOLD), numeric=True, on_sort=self._on_families_sort),
                 ft.DataColumn(ft.Text("Azioni", weight=ft.FontWeight.BOLD)),
             ],
             rows=[],
@@ -705,9 +738,9 @@ class AdminPanelView:
         col_index = self.families_table.sort_column_index
         ascending = self.families_table.sort_ascending
         
-        # 0:ID, 1:Nome
-        sort_keys = {0: 'id_famiglia', 1: 'nome_famiglia'}
-        sort_key = sort_keys.get(col_index, 'id_famiglia')
+        # 0:Nome, 1:Codice, 2:Cloud (not sortable), 3:Utenti
+        sort_keys = {0: 'nome_famiglia', 1: 'codice_famiglia', 3: 'num_membri'}
+        sort_key = sort_keys.get(col_index, 'nome_famiglia')
         
         filtered_families.sort(
             key=lambda x: (x.get(sort_key) if x.get(sort_key) is not None else "") if isinstance(x.get(sort_key), str) else (x.get(sort_key) or 0), 
@@ -719,10 +752,11 @@ class AdminPanelView:
         for f in filtered_families:
             self.families_table.rows.append(
                 ft.DataRow(cells=[
-                    ft.DataCell(ft.Text(str(f['id_famiglia']))),
+                    ft.DataCell(ft.Text(f['nome_famiglia'], weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900)),
+                    ft.DataCell(ft.Text(f.get('codice_famiglia', '-'), weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900)),
                     ft.DataCell(ft.Icon(ft.Icons.CLOUD_QUEUE if f.get('cloud_enabled') else ft.Icons.CLOUD_OFF, 
                                        color=ft.Colors.BLUE if f.get('cloud_enabled') else ft.Colors.GREY_400, size=20)),
-                    ft.DataCell(ft.Text(f['nome_famiglia'])),
+                    ft.DataCell(ft.Text(str(f.get('num_membri', 0)), weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900)),
                     ft.DataCell(
                         ft.Row([
                             ft.IconButton(
@@ -868,6 +902,11 @@ class AdminPanelView:
                 self.smtp_user,
                 self.smtp_password,
                 self.smtp_sender,
+                ft.Text("Test Invio Email", size=16, weight=ft.FontWeight.BOLD),
+                ft.Row([
+                    self.smtp_test_email,
+                    ft.ElevatedButton("Invia Test", icon=ft.Icons.SEND, on_click=self._send_test_email)
+                ]),
                 ft.Divider(height=20),
                 
                 ft.Text("Sicurezza Password", size=20, weight=ft.FontWeight.BOLD),
@@ -881,11 +920,6 @@ class AdminPanelView:
                 
                 ft.ElevatedButton("Salva Configurazione", icon=ft.Icons.SAVE, on_click=self._save_config, bgcolor=ft.Colors.BLUE, color=ft.Colors.WHITE),
                 ft.Divider(height=40),
-                ft.Text("Test Invio Email", size=16, weight=ft.FontWeight.BOLD),
-                ft.Row([
-                    self.smtp_test_email,
-                    ft.ElevatedButton("Invia Test", icon=ft.Icons.SEND, on_click=self._send_test_email)
-                ])
             ], scroll=ft.ScrollMode.AUTO),
             padding=20, expand=True
         )

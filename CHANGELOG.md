@@ -6,6 +6,25 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.48.00 (06/02/2026)
+- **Sicurezza & Privacy**:
+    - **Password Complexity**: Requisiti password ora configurabili dal Pannello Admin.
+    - **Security Indicator**: Indicatore grafico della forza password.
+    - **Verifica Email**: Sistema obbligatorio di verifica email via codice (6 cifre).
+    - **Codici Univoci**: Identificativi criptati (Utenti e Famiglie) nelle tabelle Admin.
+    - **Privacy Policy**: Nuova vista dedicata accessibile in tutta l'app.
+- **Gestione Dati**:
+    - **Backup via Email**: Funzione di invio backup completo (JSON) con decriptazione automatica.
+    - **Cancellazione Account**: Eliminazione definitiva con verifica password e pulizia dati.
+- **UI & UX**:
+    - **Responsive Wealth**: Riepilogo patrimonio compattato solo su dispositivi mobile.
+    - **Normalizzazione Nomi**: Title Case automatico per Nome e Cognome.
+    - **DatePicker**: Introdotto per la Data di Nascita (non obbligatoria).
+    - **Semplificazione Profilo**: CF e Indirizzo non più obbligatori.
+- **Fix & Stabilità**:
+    - **PostgreSQL**: Fix inizializzazione booleani DEFAULT FALSE.
+    - **Admin Tools**: Migliorato reset password membri via recovery Master Key.
+
 ### v0.47.17 (05/02/2026)
 - **Background Service Fix**: Risolto errore `UnboundLocalError: admin_id` nel servizio di background che causava il crash dell'automazione server.
 - **Improved Automation**: Riorganizzata la sequenza di recupero membri famiglia per garantire la disponibilità dell'ID amministratore prima di procedere ai pagamenti.

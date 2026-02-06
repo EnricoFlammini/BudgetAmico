@@ -279,33 +279,25 @@ class FamigliaTab(ft.Container):
             if val_prestiti > 0:
                 righe_dettaglio.append(riga_resp(loc.get("loans"), loc.format_currency(-val_prestiti), color=AppColors.ERROR))
             
-            # --- Web Logic: Collapsible Details ---
-            is_web = False
-            try:
-                from controllers.web_app_controller import WebAppController
-                if isinstance(self.controller, WebAppController):
-                    is_web = True
-            except ImportError:
-                pass
-
-            content_dettagli = ft.Column(righe_dettaglio, spacing=5)
+            # --- Responsive Logic: Collapsible Details ---
+            page = self.controller.page
+            is_mobile = page.platform in ["android", "ios"] or (page.width is not None and page.width < 700)
             
-            icona_espandi = None
-            if is_web:
-                # Default hidden on web
-                content_dettagli.visible = False
-                
-                def toggle_dettagli(e):
-                    content_dettagli.visible = not content_dettagli.visible
-                    e.control.icon = ft.Icons.KEYBOARD_ARROW_UP if content_dettagli.visible else ft.Icons.KEYBOARD_ARROW_DOWN
-                    if self.controller.page:
-                        self.controller.page.update()
+            content_dettagli = ft.Column(righe_dettaglio, spacing=5)
+            # Il dettaglio interno è visibile se NON siamo su mobile
+            content_dettagli.visible = not is_mobile
+            
+            def toggle_dettagli(e):
+                content_dettagli.visible = not content_dettagli.visible
+                e.control.icon = ft.Icons.KEYBOARD_ARROW_UP if content_dettagli.visible else ft.Icons.KEYBOARD_ARROW_DOWN
+                if self.controller.page:
+                    self.controller.page.update()
 
-                icona_espandi = ft.IconButton(
-                    icon=ft.Icons.KEYBOARD_ARROW_DOWN,
-                    on_click=toggle_dettagli,
-                    tooltip="Mostra/Nascondi Dettagli"
-                )
+            icona_espandi = ft.IconButton(
+                icon=ft.Icons.KEYBOARD_ARROW_UP if content_dettagli.visible else ft.Icons.KEYBOARD_ARROW_DOWN,
+                on_click=toggle_dettagli,
+                tooltip="Mostra/Nascondi Dettagli"
+            )
 
             # Card riepilogo patrimonio responsive
             header_patrimonio = ft.Column([
@@ -335,22 +327,20 @@ class FamigliaTab(ft.Container):
 
             area_riepilogo = ft.Column([card_riepilogo, container_mese], spacing=0)
 
-            # Toggle Header for Web
-            icona_global_collapser = None
-            if is_web:
-                area_riepilogo.visible = False  # Default hidden on web as requested
-                
-                def toggle_area_riepilogo(e):
-                    area_riepilogo.visible = not area_riepilogo.visible
-                    e.control.icon = ft.Icons.KEYBOARD_ARROW_UP if area_riepilogo.visible else ft.Icons.KEYBOARD_ARROW_DOWN
-                    if self.controller.page:
-                        self.controller.page.update()
-                
-                icona_global_collapser = ft.IconButton(
-                    icon=ft.Icons.KEYBOARD_ARROW_DOWN,
-                    on_click=toggle_area_riepilogo,
-                    tooltip="Espandi/Riduci Riepilogo"
-                )
+            # Toggle Header for Mobile/Responsive
+            area_riepilogo.visible = not is_mobile
+            
+            def toggle_area_riepilogo(e):
+                area_riepilogo.visible = not area_riepilogo.visible
+                e.control.icon = ft.Icons.KEYBOARD_ARROW_UP if area_riepilogo.visible else ft.Icons.KEYBOARD_ARROW_DOWN
+                if self.controller.page:
+                    self.controller.page.update()
+            
+            icona_global_collapser = ft.IconButton(
+                icon=ft.Icons.KEYBOARD_ARROW_UP if area_riepilogo.visible else ft.Icons.KEYBOARD_ARROW_DOWN,
+                on_click=toggle_area_riepilogo,
+                tooltip="Espandi/Riduci Riepilogo"
+            )
             
             # --- TRANSAZIONI LOGIC ---
             transazioni = data.get('transazioni', [])
