@@ -837,6 +837,12 @@ class AdminPanelView:
         self.smtp_password = ft.TextField(label="SMTP Password", password=True, can_reveal_password=True)
         self.smtp_sender = ft.TextField(label="SMTP Sender (Email Mittente Verificata)", hint_text="Es. flammini.enrico@gmail.it")
         self.smtp_test_email = ft.TextField(label="Email Destinatario Test")
+        
+        # Password Complexity
+        self.pwd_min_length = ft.TextField(label="Lunghezza Minima Password", value="8", width=200)
+        self.pwd_require_special = ft.Switch(label="Richiedi Caratteri Speciali (@#$...)")
+        self.pwd_require_digits = ft.Switch(label="Richiedi Numeri (0-9)")
+        self.pwd_require_uppercase = ft.Switch(label="Richiedi Lettere Maiuscole (A-Z)")
 
     def _build_config_tab_content(self):
         return ft.Container(
@@ -856,7 +862,18 @@ class AdminPanelView:
                 self.smtp_user,
                 self.smtp_password,
                 self.smtp_sender,
-                ft.ElevatedButton("Salva Configurazione", icon=ft.Icons.SAVE, on_click=self._save_config),
+                ft.Divider(height=20),
+                
+                ft.Text("Sicurezza Password", size=20, weight=ft.FontWeight.BOLD),
+                ft.Text("Imposta i requisiti minimi per le password degli utenti.", size=12, color=ft.Colors.GREY),
+                ft.Divider(),
+                self.pwd_min_length,
+                self.pwd_require_special,
+                self.pwd_require_digits,
+                self.pwd_require_uppercase,
+                ft.Container(height=10),
+                
+                ft.ElevatedButton("Salva Configurazione", icon=ft.Icons.SAVE, on_click=self._save_config, bgcolor=ft.Colors.BLUE, color=ft.Colors.WHITE),
                 ft.Divider(height=40),
                 ft.Text("Test Invio Email", size=16, weight=ft.FontWeight.BOLD),
                 ft.Row([
@@ -982,6 +999,14 @@ class AdminPanelView:
             self.smtp_user.value = config.get('user') or ""
             self.smtp_password.value = config.get('password') or ""
             self.smtp_sender.value = config.get('sender') or ""
+            
+        # Load Password Complexity
+        from db.gestione_db import get_password_complexity_config
+        pwd_cfg = get_password_complexity_config()
+        self.pwd_min_length.value = str(pwd_cfg.get("min_length", 8))
+        self.pwd_require_special.value = pwd_cfg.get("require_special", False)
+        self.pwd_require_digits.value = pwd_cfg.get("require_digits", False)
+        self.pwd_require_uppercase.value = pwd_cfg.get("require_uppercase", False)
 
     def _save_config(self, e):
         from db.gestione_db import save_system_config
@@ -1006,7 +1031,11 @@ class AdminPanelView:
                  ('smtp_user', self.smtp_user.value),
                  ('smtp_password', self.smtp_password.value),
                  ('smtp_sender', self.smtp_sender.value),
-                 ('smtp_provider', 'custom')
+                 ('smtp_provider', 'custom'),
+                 ('pwd_min_length', self.pwd_min_length.value),
+                 ('pwd_require_special', 'true' if self.pwd_require_special.value else 'false'),
+                 ('pwd_require_digits', 'true' if self.pwd_require_digits.value else 'false'),
+                 ('pwd_require_uppercase', 'true' if self.pwd_require_uppercase.value else 'false')
              ]
              
              for key, value in configs_to_save:

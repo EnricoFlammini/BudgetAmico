@@ -1870,8 +1870,8 @@ def registra_utente(nome: str, cognome: str, username: str, password: str, email
         encrypted_mk_recovery = crypto.encrypt_master_key(master_key, crypto.derive_key(recovery_key, salt))
 
         # Encrypt personal data
-        enc_nome = crypto.encrypt_data(nome, master_key)
-        enc_cognome = crypto.encrypt_data(cognome, master_key)
+        enc_nome = crypto.encrypt_data(nome.title(), master_key)
+        enc_cognome = crypto.encrypt_data(cognome.title(), master_key)
         enc_indirizzo = crypto.encrypt_data(indirizzo, master_key) if indirizzo else None
         enc_cf = crypto.encrypt_data(codice_fiscale, master_key) if codice_fiscale else None
 
@@ -1901,7 +1901,7 @@ def registra_utente(nome: str, cognome: str, username: str, password: str, email
                   encrypted_mk_backup_b64,
                   compute_blind_index(username), compute_blind_index(email),
                   encrypt_system_data(username), encrypt_system_data(email),
-                  encrypt_system_data(nome), encrypt_system_data(cognome)))
+                  encrypt_system_data(nome.title()), encrypt_system_data(cognome.title())))
 
             
             id_utente = cur.fetchone()['id_utente']
@@ -3050,7 +3050,7 @@ def aggiorna_profilo_utente(id_utente, dati_profilo, master_key_b64=None):
 
     for campo, valore in dati_profilo.items():
         if campo in campi_validi:
-            valore_da_salvare = valore
+            valore_da_salvare = valore.title() if campo in ['nome', 'cognome'] else valore
             if campo in ['username', 'email']:
                  # Handle System Security Columns (Blind Index + Enc)
                  # Do NOT write to legacy columns
@@ -3077,7 +3077,7 @@ def aggiorna_profilo_utente(id_utente, dati_profilo, master_key_b64=None):
                     # ALSO Encrypt with Server Key for visibility (Mirroring)
                     if campo in ['nome', 'cognome'] and SERVER_SECRET_KEY:
                         try:
-                            enc_server = encrypt_system_data(valore)
+                            enc_server = encrypt_system_data(valore.title())
                             col_server = f"{campo}_enc_server"
                             campi_da_aggiornare.append(f"{col_server} = %s")
                             valori.append(enc_server)
@@ -3101,13 +3101,13 @@ def aggiorna_profilo_utente(id_utente, dati_profilo, master_key_b64=None):
             # --- UPDATE FAMILY DISPLAY NAMES ---
             # If name or surname changed, update Appartenenza_Famiglia for all families
             if 'nome' in dati_profilo or 'cognome' in dati_profilo:
-                nome = dati_profilo.get('nome', '')
-                cognome = dati_profilo.get('cognome', '')
-                # Fetch current values if one is missing (logic simplified: assume passed or skip)
-                # Ideally we should fetch current if partial update.
-                # However, Profile View usually saves all fields.
+                nome = dati_profilo.get('nome', '') if 'nome' in dati_profilo else ''
+                cognome = dati_profilo.get('cognome', '') if 'cognome' in dati_profilo else ''
                 
-                display_name = f"{nome} {cognome}".strip()
+                # If one is missing from update but we need it for display name, we'd need to fetch old.
+                # However, Flet Settings view sends all fields. 
+                # To be generic, let's title it.
+                display_name = f"{nome.title()} {cognome.title()}".strip()
                 if display_name and master_key_b64:
                     crypto, master_key = _get_crypto_and_key(master_key_b64)
                     if master_key:
@@ -10397,3 +10397,60 @@ def elimina_contatto(id_contatto: int, id_utente: str) -> bool:
     except Exception as e:
         logger.error(f"Errore elimina_contatto: {e}")
         return False
+
+# --- CONFIGURAZIONE SICUREZZA PASSWORD (v0.48) ---
+
+def get_password_complexity_config():
+    """Recupera la configurazione della complessità password."""
+    return {
+        "min_length": int(get_configurazione("pwd_min_length") or 8),
+        "require_special": get_configurazione("pwd_require_special") == "true",
+        "require_digits": get_configurazione("pwd_require_digits") == "true",
+        "require_uppercase": get_configurazione("pwd_require_uppercase") == "true"
+    }
+
+def save_password_complexity_config(config, id_utente=None):
+    """Salva la configurazione della complessità password."""
+    success = True
+    success &= save_system_config("pwd_min_length", str(config.get("min_length", 8)), id_utente)
+    success &= save_system_config("pwd_require_special", "true" if config.get("require_special") else "false", id_utente)
+    success &= save_system_config("pwd_require_digits", "true" if config.get("require_digits") else "false", id_utente)
+    success &= save_system_config("pwd_require_uppercase", "true" if config.get("require_uppercase") else "false", id_utente)
+    return success
+
+# --- VERIFICA EMAIL (v0.48) ---
+
+def generate_email_verification_code(email):
+    """Genera e salva un codice di verifica email (6 cifre)."""
+    import secrets
+    code = "".join([str(secrets.randbelow(10)) for _ in range(6)])
+    # Salva in Configurazioni con prefisso e timestamp per scadenza (es. 15 min)
+    # Chiave: email_verification_<code>_<email>
+    # Valore: timestamp_scadenza
+    import time
+    expiry = int(time.time()) + 900 # 15 minuti
+    save_system_config(f"verify_email_{email}", f"{code}|{expiry}")
+    return code
+
+def verify_email_code(email, code):
+    """Verifica se il codice per l'email è corretto e non scaduto."""
+    raw = get_configurazione(f"verify_email_{email}")
+    if not raw: return False
+    
+    try:
+        saved_code, expiry = raw.split("|")
+        import time
+        if int(time.time()) > int(expiry):
+            return False
+        if saved_code == code:
+            # Segna come verificata nel DB
+            with get_db_connection() as con:
+                cur = con.cursor()
+                # Use blind index to find user
+                bindex = compute_blind_index(email)
+                cur.execute("UPDATE Utenti SET email_verificata = 1 WHERE email_bindex = %s", (bindex,))
+                con.commit()
+            return True
+    except:
+        pass
+    return False

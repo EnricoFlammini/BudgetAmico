@@ -15,6 +15,10 @@ class ImpostazioniTab(ft.Container):
         self.controller = controller
         self.controller.page = controller.page
         self.loc = controller.loc
+        
+        # Cache complexities
+        from db.gestione_db import get_password_complexity_config
+        self.pwd_config = get_password_complexity_config()
 
         self.content = ft.Column(
             scroll=ft.ScrollMode.ADAPTIVE,
@@ -82,7 +86,13 @@ class ImpostazioniTab(ft.Container):
         successo_password = True
 
         if nuova_password:
-            if nuova_password == conferma_password:
+            # Check Complessità (v0.48)
+            pwd_errors = self._check_password_complexity(nuova_password)
+            if pwd_errors:
+                self.txt_nuova_password.error_text = "Requisiti: " + ", ".join(pwd_errors)
+                successo_password = False
+                self.page.update()
+            elif nuova_password == conferma_password:
                 successo_password = cambia_password(id_utente, hash_password(nuova_password))
                 if not successo_password:
                     self.controller.show_error_dialog("Errore durante il cambio password.")
@@ -142,11 +152,51 @@ class ImpostazioniTab(ft.Container):
         self.txt_email = ft.TextField(label=loc.get("email"), border_color=ft.Colors.OUTLINE)
         self.txt_nome = ft.TextField(label=loc.get("name"), border_color=ft.Colors.OUTLINE)
         self.txt_cognome = ft.TextField(label=loc.get("surname"), border_color=ft.Colors.OUTLINE)
-        self.txt_data_nascita = ft.TextField(label=loc.get("date_of_birth"), border_color=ft.Colors.OUTLINE)
-        self.txt_codice_fiscale = ft.TextField(label=loc.get("tax_code"), border_color=ft.Colors.OUTLINE)
-        self.txt_indirizzo = ft.TextField(label=loc.get("address"), border_color=ft.Colors.OUTLINE)
-        self.txt_nuova_password = ft.TextField(label=loc.get("new_password"), password=True, can_reveal_password=True, border_color=ft.Colors.OUTLINE)
+        
+        # Data di Nascita con DatePicker
+        def on_date_change(e):
+            if e.control.value:
+                self.txt_data_nascita.value = e.control.value.strftime("%Y-%m-%d")
+                self.page.update()
+
+        self.date_picker = ft.DatePicker(
+            on_change=on_date_change,
+            first_date=ft.datetime.datetime(1900, 1, 1),
+            last_date=ft.datetime.datetime.now(),
+        )
+        
+        self.txt_data_nascita = ft.TextField(
+            label=loc.get("date_of_birth"), 
+            border_color=ft.Colors.OUTLINE,
+            suffix_icon=ft.Icons.CALENDAR_MONTH,
+            on_focus=lambda _: self.page.open(self.date_picker),
+            read_only=True
+        )
+        
+        self.txt_codice_fiscale = ft.TextField(label=loc.get("tax_code"), border_color=ft.Colors.OUTLINE, visible=False)
+        self.txt_indirizzo = ft.TextField(label=loc.get("address"), border_color=ft.Colors.OUTLINE, visible=False)
+        
+        # Password Strength (v0.48)
+        self.pwd_strength_bar = ft.ProgressBar(value=0, width=300, color=ft.Colors.RED, bgcolor=ft.Colors.GREY_200, visible=False)
+        self.pwd_strength_text = ft.Text("", size=12, color=ft.Colors.GREY_600, visible=False)
+        
+        self.txt_nuova_password = ft.TextField(
+            label=loc.get("new_password"), 
+            password=True, 
+            can_reveal_password=True, 
+            border_color=ft.Colors.OUTLINE,
+            on_change=self._on_password_change
+        )
         self.txt_conferma_password = ft.TextField(label=loc.get("confirm_new_password"), password=True, can_reveal_password=True, border_color=ft.Colors.OUTLINE)
+        
+        # Toggle per campi opzionali
+        def toggle_extra_fields(e):
+            self.txt_codice_fiscale.visible = not self.txt_codice_fiscale.visible
+            self.txt_indirizzo.visible = not self.txt_indirizzo.visible
+            btn_extra.icon = ft.Icons.KEYBOARD_ARROW_UP if self.txt_codice_fiscale.visible else ft.Icons.KEYBOARD_ARROW_DOWN
+            self.page.update()
+            
+        btn_extra = ft.TextButton("Dati Aggiuntivi (CF, Indirizzo)", icon=ft.Icons.KEYBOARD_ARROW_DOWN, on_click=toggle_extra_fields)
         
         self.btn_salva_profilo = ft.ElevatedButton(
             loc.get("save_profile"),
@@ -196,18 +246,23 @@ class ImpostazioniTab(ft.Container):
             
             ft.ResponsiveRow([
                 ft.Column([self.txt_data_nascita], col={"xs": 12, "sm": 6}),
-                ft.Column([self.txt_codice_fiscale], col={"xs": 12, "sm": 6}),
+                ft.Column([btn_extra], col={"xs": 12, "sm": 6}, horizontal_alignment=ft.CrossAxisAlignment.END),
             ]),
             
             ft.ResponsiveRow([
-                ft.Column([self.txt_indirizzo], col={"xs": 12})
+                ft.Column([self.txt_codice_fiscale], col={"xs": 12, "sm": 6}),
+                ft.Column([self.txt_indirizzo], col={"xs": 12, "sm": 6}),
             ]),
 
             ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
             AppStyles.subheader_text(loc.get("change_password")),
             
             ft.ResponsiveRow([
-                ft.Column([self.txt_nuova_password], col={"xs": 12, "sm": 6}),
+                ft.Column([
+                    self.txt_nuova_password,
+                    self.pwd_strength_bar,
+                    self.pwd_strength_text
+                ], col={"xs": 12, "sm": 6}),
                 ft.Column([self.txt_conferma_password], col={"xs": 12, "sm": 6}),
             ]),
             
@@ -240,6 +295,13 @@ class ImpostazioniTab(ft.Container):
                     ], col={"xs": 12, "sm": 6}),
                 ]
             ),
+            ft.Row([
+                ft.TextButton(
+                    "Informativa Privacy",
+                    icon=ft.Icons.PRIVACY_TIP,
+                    on_click=lambda _: self.page.go("/privacy")
+                )
+            ], alignment=ft.MainAxisAlignment.CENTER),
             # Padding in fondo
             ft.Container(height=80)
         ]
@@ -339,6 +401,49 @@ class ImpostazioniTab(ft.Container):
                 self.controller.page.update()
         except Exception as e:
             self._on_error(e)
+
+    def _on_password_change(self, e):
+        """Calcola la forza della password in tempo reale."""
+        pwd = self.txt_nuova_password.value
+        if not pwd:
+            self.pwd_strength_bar.visible = False
+            self.pwd_strength_text.visible = False
+            self.page.update()
+            return
+            
+        self.pwd_strength_bar.visible = True
+        self.pwd_strength_text.visible = True
+        
+        score = 0
+        min_len = int(self.pwd_config.get("min_length", 8))
+        if len(pwd) >= min_len: score += 1
+        if any(c.isupper() for c in pwd): score += 1
+        if any(c.isdigit() for c in pwd): score += 1
+        if any(not c.isalnum() for c in pwd): score += 1
+        
+        colors = [ft.Colors.RED, ft.Colors.ORANGE, ft.Colors.YELLOW, ft.Colors.GREEN]
+        labels = ["Molto Debole", "Debole", "Media", "Forte"]
+        
+        idx = min(score, 3)
+        self.pwd_strength_bar.value = (idx + 1) / 4
+        self.pwd_strength_bar.color = colors[idx]
+        self.pwd_strength_text.value = f"Forza: {labels[idx]}"
+        self.pwd_strength_text.color = colors[idx]
+        self.page.update()
+
+    def _check_password_complexity(self, password):
+        """Verifica se la password rispetta i criteri Admin."""
+        cfg = self.pwd_config
+        errors = []
+        if len(password) < int(cfg.get("min_length", 8)):
+            errors.append(f"Almeno {cfg['min_length']} caratteri")
+        if cfg.get("require_uppercase") and not any(c.isupper() for c in password):
+            errors.append("Almeno una maiuscola")
+        if cfg.get("require_digits") and not any(c.isdigit() for c in password):
+            errors.append("Almeno un numero")
+        if cfg.get("require_special") and not any(not c.isalnum() for c in password):
+            errors.append("Almeno un carattere speciale")
+        return errors
 
     def _on_error(self, e):
         print(f"Errore ImpostazioniTab: {e}")

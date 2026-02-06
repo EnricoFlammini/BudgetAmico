@@ -11,6 +11,7 @@ import threading
 
 # Viste, Dialoghi e Utility
 from views.auth_view import AuthView
+from views.privacy_view import PrivacyView
 from views.dashboard_view import DashboardView
 from views.export_view import ExportView
 from dialogs.transaction_dialog import TransactionDialog
@@ -40,7 +41,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 MAX_RECENT_FILES = 5
-VERSION = "0.47.15"
+VERSION = "0.48.0"
 
 
 class AppController:
@@ -85,6 +86,7 @@ class AppController:
         self.auth_view = AuthView(self)
         self.dashboard_view = DashboardView(self)
         self.export_view = ExportView(self)
+        self.privacy_view = PrivacyView(self)
 
         # Inizializza i dialoghi di conferma e picker
         self._init_global_dialogs()
@@ -245,6 +247,8 @@ class AppController:
                 self.page.views.append(self.export_view.build_view())
             elif route_path == "/password-recovery":
                 self.page.views.append(self.auth_view.get_password_recovery_view())
+            elif route_path == "/privacy":
+                self.page.views.append(self.privacy_view.get_view())
             elif route_path == "/force-change-password":
                 if not self.get_user_id():
                     self.page.go("/")
