@@ -176,7 +176,7 @@ class ImpostazioniTab(ft.Container):
             label=loc.get("date_of_birth"), 
             border_color=ft.Colors.OUTLINE,
             suffix_icon=ft.Icons.CALENDAR_MONTH,
-            on_focus=lambda _: self.page.open(self.date_picker),
+            on_tap=lambda _: self.page.open(self.date_picker),
             read_only=True
         )
         
