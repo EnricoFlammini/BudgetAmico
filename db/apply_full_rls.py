@@ -78,7 +78,7 @@ def apply_rls():
             "Carte", "StoricoMassimaliCarte",
             "Contatti", "CondivisioneContatto",
             "Configurazioni", "Log_Sistema", "Config_Logger",
-            "InfoDB"
+            "InfoDB", "salvadanai", "obiettivi_risparmio", "storicoassetglobale"
         ]
         
         print("- Enabling RLS on tables...")
@@ -252,6 +252,15 @@ def apply_rls():
             DROP POLICY IF EXISTS "Users view fixed expenses" ON SpeseFisse;
             CREATE POLICY "Users view fixed expenses" ON SpeseFisse FOR SELECT USING (id_famiglia = get_current_user_family_id());
         """)
+
+        # Salvadanai & Obiettivi
+        cur.execute("""
+            DROP POLICY IF EXISTS "Users can manage family piggy banks" ON salvadanai;
+            CREATE POLICY "Users can manage family piggy banks" ON salvadanai FOR ALL USING (id_famiglia = get_current_user_family_id());
+            
+            DROP POLICY IF EXISTS "Users can manage family savings goals" ON obiettivi_risparmio;
+            CREATE POLICY "Users can manage family savings goals" ON obiettivi_risparmio FOR ALL USING (id_famiglia = get_current_user_family_id());
+        """)
         
         # Piano Ammortamento
         cur.execute("""
@@ -293,6 +302,15 @@ def apply_rls():
             CREATE POLICY "Users manage asset history" ON Storico_Asset FOR ALL USING (
                 id_conto IN (SELECT id_conto FROM Conti WHERE id_utente = auth_uid())
             );
+        """)
+
+        # Storico Asset Globale (Cache condivisa per utenti autenticati)
+        cur.execute("""
+            DROP POLICY IF EXISTS "Authenticated users can manage global asset history" ON storicoassetglobale;
+            CREATE POLICY "Authenticated users can manage global asset history" ON storicoassetglobale
+                FOR ALL
+                TO authenticated
+                USING (auth_uid() IS NOT NULL);
         """)
 
         # Storico Pagamenti Rate (Linked to Prestiti -> Family)
