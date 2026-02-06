@@ -158,11 +158,11 @@ class ImpostazioniTab(ft.Container):
         def on_date_change(e):
             if e.control.value:
                 self.txt_data_nascita.value = e.control.value.strftime("%Y-%m-%d")
-            self.page.close(self.date_picker)
+            self.date_picker.open = False
             self.page.update()
 
         def on_dismiss(e):
-            self.page.close(self.date_picker)
+            self.date_picker.open = False
             self.page.update()
 
         self.date_picker = ft.DatePicker(

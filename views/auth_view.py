@@ -317,119 +317,126 @@ class AuthView:
             self.page.update()
             return
 
-        logger.debug("Chiamata a registra_utente...")
+        logger.debug("Verifica disponibilità registrazione...")
+        from db.gestione_db import check_registration_availability, generate_email_verification_code, verify_email_code
         
-        # Mostra spinner durante la registrazione
-        self.controller.show_loading("Registrazione in corso...")
-        
-        try:
-            result = registra_utente(nome, cognome, username, password, email, None, None, None)
-        finally:
-            self.controller.hide_loading()
-
-        if result:
-            logger.debug(f"Registrazione OK. Result keys: {result.keys()}")
-            id_nuovo_utente = result.get("id_utente")
-            recovery_key = result.get("recovery_key")
-            
-            invito_attivo = self.page.session.get("invito_attivo")
-            if invito_attivo:
-                from db.gestione_db import accetta_invito
-                master_key = result.get("master_key")
-                accetta_invito(id_nuovo_utente, invito_attivo['token'], master_key)
-                self.page.session.remove("invito_attivo")
-
-            # --- EMAIL VERIFICATION FLOW (v0.48) ---
-            from db.gestione_db import generate_email_verification_code, verify_email_code
-            verification_code = generate_email_verification_code(email)
-            
-            # Send Email
-            from utils.email_sender import send_email
-            subject = "Codice di Verifica BudgetAmico"
-            body = f"<h1>Benvenuto su BudgetAmico!</h1><p>Il tuo codice di verifica è: <b>{verification_code}</b></p><p>Inseriscilo nell'app per completare la registrazione.</p>"
-            success_email, err_email = send_email(email, subject, body)
-            if not success_email:
-                 logger.error(f"Errore invio mail verifica: {err_email}")
-            
-            def on_verify_code(e):
-                code = txt_verification_code.value.strip()
-                if verify_email_code(email, code):
-                    verify_dialog.open = False
-                    self.page.update()
-                    self.controller.show_snack_bar("Email verificata con successo!", success=True)
-                    # Now show recovery key dialog
-                    self.page.overlay.append(dialog)
-                    dialog.open = True
-                    self.page.update()
-                else:
-                    txt_verification_code.error_text = "Codice non valido o scaduto."
-                    self.page.update()
-
-            txt_verification_code = ft.TextField(label="Codice di Verifica", width=200, text_align=ft.TextAlign.CENTER)
-            verify_dialog = ft.AlertDialog(
-                modal=True,
-                title=ft.Text("Verifica la tua Email"),
-                content=ft.Column([
-                    ft.Text(f"Abbiamo inviato un codice di 6 cifre a {email}", size=14),
-                    txt_verification_code
-                ], tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                actions=[
-                    ft.ElevatedButton("Verifica", on_click=on_verify_code)
-                ],
-                actions_alignment=ft.MainAxisAlignment.END
-            )
-            
-            self.page.overlay.append(verify_dialog)
-            verify_dialog.open = True
-
-            # Show recovery key dialog
-            def close_dialog(e):
-                logger.debug("Dialog chiuso. Redirect a login.")
-                dialog.open = False
-                self.controller.hide_loading()  # Safety: nasconde loading se visibile
-                if dialog in self.page.overlay:
-                    self.page.overlay.remove(dialog)
-                self.page.update()
-                self.controller.show_snack_bar("Registrazione completata! Effettua il login.", success=True)
-                self.page.go("/")
-            
-            logger.debug("Apertura dialog recovery key...")
-            dialog = ft.AlertDialog(
-                modal=True,
-                title=ft.Text("⚠️ SALVA LA TUA CHIAVE DI RECUPERO", weight=ft.FontWeight.BOLD, size=18),
-                content=ft.Column([
-                    ft.Text("Questa è la tua chiave di recupero. SALVALA IN UN POSTO SICURO!", 
-                           size=14, weight=ft.FontWeight.BOLD),
-                    ft.Text("Se perdi la password, questa chiave è l'UNICO modo per recuperare i tuoi dati.", 
-                           size=12, color=ft.Colors.RED_400),
-                    ft.Container(height=10),
-                    ft.TextField(
-                        value=recovery_key,
-                        read_only=True,
-                        multiline=True,
-                        text_size=12,
-                        border_color=ft.Colors.BLUE_400,
-                        text_style=ft.TextStyle(font_family="Courier New")
-                    ),
-                    ft.Container(height=10),
-                    ft.Text("⚠️ Senza questa chiave, i dati criptati saranno PERSI per sempre!", 
-                           size=11, italic=True, color=ft.Colors.ORANGE_400, weight=ft.FontWeight.BOLD)
-                ], tight=True, scroll=ft.ScrollMode.AUTO, width=500),
-                actions=[
-                    ft.TextButton("✅ Ho salvato la chiave", on_click=close_dialog, 
-                                 style=ft.ButtonStyle(color=ft.Colors.GREEN_400))
-                ],
-                actions_alignment=ft.MainAxisAlignment.END
-            )
-            
-            self.page.overlay.append(dialog)
-            dialog.open = True
-            self.page.update()
-        else:
+        if not check_registration_availability(username, email):
             self.txt_reg_username.error_text = "Username o Email già in uso."
             btn_registra.disabled = False
             btn_registra.update()
             self.page.update()
+            return
+
+        # --- EMAIL VERIFICATION FLOW (v0.48) ---
+        verification_code = generate_email_verification_code(email)
+        
+        # Invia Email prima di creare l'utente
+        from utils.email_sender import send_email
+        subject = "Codice di Verifica BudgetAmico"
+        body = f"<h1>Benvenuto su BudgetAmico!</h1><p>Il tuo codice di verifica è: <b>{verification_code}</b></p><p>Inseriscilo nell'app per completare la registrazione.</p>"
+        
+        self.controller.show_loading("Invio codice di verifica...")
+        success_email, err_email = send_email(email, subject, body)
+        self.controller.hide_loading()
+        
+        if not success_email:
+             self.controller.show_snack_bar(f"Errore invio mail: {err_email}", success=False)
+             btn_registra.disabled = False
+             btn_registra.update()
+             return
+
+        def on_verify_code(e):
+            code = txt_verification_code.value.strip()
+            if verify_email_code(email, code):
+                verify_dialog.open = False
+                self.page.update()
+                
+                # ORA ESEGUE LA REGISTRAZIONE EFFETTIVA
+                self.controller.show_loading("Creazione account in corso...")
+                try:
+                    result = registra_utente(nome, cognome, username, password, email, None, None, None)
+                finally:
+                    self.controller.hide_loading()
+
+                if result:
+                    id_nuovo_utente = result.get("id_utente")
+                    recovery_key = result.get("recovery_key")
+                    
+                    invito_attivo = self.page.session.get("invito_attivo")
+                    if invito_attivo:
+                        from db.gestione_db import accetta_invito
+                        master_key = result.get("master_key")
+                        accetta_invito(id_nuovo_utente, invito_attivo['token'], master_key)
+                        self.page.session.remove("invito_attivo")
+
+                    self.controller.show_snack_bar("Email verificata e account creato!", success=True)
+                    # Mostra recovery key dialog
+                    self.page.overlay.append(dialog)
+                    dialog.open = True
+                    # Update parameters for the recovery dialog which is already defined below in the original code logic
+                    # We need to make sure recovery_key is passed correctly. 
+                    # Actually, the 'dialog' variable is defined below in the original scope.
+                    # To avoid issues, let's redefine the dialog logic or ensure it's accessible.
+                    
+                    # Ricarichiamo il valore nella TextField del dialog
+                    txt_recovery.value = recovery_key
+                    self.page.update()
+                else:
+                    self.controller.show_snack_bar("Errore durante la registrazione finale.", success=False)
+            else:
+                txt_verification_code.error_text = "Codice non valido o scaduto."
+                self.page.update()
+
+        txt_verification_code = ft.TextField(label="Codice di Verifica", width=200, text_align=ft.TextAlign.CENTER)
+        verify_dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Verifica la tua Email"),
+            content=ft.Column([
+                ft.Text(f"Abbiamo inviato un codice di 6 cifre a {email}", size=14),
+                txt_verification_code
+            ], tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            actions=[
+                ft.ElevatedButton("Verifica", on_click=on_verify_code)
+            ],
+            actions_alignment=ft.MainAxisAlignment.END
+        )
+        
+        self.page.overlay.append(verify_dialog)
+        verify_dialog.open = True
+
+        # Show recovery key dialog definition (placeholders for late filling)
+        def close_dialog(e):
+            dialog.open = False
+            self.page.update()
+            self.controller.show_snack_bar("Registrazione completata! Effettua il login.", success=True)
+            self.page.go("/")
+        
+        txt_recovery = ft.TextField(
+            value="",
+            read_only=True,
+            multiline=True,
+            text_size=12,
+            border_color=ft.Colors.BLUE_400,
+            text_style=ft.TextStyle(font_family="Courier New")
+        )
+
+        dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("⚠️ SALVA LA TUA CHIAVE DI RECUPERO", weight=ft.FontWeight.BOLD, size=18),
+            content=ft.Column([
+                ft.Text("Questa è la tua chiave di recupero. SALVALA IN UN POSTO SICURO!", size=14, weight=ft.FontWeight.BOLD),
+                ft.Text("Se perdi la password, questa chiave è l'UNICO modo per recuperare i tuoi dati.", size=12, color=ft.Colors.RED_400),
+                ft.Container(height=10),
+                txt_recovery,
+                ft.Container(height=10),
+                ft.Text("⚠️ Senza questa chiave, i dati criptati saranno PERSI per sempre!", size=11, italic=True, color=ft.Colors.ORANGE_400, weight=ft.FontWeight.BOLD)
+            ], tight=True, scroll=ft.ScrollMode.AUTO, width=500),
+            actions=[
+                ft.TextButton("✅ Ho salvato la chiave", on_click=close_dialog, style=ft.ButtonStyle(color=ft.Colors.GREEN_400))
+            ],
+            actions_alignment=ft.MainAxisAlignment.END
+        )
+        self.page.update()
 
     # --- VISTA E LOGICA RECUPERO PASSWORD ---
 

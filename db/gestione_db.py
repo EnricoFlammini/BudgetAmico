@@ -1889,10 +1889,16 @@ def registra_utente(nome: str, cognome: str, username: str, password: str, email
 
         with get_db_connection() as con:
             cur = con.cursor()
+            u_bindex = compute_blind_index(username)
+            e_bindex = compute_blind_index(email)
+            
+            # Pulisci eventuali tentativi precedenti non verificati
+            cur.execute("DELETE FROM Utenti WHERE (username_bindex = %s OR email_bindex = %s) AND email_verificata = FALSE", (u_bindex, e_bindex))
+            
             # NOTA: username e email legacy sono NULL - usiamo solo le versioni _bindex e _enc
             cur.execute("""
-                INSERT INTO Utenti (nome, cognome, username, password_hash, password_algo, email, data_nascita, codice_fiscale, indirizzo, salt, encrypted_master_key, recovery_key_hash, encrypted_master_key_recovery, encrypted_master_key_backup, username_bindex, email_bindex, username_enc, email_enc, nome_enc_server, cognome_enc_server)
-                VALUES (%s, %s, %s, %s, 'pbkdf2', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO Utenti (nome, cognome, username, password_hash, password_algo, email, data_nascita, codice_fiscale, indirizzo, salt, encrypted_master_key, recovery_key_hash, encrypted_master_key_recovery, encrypted_master_key_backup, username_bindex, email_bindex, username_enc, email_enc, nome_enc_server, cognome_enc_server, email_verificata)
+                VALUES (%s, %s, %s, %s, 'pbkdf2', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
                 RETURNING id_utente
             """, (enc_nome, enc_cognome, None, password_hash, None, data_nascita, enc_cf, enc_indirizzo, 
                   base64.urlsafe_b64encode(salt).decode(), 
@@ -1900,7 +1906,7 @@ def registra_utente(nome: str, cognome: str, username: str, password: str, email
                   recovery_key_hash,
                   base64.urlsafe_b64encode(encrypted_mk_recovery).decode(),
                   encrypted_mk_backup_b64,
-                  compute_blind_index(username), compute_blind_index(email),
+                  u_bindex, e_bindex,
                   encrypt_system_data(username), encrypt_system_data(email),
                   encrypt_system_data(nome.title()), encrypt_system_data(cognome.title())))
 
@@ -10496,15 +10502,23 @@ def verify_email_code(email, code):
         import time
         if int(time.time()) > int(expiry):
             return False
-        if saved_code == code:
-            # Segna come verificata nel DB
-            with get_db_connection() as con:
-                cur = con.cursor()
-                # Use blind index to find user
-                bindex = compute_blind_index(email)
-                cur.execute("UPDATE Utenti SET email_verificata = 1 WHERE email_bindex = %s", (bindex,))
-                con.commit()
-            return True
+        return saved_code == code
     except:
         pass
     return False
+
+def check_registration_availability(username, email):
+    """Verifica se username o email sono già occupati da un utente VERIFICATO."""
+    u_bindex = compute_blind_index(username)
+    e_bindex = compute_blind_index(email)
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("""
+                SELECT id_utente FROM Utenti 
+                WHERE (username_bindex = %s OR email_bindex = %s) AND email_verificata = TRUE
+            """, (u_bindex, e_bindex))
+            return cur.fetchone() is None
+    except Exception as e:
+        logger.error(f"Errore check_registration_availability: {e}")
+        return False
