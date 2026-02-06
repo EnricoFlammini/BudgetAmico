@@ -13,6 +13,8 @@ from dialogs.portafoglio_dialogs import PortafoglioDialogs
 from dialogs.card_dialog import CardDialog
 from dialogs.admin_dialogs import AdminDialogs
 from views.auth_view import AuthView
+from views.privacy_view import PrivacyView
+from views.export_view import ExportView
 from utils.logger import setup_logger
 
 logger = setup_logger("WebAppController")
@@ -51,6 +53,8 @@ class WebAppController(AppController):
         # Init Views
         self.auth_view = AuthView(self)
         self.dashboard_view = WebDashboardView(self) # USE WEB VIEW
+        self.privacy_view = PrivacyView(self)
+        self.export_view = ExportView(self)
         
         # Re-use global dialogs init (Overridden below)
         self._init_global_dialogs()
