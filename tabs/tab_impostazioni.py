@@ -158,10 +158,16 @@ class ImpostazioniTab(ft.Container):
         def on_date_change(e):
             if e.control.value:
                 self.txt_data_nascita.value = e.control.value.strftime("%Y-%m-%d")
-                self.page.update()
+            self.page.close(self.date_picker)
+            self.page.update()
+
+        def on_dismiss(e):
+            self.page.close(self.date_picker)
+            self.page.update()
 
         self.date_picker = ft.DatePicker(
             on_change=on_date_change,
+            on_dismiss=on_dismiss,
             first_date=datetime.datetime(1900, 1, 1),
             last_date=datetime.datetime.now(),
         )
