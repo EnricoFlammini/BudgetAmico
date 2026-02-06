@@ -13,13 +13,14 @@ class PrivacyView:
         logger.info("Richiamata build_view() per /privacy")
         
         return ft.View(
-            "/privacy",
-            [
-                ft.AppBar(
-                    title=ft.Text("Informativa Privacy"),
-                    center_title=True,
-                    bgcolor=ft.Colors.SURFACE_VARIANT,
-                ),
+            route="/privacy",
+            appbar=ft.AppBar(
+                title=ft.Text("Informativa Privacy", weight=ft.FontWeight.BOLD),
+                center_title=True,
+                bgcolor=ft.Colors.SURFACE_VARIANT,
+                leading=ft.IconButton(ft.Icons.ARROW_BACK, on_click=lambda _: self.page.go("/"))
+            ),
+            controls=[
                 ft.Column([
                     ft.Text("Informativa sulla Privacy", size=24, weight=ft.FontWeight.BOLD),
                     ft.Divider(),
@@ -33,7 +34,7 @@ class PrivacyView:
                         "Raccogliamo solo i dati necessari per il funzionamento dell'applicazione: "
                         "e-mail (per l'account e le notifiche), nome e cognome (per la visualizzazione in famiglia). "
                         "Tutti i dati sensibili, come descrizioni di transazioni e nomi dei conti, sono "
-                        "criptati end-to-end con la tua Master Key personale.",
+                        "criptati end-to-end con la tua chiave master personale.",
                         size=14
                     ),
                     ft.Text("2. Utilizzo della Crittografia", size=18, weight=ft.FontWeight.BOLD),
@@ -55,7 +56,8 @@ class PrivacyView:
                         icon=ft.Icons.ARROW_BACK,
                         on_click=lambda _: self.page.go("/")
                     ),
-                ], spacing=15, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
+                ], spacing=15, scroll=ft.ScrollMode.ADAPTIVE)
             ],
-            padding=20
+            padding=20,
+            scroll=ft.ScrollMode.ADAPTIVE
         )

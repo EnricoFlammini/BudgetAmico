@@ -269,8 +269,11 @@ class AppController:
         except Exception as e:
             logger.critical(f"Errore in route_change: {e}")
             logger.error(traceback.format_exc())
-        finally:
-            self.hide_loading()
+            # In caso di errore critico durante il routing, nascondiamo comunque il loading se possibile
+            try:
+                self.hide_loading()
+            except:
+                pass
 
     def _handle_registration_token(self, token):
         invito_data = ottieni_invito_per_token(token)
@@ -946,21 +949,27 @@ class AppController:
 
     def show_loading(self, messaggio: str = "Attendere..."):
         """Mostra l'overlay di caricamento che blocca l'interfaccia."""
-        logger.debug(f"[OVERLAY] show_loading called: msg={messaggio}")
-        # Aggiungi all'overlay se non presente
-        if self.loading_overlay not in self.page.overlay:
-            self.page.overlay.append(self.loading_overlay)
-        self.loading_overlay.show(messaggio)
-        self.page.update()
+        try:
+            logger.debug(f"[OVERLAY] show_loading called: msg={messaggio}")
+            # Aggiungi all'overlay se non presente
+            if self.loading_overlay not in self.page.overlay:
+                self.page.overlay.append(self.loading_overlay)
+            self.loading_overlay.show(messaggio)
+            self.page.update()
+        except Exception as e:
+            logger.warning(f"[OVERLAY] Errore in show_loading: {e}")
 
     def hide_loading(self):
         """Nasconde e rimuove l'overlay di caricamento."""
-        logger.debug("[OVERLAY] hide_loading called")
-        self.loading_overlay.hide()
-        # Rimuovi dall'overlay per evitare il rettangolo grigio
-        if self.loading_overlay in self.page.overlay:
-            self.page.overlay.remove(self.loading_overlay)
-        self.page.update()
+        try:
+            logger.debug("[OVERLAY] hide_loading called")
+            self.loading_overlay.hide()
+            # Rimuovi dall'overlay per evitare il rettangolo grigio
+            if self.loading_overlay in self.page.overlay:
+                self.page.overlay.remove(self.loading_overlay)
+            self.page.update()
+        except Exception as e:
+            logger.warning(f"[OVERLAY] Errore in hide_loading: {e}")
 
     def get_user_id(self):
         utente = self.page.session.get("utente_loggato")
