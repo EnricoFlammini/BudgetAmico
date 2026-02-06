@@ -2213,7 +2213,8 @@ def cambia_password_e_username(id_utente: str, password_raw: str, nuovo_username
             return {
                 "success": True, 
                 "recovery_key": recovery_key,
-                "master_key": base64.urlsafe_b64encode(master_key).decode() # Return b64 string
+                "master_key": base64.urlsafe_b64encode(master_key).decode(), # Return b64 string
+                "username": nuovo_username
             }
 
     except Exception as e:

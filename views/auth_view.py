@@ -632,7 +632,7 @@ class AuthView:
                 # Update session username and keys
                 utente = self.page.session.get("utente_loggato")
                 if utente:
-                    utente['username'] = nuovo_username
+                    utente['username'] = result.get("username")
                     if result.get("master_key"):
                          utente['master_key'] = result.get("master_key")
                          self.page.session.set("master_key", result.get("master_key"))
