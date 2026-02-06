@@ -1,4 +1,5 @@
 import flet as ft
+import datetime
 from utils.styles import AppColors, AppStyles, PageConstants
 from db.gestione_db import (
     imposta_conto_default_utente, aggiorna_profilo_utente, cambia_password, hash_password,
@@ -161,8 +162,8 @@ class ImpostazioniTab(ft.Container):
 
         self.date_picker = ft.DatePicker(
             on_change=on_date_change,
-            first_date=ft.datetime.datetime(1900, 1, 1),
-            last_date=ft.datetime.datetime.now(),
+            first_date=datetime.datetime(1900, 1, 1),
+            last_date=datetime.datetime.now(),
         )
         
         self.txt_data_nascita = ft.TextField(

@@ -574,10 +574,11 @@ def reset_user_password(user_id: int) -> Tuple[bool, str]:
         <p>Saluti,<br>Team BudgetAmico</p>
         """
         
-        if send_email(email, subject, body):
+        success_email, error_msg = send_email(email, subject, body)
+        if success_email:
             return True, f"Password resettata e email inviata a {email}"
         else:
-            return False, "Password resettata ma errore invio email."
+            return False, f"Password resettata ma errore invio email: {error_msg}"
 
     except Exception as e:
         logger.error(f"Errore reset_user_password: {e}")

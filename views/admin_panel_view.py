@@ -625,6 +625,12 @@ class AdminPanelView:
         def do_reset():
             from db.gestione_db import reset_user_password
             success, msg = reset_user_password(user_id)
+            self.page.close(dlg)
+            if success:
+                self.page.snack_bar = ft.SnackBar(ft.Text(msg), bgcolor=ft.Colors.GREEN)
+            else:
+                self.page.snack_bar = ft.SnackBar(ft.Text(msg), bgcolor=ft.Colors.RED)
+            self.page.snack_bar.open = True
             self.page.update()
 
         dlg = ft.AlertDialog(
