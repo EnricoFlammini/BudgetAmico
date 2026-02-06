@@ -341,6 +341,35 @@ def delete_user(user_id: int) -> tuple[bool, str]:
         logger.error(f"Errore delete_user {user_id}: {e}")
         return False, str(e)
 
+def elimina_account_utente(id_utente: str, password_raw: str) -> tuple[bool, str]:
+    """
+    Elimina definitivamente l'account utente previa verifica della password.
+    """
+    try:
+        # 1. Recupera username per verifica_login
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT username_enc FROM Utenti WHERE id_utente = %s", (id_utente,))
+            res = cur.fetchone()
+            if not res:
+                return False, "Utente non trovato."
+            
+            username = decrypt_system_data(res['username_enc'])
+            if not username:
+                return False, "Impossibile recuperare i dati utente per la verifica."
+
+        # 2. Verifica password
+        utente_loggato, errore = verifica_login(username, password_raw)
+        if not utente_loggato:
+            return False, errore or "Password errata."
+
+        # 3. Esegue eliminazione (delete_user usa int ID)
+        return delete_user(int(id_utente))
+
+    except Exception as e:
+        logger.error(f"Errore elimina_account_utente {id_utente}: {e}")
+        return False, f"Errore durante l'eliminazione dell'account: {e}"
+
 
 def get_all_families() -> List[Dict[str, Any]]:
     """Recupera la lista di tutte le famiglie, tentando di decriptare il nome."""

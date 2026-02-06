@@ -280,6 +280,15 @@ class ImpostazioniTab(ft.Container):
             
             ft.Row([self.btn_salva_profilo], alignment=ft.MainAxisAlignment.END),
             
+            ft.Row([
+                ft.TextButton(
+                    "Leggi l'informativa sulla privacy", 
+                    icon=ft.Icons.PRIVACY_TIP,
+                    on_click=lambda _: self.page.go("/privacy"),
+                    style=ft.ButtonStyle(color=ft.Colors.GREY_500)
+                )
+            ], alignment=ft.MainAxisAlignment.CENTER),
+            
             ft.Divider(height=30, color=ft.Colors.TRANSPARENT),
             
             # Sezione Backup
@@ -314,9 +323,80 @@ class ImpostazioniTab(ft.Container):
                     on_click=lambda _: self.page.go("/privacy")
                 )
             ], alignment=ft.MainAxisAlignment.CENTER),
+
+            ft.Divider(height=30, color=ft.Colors.TRANSPARENT),
+            
+            # Zona di Pericolo
+            ft.Container(
+                content=ft.Column([
+                    AppStyles.subheader_text("Zona di Pericolo", color=ft.Colors.ERROR),
+                    ft.Text("Le seguenti azioni sono irreversibili. Fai attenzione.", color=ft.Colors.GREY_600, size=12),
+                    ft.Container(height=10),
+                    ft.Row([
+                        ft.ElevatedButton(
+                            "Elimina Account Utente",
+                            icon=ft.Icons.DELETE_FOREVER,
+                            bgcolor=ft.Colors.RED_100,
+                            color=ft.Colors.RED,
+                            on_click=self._mostra_dialogo_elimina_account
+                        )
+                    ])
+                ]),
+                padding=20,
+                border=ft.border.all(1, ft.Colors.RED_200),
+                border_radius=10,
+                bgcolor=ft.Colors.RED_50 # Sfondo leggerissimo rosso
+            ),
+
             # Padding in fondo
             ft.Container(height=80)
         ]
+
+    def _mostra_dialogo_elimina_account(self, e):
+        """Mostra il dialogo di conferma per l'eliminazione dell'account."""
+        
+        txt_pass_elimina = ft.TextField(
+            label="Inserisci la tua password per confermare",
+            password=True,
+            can_reveal_password=True,
+            border_color=ft.Colors.RED,
+            on_submit=lambda _: self._esegui_eliminazione_account(txt_pass_elimina.value, dialog)
+        )
+        
+        def close_dlg(e):
+            self.page.close(dialog)
+
+        dialog = ft.AlertDialog(
+            title=ft.Row([
+                ft.Icon(ft.Icons.WARNING, color=ft.Colors.RED),
+                ft.Text("Eliminazione Account")
+            ]),
+            content=ft.Column([
+                ft.Text("Sei sicuro di voler eliminare il tuo account?"),
+                ft.Text("Tutti i tuoi dati personali (conti, transazioni, asset) verranno cancellati permanentemente.", weight=ft.FontWeight.BOLD),
+                ft.Text("Le famiglie di cui fai parte rimarranno attive per gli altri membri.", size=12),
+                ft.Container(height=10),
+                txt_pass_elimina
+            ], tight=True, spacing=10),
+            actions=[
+                ft.TextButton("Annulla", on_click=close_dlg),
+                ft.ElevatedButton("ELIMINA DEFINITIVAMENTE", 
+                                 bgcolor=ft.Colors.RED, 
+                                 color=ft.Colors.WHITE,
+                                 on_click=lambda _: self._esegui_eliminazione_account(txt_pass_elimina.value, dialog))
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        
+        self.page.open(dialog)
+
+    def _esegui_eliminazione_account(self, password, dialog):
+        if not password:
+            self.controller.show_snack_bar("Inserisci la password per confermare.", success=False)
+            return
+        
+        self.page.close(dialog)
+        self.controller.elimina_account_utente(password)
 
     def update_view_data(self, is_initial_load=False):
         # Mostra loading locale

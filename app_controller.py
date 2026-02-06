@@ -144,6 +144,11 @@ class AppController:
                     icon=ft.Icons.CODE,
                     on_click=lambda e: self._apri_link("https://github.com/EnricoFlammini/BudgetAmico")
                 ),
+                ft.ElevatedButton(
+                    "Informativa Privacy",
+                    icon=ft.Icons.PRIVACY_TIP,
+                    on_click=lambda _: self.page.go("/privacy")
+                ),
             ], wrap=True, spacing=10),
         ], tight=True, spacing=10)
         
@@ -803,6 +808,32 @@ class AppController:
         logger.info("User logged out")
         self.page.session.clear()
         self.page.go("/")
+
+    def elimina_account_utente(self, password):
+        """Gestisce l'eliminazione definitiva dell'account."""
+        user_id = self.get_user_id()
+        if not user_id:
+            self.show_snack_bar("Errore: Utente non trovato.", success=False)
+            return
+
+        self.show_loading("Eliminazione account in corso...")
+        try:
+            from db.gestione_db import elimina_account_utente
+            success, message = elimina_account_utente(user_id, password)
+            
+            if success:
+                logger.info(f"ACCOUNT ELIMINATO: {user_id}")
+                self.hide_loading()
+                self.show_snack_bar("Account eliminato permanentemente. Addio!", success=True)
+                # Disconnessione forzata
+                self.logout()
+            else:
+                self.hide_loading()
+                self.show_snack_bar(message, success=False)
+        except Exception as e:
+            logger.error(f"Errore durante l'eliminazione dell'account {user_id}: {e}")
+            self.hide_loading()
+            self.show_snack_bar(f"Errore: {e}", success=False)
 
     def open_new_transaction_dialog(self):
         """Apre il dialogo Nuova Transazione."""
