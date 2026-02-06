@@ -269,11 +269,9 @@ class AppController:
         except Exception as e:
             logger.critical(f"Errore in route_change: {e}")
             logger.error(traceback.format_exc())
-            # In caso di errore critico durante il routing, nascondiamo comunque il loading se possibile
-            try:
-                self.hide_loading()
-            except:
-                pass
+            # In caso di errore critico durante il routing, nascondiamo comunque il loading se possibile (senza crashare)
+            try: self.hide_loading()
+            except: pass
 
     def _handle_registration_token(self, token):
         invito_data = ottieni_invito_per_token(token)

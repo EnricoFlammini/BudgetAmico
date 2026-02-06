@@ -1,5 +1,6 @@
 import flet as ft
 from utils.logger import setup_logger
+from utils.styles import AppColors
 
 logger = setup_logger("PrivacyView")
 
@@ -13,11 +14,11 @@ class PrivacyView:
         logger.info("Richiamata build_view() per /privacy")
         
         return ft.View(
-            route="/privacy",
+            "/privacy",
             appbar=ft.AppBar(
                 title=ft.Text("Informativa Privacy", weight=ft.FontWeight.BOLD),
                 center_title=True,
-                bgcolor=ft.Colors.SURFACE_VARIANT,
+                bgcolor=AppColors.SURFACE_VARIANT,
                 leading=ft.IconButton(ft.Icons.ARROW_BACK, on_click=lambda _: self.page.go("/"))
             ),
             controls=[
@@ -58,6 +59,6 @@ class PrivacyView:
                     ),
                 ], spacing=15, scroll=ft.ScrollMode.ADAPTIVE)
             ],
-            padding=20,
-            scroll=ft.ScrollMode.ADAPTIVE
+            scroll=ft.ScrollMode.ADAPTIVE,
+            padding=20
         )
