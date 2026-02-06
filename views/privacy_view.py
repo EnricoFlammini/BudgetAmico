@@ -1,4 +1,7 @@
 import flet as ft
+from utils.logger import setup_logger
+
+logger = setup_logger("PrivacyView")
 
 class PrivacyView:
     def __init__(self, controller):
@@ -7,8 +10,10 @@ class PrivacyView:
         self.loc = controller.loc
 
     def get_view(self):
+        logger.info("Richiamata get_view() per /privacy")
         return ft.View(
             "/privacy",
+            scroll=ft.ScrollMode.ADAPTIVE,
             appbar=ft.AppBar(
                 title=ft.Text("Informativa sulla Privacy", weight=ft.FontWeight.BOLD),
                 bgcolor=ft.Colors.SURFACE_VARIANT,
@@ -52,9 +57,8 @@ class PrivacyView:
                             icon=ft.Icons.ARROW_BACK,
                             on_click=lambda _: self.page.go("/")
                         ),
-                    ], spacing=10, scroll=ft.ScrollMode.ADAPTIVE),
-                    padding=20,
-                    expand=True
+                    ], spacing=10),
+                    padding=20
                 )
             ]
         )
