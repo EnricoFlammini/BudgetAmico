@@ -547,29 +547,44 @@ def reset_user_password(user_id: int) -> Tuple[bool, str]:
         
         # Genera nuova password
         new_password = generate_token(12)
-        password_hash = hash_password(new_password)
         
-        # Aggiorna DB e imposta flag forza cambio password
-        with get_db_connection() as con:
-            cur = con.cursor()
-            cur.execute("""
-                UPDATE Utenti 
-                SET password_hash = %s, password_algo = 'pbkdf2', forza_cambio_password = TRUE 
-                WHERE id_utente = %s
-            """, (password_hash, user_id))
-            con.commit()
-            
+        # Aggiorna DB usando la logica di recupero master key (v0.48)
+        success_recovery = imposta_password_temporanea(user_id, new_password)
+        
+        recovery_note = ""
+        if not success_recovery:
+            # Fallback a solo reset hash se il recupero fallisce (es. backup mancante o errore)
+            # Ma informiamo che i dati non saranno accessibili direttamente.
+            password_hash = hash_password(new_password)
+            with get_db_connection() as con:
+                cur = con.cursor()
+                cur.execute("""
+                    UPDATE Utenti 
+                    SET password_hash = %s, password_algo = 'pbkdf2', forza_cambio_password = TRUE 
+                    WHERE id_utente = %s
+                """, (password_hash, user_id))
+                con.commit()
+            recovery_note = """
+            <p style='color: #d32f2f; font-weight: bold;'>⚠️ NOTA IMPORTANTE SULLA SICUREZZA:</p>
+            <p>Il backup della tua chiave master non è stato trovato sul server. Per motivi di sicurezza, i tuoi dati criptati esistenti (conti, transazioni, ecc.) 
+            <b>non saranno accessibili</b> fino a quando non userai la tua <b>Chiave di Recupero</b> personale per ripristinarli al primo accesso.</p>
+            """
+        else:
+            recovery_note = "<p><i>I tuoi dati sono stati recuperati con successo grazie al backup di sicurezza del server.</i></p>"
+        
         # Invia Email
         subject = "BudgetAmico - Reset Password"
         body = f"""
         <h2>Ciao {username},</h2>
         <p>Un amministratore ha richiesto il reset della tua password.</p>
-        <p>Ecco le tue nuove credenziali:</p>
+        <p>Ecco le tue nuove credenziali temporanee:</p>
         <ul>
             <li><b>Username:</b> {username}</li>
             <li><b>Nuova Password:</b> {new_password}</li>
         </ul>
         <p>Ti verrà chiesto di cambiare questa password al primo accesso.</p>
+        <br>
+        {recovery_note}
         <br>
         <p>Saluti,<br>Team BudgetAmico</p>
         """
