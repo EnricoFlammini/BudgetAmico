@@ -14,8 +14,8 @@ if not os.path.exists(APP_DATA_DIR):
 DB_FILE = os.path.join(APP_DATA_DIR, 'budget_amico.db')
 
 # --- SCHEMA DATABASE ---
-# Versione 22: Aggiunta id_asset e id_obiettivo a Salvadanai per tracciamento fondi dedicati
-SCHEMA_VERSION = 22
+# Versione 23: Aggiunta email_verificata a Utenti
+SCHEMA_VERSION = 23
 
 TABLES = {
     "Utenti": """
@@ -32,7 +32,8 @@ TABLES = {
             id_conto_default INTEGER REFERENCES Conti(id_conto) ON DELETE SET NULL,
             id_conto_condiviso_default INTEGER REFERENCES ContiCondivisi(id_conto_condiviso) ON DELETE SET NULL,
             id_carta_default INTEGER REFERENCES Carte(id_carta) ON DELETE SET NULL,
-            forza_cambio_password BOOLEAN DEFAULT 0
+            forza_cambio_password BOOLEAN DEFAULT 0,
+            email_verificata BOOLEAN DEFAULT 0
         );
         CREATE UNIQUE INDEX IF NOT EXISTS idx_utenti_username_bindex ON Utenti(username_bindex);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_utenti_email_bindex ON Utenti(email_bindex);

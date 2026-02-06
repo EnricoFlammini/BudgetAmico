@@ -571,12 +571,43 @@ def _migra_da_v21_a_v22(con):
 
         con.commit()
         print("Migrazione a v22 completata con successo.")
-        return True
     except Exception as e:
         print(f"❌ Errore critico durante la migrazione da v21 a v22: {e}")
         try: con.rollback() 
         except: pass
         return False
+        
+
+def _migra_da_v22_a_v23(con):
+    """
+    Logica specifica per migrare un DB dalla versione 22 alla 23.
+    - Aggiunge email_verificata alla tabella Utenti.
+    """
+    print("Esecuzione migrazione da v22 a v23...")
+    try:
+        cur = con.cursor()
+
+        # 1. Aggiungi colonna email_verificata
+        print("  - Aggiunta colonna email_verificata a Utenti...")
+        try:
+            # Postgres supports ADD COLUMN standard
+            cur.execute("ALTER TABLE Utenti ADD COLUMN email_verificata BOOLEAN DEFAULT 0")
+        except Exception as e:
+            if "duplicate column" in str(e) or "already exists" in str(e):
+                print("    Colonna 'email_verificata' già esistente.")
+            else:
+                raise e
+
+        con.commit()
+        print("Migrazione a v23 completata con successo.")
+        return True
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v22 a v23: {e}")
+        try: con.rollback() 
+        except: pass
+        return False
+
+
 
 
 def _migra_da_v7_a_v8(con: sqlite3.Connection):
@@ -940,6 +971,11 @@ def migra_database(con, versione_vecchia=None, versione_nuova=None):
             if not _migra_da_v21_a_v22(con):
                  raise Exception("Migrazione da v21 a v22 fallita.")
             versione_vecchia = 22
+
+        if versione_vecchia == 22 and versione_nuova >= 23:
+            if not _migra_da_v22_a_v23(con):
+                 raise Exception("Migrazione da v22 a v23 fallita.")
+            versione_vecchia = 23
 
         # Se tutto è andato bene, aggiorna la versione del DB
         # Per Postgres usiamo InfoDB, per SQLite PRAGMA

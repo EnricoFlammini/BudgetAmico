@@ -35,6 +35,15 @@ class AuthView:
         self.txt_reg_codice_fiscale = ft.TextField(label="Codice Fiscale")
         self.txt_reg_indirizzo = ft.TextField(label="Indirizzo")
 
+        # Password Strength Indicator (v0.48)
+        self.pwd_strength_bar = ft.ProgressBar(value=0, width=300, color=ft.Colors.RED, bgcolor=ft.Colors.GREY_200, visible=False)
+        self.pwd_strength_text = ft.Text("", size=12, color=ft.Colors.GREY_600, visible=False)
+        self.txt_reg_password.on_change = self._on_password_change
+
+        # Cache complexities
+        from db.gestione_db import get_password_complexity_config
+        self.pwd_config = get_password_complexity_config()
+
         # Controlli per il Recupero Password
         self.txt_recovery_email = ft.TextField(autofocus=True)
         self.recovery_status_text = ft.Text(visible=False)
@@ -95,7 +104,13 @@ class AuthView:
                                 tooltip="Divisore Pro (Free Tool)",
                                 on_click=lambda _: self.page.go("/divisore")
                             ),
-                            ft.Text("Divisore Pro", size=10, color=ft.Colors.GREEN)
+                            ft.Text("Divisore Pro", size=10, color=ft.Colors.GREEN),
+                            ft.Container(height=10),
+                            ft.TextButton(
+                                "Informativa Privacy",
+                                style=ft.ButtonStyle(color=ft.Colors.GREY_500),
+                                on_click=lambda _: self.page.go("/privacy")
+                            )
                         ], spacing=0, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -139,11 +154,12 @@ class AuthView:
                         self.txt_reg_email,
                         self.txt_reg_nome,
                         self.txt_reg_cognome,
-                        self.txt_reg_password,
+                        ft.Column([
+                            self.txt_reg_password,
+                            self.pwd_strength_bar,
+                            self.pwd_strength_text
+                        ], spacing=2, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                         self.txt_reg_conferma_password,
-                        self.txt_reg_data_nascita,
-                        self.txt_reg_codice_fiscale,
-                        self.txt_reg_indirizzo,
                         ft.Container(height=10),
                         ft.ElevatedButton(
                             loc.get("register_now"),
@@ -212,6 +228,50 @@ class AuthView:
             self.controller.hide_loading()
             raise
 
+    def _on_password_change(self, e):
+        """Calcola la forza della password in tempo reale."""
+        pwd = self.txt_reg_password.value
+        if not pwd:
+            self.pwd_strength_bar.visible = False
+            self.pwd_strength_text.visible = False
+            self.page.update()
+            return
+            
+        self.pwd_strength_bar.visible = True
+        self.pwd_strength_text.visible = True
+        
+        # Strength logic
+        score = 0
+        min_len = int(self.pwd_config.get("min_length", 8))
+        if len(pwd) >= min_len: score += 1
+        if any(c.isupper() for c in pwd): score += 1
+        if any(c.isdigit() for c in pwd): score += 1
+        if any(not c.isalnum() for c in pwd): score += 1
+        
+        colors = [ft.Colors.RED, ft.Colors.ORANGE, ft.Colors.YELLOW, ft.Colors.GREEN]
+        labels = ["Molto Debole", "Debole", "Media", "Forte"]
+        
+        idx = min(score, 3)
+        self.pwd_strength_bar.value = (idx + 1) / 4
+        self.pwd_strength_bar.color = colors[idx]
+        self.pwd_strength_text.value = f"Forza: {labels[idx]}"
+        self.pwd_strength_text.color = colors[idx]
+        self.page.update()
+
+    def _check_password_complexity(self, password):
+        """Verifica se la password rispetta i criteri Admin."""
+        cfg = self.pwd_config
+        errors = []
+        if len(password) < int(cfg.get("min_length", 8)):
+            errors.append(f"Almeno {cfg['min_length']} caratteri")
+        if cfg.get("require_uppercase") and not any(c.isupper() for c in password):
+            errors.append("Almeno una maiuscola")
+        if cfg.get("require_digits") and not any(c.isdigit() for c in password):
+            errors.append("Almeno un numero")
+        if cfg.get("require_special") and not any(not c.isalnum() for c in password):
+            errors.append("Almeno un carattere speciale")
+        return errors
+
     def _registra_cliccato(self, e):
         # Disable button to prevent double submission
         btn_registra = e.control
@@ -224,9 +284,10 @@ class AuthView:
         cognome = self.txt_reg_cognome.value.strip()
         password = self.txt_reg_password.value
         conferma_password = self.txt_reg_conferma_password.value
-        data_nascita = self.txt_reg_data_nascita.value.strip()
-        codice_fiscale = self.txt_reg_codice_fiscale.value.strip()
-        indirizzo = self.txt_reg_indirizzo.value.strip()
+        # Campi opzionali o rimossi nella v0.48
+        data_nascita = None
+        codice_fiscale = None
+        indirizzo = None
 
         # Reset errori
         for field in [self.txt_reg_username, self.txt_reg_email, self.txt_reg_nome, self.txt_reg_cognome,
@@ -236,9 +297,16 @@ class AuthView:
 
         # Validazione
         is_valid = True
-        if not all([username, email, nome, cognome, password, conferma_password, data_nascita, codice_fiscale, indirizzo]):
-            self.controller.show_snack_bar("Tutti i campi sono obbligatori.", success=False)
+        if not all([username, email, nome, cognome, password, conferma_password]):
+            self.controller.show_snack_bar("Username, Email, Nome, Cognome e Password sono obbligatori.", success=False)
             is_valid = False
+            
+        # Check Complessità Password (v0.48)
+        pwd_errors = self._check_password_complexity(password)
+        if pwd_errors:
+            self.txt_reg_password.error_text = "Requisiti: " + ", ".join(pwd_errors)
+            is_valid = False
+            
         if password != conferma_password:
             self.txt_reg_conferma_password.error_text = "Le password non coincidono."
             is_valid = False
@@ -255,7 +323,7 @@ class AuthView:
         self.controller.show_loading("Registrazione in corso...")
         
         try:
-            result = registra_utente(nome, cognome, username, password, email, data_nascita, codice_fiscale, indirizzo)
+            result = registra_utente(nome, cognome, username, password, email, None, None, None)
         finally:
             self.controller.hide_loading()
 
@@ -270,6 +338,49 @@ class AuthView:
                 master_key = result.get("master_key")
                 accetta_invito(id_nuovo_utente, invito_attivo['token'], master_key)
                 self.page.session.remove("invito_attivo")
+
+            # --- EMAIL VERIFICATION FLOW (v0.48) ---
+            from db.gestione_db import generate_email_verification_code, verify_email_code
+            verification_code = generate_email_verification_code(email)
+            
+            # Send Email
+            from utils.email_sender import send_email
+            subject = "Codice di Verifica BudgetAmico"
+            body = f"<h1>Benvenuto su BudgetAmico!</h1><p>Il tuo codice di verifica è: <b>{verification_code}</b></p><p>Inseriscilo nell'app per completare la registrazione.</p>"
+            success_email, err_email = send_email(email, subject, body)
+            if not success_email:
+                 logger.error(f"Errore invio mail verifica: {err_email}")
+            
+            def on_verify_code(e):
+                code = txt_verification_code.value.strip()
+                if verify_email_code(email, code):
+                    verify_dialog.open = False
+                    self.page.update()
+                    self.controller.show_snack_bar("Email verificata con successo!", success=True)
+                    # Now show recovery key dialog
+                    self.page.overlay.append(dialog)
+                    dialog.open = True
+                    self.page.update()
+                else:
+                    txt_verification_code.error_text = "Codice non valido o scaduto."
+                    self.page.update()
+
+            txt_verification_code = ft.TextField(label="Codice di Verifica", width=200, text_align=ft.TextAlign.CENTER)
+            verify_dialog = ft.AlertDialog(
+                modal=True,
+                title=ft.Text("Verifica la tua Email"),
+                content=ft.Column([
+                    ft.Text(f"Abbiamo inviato un codice di 6 cifre a {email}", size=14),
+                    txt_verification_code
+                ], tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                actions=[
+                    ft.ElevatedButton("Verifica", on_click=on_verify_code)
+                ],
+                actions_alignment=ft.MainAxisAlignment.END
+            )
+            
+            self.page.overlay.append(verify_dialog)
+            verify_dialog.open = True
 
             # Show recovery key dialog
             def close_dialog(e):
