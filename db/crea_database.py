@@ -32,8 +32,8 @@ TABLES = {
             id_conto_default INTEGER REFERENCES Conti(id_conto) ON DELETE SET NULL,
             id_conto_condiviso_default INTEGER REFERENCES ContiCondivisi(id_conto_condiviso) ON DELETE SET NULL,
             id_carta_default INTEGER REFERENCES Carte(id_carta) ON DELETE SET NULL,
-            forza_cambio_password BOOLEAN DEFAULT 0,
-            email_verificata BOOLEAN DEFAULT 0
+            forza_cambio_password BOOLEAN DEFAULT FALSE,
+            email_verificata BOOLEAN DEFAULT FALSE
         );
         CREATE UNIQUE INDEX IF NOT EXISTS idx_utenti_username_bindex ON Utenti(username_bindex);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_utenti_email_bindex ON Utenti(email_bindex);
@@ -73,7 +73,7 @@ TABLES = {
             valore_manuale REAL DEFAULT 0.0,
             rettifica_saldo REAL DEFAULT 0.0,
             borsa_default TEXT,
-            nascosto BOOLEAN DEFAULT 0
+            nascosto BOOLEAN DEFAULT FALSE
         );
     """,
     "ContiCondivisi": """
@@ -130,7 +130,7 @@ TABLES = {
             descrizione TEXT NOT NULL,
             importo REAL NOT NULL,
             id_carta INTEGER REFERENCES Carte(id_carta) ON DELETE SET NULL,
-            importo_nascosto BOOLEAN DEFAULT 0
+            importo_nascosto BOOLEAN DEFAULT FALSE
         );
     """,
     "Budget": """
@@ -174,7 +174,7 @@ TABLES = {
             id_conto_condiviso_pagamento_default INTEGER REFERENCES ContiCondivisi(id_conto_condiviso) ON DELETE SET NULL,
             id_categoria_pagamento_default INTEGER REFERENCES Categorie(id_categoria) ON DELETE SET NULL,
             id_sottocategoria_pagamento_default INTEGER REFERENCES Sottocategorie(id_sottocategoria) ON DELETE SET NULL,
-            addebito_automatico BOOLEAN DEFAULT 0
+            addebito_automatico BOOLEAN DEFAULT FALSE
         );
     """,
     "StoricoPagamentiRate": """
@@ -197,7 +197,7 @@ TABLES = {
             citta TEXT,
             valore_acquisto REAL,
             valore_attuale REAL NOT NULL,
-            nuda_proprieta BOOLEAN DEFAULT 0,
+            nuda_proprieta BOOLEAN DEFAULT FALSE,
             id_prestito_collegato INTEGER REFERENCES Prestiti(id_prestito) ON DELETE SET NULL
         );
     """,
@@ -236,8 +236,8 @@ TABLES = {
             id_categoria INTEGER NOT NULL REFERENCES Categorie(id_categoria) ON DELETE CASCADE,
             id_sottocategoria INTEGER REFERENCES Sottocategorie(id_sottocategoria) ON DELETE SET NULL,
             giorno_addebito INTEGER NOT NULL,
-            attiva BOOLEAN DEFAULT 1,
-            addebito_automatico BOOLEAN DEFAULT 0
+            attiva BOOLEAN DEFAULT TRUE,
+            addebito_automatico BOOLEAN DEFAULT FALSE
         );
     """,
     "Configurazioni": """
@@ -297,9 +297,9 @@ TABLES = {
             spesa_tenuta_encrypted TEXT,
             soglia_azzeramento_encrypted TEXT,
             giorno_addebito_tenuta_encrypted TEXT,
-            addebito_automatico BOOLEAN DEFAULT 0,
+            addebito_automatico BOOLEAN DEFAULT FALSE,
             data_creazione TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            attiva BOOLEAN DEFAULT 1
+            attiva BOOLEAN DEFAULT TRUE
         );
     """,
     "StoricoMassimaliCarte": """
@@ -366,10 +366,10 @@ TABLES = {
             id_obiettivo INTEGER REFERENCES Obiettivi_Risparmio(id) ON DELETE SET NULL,
             nome TEXT NOT NULL,
             importo_assegnato TEXT NOT NULL,
-            incide_su_liquidita BOOLEAN DEFAULT 0,
+            incide_su_liquidita BOOLEAN DEFAULT FALSE,
             note TEXT,
             data_creazione TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            usa_saldo_totale BOOLEAN DEFAULT 0
+            usa_saldo_totale BOOLEAN DEFAULT FALSE
         );
     """,
     "Obiettivi_Risparmio": """
@@ -381,7 +381,7 @@ TABLES = {
             data_obiettivo DATE NOT NULL,
             note TEXT,
             data_creazione TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            mostra_suggerimento_mensile BOOLEAN DEFAULT 1
+            mostra_suggerimento_mensile BOOLEAN DEFAULT TRUE
         );
     """,
     "StoricoAssetGlobale": """

@@ -591,7 +591,7 @@ def _migra_da_v22_a_v23(con):
         print("  - Aggiunta colonna email_verificata a Utenti...")
         try:
             # Postgres supports ADD COLUMN standard
-            cur.execute("ALTER TABLE Utenti ADD COLUMN email_verificata BOOLEAN DEFAULT 0")
+            cur.execute("ALTER TABLE Utenti ADD COLUMN email_verificata BOOLEAN DEFAULT FALSE")
         except Exception as e:
             if "duplicate column" in str(e) or "already exists" in str(e):
                 print("    Colonna 'email_verificata' già esistente.")
