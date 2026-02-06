@@ -280,15 +280,6 @@ class ImpostazioniTab(ft.Container):
             
             ft.Row([self.btn_salva_profilo], alignment=ft.MainAxisAlignment.END),
             
-            ft.Row([
-                ft.TextButton(
-                    "Leggi l'informativa sulla privacy", 
-                    icon=ft.Icons.PRIVACY_TIP,
-                    on_click=lambda _: self.page.go("/privacy"),
-                    style=ft.ButtonStyle(color=ft.Colors.GREY_500)
-                )
-            ], alignment=ft.MainAxisAlignment.CENTER),
-            
             ft.Divider(height=30, color=ft.Colors.TRANSPARENT),
             
             # Sezione Backup
