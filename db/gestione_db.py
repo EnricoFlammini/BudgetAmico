@@ -290,7 +290,7 @@ def ottieni_statistiche_accessi() -> Dict[str, int]:
                 WHERE l.timestamp > NOW() - INTERVAL '15 minutes'
                 AND l.id_utente IS NOT NULL
             """)
-            attivi = [row['username'] for row in cur.fetchall()]
+            attivi = [row['username'] for row in cur.fetchall() if row['username']]
             stats['attivi_ora'] = len(attivi)
             stats['lista_attivi'] = attivi[:5] # Mostriamo i primi 5
             

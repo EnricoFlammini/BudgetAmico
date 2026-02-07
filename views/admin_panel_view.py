@@ -523,7 +523,7 @@ class AdminPanelView:
             stats = ottieni_statistiche_accessi()
             self.stats_attivi_ora.value = str(stats.get('attivi_ora', 0))
             
-            attivi_list = stats.get('lista_attivi', [])
+            attivi_list = [str(u) for u in stats.get('lista_attivi', []) if u]
             if attivi_list:
                 self.stats_attivi_ora_tooltip = "Utenti attivi:\n" + "\n".join(attivi_list)
                 if stats.get('attivi_ora', 0) > len(attivi_list):
