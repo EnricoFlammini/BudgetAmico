@@ -470,12 +470,13 @@ class AdminPanelView:
 
     def _init_access_stats_ui(self):
         self.stats_attivi_ora = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN)
+        self.stats_attivi_ora_tooltip = "Nessun utente attivo"
         self.stats_24h = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE)
         self.stats_48h = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY)
         self.stats_72h = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER)
 
     def _build_access_stats_row(self):
-        def stat_card(label, control, icon):
+        def stat_card(label, control, icon, tooltip=None):
             return ft.Container(
                 content=ft.Column([
                     ft.Row([ft.Icon(icon, size=16), ft.Text(label, size=12, weight=ft.FontWeight.W_500)], spacing=5),
@@ -484,11 +485,12 @@ class AdminPanelView:
                 bgcolor=ft.Colors.SURFACE_VARIANT,
                 padding=10,
                 border_radius=8,
-                width=140
+                width=140,
+                tooltip=tooltip
             )
 
         return ft.Row([
-            stat_card("Attivi Ora", self.stats_attivi_ora, ft.Icons.WEB_OUTLINED),
+            stat_card("Attivi Ora", self.stats_attivi_ora, ft.Icons.WEB_OUTLINED, self.stats_attivi_ora_tooltip),
             stat_card("Ultime 24h", self.stats_24h, ft.Icons.HISTORY),
             stat_card("Ultime 48h", self.stats_48h, ft.Icons.HISTORY),
             stat_card("Ultime 72h", self.stats_72h, ft.Icons.HISTORY),
@@ -520,6 +522,15 @@ class AdminPanelView:
             # Carica anche le statistiche degli accessi
             stats = ottieni_statistiche_accessi()
             self.stats_attivi_ora.value = str(stats.get('attivi_ora', 0))
+            
+            attivi_list = stats.get('lista_attivi', [])
+            if attivi_list:
+                self.stats_attivi_ora_tooltip = "Utenti attivi:\n" + "\n".join(attivi_list)
+                if stats.get('attivi_ora', 0) > len(attivi_list):
+                    self.stats_attivi_ora_tooltip += f"\n...e altri {stats['attivi_ora'] - len(attivi_list)}"
+            else:
+                self.stats_attivi_ora_tooltip = "Nessun utente attivo"
+
             self.stats_24h.value = str(stats.get('24h', 0))
             self.stats_48h.value = str(stats.get('48h', 0))
             self.stats_72h.value = str(stats.get('72h', 0))

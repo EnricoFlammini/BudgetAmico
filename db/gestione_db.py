@@ -277,25 +277,28 @@ def ottieni_statistiche_accessi() -> Dict[str, int]:
     Calcola le statistiche degli accessi basandoci sui log di sistema.
     Restituisce: { 'attivi_ora': int, '24h': int, '48h': int, '72h': int }
     """
-    stats = {'attivi_ora': 0, '24h': 0, '48h': 0, '72h': 0}
+    stats = {'attivi_ora': 0, '24h': 0, '48h': 0, '72h': 0, 'lista_attivi': []}
     try:
         with get_db_connection() as con:
             cur = con.cursor()
             
-            # 1. Attivi ora (qualsiasi log negli ultimi 15 minuti)
+            # 1. Attivi ora (qualsiasi log negli ultimi 15 minuti) + Recupero nomi
             cur.execute("""
-                SELECT COUNT(DISTINCT id_utente) as count 
-                FROM Log_Sistema 
-                WHERE timestamp > NOW() - INTERVAL '15 minutes'
-                AND id_utente IS NOT NULL
+                SELECT DISTINCT u.username
+                FROM Log_Sistema l
+                JOIN Utenti u ON l.id_utente = u.id_utente
+                WHERE l.timestamp > NOW() - INTERVAL '15 minutes'
+                AND l.id_utente IS NOT NULL
             """)
-            stats['attivi_ora'] = cur.fetchone()['count']
+            attivi = [row['username'] for row in cur.fetchall()]
+            stats['attivi_ora'] = len(attivi)
+            stats['lista_attivi'] = attivi[:5] # Mostriamo i primi 5
             
             # 2. Accessi ultime 24h
             cur.execute("""
                 SELECT COUNT(DISTINCT id_utente) as count 
                 FROM Log_Sistema 
-                WHERE messaggio LIKE 'LOGIN RIUSCITO%' 
+                WHERE (messaggio LIKE 'LOGIN RIUSCITO%' OR messaggio LIKE 'LOGIN RIUSCITO%') 
                 AND timestamp > NOW() - INTERVAL '24 hours'
             """)
             stats['24h'] = cur.fetchone()['count']
@@ -304,7 +307,7 @@ def ottieni_statistiche_accessi() -> Dict[str, int]:
             cur.execute("""
                 SELECT COUNT(DISTINCT id_utente) as count 
                 FROM Log_Sistema 
-                WHERE messaggio LIKE 'LOGIN RIUSCITO%' 
+                WHERE (messaggio LIKE 'LOGIN RIUSCITO%' OR messaggio LIKE 'LOGIN RIUSCITO%') 
                 AND timestamp > NOW() - INTERVAL '48 hours'
             """)
             stats['48h'] = cur.fetchone()['count']
@@ -313,7 +316,7 @@ def ottieni_statistiche_accessi() -> Dict[str, int]:
             cur.execute("""
                 SELECT COUNT(DISTINCT id_utente) as count 
                 FROM Log_Sistema 
-                WHERE messaggio LIKE 'LOGIN RIUSCITO%' 
+                WHERE (messaggio LIKE 'LOGIN RIUSCITO%' OR messaggio LIKE 'LOGIN RIUSCITO%') 
                 AND timestamp > NOW() - INTERVAL '72 hours'
             """)
             stats['72h'] = cur.fetchone()['count']

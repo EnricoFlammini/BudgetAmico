@@ -207,9 +207,9 @@ class AuthView:
             utente, errore = verifica_login(username, password)
             
             if utente:
-                logger.info(f"LOGIN RIUSCITO - Utente ID: {utente.get('id')}")
-                logger.info(f"  - Forza cambio password: {utente.get('forza_cambio_password')}")
-                logger.info(f"  - Master key presente: {'Si' if utente.get('master_key') else 'No'}")
+                logger.info(f"LOGIN RIUSCITO - Utente ID: {utente.get('id')}", extra={'id_utente': utente.get('id')})
+                logger.info(f"  - Forza cambio password: {utente.get('forza_cambio_password')}", extra={'id_utente': utente.get('id')})
+                logger.info(f"  - Master key presente: {'Si' if utente.get('master_key') else 'No'}", extra={'id_utente': utente.get('id')})
                 self.txt_errore_login.visible = False
                 # Save temp password if user needs to change it (for re-encrypting family key)
                 if utente.get("forza_cambio_password"):

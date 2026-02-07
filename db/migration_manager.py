@@ -673,6 +673,47 @@ def _migra_da_v23_a_v24(con):
         return False
 
 
+def _migra_da_v24_a_v25(con):
+    """
+    Logica specifica per migrare un DB dalla versione 24 alla 25.
+    - Abilita i logger essenziali per il tracciamento attività nel portale admin.
+    """
+    print("Esecuzione migrazione da v24 a v25...")
+    try:
+        cur = con.cursor()
+        
+        # Abilita componenti chiave per le statistiche
+        componenti_da_abilitare = [
+            'AuthView',
+            'AppController',
+            'DashboardView',
+            'WebAppController'
+        ]
+        
+        for comp in componenti_da_abilitare:
+            cur.execute("""
+                UPDATE Config_Logger 
+                SET abilitato = TRUE, livello_minimo = 'INFO'
+                WHERE componente = %s
+            """, (comp,))
+            
+            # Se non esiste (anche se dovrebbe), inseriscilo
+            if cur.rowcount == 0:
+                cur.execute("""
+                    INSERT INTO Config_Logger (componente, abilitato, livello_minimo)
+                    VALUES (%s, TRUE, 'INFO')
+                """, (comp,))
+
+        con.commit()
+        print("Migrazione a v25 completata con successo.")
+        return True
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v24 a v25: {e}")
+        try: con.rollback() 
+        except: pass
+        return False
+
+
 
 
 def _migra_da_v7_a_v8(con: sqlite3.Connection):
@@ -1046,6 +1087,11 @@ def migra_database(con, versione_vecchia=None, versione_nuova=None):
             if not _migra_da_v23_a_v24(con):
                  raise Exception("Migrazione da v23 a v24 fallita.")
             versione_vecchia = 24
+
+        if versione_vecchia == 24 and versione_nuova >= 25:
+            if not _migra_da_v24_a_v25(con):
+                 raise Exception("Migrazione da v24 a v25 fallita.")
+            versione_vecchia = 25
 
         # Se tutto è andato bene, aggiorna la versione del DB
         # Per Postgres usiamo InfoDB, per SQLite PRAGMA

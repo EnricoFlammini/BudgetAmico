@@ -15,7 +15,7 @@ DB_FILE = os.path.join(APP_DATA_DIR, 'budget_amico.db')
 
 # --- SCHEMA DATABASE ---
 # Versione 24: Aggiunta codici_univoci_enc a Utenti e Famiglie
-SCHEMA_VERSION = 24
+SCHEMA_VERSION = 25
 
 TABLES = {
     "Utenti": """

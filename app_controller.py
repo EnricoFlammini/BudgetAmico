@@ -242,6 +242,12 @@ class AppController:
             route_path = parsed_url.path
             query_params = {k: v[0] for k, v in parse_qs(parsed_url.query).items()}
 
+            # Log activity for registered users
+            id_utente = self.get_user_id()
+            id_famiglia = self.get_family_id()
+            if id_utente:
+                logger.info(f"[ACTIVITY] Route changed to: {route_path}", extra={'id_utente': id_utente, 'id_famiglia': id_famiglia})
+
             if query_params.get("token") and route_path == "/registrazione":
                 self._handle_registration_token(query_params["token"])
             elif route_path == "/":
@@ -883,7 +889,11 @@ class AppController:
                 self.page.go("/admin/login")
 
     def logout(self, e=None):
-        logger.info("User logged out")
+        id_utente = self.get_user_id()
+        if id_utente:
+            logger.info("User logged out", extra={'id_utente': id_utente, 'id_famiglia': self.get_family_id()})
+        else:
+            logger.info("User logged out (no active session)")
         self.page.session.clear()
         self.page.go("/")
 
