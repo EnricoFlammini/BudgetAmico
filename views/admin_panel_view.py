@@ -482,7 +482,7 @@ class AdminPanelView:
                     ft.Row([ft.Icon(icon, size=16), ft.Text(label, size=12, weight=ft.FontWeight.W_500)], spacing=5),
                     control
                 ], spacing=2, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                bgcolor=ft.Colors.SURFACE_VARIANT,
+                bgcolor=ft.Colors.BLUE_GREY_50,
                 padding=10,
                 border_radius=8,
                 width=140,
