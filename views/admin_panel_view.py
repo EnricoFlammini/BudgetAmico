@@ -502,7 +502,7 @@ class AdminPanelView:
         )
 
     def _build_access_stats_row(self):
-        return ft.Wrap([
+        return ft.Row([
             self.card_attivi_ora,
             self.card_24h,
             self.card_48h,
@@ -511,7 +511,7 @@ class AdminPanelView:
             self.card_30d,
             self.card_1y,
             self.card_all,
-        ], spacing=10, run_spacing=10, alignment=ft.MainAxisAlignment.START)
+        ], wrap=True, spacing=10, run_spacing=10, alignment=ft.MainAxisAlignment.START)
 
 
     def _build_users_tab_content(self):
