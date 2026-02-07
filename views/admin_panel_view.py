@@ -470,15 +470,23 @@ class AdminPanelView:
 
     def _init_access_stats_ui(self):
         self.stats_attivi_ora = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN)
-        self.stats_24h = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE)
-        self.stats_48h = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY)
-        self.stats_72h = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER)
+        self.stats_24h = ft.Text("0", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE)
+        self.stats_48h = ft.Text("0", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY)
+        self.stats_72h = ft.Text("0", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER)
+        self.stats_7d  = ft.Text("0", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.INDIGO)
+        self.stats_30d = ft.Text("0", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.PURPLE)
+        self.stats_1y  = ft.Text("0", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.DEEP_ORANGE)
+        self.stats_all = ft.Text("0", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.BROWN)
         
-        # Inizializza i container delle card per poterli aggiornare (es. tooltip)
+        # Inizializza i container delle card
         self.card_attivi_ora = self._stat_card("Attivi Ora", self.stats_attivi_ora, ft.Icons.WEB_OUTLINED)
-        self.card_24h = self._stat_card("Ultime 24h", self.stats_24h, ft.Icons.HISTORY)
-        self.card_48h = self._stat_card("Ultime 48h", self.stats_48h, ft.Icons.HISTORY)
-        self.card_72h = self._stat_card("Ultime 72h", self.stats_72h, ft.Icons.HISTORY)
+        self.card_24h = self._stat_card("24 Ore", self.stats_24h, ft.Icons.HISTORY)
+        self.card_48h = self._stat_card("48 Ore", self.stats_48h, ft.Icons.HISTORY)
+        self.card_72h = self._stat_card("72 Ore", self.stats_72h, ft.Icons.HISTORY)
+        self.card_7d  = self._stat_card("Settimana", self.stats_7d, ft.Icons.CALENDAR_MONTH)
+        self.card_30d = self._stat_card("Mese", self.stats_30d, ft.Icons.CALENDAR_MONTH)
+        self.card_1y  = self._stat_card("Anno", self.stats_1y, ft.Icons.CALENDAR_MONTH)
+        self.card_all = self._stat_card("Totale", self.stats_all, ft.Icons.ALL_INCLUSIVE)
 
     def _stat_card(self, label, control, icon, tooltip=None):
         return ft.Container(
@@ -494,12 +502,16 @@ class AdminPanelView:
         )
 
     def _build_access_stats_row(self):
-        return ft.Row([
+        return ft.Wrap([
             self.card_attivi_ora,
             self.card_24h,
             self.card_48h,
             self.card_72h,
-        ], spacing=10, alignment=ft.MainAxisAlignment.START)
+            self.card_7d,
+            self.card_30d,
+            self.card_1y,
+            self.card_all,
+        ], spacing=10, run_spacing=10, alignment=ft.MainAxisAlignment.START)
 
 
     def _build_users_tab_content(self):
@@ -544,6 +556,10 @@ class AdminPanelView:
             self.stats_24h.value = format_stat('24h')
             self.stats_48h.value = format_stat('48h')
             self.stats_72h.value = format_stat('72h')
+            self.stats_7d.value = format_stat('7d')
+            self.stats_30d.value = format_stat('30d')
+            self.stats_1y.value = format_stat('1y')
+            self.stats_all.value = format_stat('sempre')
             
             # Aggiorna il tooltip della prima card
             # (Lo facciamo dopo perché _build_access_stats_row usa il valore iniziale del tooltip)
