@@ -148,7 +148,7 @@ class DashboardView:
         """Gestisce il click su un elemento della sidebar."""
         # Get the label for logging
         label = self.sidebar_items[index]['label'] if index < len(self.sidebar_items) else f"index_{index}"
-        logger.info(f"[NAV] Tab clicked: '{label}' (index={index})")
+        logger.info(f"[NAV] Tab clicked: '{label}' (index={index})", extra={'id_utente': self.controller.get_user_id(), 'id_famiglia': self.controller.get_family_id()})
         
         self.selected_index = index
         self.content_area.content = view_instance

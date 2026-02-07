@@ -470,30 +470,35 @@ class AdminPanelView:
 
     def _init_access_stats_ui(self):
         self.stats_attivi_ora = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN)
-        self.stats_attivi_ora_tooltip = "Nessun utente attivo"
         self.stats_24h = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE)
         self.stats_48h = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY)
         self.stats_72h = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER)
+        
+        # Inizializza i container delle card per poterli aggiornare (es. tooltip)
+        self.card_attivi_ora = self._stat_card("Attivi Ora", self.stats_attivi_ora, ft.Icons.WEB_OUTLINED)
+        self.card_24h = self._stat_card("Ultime 24h", self.stats_24h, ft.Icons.HISTORY)
+        self.card_48h = self._stat_card("Ultime 48h", self.stats_48h, ft.Icons.HISTORY)
+        self.card_72h = self._stat_card("Ultime 72h", self.stats_72h, ft.Icons.HISTORY)
+
+    def _stat_card(self, label, control, icon, tooltip=None):
+        return ft.Container(
+            content=ft.Column([
+                ft.Row([ft.Icon(icon, size=16), ft.Text(label, size=12, weight=ft.FontWeight.W_500)], spacing=5),
+                control
+            ], spacing=2, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            bgcolor=ft.Colors.BLUE_GREY_50,
+            padding=10,
+            border_radius=8,
+            width=140,
+            tooltip=tooltip
+        )
 
     def _build_access_stats_row(self):
-        def stat_card(label, control, icon, tooltip=None):
-            return ft.Container(
-                content=ft.Column([
-                    ft.Row([ft.Icon(icon, size=16), ft.Text(label, size=12, weight=ft.FontWeight.W_500)], spacing=5),
-                    control
-                ], spacing=2, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                bgcolor=ft.Colors.BLUE_GREY_50,
-                padding=10,
-                border_radius=8,
-                width=140,
-                tooltip=tooltip
-            )
-
         return ft.Row([
-            stat_card("Attivi Ora", self.stats_attivi_ora, ft.Icons.WEB_OUTLINED, self.stats_attivi_ora_tooltip),
-            stat_card("Ultime 24h", self.stats_24h, ft.Icons.HISTORY),
-            stat_card("Ultime 48h", self.stats_48h, ft.Icons.HISTORY),
-            stat_card("Ultime 72h", self.stats_72h, ft.Icons.HISTORY),
+            self.card_attivi_ora,
+            self.card_24h,
+            self.card_48h,
+            self.card_72h,
         ], spacing=10, alignment=ft.MainAxisAlignment.START)
 
 
@@ -525,15 +530,27 @@ class AdminPanelView:
             
             attivi_list = [str(u) for u in stats.get('lista_attivi', []) if u]
             if attivi_list:
-                self.stats_attivi_ora_tooltip = "Utenti attivi:\n" + "\n".join(attivi_list)
+                tooltip_text = "Utenti attivi:\n" + "\n".join(attivi_list)
                 if stats.get('attivi_ora', 0) > len(attivi_list):
-                    self.stats_attivi_ora_tooltip += f"\n...e altri {stats['attivi_ora'] - len(attivi_list)}"
+                    tooltip_text += f"\n...e altri {stats['attivi_ora'] - len(attivi_list)}"
+                self.card_attivi_ora.tooltip = tooltip_text
             else:
-                self.stats_attivi_ora_tooltip = "Nessun utente attivo"
+                self.card_attivi_ora.tooltip = "Nessun utente attivo"
 
-            self.stats_24h.value = str(stats.get('24h', 0))
-            self.stats_48h.value = str(stats.get('48h', 0))
-            self.stats_72h.value = str(stats.get('72h', 0))
+            def format_stat(period):
+                s = stats.get(period, {'unici': 0, 'totali': 0})
+                return f"{s['unici']} / {s['totali']}"
+
+            self.stats_24h.value = format_stat('24h')
+            self.stats_48h.value = format_stat('48h')
+            self.stats_72h.value = format_stat('72h')
+            
+            # Aggiorna il tooltip della prima card
+            # (Lo facciamo dopo perché _build_access_stats_row usa il valore iniziale del tooltip)
+            # In realtà il tooltip è legato al Container, non al Text.
+            # Dobbiamo aggiornare il tooltip del Container se vogliamo che cambi dinamicamente.
+            # Ma Flet aggiorna il tooltip se cambiamo la proprietà tooltip della card.
+            # Vediamo come è costruita la card.
 
         # 1. Search Filter
         search_query = self.users_search.value.lower() if self.users_search.value else ""

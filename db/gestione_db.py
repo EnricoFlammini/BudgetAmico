@@ -272,54 +272,69 @@ def get_user_count():
         return -1
 
 
-def ottieni_statistiche_accessi() -> Dict[str, int]:
+def ottieni_statistiche_accessi() -> Dict[str, Any]:
     """
     Calcola le statistiche degli accessi basandoci sui log di sistema.
-    Restituisce: { 'attivi_ora': int, '24h': int, '48h': int, '72h': int }
+    Restituisce: { 
+        'attivi_ora': int, 
+        'lista_attivi': [str],
+        '24h': {'unici': int, 'totali': int},
+        '48h': {'unici': int, 'totali': int},
+        '72h': {'unici': int, 'totali': int}
+    }
     """
-    stats = {'attivi_ora': 0, '24h': 0, '48h': 0, '72h': 0, 'lista_attivi': []}
+    stats = {
+        'attivi_ora': 0, 
+        'lista_attivi': [],
+        '24h': {'unici': 0, 'totali': 0},
+        '48h': {'unici': 0, 'totali': 0},
+        '72h': {'unici': 0, 'totali': 0}
+    }
     try:
+        from db.gestione_db import decrypt_system_data
         with get_db_connection() as con:
             cur = con.cursor()
             
             # 1. Attivi ora (qualsiasi log negli ultimi 15 minuti) + Recupero nomi
+            # Usiamo un approccio più robusto per i nomi
             cur.execute("""
-                SELECT DISTINCT u.username
+                SELECT DISTINCT id_utente, 
+                       (SELECT username FROM Utenti WHERE id_utente = l.id_utente) as user_plain,
+                       (SELECT username_enc FROM Utenti WHERE id_utente = l.id_utente) as user_enc
                 FROM Log_Sistema l
-                JOIN Utenti u ON l.id_utente = u.id_utente
-                WHERE l.timestamp > NOW() - INTERVAL '15 minutes'
+                WHERE l.timestamp > CURRENT_TIMESTAMP - INTERVAL '15 minutes'
                 AND l.id_utente IS NOT NULL
             """)
-            attivi = [row['username'] for row in cur.fetchall() if row['username']]
-            stats['attivi_ora'] = len(attivi)
-            stats['lista_attivi'] = attivi[:5] # Mostriamo i primi 5
             
-            # 2. Accessi ultime 24h
-            cur.execute("""
-                SELECT COUNT(DISTINCT id_utente) as count 
-                FROM Log_Sistema 
-                WHERE (messaggio LIKE 'LOGIN RIUSCITO%' OR messaggio LIKE 'LOGIN RIUSCITO%') 
-                AND timestamp > NOW() - INTERVAL '24 hours'
-            """)
-            stats['24h'] = cur.fetchone()['count']
+            attivi_nomi = []
+            for row in cur.fetchall():
+                name = row['user_plain']
+                if not name and row['user_enc']:
+                    name = decrypt_system_data(row['user_enc'])
+                
+                if name:
+                    attivi_nomi.append(name)
+                else:
+                    attivi_nomi.append(f"User #{row['id_utente']}")
+
+            stats['attivi_ora'] = len(attivi_nomi)
+            stats['lista_attivi'] = attivi_nomi[:5]
             
-            # 3. Accessi ultime 48h
-            cur.execute("""
-                SELECT COUNT(DISTINCT id_utente) as count 
-                FROM Log_Sistema 
-                WHERE (messaggio LIKE 'LOGIN RIUSCITO%' OR messaggio LIKE 'LOGIN RIUSCITO%') 
-                AND timestamp > NOW() - INTERVAL '48 hours'
-            """)
-            stats['48h'] = cur.fetchone()['count']
-            
-            # 4. Accessi ultime 72h
-            cur.execute("""
-                SELECT COUNT(DISTINCT id_utente) as count 
-                FROM Log_Sistema 
-                WHERE (messaggio LIKE 'LOGIN RIUSCITO%' OR messaggio LIKE 'LOGIN RIUSCITO%') 
-                AND timestamp > NOW() - INTERVAL '72 hours'
-            """)
-            stats['72h'] = cur.fetchone()['count']
+            # Funzione helper per le query dei periodi
+            def get_period_stats(hours):
+                cur.execute("""
+                    SELECT COUNT(DISTINCT id_utente) as unici, COUNT(*) as totali
+                    FROM Log_Sistema 
+                    WHERE (messaggio LIKE 'LOGIN RIUSCITO%' OR messaggio LIKE '[NAV]%') 
+                    AND timestamp > CURRENT_TIMESTAMP - INTERVAL %s
+                """, (f'{hours} hours',))
+                res = cur.fetchone()
+                return {'unici': res['unici'] or 0, 'totali': res['totali'] or 0}
+
+            # 2. Accessi ultime 24h/48h/72h
+            stats['24h'] = get_period_stats(24)
+            stats['48h'] = get_period_stats(48)
+            stats['72h'] = get_period_stats(72)
             
         return stats
     except Exception as e:
