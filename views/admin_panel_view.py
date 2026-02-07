@@ -74,6 +74,7 @@ class AdminPanelView:
         self._init_config_tab_ui()
         self._init_db_stats_tab_ui()
         self._init_fop_tab_ui()
+        self._init_access_stats_ui()
 
     def _sort_datatable(self, e, table: ft.DataTable, data_list: list, update_method):
         """Helper generico per ordinare le tabelle."""
@@ -467,6 +468,33 @@ class AdminPanelView:
         )
         self._cached_users = []
 
+    def _init_access_stats_ui(self):
+        self.stats_attivi_ora = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN)
+        self.stats_24h = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE)
+        self.stats_48h = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY)
+        self.stats_72h = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER)
+
+    def _build_access_stats_row(self):
+        def stat_card(label, control, icon):
+            return ft.Container(
+                content=ft.Column([
+                    ft.Row([ft.Icon(icon, size=16), ft.Text(label, size=12, weight=ft.FontWeight.W_500)], spacing=5),
+                    control
+                ], spacing=2, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                bgcolor=ft.Colors.SURFACE_VARIANT,
+                padding=10,
+                border_radius=8,
+                width=140
+            )
+
+        return ft.Row([
+            stat_card("Attivi Ora", self.stats_attivi_ora, ft.Icons.WEB_OUTLINED),
+            stat_card("Ultime 24h", self.stats_24h, ft.Icons.HISTORY),
+            stat_card("Ultime 48h", self.stats_48h, ft.Icons.HISTORY),
+            stat_card("Ultime 72h", self.stats_72h, ft.Icons.HISTORY),
+        ], spacing=10, alignment=ft.MainAxisAlignment.START)
+
+
     def _build_users_tab_content(self):
         return ft.Container(
             content=ft.Column([
@@ -474,6 +502,8 @@ class AdminPanelView:
                     ft.Text("Gestione Utenti", size=20, weight=ft.FontWeight.BOLD),
                     ft.IconButton(icon=ft.Icons.REFRESH, tooltip="Ricarica Lista", on_click=lambda e: self._load_users_refresh())
                 ]),
+                self._build_access_stats_row(),
+                ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
                 ft.Row([self.users_search]),
                 ft.Container(content=self.users_table, expand=True, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8)
             ]),
@@ -482,10 +512,17 @@ class AdminPanelView:
 
     def _load_users(self, use_cache=False):
         # Lazy import to avoid circular dependency
-        from db.gestione_db import get_all_users
+        from db.gestione_db import get_all_users, ottieni_statistiche_accessi
         
         if not use_cache or not self._cached_users:
             self._cached_users = get_all_users()
+            
+            # Carica anche le statistiche degli accessi
+            stats = ottieni_statistiche_accessi()
+            self.stats_attivi_ora.value = str(stats.get('attivi_ora', 0))
+            self.stats_24h.value = str(stats.get('24h', 0))
+            self.stats_48h.value = str(stats.get('48h', 0))
+            self.stats_72h.value = str(stats.get('72h', 0))
 
         # 1. Search Filter
         search_query = self.users_search.value.lower() if self.users_search.value else ""
