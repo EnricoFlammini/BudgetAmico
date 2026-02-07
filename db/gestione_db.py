@@ -326,8 +326,8 @@ def ottieni_statistiche_accessi() -> Dict[str, Any]:
                     SELECT COUNT(DISTINCT id_utente) as unici, COUNT(*) as totali
                     FROM Log_Sistema 
                     WHERE (messaggio LIKE 'LOGIN RIUSCITO%' OR messaggio LIKE '[NAV]%') 
-                    AND timestamp > CURRENT_TIMESTAMP - INTERVAL %s
-                """, (f'{hours} hours',))
+                    AND timestamp > CURRENT_TIMESTAMP - (INTERVAL '1 hour' * %s)
+                """, (hours,))
                 res = cur.fetchone()
                 return {'unici': res['unici'] or 0, 'totali': res['totali'] or 0}
 
