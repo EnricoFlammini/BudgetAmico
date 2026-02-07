@@ -37,12 +37,12 @@ class TransactionDialog(ft.AlertDialog):
 
         # Controlli del dialogo
         self.txt_data_selezionata = ft.Text(size=16)
-        self.radio_tipo_transazione = ft.RadioGroup(content=ft.Row(wrap=True))
+        self.radio_tipo_transazione = ft.RadioGroup(content=ft.Row(wrap=True, spacing=5))
         self.txt_descrizione_dialog = ft.TextField()
         self.txt_importo_dialog = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
-        self.dd_conto_dialog = ft.Dropdown(expand=True)
-        self.dd_conto_destinazione_dialog = ft.Dropdown(expand=True, visible=False) # Nuovo per Giroconto
-        self.dd_sottocategoria_dialog = ft.Dropdown(expand=True)
+        self.dd_conto_dialog = ft.Dropdown()
+        self.dd_conto_destinazione_dialog = ft.Dropdown(visible=False) # Nuovo per Giroconto
+        self.dd_sottocategoria_dialog = ft.Dropdown()
         self.cb_importo_nascosto = ft.Checkbox(value=False)
         
         self.content = ft.Column(
@@ -60,7 +60,7 @@ class TransactionDialog(ft.AlertDialog):
                 self.dd_sottocategoria_dialog,
                 self.cb_importo_nascosto,
             ],
-            tight=True, height=450, width=350,
+            tight=True, scroll=ft.ScrollMode.AUTO, width=350,
         )
 
         self.actions = [
