@@ -1148,9 +1148,11 @@ def ottieni_totale_budget_storico(id_famiglia: str, anno: int, mese: int, master
         with get_db_connection() as con:
             cur = con.cursor()
             cur.execute("""
-                SELECT importo_limite, nome_categoria 
-                FROM Budget_Storico 
-                WHERE id_famiglia = %s AND anno = %s AND mese = %s
+                SELECT BS.importo_limite, C.nome_categoria 
+                FROM Budget_Storico BS
+                JOIN Sottocategorie S ON BS.id_sottocategoria = S.id_sottocategoria
+                JOIN Categorie C ON S.id_categoria = C.id_categoria
+                WHERE BS.id_famiglia = %s AND BS.anno = %s AND BS.mese = %s
             """, (id_famiglia, anno, mese))
             
             rows = cur.fetchall()

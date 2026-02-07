@@ -6,6 +6,9 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.48.01 (07/02/2026)
+- **Fix Database**: Risolto errore `42703` (column "nome_categoria" does not exist) nella funzione `ottieni_totale_budget_storico` tramite l'aggiunta delle JOIN corrette con Categorie e Sottocategorie.
+
 ### v0.48.00 (06/02/2026)
 - **Sicurezza & Privacy**:
     - **Password Complexity**: Requisiti password ora configurabili dal Pannello Admin.

@@ -1,4 +1,4 @@
-# Manuale Completo Budget Amico v0.48.00
+# Manuale Completo Budget Amico v0.48.01
 
 ## Indice
 
@@ -190,5 +190,5 @@ Per bug o richieste funzionalità, riferirsi al canale GitHub ufficiale del prog
 
 ---
 
-*Budget Amico - *Versione documento: 0.48.00*
+*Budget Amico - *Versione documento: 0.48.01*
 *Sviluppato con ❤️ da Iscavar79*
