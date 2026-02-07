@@ -39,7 +39,8 @@ class InvestimentoDialog(ft.AlertDialog):
                 self.borsa_default
             ],
             tight=True,
-            width=400
+            scroll=ft.ScrollMode.AUTO,
+            width=350
         )
 
         self.actions = [

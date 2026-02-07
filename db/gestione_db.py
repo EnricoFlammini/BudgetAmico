@@ -31,6 +31,21 @@ SERVER_SECRET_KEY = os.getenv("SERVER_SECRET_KEY")
 if not SERVER_SECRET_KEY:
     logger.warning("SERVER_SECRET_KEY not found in .env. Password recovery via email will not work for new encrypted data.")
 
+# --- Helpers ---
+def _valida_id_int(val):
+    """
+    Converte il valore in intero se possibile, altrimenti restituisce None.
+    Utile per evitare 'invalid input syntax for type integer: ""' in SQL.
+    """
+    if val is None: return None
+    if isinstance(val, int): return val
+    if isinstance(val, str):
+        v_stripped = val.strip()
+        if v_stripped == "" or not v_stripped.isdigit():
+            return None
+        return int(v_stripped)
+    return None
+
 # --- System Key Helpers ---
 def _get_system_keys():
     if not SERVER_SECRET_KEY: return None, None
@@ -2765,6 +2780,8 @@ def elimina_conto(id_conto: str) -> bool:
 
 # --- Funzioni Categorie ---
 def ottieni_categorie(id_famiglia: str, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> List[Dict[str, Any]]:
+    id_famiglia = _valida_id_int(id_famiglia)
+    if not id_famiglia: return []
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -4198,6 +4215,8 @@ def ottieni_dettagli_conto_condiviso(id_conto_condiviso, master_key_b64: Optiona
         return []
 
 def ottieni_utenti_famiglia(id_famiglia):
+    id_famiglia = _valida_id_int(id_famiglia)
+    if not id_famiglia: return []
     try:
         with get_db_connection() as con:
             # con.row_factory = sqlite3.Row # Removed for Supabase
@@ -4360,6 +4379,10 @@ def ottieni_tutti_i_conti_famiglia(id_famiglia, id_utente_richiedente, master_ke
 _family_key_cache = {}
 
 def _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto):
+    id_famiglia = _valida_id_int(id_famiglia)
+    id_utente = _valida_id_int(id_utente)
+    if not id_famiglia or not id_utente: return None
+
     # Check cache first
     cache_key = (id_famiglia, id_utente)
     if cache_key in _family_key_cache:
@@ -8156,6 +8179,8 @@ def ottieni_backup_completo_famiglia(id_famiglia, master_key_b64=None, id_utente
 
 
 def ottieni_prima_famiglia_utente(id_utente):
+    id_utente = _valida_id_int(id_utente)
+    if not id_utente: return None
     try:
         with get_db_connection() as con:
             cur = con.cursor()

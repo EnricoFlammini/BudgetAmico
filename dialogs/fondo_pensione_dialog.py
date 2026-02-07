@@ -80,7 +80,7 @@ class FondoPensioneDialog(ft.AlertDialog):
                 [self.btn_versa_da_conto, self.btn_versa_esterno, self.btn_preleva],
                 alignment=ft.MainAxisAlignment.SPACE_AROUND
             )
-        ], spacing=15, tight=True)
+        ], spacing=15, tight=True, scroll=ft.ScrollMode.AUTO, width=350)
 
         if self not in self.controller.page.overlay:
             self.controller.page.overlay.append(self)

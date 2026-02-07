@@ -61,8 +61,7 @@ class AccountTransactionsDialog(ft.AlertDialog):
                     self.txt_totale,
                     AppStyles.small_text("Include solo transazioni registrate, non i giroconti interni.")
                 ],
-                width=500,
-                height=500,
+                width=350,
                 scroll=ft.ScrollMode.AUTO
             ),
             actions=[
@@ -205,10 +204,9 @@ class AccountTransactionsDialog(ft.AlertDialog):
             title=ft.Text("Modifica Transazione"),
             content=ft.Column([
                 row_data,
-                self.txt_mod_desc,
                 self.txt_mod_importo,
                 AppStyles.small_text("Attenzione: Modificare l'importo non aggiorna automaticamente i saldi degli asset, solo il saldo del conto.")
-            ], tight=True, height=250),
+            ], tight=True, scroll=ft.ScrollMode.AUTO),
             actions=[
                 ft.TextButton("Annulla", on_click=self._chiudi_dialog_modifica),
                 ft.TextButton("Salva", on_click=self._salva_modifica)

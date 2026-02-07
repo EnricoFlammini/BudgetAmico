@@ -114,6 +114,11 @@ class TransactionDialog(ft.AlertDialog):
     def _popola_dropdowns(self):
         utente_id = self.controller.get_user_id()
         famiglia_id = self.controller.get_family_id()
+        
+        if not famiglia_id or str(famiglia_id).strip() == "":
+            logger.warning("[DIALOG] _popola_dropdowns: Missing famiglia_id, skipping DB calls.")
+            return
+
         master_key_b64 = self.controller.page.session.get("master_key")
 
         # 0. Recupera Matrice FOP Globale
@@ -280,7 +285,11 @@ class TransactionDialog(ft.AlertDialog):
             if self not in self.controller.page.overlay:
                 self.controller.page.overlay.append(self)
             self.open = True
-            if self.controller.page: self.controller.page.update()
+            if self.controller.page:
+                try:
+                    self.controller.page.update()
+                except Exception as e:
+                    logger.error(f"Errore update pagina (nuova transazione): {e}")
         except Exception as ex:
             logger.error(f"Errore apertura dialog nuova transazione: {ex}")
             traceback.print_exc()
@@ -318,7 +327,11 @@ class TransactionDialog(ft.AlertDialog):
             if self not in self.controller.page.overlay:
                 self.controller.page.overlay.append(self)
             self.open = True
-            if self.controller.page: self.controller.page.update()
+            if self.controller.page:
+                try:
+                    self.controller.page.update()
+                except Exception as e:
+                    logger.error(f"Errore update pagina (modifica transazione): {e}")
         except Exception as ex:
             logger.error(f"Errore apertura dialog modifica transazione: {ex}")
             traceback.print_exc()

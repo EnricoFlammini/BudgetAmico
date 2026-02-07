@@ -35,8 +35,7 @@ class CardTransactionsDialog(ft.AlertDialog):
                     ft.Divider(),
                     self.txt_totale
                 ],
-                width=500,
-                height=500,
+                width=350,
                 scroll=ft.ScrollMode.AUTO
             ),
             actions=[

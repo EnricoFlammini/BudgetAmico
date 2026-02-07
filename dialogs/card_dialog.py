@@ -116,7 +116,7 @@ class CardDialog:
                 self.txt_soglia_azzeramento,
                 ft.Divider(),
                 self.credit_fields
-            ], width=450, scroll=ft.ScrollMode.AUTO, height=600),
+            ], width=350, scroll=ft.ScrollMode.AUTO),
             actions=[
                 ft.TextButton("Annulla", on_click=self._close),
                 ft.ElevatedButton("Salva", on_click=self._save)

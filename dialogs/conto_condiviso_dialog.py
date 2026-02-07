@@ -48,9 +48,8 @@ class ContoCondivisoDialog(ft.AlertDialog):
             ],
             tight=True,
             spacing=10,
-            height=500,
-            width=600,
-            scroll=ft.ScrollMode.ADAPTIVE
+            width=350,
+            scroll=ft.ScrollMode.AUTO
         )
         self.actions = [
             ft.TextButton(on_click=self._chiudi_dialog),

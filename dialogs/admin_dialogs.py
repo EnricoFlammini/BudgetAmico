@@ -67,7 +67,7 @@ class AdminDialogs:
         self.dialog_invito_membri = ft.AlertDialog(
             modal=True,
             title=ft.Text(self.loc.get("invite_member")),
-            content=ft.Column([self.txt_username_o_email, self.dd_ruolo], tight=True),
+            content=ft.Column([self.txt_username_o_email, self.dd_ruolo], tight=True, scroll=ft.ScrollMode.AUTO, width=350),
             actions=[
                 ft.TextButton(self.loc.get("cancel"), on_click=self._chiudi_dialog_invito),
                 ft.TextButton(self.loc.get("invite"), on_click=self._invita_membro_cliccato),
@@ -105,7 +105,7 @@ class AdminDialogs:
         self.dialog_imposta_budget = ft.AlertDialog(
             modal=True,
             title=ft.Text(self.loc.get("set_monthly_budget")),
-            content=ft.Column([self.dd_budget_sottocategorie, self.txt_budget_limite], tight=True),
+            content=ft.Column([self.dd_budget_sottocategorie, self.txt_budget_limite], tight=True, scroll=ft.ScrollMode.AUTO, width=350),
             actions=[
                 ft.TextButton(self.loc.get("cancel"), on_click=self._chiudi_dialog_imposta_budget),
                 ft.TextButton(self.loc.get("save"), on_click=self._salva_budget_cliccato),

@@ -7,6 +7,13 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 ## 📅 Changelog
 
 ### v0.49.00 (07/02/2026)
+- **Ottimizzazione Mobile**: Revisione globale di tutti i dialoghi (15+) per garantire una corretta visualizzazione su smartphone:
+    - Introdotto scrolling automatico per prevenire overflow con la tastiera attiva.
+    - Rimosse altezze fisse e vincoli di espansione che causavano schiacciamento della UI.
+    - Standardizzata larghezza a 350px per massima compatibilità.
+- **Fix & Stabilità**:
+    - **PostgreSQL**: Risolto errore di sintassi (`22P02`) per tipi integer tramite sanificazione automatica degli ID (conversione stringhe vuote in NULL).
+    - **Flet Stability**: Introdotto error handling negli aggiornamenti UI dei dialoghi per prevenire crash (`AssertionError`) in scenari di sessione instabile.
 - **Admin Panel**: Aggiunte statistiche di accesso (utenti attivi ora, accessi ultime 24h, 48h, 72h) nel portale admin.
 
 ### v0.48.01 (07/02/2026)

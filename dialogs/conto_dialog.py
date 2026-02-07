@@ -55,9 +55,8 @@ class ContoDialog(ft.AlertDialog):
                     ft.Divider(),
                     AppStyles.subheader_text("Salvadanai Associati"),
                     self.container_pb_rettifica
-                ], tight=True),
-                width=400,
-                height=400
+                ], tight=True, scroll=ft.ScrollMode.AUTO),
+                width=350,
             ),
             actions=[
                 ft.TextButton("Annulla", on_click=self._chiudi_dialog_rettifica),
@@ -142,9 +141,8 @@ class ContoDialog(ft.AlertDialog):
             ],
             tight=True,
             spacing=10,
-            height=550,
-            width=650,
-            scroll=ft.ScrollMode.ADAPTIVE
+            width=350,
+            scroll=ft.ScrollMode.AUTO
         )
         self.actions = [
             ft.TextButton(on_click=self._chiudi_dialog_conto),

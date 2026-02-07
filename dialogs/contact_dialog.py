@@ -81,7 +81,7 @@ class ContactDialog(ft.AlertDialog):
                 ft.Divider(),
                 self.dd_condivisione,
                 self.col_selezione_utenti
-            ], tight=True, scroll=ft.ScrollMode.AUTO, height=500),
+            ], tight=True, scroll=ft.ScrollMode.AUTO, width=350),
             actions=[
                 ft.TextButton("Annulla", on_click=self._close),
                 ft.TextButton("Salva", on_click=self._save),

@@ -86,7 +86,7 @@ class PrestitoDialogs:
                     ft.Text("Ripartizione Quote di Competenza", weight=ft.FontWeight.BOLD),
                     self.container_quote
                 ],
-                tight=True, spacing=10, height=600, width=500, scroll=ft.ScrollMode.ADAPTIVE
+                tight=True, spacing=10, width=350, scroll=ft.ScrollMode.AUTO
             ),
             actions=[
                 ft.TextButton(on_click=self._chiudi_dialog_prestito),
@@ -107,7 +107,7 @@ class PrestitoDialogs:
             content=ft.Column([
                 self.txt_importo_pagamento, self.txt_data_pagamento,
                 self.dd_conto_pagamento, self.dd_sottocategoria_pagamento
-            ], tight=True, spacing=10),
+            ], tight=True, spacing=10, scroll=ft.ScrollMode.AUTO, width=350),
             actions=[
                 ft.TextButton(on_click=self._chiudi_dialog_paga_rata),
                 ft.TextButton(on_click=self._esegui_pagamento_cliccato)

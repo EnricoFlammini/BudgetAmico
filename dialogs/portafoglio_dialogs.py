@@ -41,8 +41,8 @@ class PortafoglioDialogs:
                     self.txt_gain_loss_totale
                 ], alignment=ft.MainAxisAlignment.SPACE_AROUND),
                 ft.Divider(),
-                ft.Column([self.dt_portafoglio], scroll=ft.ScrollMode.ADAPTIVE, expand=True)
-            ], width=1100, height=600),
+                ft.Column([self.dt_portafoglio], scroll=ft.ScrollMode.AUTO, expand=True)
+            ], width=350),
             actions=[
                 ft.TextButton(on_click=self._chiudi_dialog_portafoglio),
                 ft.ElevatedButton(icon=ft.Icons.ADD_BOX, text=self.loc.get("add_existing_asset"), on_click=self._apri_dialog_asset_esistente),
@@ -95,7 +95,7 @@ class PortafoglioDialogs:
                 self.txt_prezzo_unitario,
                 self.dd_conto_transazione,
                 self.radio_operazione
-            ], tight=True, spacing=10, height=520, width=420),
+            ], tight=True, spacing=10, scroll=ft.ScrollMode.AUTO, width=350),
             actions=[
                 ft.TextButton(on_click=self._chiudi_dialog_operazione),
                 ft.TextButton(on_click=self._salva_operazione)
@@ -137,7 +137,7 @@ class PortafoglioDialogs:
                 self.ticker_search_modifica,
                 self.txt_modifica_quantita,
                 self.txt_modifica_prezzo_medio
-            ], tight=True, width=400),
+            ], tight=True, scroll=ft.ScrollMode.AUTO, width=350),
             actions=[
                 ft.TextButton(on_click=self._chiudi_dialog_modifica_asset),
                 ft.TextButton(on_click=self._salva_modifica_asset)
@@ -167,7 +167,7 @@ class PortafoglioDialogs:
                 self.txt_quantita_esistente,
                 self.txt_prezzo_medio_acquisto,
                 self.txt_valore_attuale_unitario
-            ], tight=True, spacing=10, height=450, width=420),
+            ], tight=True, spacing=10, scroll=ft.ScrollMode.AUTO, width=350),
             actions=[
                 ft.TextButton(on_click=self._chiudi_dialog_asset_esistente),
                 ft.TextButton(on_click=self._salva_asset_esistente)
@@ -310,7 +310,7 @@ class PortafoglioDialogs:
             self.txt_prezzo_unitario,
             self.dd_conto_transazione,
             self.radio_operazione
-        ], tight=True, spacing=10, height=520, width=420)
+        ], tight=True, spacing=10, scroll=ft.ScrollMode.AUTO, width=350)
         
         self.dialog_operazione_asset.actions = [
             ft.TextButton(on_click=self._chiudi_dialog_operazione),
@@ -674,7 +674,7 @@ class PortafoglioDialogs:
             self.txt_quantita_esistente,
             self.txt_prezzo_medio_acquisto,
             self.txt_valore_attuale_unitario
-        ], tight=True, spacing=10, height=450, width=420)
+        ], tight=True, spacing=10, scroll=ft.ScrollMode.AUTO, width=350)
         
         # Sostituisco le azioni
         self.dialog_operazione_asset.actions = [

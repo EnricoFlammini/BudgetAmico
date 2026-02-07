@@ -65,9 +65,8 @@ class SpesaFissaDialog(ft.AlertDialog):
             ],
             tight=True,
             spacing=10,
-            height=550, # Increased height
-            width=500,
-            scroll=ft.ScrollMode.ADAPTIVE
+            width=350,
+            scroll=ft.ScrollMode.AUTO
         )
 
         self.actions = [
