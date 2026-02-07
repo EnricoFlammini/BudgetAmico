@@ -6,6 +6,9 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.49.00 (07/02/2026)
+- **Admin Panel**: Aggiunte statistiche di accesso (utenti attivi ora, accessi ultime 24h, 48h, 72h) nel portale admin.
+
 ### v0.48.01 (07/02/2026)
 - **Fix Database**: Risolto errore `42703` (column "nome_categoria" does not exist) nella funzione `ottieni_totale_budget_storico` tramite l'aggiunta delle JOIN corrette con Categorie e Sottocategorie.
 

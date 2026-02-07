@@ -1,4 +1,4 @@
-# Guida Rapida Budget Amico v0.48.01
+# Guida Rapida Budget Amico v0.49.00
 
 ## Benvenuto in Budget Amico! 🎉
 
@@ -141,5 +141,5 @@ Personalizza lingua, valuta e altre preferenze nella sezione **"Impostazioni"**.
 
 ---
 
-*Budget Amico - *Versione documento: 0.48.01*
+*Budget Amico - *Versione documento: 0.49.00*
 *Sviluppato da Iscavar79*
