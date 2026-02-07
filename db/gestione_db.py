@@ -4448,6 +4448,10 @@ def _get_key_for_transaction(id_conto, master_key, crypto):
     return master_key
 
 def aggiungi_transazione(id_conto, data, descrizione, importo, id_sottocategoria=None, cursor=None, master_key_b64=None, importo_nascosto=False, id_carta=None):
+    # Sanificazione parametri integer per evitare errori SQL 22P02
+    id_sottocategoria = _valida_id_int(id_sottocategoria)
+    id_carta = _valida_id_int(id_carta)
+
     # Encrypt if key available using Family Key if possible (for shared visibility)
     crypto, master_key = _get_crypto_and_key(master_key_b64)
     encryption_key = _get_key_for_transaction(id_conto, master_key, crypto)
@@ -4490,6 +4494,10 @@ def aggiungi_transazione(id_conto, data, descrizione, importo, id_sottocategoria
 
 
 def modifica_transazione(id_transazione, data, descrizione, importo, id_sottocategoria=None, id_conto=None, master_key_b64=None, importo_nascosto=False, id_carta=None):
+    # Sanificazione parametri integer per evitare errori SQL 22P02
+    id_sottocategoria = _valida_id_int(id_sottocategoria)
+    id_carta = _valida_id_int(id_carta)
+
     # Encrypt if key available using Family Key if possible (for shared visibility)
     crypto, master_key = _get_crypto_and_key(master_key_b64)
     encryption_key = _get_key_for_transaction(id_conto, master_key, crypto)
@@ -5203,6 +5211,10 @@ def ottieni_transazioni_utente(id_utente, anno, mese, master_key_b64=None):
 
 
 def aggiungi_transazione_condivisa(id_utente_autore, id_conto_condiviso, data, descrizione, importo, id_sottocategoria=None, cursor=None, master_key_b64=None, importo_nascosto=False, id_carta=None):
+    # Sanificazione parametri integer per evitare errori SQL 22P02
+    id_sottocategoria = _valida_id_int(id_sottocategoria)
+    id_carta = _valida_id_int(id_carta)
+
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
     
@@ -5248,6 +5260,10 @@ def aggiungi_transazione_condivisa(id_utente_autore, id_conto_condiviso, data, d
 
 
 def modifica_transazione_condivisa(id_transazione_condivisa, data, descrizione, importo, id_sottocategoria=None, master_key_b64=None, id_utente=None, importo_nascosto=False, id_carta=None):
+    # Sanificazione parametri integer per evitare errori SQL 22P02
+    id_sottocategoria = _valida_id_int(id_sottocategoria)
+    id_carta = _valida_id_int(id_carta)
+
     # Encrypt if key available
     crypto, master_key = _get_crypto_and_key(master_key_b64)
     
@@ -7468,10 +7484,10 @@ def aggiorna_prezzo_asset(id_asset, nuovo_prezzo):
 
 # --- Funzioni Giroconti ---
 def esegui_giroconto(id_conto_origine, id_conto_destinazione, importo, data, descrizione=None, master_key_b64=None, tipo_origine="personale", tipo_destinazione="personale", id_utente_autore=None, id_famiglia=None):
-    """
-    Esegue un giroconto tra conti personali e/o condivisi.
-    tipo_origine/tipo_destinazione: "personale" o "condiviso"
-    """
+    # Sanificazione parametri integer
+    id_conto_origine = _valida_id_int(id_conto_origine)
+    id_conto_destinazione = _valida_id_int(id_conto_destinazione)
+    
     if not descrizione:
         descrizione = "Giroconto"
     
@@ -9995,10 +10011,10 @@ def esegui_giroconto_salvadanaio(
     id_famiglia: Optional[str] = None,
     parent_is_shared: bool = False # New flag
 ) -> bool:
-    """
-    Gestisce il trasferimento di fondi tra un Conto e un suo Salvadanaio.
-    Supports Personal and Shared accounts.
-    """
+    # Sanificazione parametri integer
+    id_conto = _valida_id_int(id_conto)
+    id_salvadanaio = _valida_id_int(id_salvadanaio)
+
     if not data: data = datetime.date.today().strftime('%Y-%m-%d')
     if not descrizione: descrizione = "Giroconto Salvadanaio"
     

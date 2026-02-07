@@ -238,7 +238,10 @@ class TransactionDialog(ft.AlertDialog):
         self.dd_conto_dialog.label = self.loc.get("from_account", "Da Conto") if is_giroconto else self.loc.get("account")
         
         if self.page and e is not None:
-             self.page.update()
+            try:
+                self.page.update()
+            except Exception as ex:
+                logger.error(f"Errore update pagina (_on_tipo_transazione_change): {ex}")
 
     def _reset_campi(self):
         self.txt_descrizione_dialog.error_text = None
@@ -381,6 +384,13 @@ class TransactionDialog(ft.AlertDialog):
             
             # Gestione speciale per "Interessi"
             id_sottocategoria_raw = self.dd_sottocategoria_dialog.value if tipo != "Giroconto" else None
+            
+            # Sanificazione id_sottocategoria: assicura che sia int o None, mai ""
+            if id_sottocategoria_raw == "" or id_sottocategoria_raw is None:
+                id_sottocategoria_raw = None
+            elif str(id_sottocategoria_raw).isdigit():
+                id_sottocategoria_raw = int(id_sottocategoria_raw)
+
             is_interessi = (id_sottocategoria_raw == "INTERESSI")
             
             if is_interessi:
