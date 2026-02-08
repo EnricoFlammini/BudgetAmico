@@ -1,4 +1,4 @@
-# Budget Amico v0.49.00
+# Budget Amico v.0.50 (Sviluppo)
 
 <!-- Sostituisci con un URL a un'icona/logo se ne hai uno -->
 
@@ -6,6 +6,16 @@
 
 
 > Il tuo assistente personale per la gestione delle finanze familiari. Semplice, sicuro, multipiattaforma. Web App in Python con framework Flet.
+
+---
+
+## 🛠️ Ciclo di Sviluppo e Branching
+
+Per garantire la stabilità della versione in produzione e permettere lo sviluppo di nuove funzionalità, seguiamo questo workflow Git:
+
+-   **Branch `main`**: Contiene la versione stabile in produzione. Solo hotfix urgenti vengono applicati qui.
+-   **Branch di Versione (es. `v.0.50`)**: Branch dedicato allo sviluppo della nuova versione. Tutte le nuove feature e refactoring avvengono qui.
+-   **Sincronizzazione**: Le correzioni apportate su `main` devono essere regolarmente riportate sul branch di sviluppo tramite `git merge main`.
 
 ---
 
