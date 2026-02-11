@@ -833,6 +833,7 @@ class ContoDialog(ft.AlertDialog):
             new_conto_id = None
 
             # --- SALVATAGGIO ---
+            print(f"[DEBUG] Saving Account {self.conto_id_in_modifica}. Icon: {self.selected_icon_value}, Color: {self.selected_color_value}")
             if is_shared:
                 # -- SHARED ACCOUNT LOGIC --
                 if self.conto_id_in_modifica:
