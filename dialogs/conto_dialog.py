@@ -570,7 +570,9 @@ class ContoDialog(ft.AlertDialog):
 
     def _chiudi_dialog_conto(self, e):
         print("[DEBUG] _chiudi_dialog_conto called")
-        self.controller.page.close(self)
+        self.open = False
+        if self in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self)
         self.controller.page.update()
 
     def apri_dialog_conto(self, e, conto_data=None, escludi_investimento=False, is_shared_edit=False, shared_default=False):

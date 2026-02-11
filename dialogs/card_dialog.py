@@ -210,7 +210,9 @@ class CardDialog:
 
     def _close(self, e):
         print("[DEBUG] Closing CardDialog")
-        self.page.close(self.dlg)
+        self.dlg.open = False
+        if self.dlg in self.page.overlay:
+            self.page.overlay.remove(self.dlg)
         self.page.update()
 
     def _save(self, e):

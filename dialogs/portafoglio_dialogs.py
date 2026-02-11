@@ -263,13 +263,10 @@ class PortafoglioDialogs:
         self.controller.page.update()
 
     def _chiudi_dialog_portafoglio(self, e):
-        try:
-            self.controller.page.close(self.dialog_portafoglio)
-            self.controller.page.update()
-        except Exception as ex:
-            print(f"Errore chiusura dialog portafoglio: {ex}")
-            import traceback
-            traceback.print_exc()
+        self.dialog_portafoglio.open = False
+        if self.dialog_portafoglio in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_portafoglio)
+        self.controller.page.update()
 
     def _aggiorna_tabella_portafoglio(self):
         loc = self.loc
@@ -377,13 +374,10 @@ class PortafoglioDialogs:
         self.controller.page.update()
 
     def _chiudi_dialog_operazione(self, e):
-        try:
-            self.controller.page.close(self.dialog_operazione_asset)
-            self.controller.page.update()
-        except Exception as ex:
-            print(f"Errore chiusura dialog operazione: {ex}")
-            import traceback
-            traceback.print_exc()
+        self.dialog_operazione_asset.open = False
+        if self.dialog_operazione_asset in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_operazione_asset)
+        self.controller.page.update()
 
     def _on_asset_selezionato(self, e):
         """Chiamato quando un asset viene selezionato dal dropdown."""
@@ -574,13 +568,10 @@ class PortafoglioDialogs:
         self.controller.page.update()
 
     def _chiudi_dialog_aggiorna_prezzo(self, e):
-        try:
-            self.controller.page.close(self.dialog_aggiorna_prezzo)
-            self.controller.page.update()
-        except Exception as ex:
-            print(f"Errore chiusura dialog aggiorna prezzo: {ex}")
-            import traceback
-            traceback.print_exc()
+        self.dialog_aggiorna_prezzo.open = False
+        if self.dialog_aggiorna_prezzo in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_aggiorna_prezzo)
+        self.controller.page.update()
 
     def _salva_nuovo_prezzo(self, e):
         try:
@@ -610,13 +601,10 @@ class PortafoglioDialogs:
         self.controller.page.update()
 
     def _chiudi_dialog_modifica_asset(self, e):
-        try:
-            self.controller.page.close(self.dialog_modifica_asset)
-            self.controller.page.update()
-        except Exception as ex:
-            print(f"Errore chiusura dialog modifica asset: {ex}")
-            import traceback
-            traceback.print_exc()
+        self.dialog_modifica_asset.open = False
+        if self.dialog_modifica_asset in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_modifica_asset)
+        self.controller.page.update()
 
     def _salva_modifica_asset(self, e):
         # Usa txt se settato (da autocomplete), altrimenti dal campo search
@@ -648,7 +636,9 @@ class PortafoglioDialogs:
     def _elimina_asset_click(self, e):
         asset = e.control.data
         def on_confirm_delete(e_confirm):
-            self.controller.page.close(dlg_confirm)
+            dlg_confirm.open = False
+        if dlg_confirm in self.controller.page.overlay:
+            self.controller.page.overlay.remove(dlg_confirm)
             if elimina_asset(asset['id_asset']):
                 self.controller.db_write_operation()
                 self._aggiorna_tabella_portafoglio()
@@ -657,7 +647,9 @@ class PortafoglioDialogs:
                 self.controller.show_snack_bar("Errore durante l'eliminazione asset.", success=False)
 
         def on_cancel_delete(e_cancel):
-            self.controller.page.close(dlg_confirm)
+            dlg_confirm.open = False
+        if dlg_confirm in self.controller.page.overlay:
+            self.controller.page.overlay.remove(dlg_confirm)
 
         dlg_confirm = ft.AlertDialog(
             modal=True,
@@ -707,13 +699,10 @@ class PortafoglioDialogs:
         self.controller.page.update()
 
     def _chiudi_dialog_asset_esistente(self, e):
-        try:
-            self.controller.page.close(self.dialog_operazione_asset)
-            self.controller.page.update()
-        except Exception as ex:
-            print(f"Errore chiusura dialog asset esistente: {ex}")
-            import traceback
-            traceback.print_exc()
+        self.dialog_operazione_asset.open = False
+        if self.dialog_operazione_asset in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self.dialog_operazione_asset)
+        self.controller.page.update()
 
     def _salva_asset_esistente(self, e):
         try:
