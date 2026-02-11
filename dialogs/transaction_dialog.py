@@ -129,8 +129,8 @@ class TransactionDialog(ft.AlertDialog):
         )
 
         self.actions = [
-            ft.TextButton(on_click=self.chiudi_dialog),
-            ft.TextButton(on_click=self._salva_nuova_transazione),
+            ft.TextButton(text="Annulla", on_click=self.chiudi_dialog),
+            ft.ElevatedButton(text="Salva", icon=ft.Icons.SAVE, on_click=self._salva_nuova_transazione),
         ]
         self.actions_alignment = ft.MainAxisAlignment.END
 
@@ -200,7 +200,8 @@ class TransactionDialog(ft.AlertDialog):
             self.selected_dest_name.color = ft.Colors.ON_SURFACE
             self.dd_conto_destinazione_dialog.value = key
             self.lbl_error_dest.visible = False
-            self.pm_dest.update()
+            if self.pm_dest.page:
+                self.pm_dest.update()
         else:
             self.selected_account_key = key
             self.selected_account_data = account_data
@@ -220,7 +221,8 @@ class TransactionDialog(ft.AlertDialog):
             
             self.selected_account_name.color = ft.Colors.ON_SURFACE
             self.lbl_error_conto.visible = False
-            self.pm_conto.update()
+            if self.pm_conto.page:
+                self.pm_conto.update()
             
             # Sincronizza con il dropdown nascosto per non rompere la logica esistente
             self.dd_conto_dialog.value = key
@@ -893,7 +895,8 @@ class TransactionDialog(ft.AlertDialog):
         save_btn.text = "Salvataggio..."
         save_btn.disabled = True
         cancel_btn.disabled = True
-        self.update()
+        if self.page:
+            self.update()
 
         try:
             dati_validati = self._valida_e_raccogli_dati()
@@ -902,7 +905,8 @@ class TransactionDialog(ft.AlertDialog):
                 save_btn.text = original_text
                 save_btn.disabled = False
                 cancel_btn.disabled = False
-                self.update()
+                if self.page:
+                    self.update()
                 return
 
             transazione_in_modifica = self.controller.page.session.get("transazione_in_modifica")
@@ -966,7 +970,8 @@ class TransactionDialog(ft.AlertDialog):
                 save_btn.text = original_text
                 save_btn.disabled = False
                 cancel_btn.disabled = False
-                self.update()
+                if self.page:
+                    self.update()
 
         except Exception as ex:
             logger.error(f"Errore salvataggio transazione: {ex}")

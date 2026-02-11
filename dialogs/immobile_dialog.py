@@ -46,8 +46,8 @@ class ImmobileDialog(ft.AlertDialog):
             scroll=ft.ScrollMode.AUTO
         )
         self.actions = [
-            ft.TextButton(on_click=self.chiudi_dialog),
-            ft.TextButton(on_click=self.salva_immobile),
+            ft.TextButton(text="Annulla", on_click=self.chiudi_dialog),
+            ft.ElevatedButton(text="Salva", icon=ft.Icons.SAVE, on_click=self.salva_immobile),
         ]
         self.actions_alignment = ft.MainAxisAlignment.END
 
@@ -190,7 +190,8 @@ class ImmobileDialog(ft.AlertDialog):
             self.txt_nome.error_text = self.loc.get("fill_all_fields") if not self.txt_nome.value else None
             self.txt_valore_attuale.error_text = self.loc.get(
                 "fill_all_fields") if not self.txt_valore_attuale.value else None
-            self.content.update()
+            if self.content.page:
+                self.content.update()
             return
 
         try:
@@ -245,7 +246,8 @@ class ImmobileDialog(ft.AlertDialog):
         except ValueError:
             self.txt_valore_acquisto.error_text = self.loc.get("invalid_amount")
             self.txt_valore_attuale.error_text = self.loc.get("invalid_amount")
-            self.content.update()
+            if self.content.page:
+                self.content.update()
         except Exception as ex:
             print(f"Errore salvataggio immobile: {ex}")
             traceback.print_exc()

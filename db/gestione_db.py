@@ -2780,15 +2780,6 @@ def ottieni_conti(id_utente: str, master_key_b64: Optional[str] = None) -> List[
 
 
 
-def elimina_conto(id_conto: str) -> bool:
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            cur.execute("DELETE FROM Conti WHERE id_conto = %s", (id_conto,))
-            return cur.rowcount > 0
-    except Exception as e:
-        print(f"[ERRORE] Errore eliminazione conto: {e}")
-        return False
 
 # --- Funzioni Categorie ---
 def ottieni_categorie(id_famiglia: str, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -3536,6 +3527,7 @@ def aggiungi_conto(id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=
                 "INSERT INTO Conti (id_utente, nome_conto, tipo, iban, valore_manuale, borsa_default, config_speciale, icona, colore) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id_conto",
                 (id_utente, encrypted_nome, tipo_conto, encrypted_iban, valore_manuale, borsa_default, encrypted_config, icona, colore))
             id_nuovo_conto = cur.fetchone()['id_conto']
+            con.commit()
             return id_nuovo_conto, "Conto creato con successo"
     except Exception as e:
         print(f"[ERRORE] Errore generico: {e}")
@@ -3607,6 +3599,8 @@ def ottieni_dettagli_conti_utente(id_utente, master_key_b64=None):
                         ORDER BY C.nome_conto
                         """, (id_utente,))
             results = [dict(row) for row in cur.fetchall()]
+            for r in results:
+                print(f"[DEBUG] DB Fetch Account {r.get('id_conto')} (Enc Name: {str(r.get('nome_conto'))[:10]}...). Icon: {r.get('icona')}, Color: {r.get('colore')}")
             
             # Decrypt if key available
             crypto, master_key = _get_crypto_and_key(master_key_b64)
@@ -3688,6 +3682,7 @@ def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valor
     try:
         with get_db_connection() as con:
             cur = con.cursor()
+            print(f"[DEBUG] DB Update Account {id_conto} for user {id_utente}. Icon: {icona}, Color: {colore}")
             # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase 
             # Se il valore manuale non viene passato, non lo aggiorniamo (manteniamo quello esistente)
             if valore_manuale is not None:
@@ -3695,8 +3690,12 @@ def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valor
                             (encrypted_nome, tipo_conto, encrypted_iban, valore_manuale, borsa_default, encrypted_config, icona, colore, id_conto, id_utente))
             else:
                 cur.execute("UPDATE Conti SET nome_conto = %s, tipo = %s, iban = %s, borsa_default = %s, config_speciale = %s, icona = %s, colore = %s WHERE id_conto = %s AND id_utente = %s",
-                            (encrypted_nome, tipo_conto, encrypted_iban, borsa_default, encrypted_config, icona, colore, id_conto, id_utente))
-            return cur.rowcount > 0, "Conto modificato con successo"
+                             (encrypted_nome, tipo_conto, encrypted_iban, borsa_default, encrypted_config, icona, colore, id_conto, id_utente))
+            
+            rows_affected = cur.rowcount
+            print(f"[DEBUG] DB Update result: {rows_affected} rows affected.")
+            con.commit()
+            return rows_affected > 0, "Conto modificato con successo"
     except Exception as e:
         print(f"[ERRORE] Errore generico: {e}")
         return False, f"Errore generico: {e}"
@@ -3961,19 +3960,77 @@ def admin_imposta_saldo_conto_condiviso(id_conto_condiviso, nuovo_saldo):
 
 # --- Funzioni Conti Condivisi ---
 
-def ottieni_dettagli_conto_condiviso(id_conto, master_key_b64=None, id_utente=None):
+def ottieni_dettagli_conto(id_conto, master_key_b64=None):
     """
-    Recupera i dettagli di un conto condiviso, inclusi i partecipanti.
+    Recupera i dettagli di un singolo conto personale.
     """
     try:
         crypto, master_key = _get_crypto_and_key(master_key_b64)
-        family_key = None
-        
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT * FROM Conti WHERE id_conto = %s", (id_conto,))
+            row = cur.fetchone()
+            if not row: return None
+            
+            c = dict(row)
+            
+            # Determine if we need family_key (account names/types might be encrypted with it)
+            family_key = None
+            if master_key:
+                cur.execute("SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s", (c['id_utente'],))
+                fam_res = cur.fetchone()
+                if fam_res and fam_res['id_famiglia']:
+                    family_key = _get_family_key_for_user(fam_res['id_famiglia'], c['id_utente'], master_key, crypto)
+
+            # Decrypt fields with fallbacks
+            # Nome Conto
+            dec_nome = None
+            if family_key:
+                dec_nome = _decrypt_if_key(c['nome_conto'], family_key, crypto, silent=True)
+            if not dec_nome or dec_nome == "[ENCRYPTED]" or dec_nome.startswith("gAAAAA"):
+                dec_nome = _decrypt_if_key(c['nome_conto'], master_key, crypto, silent=True)
+            c['nome_conto'] = dec_nome
+
+            # Tipo
+            dec_tipo = None
+            if family_key:
+                dec_tipo = _decrypt_if_key(c['tipo'], family_key, crypto, silent=True)
+            if not dec_tipo or dec_tipo == "[ENCRYPTED]" or dec_tipo.startswith("gAAAAA"):
+                dec_tipo = _decrypt_if_key(c['tipo'], master_key, crypto, silent=True)
+            c['tipo'] = dec_tipo
+
+            # IBAN (Always Master)
+            c['iban'] = _decrypt_if_key(c['iban'], master_key, crypto, silent=True)
+
+            # Config Speciale
+            dec_config = None
+            if family_key:
+                dec_config = _decrypt_if_key(c['config_speciale'], family_key, crypto, silent=True)
+            if not dec_config or dec_config == "[ENCRYPTED]" or dec_config.startswith("gAAAAA"):
+                dec_config = _decrypt_if_key(c['config_speciale'], master_key, crypto, silent=True)
+            c['config_speciale'] = dec_config
+            
+            # Saldo
+            cur.execute("SELECT COALESCE(SUM(importo), 0.0) as saldo FROM Transazioni WHERE id_conto = %s", (id_conto,))
+            saldo_trans = cur.fetchone()['saldo']
+            c['saldo_calcolato'] = float(saldo_trans) + (float(c['rettifica_saldo']) if c['rettifica_saldo'] else 0.0)
+            
+            return c
+    except Exception as e:
+        print(f"[ERRORE] ottieni_dettagli_conto: {e}")
+        return None
+
+def ottieni_dettagli_conto_condiviso(id_conto_condiviso, master_key_b64=None, id_utente=None):
+    """
+    Recupera i dettagli di un conto condiviso, inclusi i partecipanti e il saldo.
+    """
+    try:
+        crypto, master_key = _get_crypto_and_key(master_key_b64)
         with get_db_connection() as con:
             cur = con.cursor()
             
-            # Fetch basic details
-            cur.execute("SELECT * FROM ContiCondivisi WHERE id_conto_condiviso = %s", (id_conto,))
+            # Fetch basic details (includes icona, colore)
+            cur.execute("SELECT * FROM ContiCondivisi WHERE id_conto_condiviso = %s", (id_conto_condiviso,))
             row = cur.fetchone()
             if not row:
                 return None
@@ -3982,28 +4039,41 @@ def ottieni_dettagli_conto_condiviso(id_conto, master_key_b64=None, id_utente=No
             dettagli['id_conto'] = dettagli['id_conto_condiviso']
             dettagli['condiviso'] = True
             
-            # Decrypt Name
+            # Decrypt Name using family key if possible
             if master_key and id_utente:
                  family_key = _get_family_key_for_user(dettagli['id_famiglia'], id_utente, master_key, crypto)
+                 
+                 # 1. Nome Conto
+                 dec_nome = None
                  if family_key:
-                     dettagli['nome_conto'] = _decrypt_if_key(dettagli['nome_conto'], family_key, crypto)
+                     dec_nome = _decrypt_if_key(dettagli['nome_conto'], family_key, crypto, silent=True)
+                 if not dec_nome or dec_nome == "[ENCRYPTED]" or dec_nome.startswith("gAAAAA"):
+                     dec_nome = _decrypt_if_key(dettagli['nome_conto'], master_key, crypto, silent=True)
+                 dettagli['nome_conto'] = dec_nome
+
+                 # 2. Config Speciale
+                 dec_config = None
+                 if family_key:
+                     dec_config = _decrypt_if_key(dettagli['config_speciale'], family_key, crypto, silent=True)
+                 if not dec_config or dec_config == "[ENCRYPTED]" or dec_config.startswith("gAAAAA"):
+                     dec_config = _decrypt_if_key(dettagli['config_speciale'], master_key, crypto, silent=True)
+                 dettagli['config_speciale'] = dec_config
 
             # Fetch participants
             cur.execute("""
-                SELECT U.id_utente, U.username
+                SELECT U.id_utente, 
+                       COALESCE(U.nome || ' ' || U.cognome, U.username) as nome_visualizzato,
+                       U.username
                 FROM PartecipazioneContoCondiviso PCC
                 JOIN Utenti U ON PCC.id_utente = U.id_utente
                 WHERE PCC.id_conto_condiviso = %s
-            """, (id_conto,))
+            """, (id_conto_condiviso,))
             dettagli['partecipanti'] = [dict(r) for r in cur.fetchall()]
-            # Add dummy display name if needed or just use username
-            for p in dettagli['partecipanti']:
-                p['nome_visualizzato'] = p['username']
             
-            # Calculate Balance (Useful for display/edit check)
-            cur.execute("SELECT COALESCE(SUM(importo), 0.0) as saldo FROM TransazioniCondivise WHERE id_conto_condiviso = %s", (id_conto,))
+            # Calculate Balance
+            cur.execute("SELECT COALESCE(SUM(importo), 0.0) as saldo FROM TransazioniCondivise WHERE id_conto_condiviso = %s", (id_conto_condiviso,))
             saldo_trans = cur.fetchone()['saldo']
-            dettagli['saldo_calcolato'] = saldo_trans + (dettagli['rettifica_saldo'] or 0.0)
+            dettagli['saldo_calcolato'] = float(saldo_trans) + (float(dettagli['rettifica_saldo']) if dettagli['rettifica_saldo'] else 0.0)
 
             return dettagli
             
@@ -4151,6 +4221,7 @@ def crea_conto_condiviso(id_famiglia, nome_conto, tipo_conto, tipo_condivisione,
                         "INSERT INTO PartecipazioneContoCondiviso (id_conto_condiviso, id_utente) VALUES (%s, %s)",
                         (id_nuovo_conto_condiviso, uid))
 
+            con.commit()
             return id_nuovo_conto_condiviso
     except Exception as e:
         print(f"[ERRORE] Errore generico durante la creazione conto condiviso: {e}")
@@ -4191,6 +4262,7 @@ def modifica_conto_condiviso(id_conto_condiviso, nome_conto, tipo=None, tipo_con
     try:
         with get_db_connection() as con:
             cur = con.cursor()
+            print(f"[DEBUG] DB Update Shared Account {id_conto_condiviso}. Icon: {icona}, Color: {colore}")
             
             # Update Nome, Tipo, TipoCondivisione, config_speciale, icona, colore
             sql = "UPDATE ContiCondivisi SET nome_conto = %s, config_speciale = %s, icona = %s, colore = %s"
@@ -4242,8 +4314,9 @@ def elimina_conto_condiviso(id_conto_condiviso):
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
+            # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase Supabase
             cur.execute("DELETE FROM ContiCondivisi WHERE id_conto_condiviso = %s", (id_conto_condiviso,))
+            con.commit()
             return cur.rowcount > 0
     except Exception as e:
         print(f"[ERRORE] Errore generico durante l'eliminazione conto condiviso: {e}")
@@ -4319,50 +4392,6 @@ def ottieni_conti_condivisi_utente(id_utente, master_key_b64=None):
         return []
 
 
-def ottieni_dettagli_conto_condiviso(id_conto_condiviso, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None):
-    try:
-        with get_db_connection() as con:
-            # con.row_factory = sqlite3.Row # Removed for Supabase
-            cur = con.cursor()
-            cur.execute("""
-                        SELECT CC.id_conto_condiviso,
-                               CC.id_famiglia,
-                               CC.nome_conto,
-                               CC.tipo,
-                               CC.tipo_condivisione,
-                               COALESCE(SUM(T.importo), 0.0) + COALESCE(CAST(NULLIF(CAST(CC.rettifica_saldo AS TEXT), '') AS NUMERIC), 0.0) AS saldo_calcolato
-                        FROM ContiCondivisi CC
-                                 LEFT JOIN TransazioniCondivise T ON CC.id_conto_condiviso = T.id_conto_condiviso
-                        WHERE CC.id_conto_condiviso = %s
-                        GROUP BY CC.id_conto_condiviso, CC.id_famiglia, CC.nome_conto, CC.tipo, CC.tipo_condivisione, CC.rettifica_saldo
-                        """, (id_conto_condiviso,))
-            conto = cur.fetchone()
-            if conto:
-                conto_dict = dict(conto)
-                
-                # Decripta il nome_conto usando la family_key
-                if master_key_b64 and id_utente and conto_dict.get('id_famiglia'):
-                    crypto, master_key = _get_crypto_and_key(master_key_b64)
-                    family_key = _get_family_key_for_user(conto_dict['id_famiglia'], id_utente, master_key, crypto)
-                    if family_key:
-                        conto_dict['nome_conto'] = _decrypt_if_key(conto_dict['nome_conto'], family_key, crypto, silent=True)
-                
-                if conto_dict['tipo_condivisione'] == 'utenti':
-                    cur.execute("""
-                                SELECT U.id_utente,
-                                       COALESCE(U.nome || ' ' || U.cognome, U.username) AS nome_visualizzato
-                                FROM PartecipazioneContoCondiviso PCC
-                                         JOIN Utenti U ON PCC.id_utente = U.id_utente
-                                WHERE PCC.id_conto_condiviso = %s
-                                """, (id_conto_condiviso,))
-                    conto_dict['partecipanti'] = [dict(row) for row in cur.fetchall()]
-                else:
-                    conto_dict['partecipanti'] = []
-                return conto_dict
-            return None
-    except Exception as e:
-        print(f"[ERRORE] Errore generico durante il recupero dettagli conto condiviso: {e}")
-        return []
 
 def ottieni_utenti_famiglia(id_famiglia):
     id_famiglia = _valida_id_int(id_famiglia)
@@ -6168,7 +6197,7 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64=Non
                     decrypted_limite = _decrypt_if_key(row['importo_limite'], family_key, crypto, silent=True)
                     # If decryption failed (returns [ENCRYPTED]) and it looks encrypted, try master_key
                     if decrypted_limite == "[ENCRYPTED]" and isinstance(row['importo_limite'], str) and row['importo_limite'].startswith("gAAAAA"):
-                         decrypted_limite = _decrypt_if_key(row['importo_limite'], master_key, crypto)
+                         decrypted_limite = _decrypt_if_key(row['importo_limite'], master_key, crypto, silent=True)
                 else:
                     decrypted_limite = row['importo_limite'] # Cannot decrypt without family key
                 try:
@@ -6182,7 +6211,7 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64=Non
                 # Decrypt subcategory name
                 sub_name = row['nome_sottocategoria']
                 if family_key:
-                    sub_name = _decrypt_if_key(sub_name, family_key, crypto)
+                    sub_name = _decrypt_if_key(sub_name, family_key, crypto, silent=True)
 
                 riepilogo[cat_id]['sottocategorie'].append({
                     'id_sottocategoria': row['id_sottocategoria'],
@@ -6777,8 +6806,8 @@ def ottieni_prestiti_famiglia(id_famiglia, master_key_b64=None, id_utente=None, 
 
             if family_key:
                 for row in results:
-                    row['nome'] = _decrypt_if_key(row['nome'], family_key, crypto)
-                    row['descrizione'] = _decrypt_if_key(row['descrizione'], family_key, crypto)
+                    row['nome'] = _decrypt_if_key(row['nome'], family_key, crypto, silent=True)
+                    row['descrizione'] = _decrypt_if_key(row['descrizione'], family_key, crypto, silent=True)
             
             # --- Batch Quote Prestiti ---
             ids_prestiti = [r['id_prestito'] for r in results]
@@ -7153,12 +7182,12 @@ def ottieni_immobili_famiglia(id_famiglia, master_key_b64=None, id_utente=None):
 
             if family_key:
                 for row in results:
-                    row['nome'] = _decrypt_if_key(row['nome'], family_key, crypto)
-                    row['via'] = _decrypt_if_key(row['via'], family_key, crypto)
-                    row['citta'] = _decrypt_if_key(row['citta'], family_key, crypto)
+                    row['nome'] = _decrypt_if_key(row['nome'], family_key, crypto, silent=True)
+                    row['via'] = _decrypt_if_key(row['via'], family_key, crypto, silent=True)
+                    row['citta'] = _decrypt_if_key(row['citta'], family_key, crypto, silent=True)
                     # Also decrypt linked loan name if present
                     if row.get('nome_mutuo'):
-                        row['nome_mutuo'] = _decrypt_if_key(row['nome_mutuo'], family_key, crypto)
+                        row['nome_mutuo'] = _decrypt_if_key(row['nome_mutuo'], family_key, crypto, silent=True)
             
             # --- OTTIMIZZAZIONE INIZIO: Batch Fetching delle Quote ---
             ids_immobili = [r['id_immobile'] for r in results]
@@ -7325,7 +7354,7 @@ def vendi_asset(id_conto_investimento, ticker, quantita_da_vendere, prezzo_di_ve
                 # Decrypt logic similar to compra_asset
                 decrypted_ticker = _decrypt_if_key(db_ticker, encryption_key, crypto, silent=True)
                 if (decrypted_ticker == "[ENCRYPTED]" or decrypted_ticker == db_ticker) and encryption_key != master_key:
-                     decrypted_ticker = _decrypt_if_key(db_ticker, master_key, crypto)
+                     decrypted_ticker = _decrypt_if_key(db_ticker, master_key, crypto, silent=True)
 
                 if decrypted_ticker == ticker_upper:
                     risultato = asset
@@ -8515,7 +8544,7 @@ def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=Non
 
             if family_key:
                 for spesa in spese:
-                    spesa['nome'] = _decrypt_if_key(spesa['nome'], family_key, crypto)
+                    spesa['nome'] = _decrypt_if_key(spesa['nome'], family_key, crypto, silent=True)
                     
                     # Decripta nome beneficiario se presente
                     if spesa.get('id_conto_personale_beneficiario'):
@@ -9532,7 +9561,7 @@ def modifica_carta(id_carta, nome_carta=None, tipo_carta=None, circuito=None,
                 cur.execute("SELECT massimale_encrypted FROM Carte WHERE id_carta = %s", (id_carta,))
                 row = cur.fetchone()
                 curr_enc = row.get('massimale_encrypted') if row else None
-                curr_val = _decrypt_if_key(curr_enc, master_key, crypto)
+                curr_val = _decrypt_if_key(curr_enc, master_key, crypto, silent=True)
                 
                 try:
                     v1 = float(curr_val) if curr_val else 0.0
@@ -9655,8 +9684,7 @@ def elimina_carta(id_carta, soft_delete=True):
                 # Usa ANY(%s) per passare una lista in Postgres/Psycopg2
                 cur.execute("UPDATE Conti SET nascosto = TRUE WHERE id_conto = ANY(%s)", (conti_da_nascondere,))
                 
-            con.commit()
-            return True
+                
             con.commit()
             return True
     except Exception as e:
@@ -9917,9 +9945,9 @@ def ottieni_obiettivi(id_famiglia: str, master_key_b64: Optional[str] = None, id
                     goal_id = row['id']
                     
                     # Decrypt core data
-                    nome = _decrypt_if_key(row['nome'], key_to_use, crypto)
-                    importo_obj_str = _decrypt_if_key(row['importo_obiettivo'], key_to_use, crypto)
-                    note = _decrypt_if_key(row['note'], key_to_use, crypto)
+                    nome = _decrypt_if_key(row['nome'], key_to_use, crypto, silent=True)
+                    importo_obj_str = _decrypt_if_key(row['importo_obiettivo'], key_to_use, crypto, silent=True)
+                    note = _decrypt_if_key(row['note'], key_to_use, crypto, silent=True)
                     
                     # Calculate accumulated amount using Dynamic Logic (min(Assigned, RealBalance))
                     # Reuse ottieni_salvadanai_obiettivo to ensure consistency with Dialog
@@ -10210,7 +10238,11 @@ def esegui_giroconto_salvadanaio(
             
             current_pb_amount_enc = row['importo_assegnato']
             # decryption of amount always uses PB key (which is family key usually or master)
-            current_pb_amount = float(_decrypt_if_key(current_pb_amount_enc, key_to_use, crypto))
+            current_pb_amount_str = _decrypt_if_key(current_pb_amount_enc, key_to_use, crypto, silent=True)
+            try:
+                current_pb_amount = float(current_pb_amount_str) if current_pb_amount_str else 0.0
+            except:
+                current_pb_amount = 0.0
             
             # Determine correct table and column for Account Transaction
             if parent_is_shared:

@@ -44,7 +44,7 @@ class PortafoglioDialogs:
                 ft.Column([self.dt_portafoglio], scroll=ft.ScrollMode.AUTO, expand=True)
             ], width=350),
             actions=[
-                ft.TextButton(on_click=self._chiudi_dialog_portafoglio),
+                ft.TextButton(text="Chiudi", on_click=self._chiudi_dialog_portafoglio),
                 ft.ElevatedButton(icon=ft.Icons.ADD_BOX, text=self.loc.get("add_existing_asset"), on_click=self._apri_dialog_asset_esistente),
                 ft.ElevatedButton(icon=ft.Icons.ADD, text=self.loc.get("add_operation"), on_click=self._apri_dialog_operazione)
             ]
@@ -78,7 +78,7 @@ class PortafoglioDialogs:
         self.txt_data_operazione = ft.TextField(label="Data", hint_text="YYYY-MM-DD", read_only=True, expand=True)
         self.btn_date_picker = ft.IconButton(
             icon=ft.Icons.CALENDAR_MONTH,
-            on_click=lambda _: self.controller.page.open(self.date_picker),
+            on_click=lambda _: self._apri_date_picker(),
             tooltip="Seleziona data"
         )
         self.row_data_operazione = ft.Row([self.txt_data_operazione, self.btn_date_picker], spacing=10)
@@ -97,8 +97,8 @@ class PortafoglioDialogs:
                 self.radio_operazione
             ], tight=True, spacing=10, scroll=ft.ScrollMode.AUTO, width=350),
             actions=[
-                ft.TextButton(on_click=self._chiudi_dialog_operazione),
-                ft.TextButton(on_click=self._salva_operazione)
+                ft.TextButton(text="Annulla", on_click=self._chiudi_dialog_operazione),
+                ft.ElevatedButton(text="Salva", icon=ft.Icons.SAVE, on_click=self._salva_operazione)
             ]
         )
 
@@ -110,8 +110,8 @@ class PortafoglioDialogs:
             title=ft.Text(),
             content=self.txt_nuovo_prezzo,
             actions=[
-                ft.TextButton(on_click=self._chiudi_dialog_aggiorna_prezzo),
-                ft.TextButton(on_click=self._salva_nuovo_prezzo)
+                ft.TextButton(text="Annulla", on_click=self._chiudi_dialog_aggiorna_prezzo),
+                ft.ElevatedButton(text="Salva", icon=ft.Icons.SAVE, on_click=self._salva_nuovo_prezzo)
             ]
         )
 
@@ -139,8 +139,8 @@ class PortafoglioDialogs:
                 self.txt_modifica_prezzo_medio
             ], tight=True, scroll=ft.ScrollMode.AUTO, width=350),
             actions=[
-                ft.TextButton(on_click=self._chiudi_dialog_modifica_asset),
-                ft.TextButton(on_click=self._salva_modifica_asset)
+                ft.TextButton(text="Annulla", on_click=self._chiudi_dialog_modifica_asset),
+                ft.ElevatedButton(text="Salva", icon=ft.Icons.SAVE, on_click=self._salva_modifica_asset)
             ]
         )
 
@@ -169,16 +169,23 @@ class PortafoglioDialogs:
                 self.txt_valore_attuale_unitario
             ], tight=True, spacing=10, scroll=ft.ScrollMode.AUTO, width=350),
             actions=[
-                ft.TextButton(on_click=self._chiudi_dialog_asset_esistente),
-                ft.TextButton(on_click=self._salva_asset_esistente)
+                ft.TextButton(text="Annulla", on_click=self._chiudi_dialog_asset_esistente),
+                ft.ElevatedButton(text="Salva", icon=ft.Icons.SAVE, on_click=self._salva_asset_esistente)
             ]
         )
+
+    def _apri_date_picker(self):
+        if self.date_picker not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.date_picker)
+        self.date_picker.open = True
+        self.controller.page.update()
 
     def _on_date_change(self, e):
         """Callback per il cambio data dal DatePicker."""
         if self.date_picker.value:
             self.txt_data_operazione.value = self.date_picker.value.strftime('%Y-%m-%d')
-            self.dialog_operazione_asset.update()
+            if self.dialog_operazione_asset.page:
+                self.dialog_operazione_asset.update()
 
     def _update_texts(self):
         """Aggiorna i testi di tutti i dialoghi."""
@@ -250,7 +257,9 @@ class PortafoglioDialogs:
         self.conto_selezionato = conto_data
         self.dialog_portafoglio.title.value = f"{self.loc.get('manage_portfolio_dialog')}: {conto_data['nome_conto']}"
         self._aggiorna_tabella_portafoglio()
-        self.controller.page.open(self.dialog_portafoglio)
+        if self.dialog_portafoglio not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_portafoglio)
+        self.dialog_portafoglio.open = True
         self.controller.page.update()
 
     def _chiudi_dialog_portafoglio(self, e):
@@ -298,7 +307,8 @@ class PortafoglioDialogs:
         self.txt_gain_loss_totale.color = ft.Colors.GREEN if gain_loss_totale >= 0 else ft.Colors.RED
 
         if self.dialog_portafoglio.open:
-            self.dialog_portafoglio.update()
+            if self.dialog_portafoglio.page:
+                self.dialog_portafoglio.update()
 
     def _apri_dialog_operazione(self, e):
         # RIPRISTINA IL CONTENUTO ORIGINALE (perché potrebbe essere stato alterato da _apri_dialog_asset_esistente)
@@ -361,7 +371,9 @@ class PortafoglioDialogs:
         ]
         self.dd_conto_transazione.value = None
 
-        self.controller.page.open(self.dialog_operazione_asset)
+        if self.dialog_operazione_asset not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_operazione_asset)
+        self.dialog_operazione_asset.open = True
         self.controller.page.update()
 
     def _chiudi_dialog_operazione(self, e):
@@ -428,7 +440,8 @@ class PortafoglioDialogs:
         self.txt_modifica_nome.value = nome
         
         if self.dialog_modifica_asset.open:
-            self.dialog_modifica_asset.update()
+            if self.dialog_modifica_asset.page:
+                self.dialog_modifica_asset.update()
 
     def _salva_operazione(self, e):
         try:
@@ -555,7 +568,9 @@ class PortafoglioDialogs:
         self.asset_da_aggiornare = e.control.data
         self.txt_nuovo_prezzo.value = str(self.asset_da_aggiornare['prezzo_attuale_manuale'])
         self.dialog_aggiorna_prezzo.title.value = f"{self.loc.get('update_price')}: {self.asset_da_aggiornare['ticker']}"
-        self.controller.page.open(self.dialog_aggiorna_prezzo)
+        if self.dialog_aggiorna_prezzo not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_aggiorna_prezzo)
+        self.dialog_aggiorna_prezzo.open = True
         self.controller.page.update()
 
     def _chiudi_dialog_aggiorna_prezzo(self, e):
@@ -589,7 +604,9 @@ class PortafoglioDialogs:
         self.ticker_search_modifica.dd_risultati.visible = False
         
         self.dialog_modifica_asset.title.value = f"{self.loc.get('edit_asset_details')}: {self.asset_da_modificare['ticker']}"
-        self.controller.page.open(self.dialog_modifica_asset)
+        if self.dialog_modifica_asset not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_modifica_asset)
+        self.dialog_modifica_asset.open = True
         self.controller.page.update()
 
     def _chiudi_dialog_modifica_asset(self, e):
@@ -652,7 +669,9 @@ class PortafoglioDialogs:
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )
-        self.controller.page.open(dlg_confirm)
+        if dlg_confirm not in self.controller.page.overlay:
+            self.controller.page.overlay.append(dlg_confirm)
+        dlg_confirm.open = True
         self.controller.page.update()
 
     def _apri_dialog_asset_esistente(self, e):

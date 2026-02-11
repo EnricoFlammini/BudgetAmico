@@ -52,8 +52,8 @@ class ContoCondivisoDialog(ft.AlertDialog):
             scroll=ft.ScrollMode.AUTO
         )
         self.actions = [
-            ft.TextButton(on_click=self._chiudi_dialog),
-            ft.TextButton(on_click=self._salva_conto_condiviso)
+            ft.TextButton(text="Annulla", on_click=self._chiudi_dialog),
+            ft.ElevatedButton(text="Salva", icon=ft.Icons.SAVE, on_click=self._salva_conto_condiviso)
         ]
         self.actions_alignment = ft.MainAxisAlignment.END
 

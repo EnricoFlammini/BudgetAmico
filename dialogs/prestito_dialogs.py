@@ -89,8 +89,8 @@ class PrestitoDialogs:
                 tight=True, spacing=10, width=350, scroll=ft.ScrollMode.AUTO
             ),
             actions=[
-                ft.TextButton(on_click=self._chiudi_dialog_prestito),
-                ft.TextButton(on_click=self._salva_prestito_cliccato)
+                ft.TextButton(text="Annulla", on_click=self._chiudi_dialog_prestito),
+                ft.ElevatedButton(text="Salva", icon=ft.Icons.SAVE, on_click=self._salva_prestito_cliccato)
             ],
             actions_alignment=ft.MainAxisAlignment.END
         )
@@ -109,8 +109,8 @@ class PrestitoDialogs:
                 self.dd_conto_pagamento, self.dd_sottocategoria_pagamento
             ], tight=True, spacing=10, scroll=ft.ScrollMode.AUTO, width=350),
             actions=[
-                ft.TextButton(on_click=self._chiudi_dialog_paga_rata),
-                ft.TextButton(on_click=self._esegui_pagamento_cliccato)
+                ft.TextButton(text="Annulla", on_click=self._chiudi_dialog_paga_rata),
+                ft.ElevatedButton(text="Paga", icon=ft.Icons.PAYMENT, on_click=self._esegui_pagamento_cliccato)
             ],
             actions_alignment=ft.MainAxisAlignment.END
         )

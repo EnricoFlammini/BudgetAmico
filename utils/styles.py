@@ -229,38 +229,62 @@ class AppStyles:
     def get_logo_control(tipo: str, config_speciale: str = None, circuito: str = None, size: int = 24, color: str = None, icona: str = None, colore: str = None) -> ft.Control:
         """
         Restituisce il controllo (Immagine o Icona) per il logo richiesto.
-        Implementa logica di fallback se le immagini ufficiali mancano.
+        Le icone vengono avvolte in un container bianco circolare per garantire
+        contrasto su qualsiasi sfondo colorato.
         """
         import json
         
         t_low = tipo.lower()
         
-        # 0. Priorità: Icona Personalizzata o Colore Personalizzato
-        used_color = colore if colore else color
+        # Colore icone: sempre nero per massimo contrasto su sfondo bianco
+        icon_color = ft.Colors.BLACK
         
+        def _wrap_in_white_box(content: ft.Control, sz: int) -> ft.Container:
+            """Avvolge un controllo in un container bianco circolare."""
+            return ft.Container(
+                content=content,
+                width=sz,
+                height=sz,
+                border_radius=sz / 2,
+                bgcolor=ft.Colors.WHITE,
+                alignment=ft.alignment.center,
+                shadow=ft.BoxShadow(
+                    spread_radius=0,
+                    blur_radius=2,
+                    color=ft.Colors.with_opacity(0.15, ft.Colors.BLACK),
+                ),
+            )
+        
+        # 0. Priorità: Icona Personalizzata
         if icona:
             # Caso 1: Icona con percorso (es. "conti/mio_logo.png" o "custom/...")
             if "/" in icona and icona.lower().endswith(('.png', '.jpg', '.jpeg')):
                 icon_path = f"/icons/{icona}" # Flet mappa assets/icons -> /icons
-                return ft.Image(
-                    src=icon_path,
-                    width=size,
-                    height=size,
-                    fit=ft.ImageFit.CONTAIN,
+                inner_size = int(size * 0.7)
+                return _wrap_in_white_box(
+                    ft.Image(
+                        src=icon_path,
+                        width=inner_size,
+                        height=inner_size,
+                        fit=ft.ImageFit.CONTAIN,
+                    ),
+                    size
                 )
             # Caso 2: Icona Flet standard
             else:
                 try:
-                    # Usa ft.Icons (classe) che è quella standard per getattr con nomi maiuscoli
                     icon_val = getattr(ft.Icons, icona.upper())
-                    return ft.Icon(icon_val, size=size, color=used_color)
+                    inner_size = int(size * 0.7)
+                    return _wrap_in_white_box(
+                        ft.Icon(icon_val, size=inner_size, color=icon_color),
+                        size
+                    )
                 except:
                     pass # Fallback logico standard
 
         # 1. Determinazione file logo e fallback
         logo_file = None
         fallback_icon = ft.Icons.ACCOUNT_BALANCE
-        fallback_color = used_color
         fallback_text = None
         fallback_bg = None
         
@@ -273,7 +297,7 @@ class AppStyles:
             fallback_icon = ft.Icons.SAVINGS
         elif t_low == "fondo pensione":
             logo_file = "conto_pensione_logo.png"
-            fallback_icon = ft.Icons.WAVES # o simile
+            fallback_icon = ft.Icons.WAVES
         elif t_low == "contanti":
             logo_file = "contanti_logo.png"
             fallback_icon = ft.Icons.MONEY
@@ -311,23 +335,38 @@ class AppStyles:
             fallback_icon = ft.Icons.CREDIT_CARD
         
         # 2. Costruzione del controllo
+        inner_size = int(size * 0.7)
         if logo_file:
-            # Container per mantenere dimensioni fisse e gestire fallback
-            return ft.Image(
-                src=logo_file,
-                width=size,
-                height=size,
-                fit=ft.ImageFit.CONTAIN,
-                error_content=ft.Container(
-                    content=ft.Text(fallback_text, size=min(14, size-4), weight="bold", color=fallback_color or ft.Colors.WHITE) if fallback_text else ft.Icon(fallback_icon, size=size, color=fallback_color),
-                    bgcolor=fallback_bg if fallback_text else None,
+            # Fallback error_content per immagini mancanti
+            if fallback_text:
+                error_ctrl = ft.Container(
+                    content=ft.Text(fallback_text, size=min(14, inner_size-4), weight="bold", color=ft.Colors.WHITE),
+                    bgcolor=fallback_bg,
                     width=size, height=size,
                     border_radius=size/2,
                     alignment=ft.alignment.center,
                 )
+            else:
+                error_ctrl = _wrap_in_white_box(
+                    ft.Icon(fallback_icon, size=inner_size, color=icon_color),
+                    size
+                )
+            
+            return _wrap_in_white_box(
+                ft.Image(
+                    src=logo_file,
+                    width=inner_size,
+                    height=inner_size,
+                    fit=ft.ImageFit.CONTAIN,
+                    error_content=error_ctrl,
+                ),
+                size
             )
         else:
-            return ft.Icon(fallback_icon, size=size, color=fallback_color)
+            return _wrap_in_white_box(
+                ft.Icon(fallback_icon, size=inner_size, color=icon_color),
+                size
+            )
 
     @staticmethod
     def scrollable_list(spacing: int = 10) -> ft.Column:

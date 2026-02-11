@@ -93,7 +93,8 @@ class SpesaFissaDialog(ft.AlertDialog):
         is_giro = (self.radio_tipo.value == "giroconto")
         self.container_beneficiario.visible = is_giro
         self._popola_dropdowns() # Re-populate to apply specific filters
-        self.content.update()
+        if self.content.page:
+            self.content.update()
 
     def apri_dialog(self, spesa_fissa_data=None):
         self._update_texts()
@@ -300,7 +301,8 @@ class SpesaFissaDialog(ft.AlertDialog):
     def _salva_cliccato(self, e):
         self.controller.show_loading("Attendere...")
         if not self._valida_campi():
-            self.content.update()
+            if self.content.page:
+                self.content.update()
             self.controller.hide_loading()
             return
 
@@ -356,7 +358,8 @@ class SpesaFissaDialog(ft.AlertDialog):
             
             if is_giroconto and not (id_conto_personale_beneficiario or id_conto_condiviso_beneficiario):
                  self.dd_conto_beneficiario.error_text = "Seleziona un conto di destinazione"
-                 self.content.update()
+                 if self.content.page:
+                     self.content.update()
                  self.controller.hide_loading()
                  return
 

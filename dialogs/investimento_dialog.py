@@ -65,7 +65,8 @@ class InvestimentoDialog(ft.AlertDialog):
 
             if not nome:
                 self.nome_broker.error_text = loc.get("required_field")
-                self.nome_broker.update()
+                if self.nome_broker.page:
+                    self.nome_broker.update()
                 return
 
             master_key_b64 = self.page_ref.session.get("master_key")

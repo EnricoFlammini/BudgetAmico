@@ -125,7 +125,9 @@ class AdminDialogs:
             self.txt_nome_categoria.value = ""
             self.id_categoria_in_modifica = None
 
-        self.controller.page.open(self.dialog_modifica_cat)
+        if self.dialog_modifica_cat not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_modifica_cat)
+        self.dialog_modifica_cat.open = True
         self.controller.page.update()
 
     def _chiudi_dialog_categoria(self, e):
@@ -136,7 +138,8 @@ class AdminDialogs:
         nome_cat = self.txt_nome_categoria.value
         if not nome_cat:
             self.txt_nome_categoria.error_text = self.loc.get("fill_all_fields")
-            self.dialog_modifica_cat.update()
+            if self.dialog_modifica_cat.page:
+                self.dialog_modifica_cat.update()
             return
 
         id_famiglia = self.controller.get_family_id()
@@ -171,7 +174,9 @@ class AdminDialogs:
         else:
             return # Non fare nulla se non ci sono dati sufficienti
 
-        self.controller.page.open(self.dialog_sottocategoria)
+        if self.dialog_sottocategoria not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_sottocategoria)
+        self.dialog_sottocategoria.open = True
         self.controller.page.update()
 
     def _chiudi_dialog_sottocategoria(self, e):
@@ -182,7 +187,8 @@ class AdminDialogs:
         nome_sottocat = self.txt_nome_sottocategoria.value
         if not nome_sottocat:
             self.txt_nome_sottocategoria.error_text = self.loc.get("fill_all_fields")
-            self.dialog_sottocategoria.update()
+            if self.dialog_sottocategoria.page:
+                self.dialog_sottocategoria.update()
             return
 
         if self.id_sottocategoria_in_modifica:
@@ -221,7 +227,9 @@ class AdminDialogs:
         self.txt_username_o_email.error_text = None
         
         # Usa page.open() per gestire correttamente il dialog
-        self.controller.page.open(self.dialog_invito_membri)
+        if self.dialog_invito_membri not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_invito_membri)
+        self.dialog_invito_membri.open = True
         self.controller.page.update()
 
     def _chiudi_dialog_invito(self, e=None):
@@ -234,7 +242,8 @@ class AdminDialogs:
         ruolo = self.dd_ruolo.value
         if not email:
             self.txt_username_o_email.error_text = self.loc.get("fill_all_fields")
-            self.dialog_invito_membri.update()
+            if self.dialog_invito_membri.page:
+                self.dialog_invito_membri.update()
             return
 
         id_famiglia = self.controller.get_family_id()
@@ -362,7 +371,9 @@ class AdminDialogs:
         self.txt_budget_limite.prefix_text = loc.currencies[loc.currency]['symbol']
 
         # Use page.open instead of overlay manipulation
-        self.controller.page.open(self.dialog_imposta_budget)
+        if self.dialog_imposta_budget not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.dialog_imposta_budget)
+        self.dialog_imposta_budget.open = True
         self.controller.page.update()
 
     def _chiudi_dialog_imposta_budget(self, e):
@@ -394,6 +405,7 @@ class AdminDialogs:
 
             except ValueError:
                 self.txt_budget_limite.error_text = loc.get("invalid_amount")
-                self.dialog_imposta_budget.update()
+                if self.dialog_imposta_budget.page:
+                    self.dialog_imposta_budget.update()
         else:
             self.controller.show_snack_bar(loc.get("fill_all_fields"), success=False)

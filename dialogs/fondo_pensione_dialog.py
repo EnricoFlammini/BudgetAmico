@@ -17,7 +17,7 @@ class FondoPensioneDialog(ft.AlertDialog):
         self.modal = True
         self.title = ft.Text()
         self.actions = [
-            ft.TextButton(on_click=self.chiudi_dialog)
+            ft.TextButton(text="Chiudi", on_click=self.chiudi_dialog)
         ]
         self.actions_alignment = ft.MainAxisAlignment.END
 

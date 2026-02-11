@@ -133,7 +133,8 @@ class ContactDialog(ft.AlertDialog):
     def _select_color(self, color, e):
         self.selected_color = color
         self._build_color_picker()
-        self.color_circles.update()
+        if self.color_circles.page:
+            self.color_circles.update()
 
     def _on_condivisione_change(self, e):
         self.col_selezione_utenti.visible = (self.dd_condivisione.value == 'selezione')
@@ -146,7 +147,8 @@ class ContactDialog(ft.AlertDialog):
         nome = self.tf_nome.value
         if not nome:
             self.tf_nome.error_text = "Il nome è obbligatorio"
-            self.tf_nome.update()
+            if self.tf_nome.page:
+                self.tf_nome.update()
             return
 
         master_key = self.page_ref.session.get("master_key")

@@ -6,6 +6,18 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.50.01 (11/02/2026)
+- **Fix Stabilità UI (AssertionError)**:
+    - Eliminato completamente l'errore `AssertionError: Control must be added to the page first` sostituendo tutte le chiamate `page.open()`/`page.close()` con il pattern sicuro basato su overlay manuale.
+    - Applicato a tutti i dialog: `ContoDialog`, `CardDialog`, `PortafoglioDialogs`, `AdminDialogs`.
+    - Aggiunto guard `if control.page:` a tutte le chiamate `.update()` premature nei dialog.
+- **Fix Contrasto Icone**:
+    - Le icone (Flet standard e PNG custom) sono ora avvolte in un container bianco circolare con ombra, garantendo visibilità su qualsiasi sfondo colorato personalizzato.
+    - Colore icone di default impostato a nero per massimo contrasto.
+- **Fix Picker Icone/Colori**:
+    - Corretto il flusso di selezione icona/colore che chiudeva il dialog senza possibilità di salvare.
+    - Standardizzato il ciclo picker → selezione → ritorno al dialog principale in `ContoDialog` e `CardDialog`.
+
 ### v0.50.00 (11/02/2026)
 - **Personalizzazione Conti e Carte**:
     - Introdotta la possibilità di scegliere icone (standard Flet o PNG personalizzati) e colori per ogni conto e carta.

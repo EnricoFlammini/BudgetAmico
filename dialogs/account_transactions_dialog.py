@@ -78,7 +78,8 @@ class AccountTransactionsDialog(ft.AlertDialog):
     def _on_date_change(self, e):
         if self.date_picker.value and hasattr(self, 'txt_mod_data'):
             self.txt_mod_data.value = self.date_picker.value.strftime('%Y-%m-%d')
-            self.dialog_modifica.update()
+            if self.dialog_modifica.page:
+                self.dialog_modifica.update()
 
     def _carica_mesi(self):
         if self.is_shared:

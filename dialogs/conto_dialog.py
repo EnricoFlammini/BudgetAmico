@@ -20,6 +20,7 @@ from db.gestione_db import (
     modifica_conto_condiviso,
     ottieni_utenti_famiglia,
     ottieni_dettagli_conto_condiviso,
+    ottieni_dettagli_conto,
     # PB Imports
     ottieni_salvadanai_conto,
     admin_rettifica_salvadanaio,
@@ -206,8 +207,8 @@ class ContoDialog(ft.AlertDialog):
             scroll=ft.ScrollMode.AUTO
         )
         self.actions = [
-            ft.TextButton(on_click=self._chiudi_dialog_conto),
-            ft.TextButton(on_click=self._salva_conto),
+            ft.TextButton(text="Annulla", on_click=self._chiudi_dialog_conto),
+            ft.ElevatedButton(text="Salva", icon=ft.Icons.SAVE, on_click=self._salva_conto),
         ]
         self.actions_alignment = ft.MainAxisAlignment.END
 
@@ -252,6 +253,8 @@ class ContoDialog(ft.AlertDialog):
 
         self.actions[0].text = loc.get("cancel")
         self.actions[1].text = loc.get("save")
+        # Ensure icon for save button
+        self.actions[1].icon = ft.Icons.SAVE
         
         # Shared fields texts
         self.dd_tipo_condivisione.label = loc.get("sharing_type")
@@ -334,7 +337,7 @@ class ContoDialog(ft.AlertDialog):
             self.container_saldo_iniziale.visible = True
             self.container_asset_iniziali.visible = False
             
-        if self.open:
+        if self.content.page:
             self.content.update()
 
     def _cambia_scope_conto(self, e):
@@ -354,7 +357,7 @@ class ContoDialog(ft.AlertDialog):
              if self.dd_tipo_condivisione.value == 'utenti':
                  self._popola_lista_utenti()
         
-        if self.open:
+        if self.content.page:
             self.content.update()
 
     def _on_ewallet_sottotipo_change(self, e):
@@ -376,7 +379,7 @@ class ContoDialog(ft.AlertDialog):
         elif is_paypal:
             self._popola_fonti_paypal()
             
-        if self.open:
+        if self.content.page:
             self.content.update()
 
     def _popola_conti_collegati(self):
@@ -526,7 +529,8 @@ class ContoDialog(ft.AlertDialog):
         self.dd_paypal_fonte_preferita.options = selected_options
         if not any(opt.key == self.dd_paypal_fonte_preferita.value for opt in selected_options):
             self.dd_paypal_fonte_preferita.value = None
-        self.dd_paypal_fonte_preferita.update()
+        if self.dd_paypal_fonte_preferita.page:
+            self.dd_paypal_fonte_preferita.update()
 
     def _on_tipo_condivisione_change(self, e):
         if self.dd_tipo_condivisione.value == 'utenti':
@@ -535,7 +539,8 @@ class ContoDialog(ft.AlertDialog):
         else:
             self.container_partecipanti.visible = False
             
-        self.content.update()
+        if self.content.page:
+            self.content.update()
 
     def _popola_lista_utenti(self, utenti_selezionati_ids=None):
         self.lv_partecipanti.controls.clear()
@@ -563,14 +568,12 @@ class ContoDialog(ft.AlertDialog):
 
 
     def _chiudi_dialog_conto(self, e):
-        self.controller.show_loading("Attendere...")
-        try:
-            self.open = False
-            self.controller.page.update()
-        finally:
-            self.controller.hide_loading()
+        print("[DEBUG] _chiudi_dialog_conto called")
+        self.controller.page.close(self)
+        self.controller.page.update()
 
     def apri_dialog_conto(self, e, conto_data=None, escludi_investimento=False, is_shared_edit=False, shared_default=False):
+        self.open = False  # Reset state for fresh setup
         self._update_texts()
         
         if escludi_investimento:
@@ -603,6 +606,12 @@ class ContoDialog(ft.AlertDialog):
                 dettagli = ottieni_dettagli_conto_condiviso(self.conto_id_in_modifica, master_key_b64=master_key_b64, id_utente=id_utente)
                 if dettagli:
                     conto_data = dettagli # Override with full details including participants
+            else:
+                # Fetch details for personal account to ensure we have icon/color/latest data
+                master_key_b64 = self.controller.page.session.get("master_key")
+                dettagli = ottieni_dettagli_conto(self.conto_id_in_modifica, master_key_b64=master_key_b64)
+                if dettagli:
+                    conto_data = dettagli
             
             self.txt_conto_nome.value = conto_data['nome_conto']
             
@@ -702,9 +711,8 @@ class ContoDialog(ft.AlertDialog):
         # Carica icona e colore se presenti
         self.selected_icon_value = conto_data.get('icona') if conto_data else None
         self.selected_color_value = conto_data.get('colore') if conto_data else None
-        self._aggiorna_preview_personalizzazione()
-
         self.open = True
+        self._aggiorna_preview_personalizzazione()
         self.controller.page.update()
 
     def _salva_conto(self, e):
@@ -821,7 +829,8 @@ class ContoDialog(ft.AlertDialog):
                             is_valid = False
 
             if not is_valid:
-                self.content.update()
+                if self.content.page:
+                    self.content.update()
                 self.controller.hide_loading()
                 return
 
@@ -832,7 +841,10 @@ class ContoDialog(ft.AlertDialog):
             new_conto_id = None
 
             # --- SALVATAGGIO ---
-            print(f"[DEBUG] Saving Account {self.conto_id_in_modifica}. Icon: {self.selected_icon_value}, Color: {self.selected_color_value}")
+            print(f"[DEBUG] _salva_conto - AccountID: {self.conto_id_in_modifica}, IsShared: {is_shared}")
+            print(f"[DEBUG]  - Selection: Icon='{self.selected_icon_value}', Color='{self.selected_color_value}'")
+            print(f"[DEBUG]  - Session: MasterKey Present={master_key_b64 is not None}, UserID={utente_id}, FamilyID={id_famiglia}")
+            
             if is_shared:
                 # -- SHARED ACCOUNT LOGIC --
                 if self.conto_id_in_modifica:
@@ -938,7 +950,8 @@ class ContoDialog(ft.AlertDialog):
             else:
                 if not self.conto_id_in_modifica and not new_conto_id:
                     self.txt_conto_iban.error_text = self.loc.get("iban_in_use_or_invalid")
-                    self.content.update()
+                    if self.content.page:
+                        self.content.update()
                 else:
                     self.controller.show_snack_bar(f"Errore durante l'operazione sul conto.", success=False)
                 return
@@ -964,10 +977,13 @@ class ContoDialog(ft.AlertDialog):
         # Preview Colore
         self.color_preview.bgcolor = self.selected_color_value if self.selected_color_value else ft.Colors.BLUE_GREY_700
         
-        # Forza aggiornamento preview
-        self.icon_preview.update()
-        self.color_preview.update()
-        self.container_personalizzazione.update()
+        # Forza aggiornamento preview (Solo se montato su una pagina)
+        if self.icon_preview.page:
+            self.icon_preview.update()
+        if self.color_preview.page:
+            self.color_preview.update()
+        if self.container_personalizzazione.page:
+            self.container_personalizzazione.update()
 
     def _apri_selettore_icona(self, e):
         """Apre un selettore di icone categorizzato (Standard, Conti, Carte, Comuni)."""
@@ -1039,21 +1055,45 @@ class ContoDialog(ft.AlertDialog):
             content=ft.Container(
                 content=ft.Column(items, scroll=ft.ScrollMode.AUTO, height=500),
                 width=400
-            )
+            ),
+            actions=[
+                ft.TextButton("Annulla", on_click=lambda _: self._chiudi_picker_e_torna())
+            ],
+            modal=True
         )
-        self.controller.page.open(self._picker_dlg)
+        self.open = False
+        self.controller.page.update()
+        if self._picker_dlg not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self._picker_dlg)
+        self._picker_dlg.open = True
+        self.controller.page.update()
 
     def _seleziona_icona_flet(self, icon_name):
         # Per le icone flet passiamo solo il nome (es. "ACCOUNT_BALANCE")
         self.selected_icon_value = icon_name
+        self._picker_dlg.open = False
+        if self._picker_dlg in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self._picker_dlg)
+        self.open = True
+        self.controller.page.update()
         self._aggiorna_preview_personalizzazione()
-        self.controller.page.close(self._picker_dlg)
 
     def _seleziona_icona(self, icon_path):
         # Per le icone asset passiamo il percorso relativo (es. "conti/mio.png")
         self.selected_icon_value = icon_path
+        self._picker_dlg.open = False
+        if self._picker_dlg in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self._picker_dlg)
+        self.open = True
+        self.controller.page.update()
         self._aggiorna_preview_personalizzazione()
-        self.controller.page.close(self._picker_dlg)
+
+    def _chiudi_picker_e_torna(self):
+        self._picker_dlg.open = False
+        if self._picker_dlg in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self._picker_dlg)
+        self.open = True
+        self.controller.page.update()
 
 
 
@@ -1074,14 +1114,27 @@ class ContoDialog(ft.AlertDialog):
             
         self._picker_dlg = ft.AlertDialog(
             title=ft.Text("Seleziona Colore"),
-            content=ft.Container(content=grid, width=300, height=300)
+            content=ft.Container(content=grid, width=300, height=300),
+            actions=[
+                ft.TextButton("Annulla", on_click=lambda _: self._chiudi_picker_e_torna())
+            ],
+            modal=True
         )
-        self.controller.page.open(self._picker_dlg)
+        self.open = False
+        self.controller.page.update()
+        if self._picker_dlg not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self._picker_dlg)
+        self._picker_dlg.open = True
+        self.controller.page.update()
 
     def _seleziona_colore(self, color):
         self.selected_color_value = color
+        self._picker_dlg.open = False
+        if self._picker_dlg in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self._picker_dlg)
+        self.open = True
+        self.controller.page.update()
         self._aggiorna_preview_personalizzazione()
-        self.controller.page.close(self._picker_dlg)
 
     # --- Logica per Rettifica Saldo (Admin) ---
 
@@ -1186,7 +1239,8 @@ class ContoDialog(ft.AlertDialog):
             e.control.data['row'].opacity = 1.0
             e.control.data['tf'].disabled = False
             
-        self.dialog_rettifica_saldo.update()
+        if self.dialog_rettifica_saldo.page:
+            self.dialog_rettifica_saldo.update()
 
     def _salva_rettifica_saldo(self, e):
         try:

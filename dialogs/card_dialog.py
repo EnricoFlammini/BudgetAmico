@@ -201,23 +201,17 @@ class CardDialog:
         return accs
 
     def open(self):
-        if hasattr(self.page, "open"):
-            self.page.open(self.dlg)
-        else:
-            self.page.dialog = self.dlg
-            self.dlg.open = True
-            
-
-            
+        print("[DEBUG] Opening CardDialog")
+        if self.dlg not in self.page.overlay:
+            self.page.overlay.append(self.dlg)
+        self.dlg.open = True
         self._aggiorna_preview_personalizzazione()
         self.page.update()
 
     def _close(self, e):
-        if hasattr(self.page, "close"):
-            self.page.close(self.dlg)
-        else:
-            self.dlg.open = False
-            self.page.update()
+        print("[DEBUG] Closing CardDialog")
+        self.page.close(self.dlg)
+        self.page.update()
 
     def _save(self, e):
         # Validation
@@ -313,11 +307,13 @@ class CardDialog:
             self.callback()
             self._close(None)
         else:
-            print("Error saving card") 
-            self._close(None)
+            print("[ERRORE] Error saving card") 
+            # Non chiudere il dialogo in caso di errore
+            if hasattr(self, "txt_nome"):
+                self.txt_nome.error_text = "Errore durante il salvataggio"
+                self.page.update()
 
     def _aggiorna_preview_personalizzazione(self):
-
         self.icon_preview.content = AppStyles.get_logo_control(
             tipo=self.dd_tipo.value or "debito",
             circuito=self.dd_circuito.value,
@@ -326,9 +322,14 @@ class CardDialog:
             colore=self.selected_color_value
         )
         self.color_preview.bgcolor = self.selected_color_value if self.selected_color_value else ft.Colors.BLUE_GREY_700
-        self.icon_preview.update()
-        self.color_preview.update()
-        self.container_personalizzazione.update()
+        
+        # Forza aggiornamento preview (Solo se montato su una pagina)
+        if self.icon_preview.page:
+            self.icon_preview.update()
+        if self.color_preview.page:
+            self.color_preview.update()
+        if self.container_personalizzazione.page:
+            self.container_personalizzazione.update()
 
     def _apri_selettore_icona(self, e):
         """Apre un selettore di icone categorizzato (Standard, Conti, Carte, Comuni)."""
@@ -396,19 +397,36 @@ class CardDialog:
             content=ft.Container(
                 content=ft.Column(items, scroll=ft.ScrollMode.AUTO, height=500),
                 width=400
-            )
+            ),
+            actions=[
+                ft.TextButton("Annulla", on_click=lambda _: self._chiudi_picker_e_torna())
+            ],
+            modal=True
         )
-        self.page.open(self._picker_dlg)
+        self.dlg.open = False
+        self.page.update()
+        if self._picker_dlg not in self.page.overlay:
+            self.page.overlay.append(self._picker_dlg)
+        self._picker_dlg.open = True
+        self.page.update()
 
     def _seleziona_icona_flet(self, icon_name):
         self.selected_icon_value = icon_name
+        self._picker_dlg.open = False
+        if self._picker_dlg in self.page.overlay:
+            self.page.overlay.remove(self._picker_dlg)
+        self.dlg.open = True
+        self.page.update()
         self._aggiorna_preview_personalizzazione()
-        self.page.close(self._picker_dlg)
 
     def _seleziona_icona(self, icon_path):
         self.selected_icon_value = icon_path
+        self._picker_dlg.open = False
+        if self._picker_dlg in self.page.overlay:
+            self.page.overlay.remove(self._picker_dlg)
+        self.dlg.open = True
+        self.page.update()
         self._aggiorna_preview_personalizzazione()
-        self.page.close(self._picker_dlg)
 
     def _apri_selettore_colore(self, e):
         from utils.color_utils import MATERIAL_COLORS
@@ -417,11 +435,34 @@ class CardDialog:
             grid.controls.append(
                 ft.Container(bgcolor=color, width=40, height=40, border_radius=20, on_click=lambda ev, c=color: self._seleziona_colore(c))
             )
-        self._picker_dlg = ft.AlertDialog(title=ft.Text("Seleziona Colore"), content=ft.Container(content=grid, width=300, height=300))
-        self.page.open(self._picker_dlg)
+        self._picker_dlg = ft.AlertDialog(
+            title=ft.Text("Seleziona Colore"),
+            content=ft.Container(content=grid, width=300, height=300),
+            actions=[
+                ft.TextButton("Annulla", on_click=lambda _: self._chiudi_picker_e_torna())
+            ],
+            modal=True
+        )
+        self.dlg.open = False
+        self.page.update()
+        if self._picker_dlg not in self.page.overlay:
+            self.page.overlay.append(self._picker_dlg)
+        self._picker_dlg.open = True
+        self.page.update()
 
     def _seleziona_colore(self, color):
         self.selected_color_value = color
+        self._picker_dlg.open = False
+        if self._picker_dlg in self.page.overlay:
+            self.page.overlay.remove(self._picker_dlg)
+        self.dlg.open = True
+        self.page.update()
         self._aggiorna_preview_personalizzazione()
-        self.page.close(self._picker_dlg)
+
+    def _chiudi_picker_e_torna(self):
+        self._picker_dlg.open = False
+        if self._picker_dlg in self.page.overlay:
+            self.page.overlay.remove(self._picker_dlg)
+        self.dlg.open = True
+        self.page.update()
 
