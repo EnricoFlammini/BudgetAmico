@@ -700,7 +700,8 @@ class ContoDialog(ft.AlertDialog):
         if self.file_picker_icona not in self.controller.page.overlay:
             self.controller.page.overlay.append(self.file_picker_icona)
             
-        # Assicura SEMPRE che l'evento on_upload sia collegato
+        # Assicura SEMPRE che gli eventi siano collegati all'istanza corrente
+        self.file_picker_icona.on_result = self._on_file_picker_result
         self.file_picker_icona.on_upload = self._on_upload_complete
         
         # Carica icona e colore se presenti
@@ -1044,7 +1045,8 @@ class ContoDialog(ft.AlertDialog):
     def _avvia_upload_icona(self, e):
         self.file_picker_icona.pick_files(allowed_extensions=["png", "jpg", "jpeg"])
 
-    def _on_file_picker_result(self, e: ft.FilePickerResultEvent):
+    async def _on_file_picker_result(self, e: ft.FilePickerResultEvent):
+        print(f"[DEBUG UPLOAD] _on_file_picker_result triggered! Files: {e.files}")
         # DEBUG VISIBILE UTENTE
         self.controller.show_snack_bar(f"Debug: File selezionato? {bool(e.files)}", success=True)
         
@@ -1056,9 +1058,12 @@ class ContoDialog(ft.AlertDialog):
 
         # Web-compatible upload logic
         try:
+            print(f"[DEBUG UPLOAD] Generazione upload URL per {file.name}")
             upload_url = self.controller.page.get_upload_url(file.name, 600)
+            print(f"[DEBUG UPLOAD] URL generato: {upload_url}")
             self.controller.show_snack_bar(f"Debug: URL generato, avvio upload...", success=True)
             
+            print(f"[DEBUG UPLOAD] Avvio upload...")
             self.file_picker_icona.upload(
                 [
                     ft.FilePickerUploadFile(
@@ -1067,17 +1072,22 @@ class ContoDialog(ft.AlertDialog):
                     )
                 ]
             )
+            print(f"[DEBUG UPLOAD] Chiamata upload inviata.")
             self.controller.show_loading("Caricamento icona in corso...", 0.5) 
             # Note: The actual processing happens in _on_upload_complete event handler
         except Exception as ex:
              print(f"[DEBUG UPLOAD] ERRORE avvio upload: {ex}")
              self.controller.show_snack_bar(f"Errore avvio caricamento: {ex}", success=False)
 
-    def _on_upload_complete(self, e: ft.FilePickerUploadEvent):
-        print(f"[DEBUG UPLOAD] _on_upload_complete chiamato. File: {e.file_name}, Error: {e.error}")
+    async def _on_upload_complete(self, e: ft.FilePickerUploadEvent):
+        print(f"[DEBUG UPLOAD] _on_upload_complete triggered! File: {e.file_name}, Progress: {e.progress}, Error: {e.error}")
         if e.error:
             self.controller.hide_loading()
             self.controller.show_snack_bar(f"Errore caricamento: {e.error}", success=False)
+            return
+
+        # Aspetta che l'upload sia completo al 100%
+        if e.progress < 1.0:
             return
 
         from db.gestione_db import processa_icona_upload
