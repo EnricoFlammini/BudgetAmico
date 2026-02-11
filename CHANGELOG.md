@@ -7,8 +7,14 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 ## 📅 Changelog
 
 ### v0.50.00 (11/02/2026)
+- **Personalizzazione Conti e Carte**:
+    - Introdotta la possibilità di scegliere icone (standard Flet o PNG personalizzati) e colori per ogni conto e carta.
+    - Aggiornata la logica di visualizzazione dei loghi in tutta l'applicazione per supportare le personalizzazioni.
+- **Ordinamento Avanzato**:
+    - Nuova scheda **"Ordinamento"** nel pannello Admin per definire l'ordine di visualizzazione di conti e carte nei menu.
+    - L'ordinamento viene salvato persistentemente a livello di famiglia e applicato ai dropdown delle transazioni.
 - **Ottimizzazione Database (Performance)**:
-    - Implementata migrazione **v27** con indici mirati su `Transazioni(data)`, `TransazioniCondivise(data)` e `Budget_Storico(id_famiglia, anno, mese)`.
+    - Implementata migrazione **v27** (indici) e **v29** (supporto personalizzazione).
     - Ridotto drasticamente il timeout del caricamento budget mensile e storico.
     - Introdotta logica avanzata di rilevamento lock e **"Opzione Nucleare"** per terminare processi bloccanti durante le migrazioni.
 - **Admin Panel Enhancements**:

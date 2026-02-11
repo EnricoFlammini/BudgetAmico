@@ -199,21 +199,41 @@ class AppStyles:
         )
 
     @staticmethod
-    def get_logo_control(tipo: str, config_speciale: str = None, circuito: str = None, size: int = 24, color: str = None) -> ft.Control:
+    def get_logo_control(tipo: str, config_speciale: str = None, circuito: str = None, size: int = 24, color: str = None, icona: str = None, colore: str = None) -> ft.Control:
         """
         Restituisce il controllo (Immagine o Icona) per il logo richiesto.
         Implementa logica di fallback se le immagini ufficiali mancano.
         """
         import json
         
+        t_low = tipo.lower()
+        
+        # 0. Priorità: Icona Personalizzata o Colore Personalizzato
+        used_color = colore if colore else color
+        
+        if icona:
+            if icona.startswith("custom/"):
+                # Icona PNG personalizzata
+                icon_path = os.path.join("icons", icona) # Flet assets path relative to assets/
+                return ft.Image(
+                    src=icon_path,
+                    width=size,
+                    height=size,
+                    fit=ft.ImageFit.CONTAIN,
+                    color=used_color # Tint if provided
+                )
+            else:
+                # Icona Flet standard
+                try:
+                    icon_val = getattr(ft.icons, icona.upper())
+                    return ft.Icon(icon_val, size=size, color=used_color)
+                except:
+                    pass # Fallback to standard logic
+
         # 1. Determinazione file logo e fallback
         logo_file = None
         fallback_icon = ft.Icons.ACCOUNT_BALANCE
-        fallback_color = color # Use provided color or None
-        fallback_text = ""
-        fallback_bg = ft.Colors.GREY_700
-        
-        t_low = tipo.lower()
+        fallback_color = used_color
         
         # Logica per Conti
         if t_low in ["conto corrente", "corrente", "conto"]:

@@ -999,6 +999,62 @@ def set_configurazione(chiave: str, valore: str, id_famiglia: Optional[str] = No
         logger.error(f"Errore salvataggio configurazione {chiave}: {e}")
         return False
 
+# --- Gestione Ordinamento FOP ---
+def ottieni_ordinamento_conti_carte(id_famiglia: str) -> Optional[dict]:
+    """Recupera l'ordinamento personalizzato per conti e carte."""
+    import json
+    val = get_configurazione("ordinamento_fop", id_famiglia=id_famiglia)
+    if not val:
+        return None
+    try:
+        return json.loads(val)
+    except:
+        return None
+
+def salva_ordinamento_conti_carte(id_famiglia: str, ordinamento_dict: dict) -> bool:
+    """Salva l'ordinamento personalizzato per conti e carte."""
+    import json
+    val = json.dumps(ordinamento_dict)
+    return set_configurazione("ordinamento_fop", val, id_famiglia=id_famiglia)
+
+# --- Gestione Icone Personalizzate ---
+def salva_icona_personalizzata(file_name: str, file_bytes: bytes) -> bool:
+    """Salva un file PNG nella cartella delle icone custom."""
+    try:
+        target_dir = os.path.join("assets", "icons", "custom")
+        if not os.path.exists(target_dir):
+            os.makedirs(target_dir, exist_ok=True)
+        
+        with open(os.path.join(target_dir, file_name), "wb") as f:
+            f.write(file_bytes)
+        return True
+    except Exception as e:
+        logger.error(f"Errore salvataggio icona personalizzata: {e}")
+        return False
+
+def elimina_icona_personalizzata(file_name: str) -> bool:
+    """Elimina un'icona personalizzata."""
+    try:
+        path = os.path.join("assets", "icons", "custom", file_name)
+        if os.path.exists(path):
+            os.remove(path)
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Errore eliminazione icona personalizzata: {e}")
+        return False
+
+def ottieni_icone_personalizzate() -> list:
+    """Restituisce la lista di nomi file delle icone personalizzate."""
+    try:
+        target_dir = os.path.join("assets", "icons", "custom")
+        if not os.path.exists(target_dir):
+            return []
+        return [f for f in os.listdir(target_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+    except Exception as e:
+        logger.error(f"Errore recupero icone personalizzate: {e}")
+        return []
+
 
 def save_system_config(key: str, value: str, id_utente: Optional[str] = None) -> bool:
     """
@@ -3531,7 +3587,7 @@ def ottieni_invito_per_token(token):
 
 
 # --- Funzioni Conti Personali ---
-def aggiungi_conto(id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=0.0, borsa_default=None, master_key_b64=None, id_famiglia=None, config_speciale=None):
+def aggiungi_conto(id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=0.0, borsa_default=None, master_key_b64=None, id_famiglia=None, config_speciale=None, icona=None, colore=None):
     if not valida_iban_semplice(iban):
         return None, "IBAN non valido"
     iban_pulito = iban.strip().upper() if iban else None
@@ -3555,8 +3611,8 @@ def aggiungi_conto(id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=
             cur = con.cursor()
             # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
             cur.execute(
-                "INSERT INTO Conti (id_utente, nome_conto, tipo, iban, valore_manuale, borsa_default, config_speciale) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id_conto",
-                (id_utente, encrypted_nome, tipo_conto, encrypted_iban, valore_manuale, borsa_default, encrypted_config))
+                "INSERT INTO Conti (id_utente, nome_conto, tipo, iban, valore_manuale, borsa_default, config_speciale, icona, colore) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id_conto",
+                (id_utente, encrypted_nome, tipo_conto, encrypted_iban, valore_manuale, borsa_default, encrypted_config, icona, colore))
             id_nuovo_conto = cur.fetchone()['id_conto']
             return id_nuovo_conto, "Conto creato con successo"
     except Exception as e:
@@ -3568,7 +3624,7 @@ def ottieni_conti_utente(id_utente, master_key_b64=None):
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("SELECT id_conto, nome_conto, tipo FROM Conti WHERE id_utente = %s AND (nascosto = FALSE OR nascosto IS NULL)", (id_utente,))
+            cur.execute("SELECT id_conto, nome_conto, tipo, icona, colore FROM Conti WHERE id_utente = %s AND (nascosto = FALSE OR nascosto IS NULL)", (id_utente,))
             results = [dict(row) for row in cur.fetchall()]
             
             crypto, master_key = _get_crypto_and_key(master_key_b64)
@@ -3613,6 +3669,8 @@ def ottieni_dettagli_conti_utente(id_utente, master_key_b64=None):
                                C.iban,
                                C.borsa_default,
                                C.config_speciale,
+                               C.icona,
+                               C.colore,
                                CASE
                                    WHEN C.tipo = 'Fondo Pensione' THEN COALESCE(CAST(C.valore_manuale AS TEXT), '0.0')
                                    WHEN C.tipo = 'Investimento'
@@ -3686,7 +3744,7 @@ def ottieni_dettagli_conti_utente(id_utente, master_key_b64=None):
         return []
 
 
-def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=None, borsa_default=None, master_key_b64=None, id_famiglia=None, config_speciale=None):
+def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=None, borsa_default=None, master_key_b64=None, id_famiglia=None, config_speciale=None, icona=None, colore=None):
     if not valida_iban_semplice(iban):
         return False, "IBAN non valido"
     iban_pulito = iban.strip().upper() if iban else None
@@ -3711,11 +3769,11 @@ def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valor
             # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase 
             # Se il valore manuale non viene passato, non lo aggiorniamo (manteniamo quello esistente)
             if valore_manuale is not None:
-                cur.execute("UPDATE Conti SET nome_conto = %s, tipo = %s, iban = %s, valore_manuale = %s, borsa_default = %s, config_speciale = %s WHERE id_conto = %s AND id_utente = %s",
-                            (encrypted_nome, tipo_conto, encrypted_iban, valore_manuale, borsa_default, encrypted_config, id_conto, id_utente))
+                cur.execute("UPDATE Conti SET nome_conto = %s, tipo = %s, iban = %s, valore_manuale = %s, borsa_default = %s, config_speciale = %s, icona = %s, colore = %s WHERE id_conto = %s AND id_utente = %s",
+                            (encrypted_nome, tipo_conto, encrypted_iban, valore_manuale, borsa_default, encrypted_config, icona, colore, id_conto, id_utente))
             else:
-                cur.execute("UPDATE Conti SET nome_conto = %s, tipo = %s, iban = %s, borsa_default = %s, config_speciale = %s WHERE id_conto = %s AND id_utente = %s",
-                            (encrypted_nome, tipo_conto, encrypted_iban, borsa_default, encrypted_config, id_conto, id_utente))
+                cur.execute("UPDATE Conti SET nome_conto = %s, tipo = %s, iban = %s, borsa_default = %s, config_speciale = %s, icona = %s, colore = %s WHERE id_conto = %s AND id_utente = %s",
+                            (encrypted_nome, tipo_conto, encrypted_iban, borsa_default, encrypted_config, icona, colore, id_conto, id_utente))
             return cur.rowcount > 0, "Conto modificato con successo"
     except Exception as e:
         print(f"[ERRORE] Errore generico: {e}")
@@ -4131,7 +4189,7 @@ def ottieni_conti_condivisi_famiglia(id_famiglia, id_utente, master_key_b64=None
     except Exception as e:
         print(f"[ERRORE] ottieni_conti_condivisi_famiglia: {e}")
         return []
-def crea_conto_condiviso(id_famiglia, nome_conto, tipo_conto, tipo_condivisione, lista_utenti=None, id_utente=None, master_key_b64=None, config_speciale=None):
+def crea_conto_condiviso(id_famiglia, nome_conto, tipo_conto, tipo_condivisione, lista_utenti=None, id_utente=None, master_key_b64=None, config_speciale=None, icona=None, colore=None):
     # Encrypt with family key if available
     encrypted_nome = nome_conto
     if id_utente and master_key_b64:
@@ -4161,8 +4219,8 @@ def crea_conto_condiviso(id_famiglia, nome_conto, tipo_conto, tipo_condivisione,
             # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
 
             cur.execute(
-                "INSERT INTO ContiCondivisi (id_famiglia, nome_conto, tipo, tipo_condivisione, config_speciale) VALUES (%s, %s, %s, %s, %s) RETURNING id_conto_condiviso",
-                (id_famiglia, encrypted_nome, tipo_conto, tipo_condivisione, encrypted_config))
+                "INSERT INTO ContiCondivisi (id_famiglia, nome_conto, tipo, tipo_condivisione, config_speciale, icona, colore) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id_conto_condiviso",
+                (id_famiglia, encrypted_nome, tipo_conto, tipo_condivisione, encrypted_config, icona, colore))
             id_nuovo_conto_condiviso = cur.fetchone()['id_conto_condiviso']
 
             if tipo_condivisione == 'utenti' and lista_utenti:
@@ -4177,7 +4235,7 @@ def crea_conto_condiviso(id_famiglia, nome_conto, tipo_conto, tipo_condivisione,
         return None
 
 
-def modifica_conto_condiviso(id_conto_condiviso, nome_conto, tipo=None, tipo_condivisione=None, lista_utenti=None, id_utente=None, master_key_b64=None, config_speciale=None):
+def modifica_conto_condiviso(id_conto_condiviso, nome_conto, tipo=None, tipo_condivisione=None, lista_utenti=None, id_utente=None, master_key_b64=None, config_speciale=None, icona=None, colore=None):
     # Encrypt with family key if available
     encrypted_nome = nome_conto
     if id_utente and master_key_b64:
@@ -4282,6 +4340,8 @@ def ottieni_conti_condivisi_utente(id_utente, master_key_b64=None):
                                CC.nome_conto,
                                CC.tipo,
                                CC.tipo_condivisione,
+                               CC.icona,
+                               CC.colore,
                                1                             AS is_condiviso,
                                COALESCE(SUM(T.importo), 0.0) + COALESCE(CAST(NULLIF(CAST(CC.rettifica_saldo AS TEXT), '') AS NUMERIC), 0.0) AS saldo_calcolato
                         FROM ContiCondivisi CC
@@ -4292,7 +4352,7 @@ def ottieni_conti_condivisi_utente(id_utente, master_key_b64=None):
                            OR (CC.id_famiglia IN (SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s) AND
                                CC.tipo_condivisione = 'famiglia')
                         GROUP BY CC.id_conto_condiviso, CC.id_famiglia, CC.nome_conto, CC.tipo,
-                                 CC.tipo_condivisione, CC.rettifica_saldo -- GROUP BY per tutte le colonne non aggregate
+                                 CC.tipo_condivisione, CC.rettifica_saldo, CC.icona, CC.colore -- GROUP BY per tutte le colonne non aggregate
                         ORDER BY CC.nome_conto
                         """, (id_utente, id_utente))
             results = [dict(row) for row in cur.fetchall()]
@@ -4463,7 +4523,7 @@ def ottieni_tutti_i_conti_famiglia(id_famiglia, id_utente_richiedente, master_ke
                 uid = u['id_utente']
                 # Conti Personali di questo utente
                 cur.execute("""
-                    SELECT id_conto, nome_conto, tipo, config_speciale 
+                    SELECT id_conto, nome_conto, tipo, config_speciale, icona, colore
                     FROM Conti 
                     WHERE id_utente = %s AND (nascosto = FALSE OR nascosto IS NULL)
                 """, (uid,))
@@ -4496,7 +4556,7 @@ def ottieni_tutti_i_conti_famiglia(id_famiglia, id_utente_richiedente, master_ke
                     risultato.append(r)
                     
                 # Carte di questo utente
-                cur.execute("SELECT id_carta, nome_carta, id_conto_contabile, id_conto_contabile_condiviso FROM Carte WHERE id_utente = %s", (uid,))
+                cur.execute("SELECT id_carta, nome_carta, id_conto_contabile, id_conto_contabile_condiviso, icona, colore FROM Carte WHERE id_utente = %s", (uid,))
                 for row in cur.fetchall():
                     dec_nome = _decrypt_if_key(row['nome_carta'], family_key, crypto, silent=True)
                     if (dec_nome == "[ENCRYPTED]" or (isinstance(dec_nome, str) and dec_nome.startswith("gAAAAA"))) and uid == id_utente_richiedente and master_key:
@@ -4511,11 +4571,13 @@ def ottieni_tutti_i_conti_famiglia(id_famiglia, id_utente_richiedente, master_ke
                         'tipo': 'Carta',
                         'id_utente_owner': uid,
                         'nome_owner': u['nome_visualizzato'],
-                        'is_condiviso': False
+                        'is_condiviso': False,
+                        'icona': row.get('icona'),
+                        'colore': row.get('colore')
                     })
 
             # 3. Conti Condivisi della famiglia
-            cur.execute("SELECT id_conto_condiviso as id_conto, nome_conto, tipo, config_speciale FROM ContiCondivisi WHERE id_famiglia = %s", (id_famiglia,))
+            cur.execute("SELECT id_conto_condiviso as id_conto, nome_conto, tipo, config_speciale, icona, colore FROM ContiCondivisi WHERE id_famiglia = %s", (id_famiglia,))
             for row in cur.fetchall():
                 r = dict(row)
                 r['is_condiviso'] = True
@@ -9421,7 +9483,7 @@ def aggiungi_carta(id_utente, nome_carta, tipo_carta, circuito,
                    id_conto_riferimento=None, id_conto_contabile=None, 
                    id_conto_riferimento_condiviso=None, id_conto_contabile_condiviso=None,
                    massimale=None, giorno_addebito=None, spesa_tenuta=None, soglia_azzeramento=None, giorno_addebito_tenuta=None,
-                   addebito_automatico=False, master_key=None, crypto=None):
+                   addebito_automatico=False, master_key=None, crypto=None, icona=None, colore=None):
     """
     Aggiunge una nuova carta nel database. Cripta i dati sensibili.
     Gestisce automaticamente la creazione/assegnazione del conto contabile e lo storico massimali.
@@ -9460,13 +9522,15 @@ def aggiungi_carta(id_utente, nome_carta, tipo_carta, circuito,
                     id_conto_riferimento, id_conto_contabile,
                     id_conto_riferimento_condiviso, id_conto_contabile_condiviso,
                     massimale_encrypted, giorno_addebito_encrypted, spesa_tenuta_encrypted, 
-                    soglia_azzeramento_encrypted, giorno_addebito_tenuta_encrypted, addebito_automatico
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    soglia_azzeramento_encrypted, giorno_addebito_tenuta_encrypted, addebito_automatico,
+                    icona, colore
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id_carta
             """, (id_utente, nome_carta, tipo_carta, circuito, 
                   id_conto_riferimento, id_conto_contabile,
                   id_conto_riferimento_condiviso, id_conto_contabile_condiviso,
-                  massimale_enc, giorno_addebito_enc, spesa_tenuta_enc, soglia_azzeramento_enc, giorno_addebito_tenuta_enc, addebito_automatico))
+                  massimale_enc, giorno_addebito_enc, spesa_tenuta_enc, soglia_azzeramento_enc, giorno_addebito_tenuta_enc, addebito_automatico,
+                  icona, colore))
             
             row = cur.fetchone()
             id_carta = row.get('id_carta') if row else None
@@ -9527,7 +9591,7 @@ def modifica_carta(id_carta, nome_carta=None, tipo_carta=None, circuito=None,
                    id_conto_riferimento=None, id_conto_contabile=None,
                    id_conto_riferimento_condiviso=None, id_conto_contabile_condiviso=None,
                    massimale=None, giorno_addebito=None, spesa_tenuta=None, soglia_azzeramento=None, giorno_addebito_tenuta=None,
-                   addebito_automatico=None, master_key_b64=None):
+                   addebito_automatico=None, master_key_b64=None, icona=None, colore=None):
     """
     Modifica una carta esistente. Aggiorna solo i campi forniti.
     Gestisce lo storico massimali e la logica esclusiva Conti Personali/Condivisi.
@@ -9611,6 +9675,13 @@ def modifica_carta(id_carta, nome_carta=None, tipo_carta=None, circuito=None,
             if giorno_addebito_tenuta is not None:
                 updates.append("giorno_addebito_tenuta_encrypted = %s")
                 params.append(_encrypt_if_key(str(giorno_addebito_tenuta), master_key, crypto))
+            
+            if icona is not None:
+                updates.append("icona = %s")
+                params.append(icona)
+            if colore is not None:
+                updates.append("colore = %s")
+                params.append(colore)
 
             if updates:
                 params.append(id_carta)

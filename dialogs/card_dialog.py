@@ -13,7 +13,12 @@ class CardDialog:
         self.is_edit = card is not None
         
         self.dlg = None
+        self.file_picker_icona = ft.FilePicker(on_result=self._on_file_picker_result)
         self._build_dialog()
+
+        # Personalizzazione
+        self.selected_icon_value = self.card.get('icona') if self.card else None
+        self.selected_color_value = self.card.get('colore') if self.card else None
 
     def _build_dialog(self):
         # Fields
@@ -103,6 +108,30 @@ class CardDialog:
             self.txt_giorno
         ], visible=(self.dd_tipo.value == "credito"))
 
+        # Personalizzazione UI
+        from utils.styles import AppStyles
+        self.icon_preview = ft.Icon(ft.Icons.CREDIT_CARD, size=30)
+        self.btn_icon_selector = ft.IconButton(
+            icon=ft.Icons.AUTO_AWESOME_OUTLINED,
+            on_click=self._apri_selettore_icona
+        )
+        
+        self.color_preview = ft.Container(width=30, height=30, border_radius=15, bgcolor=ft.Colors.BLUE_GREY_700)
+        self.btn_color_selector = ft.IconButton(
+            icon=ft.Icons.COLOR_LENS_OUTLINED,
+            on_click=self._apri_selettore_colore
+        )
+        
+        self.container_personalizzazione = ft.Container(
+            content=ft.Row([
+                ft.Row([ft.Text("Icona:", size=12, weight="bold"), self.icon_preview, self.btn_icon_selector], spacing=5),
+                ft.Row([ft.Text("Colore:", size=12, weight="bold"), self.color_preview, self.btn_color_selector], spacing=5),
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            padding=5,
+            border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+            border_radius=8
+        )
+
         self.dlg = ft.AlertDialog(
             title=ft.Text("Modifica Carta" if self.is_edit else "Nuova Carta"),
             content=ft.Column([
@@ -111,6 +140,8 @@ class CardDialog:
                 self.dd_circuito,
                 self.dd_conto_rif,
                 ft.Divider(),
+                ft.Divider(),
+                self.container_personalizzazione,
                 self.txt_massimale,
                 row_costi,
                 self.txt_soglia_azzeramento,
@@ -173,7 +204,12 @@ class CardDialog:
         else:
             self.page.dialog = self.dlg
             self.dlg.open = True
-            self.page.update()
+            
+        if self.file_picker_icona not in self.page.overlay:
+            self.page.overlay.append(self.file_picker_icona)
+            
+        self._aggiorna_preview_personalizzazione()
+        self.page.update()
 
     def _close(self, e):
         if hasattr(self.page, "close"):
@@ -213,7 +249,9 @@ class CardDialog:
             'id_conto_riferimento': id_conto_rif,
             'id_conto_riferimento_condiviso': id_conto_rif_condiviso,
             'addebito_automatico': True, # Implied for Credit, meaningless/instant for Debit
-            'master_key_b64': mk
+            'master_key_b64': mk,
+            'icona': self.selected_icon_value,
+            'colore': self.selected_color_value
         }
         if self.dd_tipo.value == "debito":
             # For Debit Cards, Accounting Account must match Reference Account (Checking)
@@ -266,7 +304,9 @@ class CardDialog:
                                      soglia_azzeramento=data.get('soglia_azzeramento'),
                                      giorno_addebito_tenuta=data.get('giorno_addebito_tenuta'),
                                      addebito_automatico=data['addebito_automatico'],
-                                     master_key=mk)
+                                     master_key=mk,
+                                     icona=self.selected_icon_value,
+                                     colore=self.selected_color_value)
 
         if success:
             self.callback()
@@ -274,4 +314,85 @@ class CardDialog:
         else:
             print("Error saving card") 
             self._close(None)
+
+    def _aggiorna_preview_personalizzazione(self):
+        from utils.styles import AppStyles
+        self.icon_preview.content = AppStyles.get_logo_control(
+            tipo=self.dd_tipo.value or "debito",
+            circuito=self.dd_circuito.value,
+            size=30,
+            icona=self.selected_icon_value,
+            colore=self.selected_color_value
+        )
+        self.color_preview.bgcolor = self.selected_color_value if self.selected_color_value else ft.Colors.BLUE_GREY_700
+        if self.dlg.open:
+            self.container_personalizzazione.update()
+
+    def _apri_selettore_icona(self, e):
+        icone_comuni = [
+            ("Default", None),
+            ("Carta 1", "CREDIT_CARD"),
+            ("Carta 2", "PAYMENT"),
+            ("Shopping", "SHOPPING_CART"),
+            ("Contanti", "MONEY"),
+        ]
+        items = []
+        for nome, val in icone_comuni:
+            items.append(
+                ft.ListTile(
+                    leading=ft.Icon(getattr(ft.Icons, val) if val else ft.Icons.CREDIT_CARD),
+                    title=ft.Text(nome),
+                    on_click=lambda ev, v=val: self._seleziona_icona(v)
+                )
+            )
+        items.append(ft.Divider())
+        items.append(
+             ft.ListTile(
+                leading=ft.Icon(ft.Icons.UPLOAD),
+                title=ft.Text("Carica Icona PNG..."),
+                on_click=self._avvia_upload_icona
+            )
+        )
+        dlg = ft.AlertDialog(
+            title=ft.Text("Seleziona Icona"),
+            content=ft.Container(content=ft.Column(items, scroll=ft.ScrollMode.AUTO, height=300), width=300)
+        )
+        self.page.open(dlg)
+
+    def _seleziona_icona(self, icon_name):
+        self.selected_icon_value = icon_name
+        self._aggiorna_preview_personalizzazione()
+        self.page.close(self.page.dialog)
+
+    def _avvia_upload_icona(self, e):
+        self.file_picker_icona.pick_files(allowed_extensions=["png", "jpg", "jpeg"])
+
+    def _on_file_picker_result(self, e: ft.FilePickerResultEvent):
+        if not e.files: return
+        file = e.files[0]
+        from db.gestione_db import salva_icona_personalizzata
+        with open(file.path, "rb") as f:
+            file_bytes = f.read()
+        import datetime
+        ext = file.name.split('.')[-1]
+        safe_name = f"card_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.{ext}"
+        if salva_icona_personalizzata(safe_name, file_bytes):
+            self.selected_icon_value = f"custom/{safe_name}"
+            self._aggiorna_preview_personalizzazione()
+            if self.page.dialog: self.page.close(self.page.dialog)
+
+    def _apri_selettore_colore(self, e):
+        from utils.color_utils import MATERIAL_COLORS
+        grid = ft.GridView(expand=True, runs_count=6, max_extent=50, spacing=5, run_spacing=5)
+        for color in MATERIAL_COLORS:
+            grid.controls.append(
+                ft.Container(bgcolor=color, width=40, height=40, border_radius=20, on_click=lambda ev, c=color: self._seleziona_colore(c))
+            )
+        dlg = ft.AlertDialog(title=ft.Text("Seleziona Colore"), content=ft.Container(content=grid, width=300, height=300))
+        self.page.open(dlg)
+
+    def _seleziona_colore(self, color):
+        self.selected_color_value = color
+        self._aggiorna_preview_personalizzazione()
+        self.page.close(self.page.dialog)
 

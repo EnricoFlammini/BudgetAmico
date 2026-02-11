@@ -16,6 +16,7 @@ from db.gestione_db import (
 )
 from utils.email_sender import send_email
 from tabs.admin_tabs.subtab_budget_manager import AdminSubTabBudgetManager
+from tabs.admin_tabs.subtab_sorting import AdminSubTabSorting
 from utils.async_task import AsyncTask
 
 class AdminTab(ft.Container):
@@ -38,6 +39,7 @@ class AdminTab(ft.Container):
         
         # Subtabs
         self.subtab_budget_manager = AdminSubTabBudgetManager(controller)
+        self.subtab_sorting = AdminSubTabSorting(controller)
         
         # Stato Automazione
         self.server_automation_enabled = False
@@ -112,6 +114,14 @@ class AdminTab(ft.Container):
             ])
         )
         tabs.append(t_mem)
+        
+        # 4. Ordinamento
+        t_sort = ft.Tab(
+            text="Ordinamento",
+            icon=ft.Icons.SORT,
+            content=self.subtab_sorting
+        )
+        tabs.append(t_sort)
         
         # 4. Backup / Export (Sostituisce Email Tab)
         t_back = ft.Tab(
@@ -194,6 +204,12 @@ class AdminTab(ft.Container):
 
     def _fetch_all_data(self, famiglia_id, master_key_b64, id_utente):
         """Recupera tutti i dati necessari per le sotto-schede."""
+        # Trigger subtab updates if they are already visible/built
+        if hasattr(self, 'subtab_budget_manager'):
+            self.subtab_budget_manager.update_view()
+        if hasattr(self, 'subtab_sorting'):
+            self.subtab_sorting.update_view()
+            
         return {
             'categorie': ottieni_categorie_e_sottocategorie(famiglia_id),
             'membri': ottieni_membri_famiglia(famiglia_id, master_key_b64, id_utente),

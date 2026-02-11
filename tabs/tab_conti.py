@@ -228,7 +228,9 @@ class ContiTab(ft.Container):
             tipo=tipo, 
             config_speciale=conto.get('config_speciale'),
             size=30,
-            color=ft.Colors.WHITE
+            color=ft.Colors.WHITE,
+            icona=conto.get('icona'),
+            colore=conto.get('colore')
         )
 
         # Content Column

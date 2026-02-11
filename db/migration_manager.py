@@ -1100,6 +1100,39 @@ def _migra_da_v27_a_v28(con):
         return False
 
 
+def _migra_da_v28_a_v29(con):
+    """
+    Logica specifica per migrare un DB dalla versione 28 alla 29.
+    - Aggiunge icona e colore a Conti, ContiCondivisi e Carte.
+    """
+    print("Esecuzione migrazione da v28 a v29...")
+    try:
+        cur = con.cursor()
+        tabelle = ["Conti", "ContiCondivisi", "Carte"]
+        colonne = ["icona", "colore"]
+        
+        for tab in tabelle:
+            for col in colonne:
+                print(f"  - Aggiunta colonna {col} a {tab}...")
+                try:
+                    cur.execute(f"ALTER TABLE {tab} ADD COLUMN {col} TEXT")
+                except Exception as e:
+                    if "duplicate column" in str(e).lower() or "already exists" in str(e).lower():
+                        print(f"    Colonna '{col}' in '{tab}' già esistente.")
+                    else:
+                        raise e
+
+        # Commit immediato
+        con.commit()
+        print("Migrazione a v29 completata con successo.")
+        return True
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v28 a v29: {e}")
+        try: con.rollback() 
+        except: pass
+        return False
+
+
 def migra_database(con, versione_vecchia=None, versione_nuova=None):
     """
     Funzione principale che gestisce il processo di migrazione.
@@ -1268,6 +1301,11 @@ def migra_database(con, versione_vecchia=None, versione_nuova=None):
             if not _migra_da_v27_a_v28(con):
                  raise Exception("Migrazione da v27 a v28 fallita.")
             versione_vecchia = 28
+
+        if versione_vecchia == 28 and versione_nuova >= 29:
+            if not _migra_da_v28_a_v29(con):
+                 raise Exception("Migrazione da v28 a v29 fallita.")
+            versione_vecchia = 29
 
         # Se tutto è andato bene, aggiorna la versione del DB
         # Per Postgres usiamo InfoDB, per SQLite PRAGMA

@@ -18,7 +18,8 @@ from db.gestione_db import (
     ottieni_salvadanai_conto,
     esegui_giroconto_salvadanaio,
     ottieni_ids_conti_tecnici_carte,
-    get_configurazione
+    get_configurazione,
+    ottieni_ordinamento_conti_carte
 )
 from utils.logger import setup_logger
 
@@ -187,7 +188,14 @@ class TransactionDialog(ft.AlertDialog):
         if is_dest:
             self.selected_dest_key = key
             self.selected_dest_name.value = account_data['nome_conto']
-            new_logo = AppStyles.get_logo_control(tipo=account_data['tipo'], config_speciale=account_data.get('config_speciale'), size=20, color=ft.Colors.ON_SURFACE)
+            new_logo = AppStyles.get_logo_control(
+                tipo=account_data['tipo'], 
+                config_speciale=account_data.get('config_speciale'), 
+                size=20, 
+                color=ft.Colors.ON_SURFACE,
+                icona=account_data.get('icona'),
+                colore=account_data.get('colore')
+            )
             self.selected_dest_logo = new_logo
             self.pm_dest.content.content.controls[0].controls[0] = self.selected_dest_logo
             self.selected_dest_name.color = ft.Colors.ON_SURFACE
@@ -204,7 +212,9 @@ class TransactionDialog(ft.AlertDialog):
                 tipo=account_data['tipo'],
                 config_speciale=account_data.get('config_speciale'),
                 size=20,
-                color=ft.Colors.ON_SURFACE
+                color=ft.Colors.ON_SURFACE,
+                icona=account_data.get('icona'),
+                colore=account_data.get('colore')
             )
             self.selected_account_logo = new_logo
             self.pm_conto.content.content.controls[0].controls[0] = self.selected_account_logo
@@ -349,6 +359,28 @@ class TransactionDialog(ft.AlertDialog):
             if tipo_op == "Giroconto" and is_allowed(c, scope, matrix_dest):
                 opzioni_destinazione.append(opt)
 
+        # --- APPLICA ORDINAMENTO PERSONALIZZATO ---
+        order_data = ottieni_ordinamento_conti_carte(famiglia_id)
+        if order_data and order_data.get('order'):
+            order_keys = order_data['order']
+            
+            def get_sort_index(opt_key):
+                # opt_key può essere 'P123', 'C456' o 'CARD_ID_ACC_FLAG'
+                k = str(opt_key)
+                if k.startswith("CARD_"):
+                    # Estrai ID carta: CARD_12_34_P -> 12
+                    try:
+                        card_id = k.split('_')[1]
+                        if card_id in order_keys: return order_keys.index(card_id)
+                    except: pass
+                elif k in order_keys:
+                    return order_keys.index(k)
+                return 999 # In fondo se non trovato
+            
+            opzioni_sorgente.sort(key=lambda o: get_sort_index(o.key))
+            opzioni_destinazione.sort(key=lambda o: get_sort_index(o.key))
+        # ------------------------------------------
+
         self.dd_conto_dialog.options = opzioni_sorgente
         self.dd_conto_destinazione_dialog.options = opzioni_destinazione
 
@@ -368,7 +400,9 @@ class TransactionDialog(ft.AlertDialog):
                     tipo=c['tipo'], 
                     config_speciale=c.get('config_speciale'), 
                     size=20, 
-                    color=ft.Colors.ON_SURFACE
+                    color=ft.Colors.ON_SURFACE,
+                    icona=c.get('icona'),
+                    colore=c.get('colore')
                 )
                 
                 items.append(

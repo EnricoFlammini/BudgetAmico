@@ -64,6 +64,9 @@ class ContoDialog(ft.AlertDialog):
             ]
         )
 
+        # FilePicker per icone personalizzate
+        self.file_picker_icona = ft.FilePicker(on_result=self._on_file_picker_result)
+
         # Controlli del dialogo principale
         self.dd_scope_conto = ft.Dropdown(
             options=[
@@ -144,6 +147,34 @@ class ContoDialog(ft.AlertDialog):
             self.dd_paypal_fonte_preferita
         ], visible=False, spacing=10)
 
+        # Personalizzazione: Icona e Colore
+        self.selected_icon_value = None
+        self.selected_color_value = None
+        
+        self.icon_preview = ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=30)
+        self.btn_icon_selector = ft.IconButton(
+            icon=ft.Icons.AUTO_AWESOME_OUTLINED,
+            tooltip="Seleziona Icona",
+            on_click=self._apri_selettore_icona
+        )
+        
+        self.color_preview = ft.Container(width=30, height=30, border_radius=15, bgcolor=ft.Colors.BLUE_GREY_700)
+        self.btn_color_selector = ft.IconButton(
+            icon=ft.Icons.COLOR_LENS_OUTLINED,
+            tooltip="Seleziona Colore",
+            on_click=self._apri_selettore_colore
+        )
+        
+        self.container_personalizzazione = ft.Container(
+            content=ft.Row([
+                ft.Row([ft.Text("Icona:", size=12, weight="bold"), self.icon_preview, self.btn_icon_selector], spacing=5),
+                ft.Row([ft.Text("Colore:", size=12, weight="bold"), self.color_preview, self.btn_color_selector], spacing=5),
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            padding=5,
+            border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+            border_radius=8
+        )
+
         self.container_partecipanti = ft.Container(
             content=ft.Column([
                 self.partecipanti_title,
@@ -164,6 +195,7 @@ class ContoDialog(ft.AlertDialog):
                 self.container_partecipanti,
                 self.txt_conto_iban,
                 ft.Divider(),
+                self.container_personalizzazione,
                 self.container_ewallet_settings,
                 self.container_saldo_iniziale,
                 self.container_asset_iniziali,
@@ -665,6 +697,14 @@ class ContoDialog(ft.AlertDialog):
         # self.controller.page.dialog = self # Deprecated/Conflict with overlay
         if self not in self.controller.page.overlay:
             self.controller.page.overlay.append(self)
+        if self.file_picker_icona not in self.controller.page.overlay:
+            self.controller.page.overlay.append(self.file_picker_icona)
+        
+        # Carica icona e colore se presenti
+        self.selected_icon_value = conto_data.get('icona') if conto_data else None
+        self.selected_color_value = conto_data.get('colore') if conto_data else None
+        self._aggiorna_preview_personalizzazione()
+
         self.open = True
         self.controller.page.update()
 
@@ -797,7 +837,7 @@ class ContoDialog(ft.AlertDialog):
                 # -- SHARED ACCOUNT LOGIC --
                 if self.conto_id_in_modifica:
                     # Modify Shared
-                     success = modifica_conto_condiviso(
+                    success = modifica_conto_condiviso(
                         self.conto_id_in_modifica,
                         nome,
                         tipo,
@@ -805,10 +845,12 @@ class ContoDialog(ft.AlertDialog):
                         lista_utenti=lista_utenti_selezionati if self.dd_tipo_condivisione.value == 'utenti' else None,
                         id_utente=utente_id,
                         master_key_b64=master_key_b64,
-                        config_speciale=config_spec_json
+                        config_speciale=config_spec_json,
+                        icona=self.selected_icon_value,
+                        colore=self.selected_color_value
                     )
-                     messaggio = "modificato" if success else "errore modifica"
-                     new_conto_id = self.conto_id_in_modifica
+                    messaggio = "modificato" if success else "errore modifica"
+                    new_conto_id = self.conto_id_in_modifica
                 else:
                     # Create Shared
                     new_conto_id = crea_conto_condiviso(
@@ -819,7 +861,9 @@ class ContoDialog(ft.AlertDialog):
                         lista_utenti_selezionati if self.dd_tipo_condivisione.value == 'utenti' else None,
                         id_utente=utente_id,
                         master_key_b64=master_key_b64,
-                        config_speciale=config_spec_json
+                        config_speciale=config_spec_json,
+                        icona=self.selected_icon_value,
+                        colore=self.selected_color_value
                     )
                     success = new_conto_id is not None
                     messaggio = "aggiunto" if success else "errore aggiunta"
@@ -837,7 +881,7 @@ class ContoDialog(ft.AlertDialog):
                     # Passa il saldo_iniziale come valore_manuale solo se il tipo è 'Fondo Pensione'
                     valore_manuale_modifica = saldo_iniziale if tipo == 'Fondo Pensione' else None
                     
-                    success, msg = modifica_conto(self.conto_id_in_modifica, utente_id, nome, tipo, iban, valore_manuale=valore_manuale_modifica, master_key_b64=master_key_b64, id_famiglia=id_famiglia, config_speciale=config_spec_json)
+                    success, msg = modifica_conto(self.conto_id_in_modifica, utente_id, nome, tipo, iban, valore_manuale=valore_manuale_modifica, master_key_b64=master_key_b64, id_famiglia=id_famiglia, config_speciale=config_spec_json, icona=self.selected_icon_value, colore=self.selected_color_value)
                     messaggio = "modificato" if success else "errore modifica"
                     new_conto_id = self.conto_id_in_modifica
                     
@@ -848,7 +892,7 @@ class ContoDialog(ft.AlertDialog):
                 else:
                     # Passa il saldo_iniziale come valore_manuale solo se il tipo è 'Fondo Pensione'
                     valore_manuale_iniziale = saldo_iniziale if tipo == 'Fondo Pensione' else 0.0
-                    res = aggiungi_conto(utente_id, nome, tipo, iban, valore_manuale=valore_manuale_iniziale, master_key_b64=master_key_b64, id_famiglia=id_famiglia, config_speciale=config_spec_json)
+                    res = aggiungi_conto(utente_id, nome, tipo, iban, valore_manuale=valore_manuale_iniziale, master_key_b64=master_key_b64, id_famiglia=id_famiglia, config_speciale=config_spec_json, icona=self.selected_icon_value, colore=self.selected_color_value)
                     if isinstance(res, tuple):
                         new_conto_id, msg = res
                     else:
@@ -907,6 +951,122 @@ class ContoDialog(ft.AlertDialog):
             self._saving_in_progress = False  # Reset flag anti doppio-click
             self.controller.hide_loading()
             if self.controller.page: self.controller.page.update()
+
+    def _aggiorna_preview_personalizzazione(self):
+        # Preview Icona
+        self.icon_preview.content = AppStyles.get_logo_control(
+            tipo=self.dd_conto_tipo.value or "Conto",
+            config_speciale=None,
+            size=30,
+            icona=self.selected_icon_value,
+            colore=self.selected_color_value
+        )
+        # Preview Colore
+        self.color_preview.bgcolor = self.selected_color_value if self.selected_color_value else ft.Colors.BLUE_GREY_700
+        
+        if self.open:
+            self.container_personalizzazione.update()
+
+    def _apri_selettore_icona(self, e):
+        # Selettore semplice con alcune icone comuni e opzione Custom
+        icone_comuni = [
+            ("Default", None),
+            ("Banca", "ACCOUNT_BALANCE"),
+            ("Carta", "CREDIT_CARD"),
+            ("Contanti", "MONEY"),
+            ("Risparmio", "SAVINGS"),
+            ("Investimenti", "TRENDING_UP"),
+            ("Pensione", "WAVES"),
+            ("Shopping", "SHOPPING_CART"),
+            ("Auto", "DIRECTIONS_CAR"),
+            ("Casa", "HOME"),
+            ("Viaggi", "FLIGHT"),
+            ("Salute", "LOCAL_HOSPITAL"),
+        ]
+        
+        items = []
+        for nome, val in icone_comuni:
+            items.append(
+                ft.ListTile(
+                    leading=ft.Icon(getattr(ft.Icons, val) if val else ft.Icons.ACCOUNT_BALANCE),
+                    title=ft.Text(nome),
+                    on_click=lambda ev, v=val: self._seleziona_icona(v)
+                )
+            )
+            
+        items.append(ft.Divider())
+        items.append(
+             ft.ListTile(
+                leading=ft.Icon(ft.Icons.UPLOAD),
+                title=ft.Text("Carica Icona PNG..."),
+                on_click=self._avvia_upload_icona
+            )
+        )
+
+        dlg = ft.AlertDialog(
+            title=ft.Text("Seleziona Icona"),
+            content=ft.Container(
+                content=ft.Column(items, scroll=ft.ScrollMode.AUTO, height=300),
+                width=300
+            )
+        )
+        self.controller.page.open(dlg)
+
+    def _seleziona_icona(self, icon_name):
+        self.selected_icon_value = icon_name
+        self._aggiorna_preview_personalizzazione()
+        self.controller.page.close(self.controller.page.dialog)
+
+    def _avvia_upload_icona(self, e):
+        self.file_picker_icona.pick_files(allowed_extensions=["png", "jpg", "jpeg"])
+
+    def _on_file_picker_result(self, e: ft.FilePickerResultEvent):
+        if not e.files:
+            return
+        
+        file = e.files[0]
+        # Leggi i bytes e salva tramite backend
+        from db.gestione_db import salva_icona_personalizzata
+        with open(file.path, "rb") as f:
+            file_bytes = f.read()
+        
+        # Genera un nome file sicuro
+        ext = file.name.split('.')[-1]
+        safe_name = f"custom_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.{ext}"
+        
+        if salva_icona_personalizzata(safe_name, file_bytes):
+            self.selected_icon_value = f"custom/{safe_name}"
+            self._aggiorna_preview_personalizzazione()
+            if self.controller.page.dialog:
+                self.controller.page.close(self.controller.page.dialog)
+        else:
+            self.controller.show_snack_bar("Errore nel salvataggio dell'icona.", success=False)
+
+    def _apri_selettore_colore(self, e):
+        from utils.color_utils import MATERIAL_COLORS
+        
+        grid = ft.GridView(expand=True, runs_count=6, max_extent=50, spacing=5, run_spacing=5)
+        for color in MATERIAL_COLORS:
+            grid.controls.append(
+                ft.Container(
+                    bgcolor=color,
+                    width=40,
+                    height=40,
+                    border_radius=20,
+                    on_click=lambda ev, c=color: self._seleziona_colore(c)
+                )
+            )
+            
+        dlg = ft.AlertDialog(
+            title=ft.Text("Seleziona Colore"),
+            content=ft.Container(content=grid, width=300, height=300)
+        )
+        self.controller.page.open(dlg)
+
+    def _seleziona_colore(self, color):
+        self.selected_color_value = color
+        self._aggiorna_preview_personalizzazione()
+        self.controller.page.close(self.controller.page.dialog)
 
     # --- Logica per Rettifica Saldo (Admin) ---
 

@@ -102,7 +102,9 @@ class TabCarte(ft.Container):
             tipo=card_data['tipo_carta'],
             circuito=card_data['circuito'],
             size=30,
-            color=ft.Colors.WHITE
+            color=ft.Colors.WHITE,
+            icona=card_data.get('icona'),
+            colore=card_data.get('colore')
         )
         
         # Custom Header (Replacing ListTile to fix styling issues)

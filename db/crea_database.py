@@ -14,8 +14,8 @@ if not os.path.exists(APP_DATA_DIR):
 DB_FILE = os.path.join(APP_DATA_DIR, 'budget_amico.db')
 
 # --- SCHEMA DATABASE ---
-# Versione 28: Aggiunta ultimo_accesso su Utenti
-SCHEMA_VERSION = 28
+# Versione 29: Aggiunta icona e colore su Conti, ContiCondivisi e Carte
+SCHEMA_VERSION = 29
 
 TABLES = {
     "Utenti": """
@@ -77,7 +77,9 @@ TABLES = {
             rettifica_saldo REAL DEFAULT 0.0,
             borsa_default TEXT,
             nascosto BOOLEAN DEFAULT FALSE,
-            config_speciale TEXT
+            config_speciale TEXT,
+            icona TEXT,
+            colore TEXT
         );
     """,
     "ContiCondivisi": """
@@ -88,7 +90,9 @@ TABLES = {
             tipo TEXT NOT NULL,
             tipo_condivisione TEXT NOT NULL CHECK(tipo_condivisione IN ('famiglia', 'utenti')),
             rettifica_saldo REAL DEFAULT 0.0,
-            config_speciale TEXT
+            config_speciale TEXT,
+            icona TEXT,
+            colore TEXT
         );
     """,
     "PartecipazioneContoCondiviso": """
@@ -308,7 +312,9 @@ TABLES = {
             giorno_addebito_tenuta_encrypted TEXT,
             addebito_automatico BOOLEAN DEFAULT FALSE,
             data_creazione TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            attiva BOOLEAN DEFAULT TRUE
+            attiva BOOLEAN DEFAULT TRUE,
+            icona TEXT,
+            colore TEXT
         );
     """,
     "StoricoMassimaliCarte": """
