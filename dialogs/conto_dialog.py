@@ -964,8 +964,10 @@ class ContoDialog(ft.AlertDialog):
         # Preview Colore
         self.color_preview.bgcolor = self.selected_color_value if self.selected_color_value else ft.Colors.BLUE_GREY_700
         
-        if self.open:
-            self.container_personalizzazione.update()
+        # Forza aggiornamento preview
+        self.icon_preview.update()
+        self.color_preview.update()
+        self.container_personalizzazione.update()
 
     def _apri_selettore_icona(self, e):
         """Apre un selettore di icone categorizzato (Standard, Conti, Carte, Comuni)."""
@@ -1045,15 +1047,13 @@ class ContoDialog(ft.AlertDialog):
         # Per le icone flet passiamo solo il nome (es. "ACCOUNT_BALANCE")
         self.selected_icon_value = icon_name
         self._aggiorna_preview_personalizzazione()
-        if hasattr(self, '_picker_dlg'):
-            self.controller.page.close(self._picker_dlg)
+        self.controller.page.close(self._picker_dlg)
 
     def _seleziona_icona(self, icon_path):
         # Per le icone asset passiamo il percorso relativo (es. "conti/mio.png")
         self.selected_icon_value = icon_path
         self._aggiorna_preview_personalizzazione()
-        if hasattr(self, '_picker_dlg'):
-            self.controller.page.close(self._picker_dlg)
+        self.controller.page.close(self._picker_dlg)
 
 
 

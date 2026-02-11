@@ -251,10 +251,11 @@ class AppStyles:
             # Caso 2: Icona Flet standard
             else:
                 try:
-                    icon_val = getattr(ft.icons, icona.upper())
+                    # Usa ft.Icons (classe) che è quella standard per getattr con nomi maiuscoli
+                    icon_val = getattr(ft.Icons, icona.upper())
                     return ft.Icon(icon_val, size=size, color=used_color)
                 except:
-                    pass # Fallback to standard logic
+                    pass # Fallback logico standard
 
         # 1. Determinazione file logo e fallback
         logo_file = None

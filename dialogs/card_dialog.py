@@ -112,7 +112,7 @@ class CardDialog:
 
         # Personalizzazione UI
 
-        self.icon_preview = ft.Icon(ft.Icons.CREDIT_CARD, size=30)
+        self.icon_preview = ft.Container(content=ft.Icon(ft.Icons.CREDIT_CARD, size=30))
         self.btn_icon_selector = ft.IconButton(
             icon=ft.Icons.AUTO_AWESOME_OUTLINED,
             on_click=self._apri_selettore_icona
@@ -326,8 +326,9 @@ class CardDialog:
             colore=self.selected_color_value
         )
         self.color_preview.bgcolor = self.selected_color_value if self.selected_color_value else ft.Colors.BLUE_GREY_700
-        if self.dlg.open:
-            self.container_personalizzazione.update()
+        self.icon_preview.update()
+        self.color_preview.update()
+        self.container_personalizzazione.update()
 
     def _apri_selettore_icona(self, e):
         """Apre un selettore di icone categorizzato (Standard, Conti, Carte, Comuni)."""
@@ -402,14 +403,12 @@ class CardDialog:
     def _seleziona_icona_flet(self, icon_name):
         self.selected_icon_value = icon_name
         self._aggiorna_preview_personalizzazione()
-        if hasattr(self, '_picker_dlg'):
-            self.page.close(self._picker_dlg)
+        self.page.close(self._picker_dlg)
 
     def _seleziona_icona(self, icon_path):
         self.selected_icon_value = icon_path
         self._aggiorna_preview_personalizzazione()
-        if hasattr(self, '_picker_dlg'):
-            self.page.close(self._picker_dlg)
+        self.page.close(self._picker_dlg)
 
     def _apri_selettore_colore(self, e):
         from utils.color_utils import MATERIAL_COLORS
