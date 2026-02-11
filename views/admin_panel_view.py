@@ -1386,6 +1386,7 @@ class AdminPanelView:
     def _build_version_tab_content(self):
         return ft.Container(
             content=ft.Column([
+                ft.Container(height=20),
                 ft.Row([
                     ft.Icon(ft.Icons.INFO_OUTLINE, size=32, color=ft.Colors.BLUE),
                     ft.Text("Informazioni Versione", size=24, weight=ft.FontWeight.BOLD),
@@ -1412,7 +1413,6 @@ class AdminPanelView:
                     bgcolor=ft.Colors.BLUE_GREY_50,
                     border_radius=15,
                     border=ft.border.all(1, ft.Colors.BLUE_GREY_100),
-                    alignment=ft.alignment.center,
                 ),
                 
                 ft.Container(height=40),
@@ -1422,7 +1422,6 @@ class AdminPanelView:
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, scroll=ft.ScrollMode.AUTO),
             padding=40,
             expand=True,
-            alignment=ft.alignment.top_center
         )
 
     def _load_version_info(self):
@@ -1443,8 +1442,6 @@ class AdminPanelView:
         # Info Ambiente
         is_dev = os.getenv("DEBUG", "false").lower() == "true"
         self.env_type_text.value = f"Ambiente: {'Sviluppo (Debug)' if is_dev else 'Produzione'}"
-        
-        self.page.update()
 
 
 class AdminLoginView:
