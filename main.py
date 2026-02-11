@@ -81,6 +81,9 @@ def run_startup_sequence():
     print("[STARTUP] Sequenza completata.")
 
 
+import importlib
+import asyncio
+
 def main(page: ft.Page):
     """Entry point per ogni singola sessione utente (Flet Page)."""
     # Impostazioni iniziali
@@ -105,6 +108,23 @@ def main(page: ft.Page):
     page.update()
 
     try:
+        # TEST ROUTE PER UPLOAD (DEBUG)
+        if page.route == "/test-upload":
+            try:
+                print("[DEBUG] Loading Test Upload Page")
+                import test_upload
+                importlib.reload(test_upload)
+                if asyncio.iscoroutinefunction(test_upload.main):
+                    page.run_task(test_upload.main, page)
+                else:
+                    test_upload.main(page)
+                print("[DEBUG] Test Upload Page Task Started")
+            except Exception as e:
+                page.add(ft.Text(f"Errore caricamento test upload: {e}"))
+                traceback.print_exc()
+            page.update()
+            return
+
         # Crea l'istanza del controller WEB dedicato
         print(f"[SESSION] Creazione WebAppController per sessione {page.session_id}...")
         app = WebAppController(page)
@@ -115,19 +135,6 @@ def main(page: ft.Page):
         # Rimuoviamo il caricamento e andiamo alla route
         page.controls.clear()
         
-        # TEST ROUTE PER UPLOAD (DEBUG)
-        if page.route == "/test-upload":
-            try:
-                print("[DEBUG] Loading Test Upload Page")
-                import test_upload
-                test_upload.main(page)
-                print("[DEBUG] Test Upload Page Loaded")
-            except Exception as e:
-                page.add(ft.Text(f"Errore caricamento test upload: {e}"))
-                traceback.print_exc()
-            page.update()
-            return
-
         page.go(page.route)
         print(f"[SESSION] Sessione {page.session_id} pronta sulla route: {page.route}")
         
