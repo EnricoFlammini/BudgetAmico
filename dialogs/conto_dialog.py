@@ -700,7 +700,7 @@ class ContoDialog(ft.AlertDialog):
         if self.file_picker_icona not in self.controller.page.overlay:
             self.controller.page.overlay.append(self.file_picker_icona)
             
-        # Assicura che l'evento on_upload sia collegato (per istanze già create)
+        # Assicura SEMPRE che l'evento on_upload sia collegato
         self.file_picker_icona.on_upload = self._on_upload_complete
         
         # Carica icona e colore se presenti
