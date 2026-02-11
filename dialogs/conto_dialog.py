@@ -696,8 +696,6 @@ class ContoDialog(ft.AlertDialog):
         # self.controller.page.dialog = self # Deprecated/Conflict with overlay
         if self not in self.controller.page.overlay:
             self.controller.page.overlay.append(self)
-        if self.file_picker_icona not in self.controller.page.overlay:
-            self.controller.page.overlay.append(self.file_picker_icona)
             
 
         
