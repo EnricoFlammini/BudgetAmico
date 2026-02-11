@@ -151,7 +151,7 @@ class ContoDialog(ft.AlertDialog):
         self.selected_icon_value = None
         self.selected_color_value = None
         
-        self.icon_preview = ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=30)
+        self.icon_preview = ft.Container(content=ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=30))
         self.btn_icon_selector = ft.IconButton(
             icon=ft.Icons.AUTO_AWESOME_OUTLINED,
             tooltip="Seleziona Icona",
