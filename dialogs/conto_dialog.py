@@ -699,6 +699,9 @@ class ContoDialog(ft.AlertDialog):
             self.controller.page.overlay.append(self)
         if self.file_picker_icona not in self.controller.page.overlay:
             self.controller.page.overlay.append(self.file_picker_icona)
+            
+        # Assicura che l'evento on_upload sia collegato (per istanze già create)
+        self.file_picker_icona.on_upload = self._on_upload_complete
         
         # Carica icona e colore se presenti
         self.selected_icon_value = conto_data.get('icona') if conto_data else None
@@ -1042,13 +1045,18 @@ class ContoDialog(ft.AlertDialog):
         self.file_picker_icona.pick_files(allowed_extensions=["png", "jpg", "jpeg"])
 
     def _on_file_picker_result(self, e: ft.FilePickerResultEvent):
+        print(f"[DEBUG UPLOAD] _on_file_picker_result chiamato. Files: {e.files}")
         if not e.files:
             return
         
         file = e.files[0]
         # Web-compatible upload logic
         try:
+            print(f"[DEBUG UPLOAD] Generazione upload url per: {file.name}")
             upload_url = self.controller.page.get_upload_url(file.name, 600)
+            print(f"[DEBUG UPLOAD] Upload URL: {upload_url}")
+            
+            print(f"[DEBUG UPLOAD] Chiamata a file_picker.upload...")
             self.file_picker_icona.upload(
                 [
                     ft.FilePickerUploadFile(
@@ -1057,12 +1065,15 @@ class ContoDialog(ft.AlertDialog):
                     )
                 ]
             )
+            print(f"[DEBUG UPLOAD] file_picker.upload chiamato.")
             self.controller.show_loading("Caricamento icona...", 0.5) 
             # Note: The actual processing happens in _on_upload_complete event handler
         except Exception as ex:
-             print(f"Errore avvio upload: {ex}")
+             print(f"[DEBUG UPLOAD] ERRORE avvio upload: {ex}")
              self.controller.show_snack_bar("Errore avvio caricamento.", success=False)
+
     def _on_upload_complete(self, e: ft.FilePickerUploadEvent):
+        print(f"[DEBUG UPLOAD] _on_upload_complete chiamato. File: {e.file_name}, Error: {e.error}")
         if e.error:
             self.controller.hide_loading()
             self.controller.show_snack_bar(f"Errore caricamento: {e.error}", success=False)
