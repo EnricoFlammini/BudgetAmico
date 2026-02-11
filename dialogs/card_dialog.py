@@ -353,16 +353,16 @@ class CardDialog:
                 on_click=self._avvia_upload_icona
             )
         )
-        dlg = ft.AlertDialog(
+        self._picker_dlg = ft.AlertDialog(
             title=ft.Text("Seleziona Icona"),
             content=ft.Container(content=ft.Column(items, scroll=ft.ScrollMode.AUTO, height=300), width=300)
         )
-        self.page.open(dlg)
+        self.page.open(self._picker_dlg)
 
     def _seleziona_icona(self, icon_name):
         self.selected_icon_value = icon_name
         self._aggiorna_preview_personalizzazione()
-        self.page.close(self.page.dialog)
+        self.page.close(self._picker_dlg)
 
     def _avvia_upload_icona(self, e):
         self.file_picker_icona.pick_files(allowed_extensions=["png", "jpg", "jpeg"])
@@ -379,7 +379,7 @@ class CardDialog:
         if salva_icona_personalizzata(safe_name, file_bytes):
             self.selected_icon_value = f"custom/{safe_name}"
             self._aggiorna_preview_personalizzazione()
-            if self.page.dialog: self.page.close(self.page.dialog)
+            if hasattr(self, '_picker_dlg') and self._picker_dlg: self.page.close(self._picker_dlg)
 
     def _apri_selettore_colore(self, e):
         from utils.color_utils import MATERIAL_COLORS
@@ -388,11 +388,11 @@ class CardDialog:
             grid.controls.append(
                 ft.Container(bgcolor=color, width=40, height=40, border_radius=20, on_click=lambda ev, c=color: self._seleziona_colore(c))
             )
-        dlg = ft.AlertDialog(title=ft.Text("Seleziona Colore"), content=ft.Container(content=grid, width=300, height=300))
-        self.page.open(dlg)
+        self._picker_dlg = ft.AlertDialog(title=ft.Text("Seleziona Colore"), content=ft.Container(content=grid, width=300, height=300))
+        self.page.open(self._picker_dlg)
 
     def _seleziona_colore(self, color):
         self.selected_color_value = color
         self._aggiorna_preview_personalizzazione()
-        self.page.close(self.page.dialog)
+        self.page.close(self._picker_dlg)
 
