@@ -2840,48 +2840,7 @@ def ottieni_conti(id_utente: str, master_key_b64: Optional[str] = None) -> List[
         print(f"[ERRORE] Errore recupero conti: {e}")
         return []
 
-def modifica_conto(id_conto: str, nome_conto: str, tipo: str, saldo_iniziale: float, data_saldo_iniziale: str, master_key_b64: Optional[str] = None, id_famiglia: Optional[str] = None, id_utente: Optional[str] = None) -> bool:
-    # Encrypt if key available
-    crypto, master_key = _get_crypto_and_key(master_key_b64)
-    
-    # Use family_key for account name encryption (so other family members can decrypt it)
-    encryption_key = master_key
-    if master_key and id_famiglia and id_utente:
-        family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
-        if family_key:
-            encryption_key = family_key
-    
-    encrypted_nome = _encrypt_if_key(nome_conto, encryption_key, crypto)
-    encrypted_tipo = _encrypt_if_key(tipo, master_key, crypto)  # tipo can stay with master_key
-    encrypted_saldo = _encrypt_if_key(str(saldo_iniziale), master_key, crypto)
 
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            cur.execute(
-                "UPDATE Conti SET nome_conto = %s, tipo = %s WHERE id_conto = %s",
-                (encrypted_nome, encrypted_tipo, id_conto))
-            
-            # Update initial balance transaction
-            # Find existing "Saldo Iniziale" transaction
-            cur.execute("SELECT id_transazione FROM Transazioni WHERE id_conto = %s AND descrizione = 'Saldo Iniziale'", (id_conto,))
-            res = cur.fetchone()
-            
-            if res:
-                if saldo_iniziale != 0:
-                    cur.execute("UPDATE Transazioni SET importo = %s, data = %s WHERE id_transazione = %s",
-                                (saldo_iniziale, data_saldo_iniziale, res['id_transazione']))
-                else:
-                    cur.execute("DELETE FROM Transazioni WHERE id_transazione = %s", (res['id_transazione'],))
-            elif saldo_iniziale != 0:
-                cur.execute(
-                    "INSERT INTO Transazioni (id_conto, data, descrizione, importo) VALUES (%s, %s, 'Saldo Iniziale', %s)",
-                    (id_conto, data_saldo_iniziale, saldo_iniziale))
-            
-            return cur.rowcount > 0
-    except Exception as e:
-        print(f"[ERRORE] Errore modifica conto: {e}")
-        return False
 
 
 def elimina_conto(id_conto: str) -> bool:
@@ -4296,9 +4255,9 @@ def modifica_conto_condiviso(id_conto_condiviso, nome_conto, tipo=None, tipo_con
         with get_db_connection() as con:
             cur = con.cursor()
             
-            # Update Nome, Tipo, TipoCondivisione, config_speciale
-            sql = "UPDATE ContiCondivisi SET nome_conto = %s, config_speciale = %s"
-            params = [encrypted_nome, encrypted_config]
+            # Update Nome, Tipo, TipoCondivisione, config_speciale, icona, colore
+            sql = "UPDATE ContiCondivisi SET nome_conto = %s, config_speciale = %s, icona = %s, colore = %s"
+            params = [encrypted_nome, encrypted_config, icona, colore]
             
             if tipo:
                 sql += ", tipo = %s"
