@@ -1375,67 +1375,6 @@ class AdminPanelView:
         )
 
 
-class AdminLoginView:
-    """Vista di login per l'admin di sistema."""
-    
-    def __init__(self, page: ft.Page, on_login_success):
-        self.page = page
-        self.on_login_success = on_login_success
-        
-        self.txt_username = ft.TextField(
-            label="Username Admin",
-            autofocus=True,
-            width=300
-        )
-        self.txt_password = ft.TextField(
-            label="Password Admin",
-            password=True,
-            can_reveal_password=True,
-            width=300,
-            on_submit=self._on_login_click
-        )
-        self.error_text = ft.Text(color=ft.Colors.RED, size=12)
-    
-    def _on_login_click(self, e):
-        username = self.txt_username.value
-        password = self.txt_password.value
-        
-        if verifica_admin_sistema(username, password):
-            self.on_login_success()
-        else:
-            self.error_text.value = "Credenziali non valide."
-            self.page.update()
-            
-    def build_view(self) -> ft.View:
-        return ft.View(
-            "/admin/login",
-            [
-                ft.Container(
-                    content=ft.Column([
-                        ft.Icon(ft.Icons.ADMIN_PANEL_SETTINGS, size=64, color=ft.Colors.BLUE),
-                        ft.Text("Admin Login", size=24, weight=ft.FontWeight.BOLD),
-                        ft.Container(height=20),
-                        self.txt_username,
-                        self.txt_password,
-                        self.error_text,
-                        ft.Container(height=20),
-                        ft.ElevatedButton(
-                            "Accedi",
-                            on_click=self._on_login_click,
-                            width=300
-                        ),
-                        ft.TextButton(
-                            "Torna alla Home",
-                            on_click=lambda e: self.page.go("/")
-                        )
-                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
-                    alignment=ft.alignment.center,
-                    expand=True
-                )
-            ]
-        )
-
-
     # =========================================================================
     # --- VERSION TAB LOGIC ---
     # =========================================================================
@@ -1506,3 +1445,64 @@ class AdminLoginView:
         self.env_type_text.value = f"Ambiente: {'Sviluppo (Debug)' if is_dev else 'Produzione'}"
         
         self.page.update()
+
+
+class AdminLoginView:
+    """Vista di login per l'admin di sistema."""
+    
+    def __init__(self, page: ft.Page, on_login_success):
+        self.page = page
+        self.on_login_success = on_login_success
+        
+        self.txt_username = ft.TextField(
+            label="Username Admin",
+            autofocus=True,
+            width=300
+        )
+        self.txt_password = ft.TextField(
+            label="Password Admin",
+            password=True,
+            can_reveal_password=True,
+            width=300,
+            on_submit=self._on_login_click
+        )
+        self.error_text = ft.Text(color=ft.Colors.RED, size=12)
+    
+    def _on_login_click(self, e):
+        username = self.txt_username.value
+        password = self.txt_password.value
+        
+        if verifica_admin_sistema(username, password):
+            self.on_login_success()
+        else:
+            self.error_text.value = "Credenziali non valide."
+            self.page.update()
+            
+    def build_view(self) -> ft.View:
+        return ft.View(
+            "/admin/login",
+            [
+                ft.Container(
+                    content=ft.Column([
+                        ft.Icon(ft.Icons.ADMIN_PANEL_SETTINGS, size=64, color=ft.Colors.BLUE),
+                        ft.Text("Admin Login", size=24, weight=ft.FontWeight.BOLD),
+                        ft.Container(height=20),
+                        self.txt_username,
+                        self.txt_password,
+                        self.error_text,
+                        ft.Container(height=20),
+                        ft.ElevatedButton(
+                            "Accedi",
+                            on_click=self._on_login_click,
+                            width=300
+                        ),
+                        ft.TextButton(
+                            "Torna alla Home",
+                            on_click=lambda e: self.page.go("/")
+                        )
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
+                    alignment=ft.alignment.center,
+                    expand=True
+                )
+            ]
+        )
