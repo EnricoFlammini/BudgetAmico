@@ -93,7 +93,7 @@ class SupabaseManager:
                     'port': result.port or 5432,
                     'database': result.path[1:],
                     'ssl_context': True,
-                    'timeout': 10
+                    'timeout': 30  # Aumentato a 30 secondi per maggiore resilienza
                 }
                 cls._initialized = True
                 print(f"[DB] Parametri configurati per host: {result.hostname}")
@@ -105,10 +105,20 @@ class SupabaseManager:
 
     @classmethod
     def _create_connection(cls):
-        """Crea una nuova connessione raw."""
+        """Crea una nuova connessione raw con tentativi integrati."""
         if not cls._initialized:
             cls._initialize()
-        return pg8000.dbapi.connect(**cls._conn_params)
+        
+        last_error = None
+        for attempt in range(1, 3): # 2 tentativi interni
+            try:
+                return pg8000.dbapi.connect(**cls._conn_params)
+            except Exception as e:
+                last_error = e
+                if attempt < 2:
+                    import time
+                    time.sleep(2)
+        raise last_error
 
     @classmethod
     def get_connection(cls, id_utente: Optional[int] = None) -> DictConnection:
