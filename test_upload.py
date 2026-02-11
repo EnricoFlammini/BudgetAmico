@@ -24,8 +24,8 @@ async def main(page: ft.Page):
                 page.update()
                 
                 print(f"[DEBUG TEST] Avvio upload...")
-                await fp.upload_async([ft.FilePickerUploadFile(file.name, upload_url=upload_url)])
-                print(f"[DEBUG TEST] Chiamata upload_async inviata.")
+                fp.upload([ft.FilePickerUploadFile(file.name, upload_url=upload_url)])
+                print(f"[DEBUG TEST] Chiamata upload inviata.")
             except Exception as ex:
                 print(f"[DEBUG TEST] ERRORE in on_result: {ex}")
                 page.snack_bar = ft.SnackBar(ft.Text(f"Errore: {ex}"))
@@ -44,10 +44,10 @@ async def main(page: ft.Page):
     
     async def pick_click(e):
         print("[DEBUG TEST] Click su Carica File")
-        await fp.pick_files_async()
+        fp.pick_files()
 
     page.add(
-        ft.ElevatedButton("Carica File (Async)", on_click=pick_click)
+        ft.ElevatedButton("Carica File", on_click=pick_click)
     )
     page.update()
     print("[DEBUG TEST] UI Renderizzata")
