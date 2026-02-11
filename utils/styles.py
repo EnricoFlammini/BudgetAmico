@@ -199,6 +199,33 @@ class AppStyles:
         )
 
     @staticmethod
+    def ottieni_icone_categorizzate(assets_path: str = "assets") -> dict:
+        """
+        Scansiona la cartella assets/icons e restituisce un dizionario delle icone suddivise per categoria.
+        Es. {"conti": ["Banca.png", ...], "carte": [...]}
+        """
+        import os
+        icone = {}
+        icons_root = os.path.join(assets_path, "icons")
+        
+        if not os.path.exists(icons_root):
+            return icone
+            
+        for category in os.listdir(icons_root):
+            cat_path = os.path.join(icons_root, category)
+            if os.path.isdir(cat_path):
+                file_list = []
+                for f in os.listdir(cat_path):
+                    if f.lower().endswith(('.png', '.jpg', '.jpeg')) and f != "placeholder.txt":
+                        file_list.append(f)
+                if file_list:
+                    # Ordina alfabeticamente
+                    file_list.sort()
+                    icone[category] = file_list
+                    
+        return icone
+
+    @staticmethod
     def get_logo_control(tipo: str, config_speciale: str = None, circuito: str = None, size: int = 24, color: str = None, icona: str = None, colore: str = None) -> ft.Control:
         """
         Restituisce il controllo (Immagine o Icona) per il logo richiesto.
@@ -212,18 +239,17 @@ class AppStyles:
         used_color = colore if colore else color
         
         if icona:
-            if icona.startswith("custom/"):
-                # Icona PNG personalizzata
-                icon_path = f"/icons/{icona}" # Usa forward slash per URL asset
+            # Caso 1: Icona con percorso (es. "conti/mio_logo.png" o "custom/...")
+            if "/" in icona and icona.lower().endswith(('.png', '.jpg', '.jpeg')):
+                icon_path = f"/icons/{icona}" # Flet mappa assets/icons -> /icons
                 return ft.Image(
                     src=icon_path,
                     width=size,
                     height=size,
                     fit=ft.ImageFit.CONTAIN,
-                    # color=used_color # Rimosso tint per icone custom (spesso loghi colorati)
                 )
+            # Caso 2: Icona Flet standard
             else:
-                # Icona Flet standard
                 try:
                     icon_val = getattr(ft.icons, icona.upper())
                     return ft.Icon(icon_val, size=size, color=used_color)

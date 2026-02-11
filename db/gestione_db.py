@@ -1018,70 +1018,6 @@ def salva_ordinamento_conti_carte(id_famiglia: str, ordinamento_dict: dict) -> b
     val = json.dumps(ordinamento_dict)
     return set_configurazione("ordinamento_fop", val, id_famiglia=id_famiglia)
 
-# --- Gestione Icone Personalizzate ---
-def salva_icona_personalizzata(file_name: str, file_bytes: bytes) -> bool:
-    """Salva un file PNG nella cartella delle icone custom."""
-    try:
-        target_dir = os.path.join("assets", "icons", "custom")
-        if not os.path.exists(target_dir):
-            os.makedirs(target_dir, exist_ok=True)
-        
-        with open(os.path.join(target_dir, file_name), "wb") as f:
-            f.write(file_bytes)
-        return True
-    except Exception as e:
-        logger.error(f"Errore salvataggio icona personalizzata: {e}")
-        return False
-
-def lista_icone_personalizzate():
-    """Restituisce una lista di nomi file delle icone personalizzate."""
-    try:
-        target_dir = os.path.join("assets", "icons", "custom")
-        if not os.path.exists(target_dir):
-            return []
-        
-        files = [f for f in os.listdir(target_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
-        return sorted(files, key=lambda x: os.path.getmtime(os.path.join(target_dir, x)), reverse=True)
-    except Exception as e:
-        logger.error(f"Errore lettura icone personalizzate: {e}")
-        return []
-
-def elimina_icona_personalizzata(file_name: str) -> bool:
-    """Elimina un'icona personalizzata."""
-    try:
-        target_dir = os.path.join("assets", "icons", "custom")
-        file_path = os.path.join(target_dir, file_name)
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            return True
-        return False
-    except Exception as e:
-        logger.error(f"Errore eliminazione icona personalizzata: {e}")
-        return False
-
-def elimina_icona_personalizzata(file_name: str) -> bool:
-    """Elimina un'icona personalizzata."""
-    try:
-        path = os.path.join("assets", "icons", "custom", file_name)
-        if os.path.exists(path):
-            os.remove(path)
-            return True
-        return False
-    except Exception as e:
-        logger.error(f"Errore eliminazione icona personalizzata: {e}")
-        return False
-
-def ottieni_icone_personalizzate() -> list:
-    """Restituisce la lista di nomi file delle icone personalizzate."""
-    try:
-        target_dir = os.path.join("assets", "icons", "custom")
-        if not os.path.exists(target_dir):
-            return []
-        return [f for f in os.listdir(target_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
-    except Exception as e:
-        logger.error(f"Errore recupero icone personalizzate: {e}")
-        return []
-
 
 def save_system_config(key: str, value: str, id_utente: Optional[str] = None) -> bool:
     """
@@ -11221,35 +11157,3 @@ def check_registration_availability(username, email):
     except Exception as e:
         logger.error(f"Errore check_registration_availability: {e}")
         return False
-
-def processa_icona_upload(temp_filename: str) -> str:
-    """
-    Processa un file caricato nella cartella temporanea (upload_dir).
-    Lo sposta nella cartella assets/icons/custom e ritorna il path relativo.
-    """
-    try:
-        # Percorso temporaneo (assumendo che upload_dir sia "temp_uploads")
-        # In Flet server (o locale con upload_dir settato), i nomi file sono preservati.
-        source_path = os.path.join("temp_uploads", temp_filename)
-        
-        if not os.path.exists(source_path):
-            logger.error(f"File upload non trovato: {source_path}")
-            return None
-            
-        # Genera nome sicuro
-        ext = temp_filename.split('.')[-1]
-        safe_name = f"custom_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.{ext}"
-        
-        target_dir = os.path.join("assets", "icons", "custom")
-        if not os.path.exists(target_dir):
-            os.makedirs(target_dir, exist_ok=True)
-            
-        target_path = os.path.join(target_dir, safe_name)
-        
-        # Sposta il file
-        shutil.move(source_path, target_path)
-        
-        return f"custom/{safe_name}"
-    except Exception as e:
-        logger.error(f"Errore processamento upload icona: {e}")
-        return None

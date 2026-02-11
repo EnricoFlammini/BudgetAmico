@@ -76,9 +76,8 @@ class AdminPanelView:
         self._init_db_stats_tab_ui()
         self._init_fop_tab_ui()
         self._init_access_stats_ui()
-        self._init_version_tab_ui()
         self._init_sorting_tab_ui()
-        self._init_icons_tab_ui()
+        self._init_version_tab_ui()
 
     def _sort_datatable(self, e, table: ft.DataTable, data_list: list, update_method):
         """Helper generico per ordinare le tabelle."""
@@ -108,7 +107,6 @@ class AdminPanelView:
         self._load_fop_matrix()
         self._load_version_info()
         self._load_sorting_data()
-        self._load_icons()
 
         # Definisci le tabs
         self.tabs.tabs = [
@@ -153,11 +151,6 @@ class AdminPanelView:
                 content=self._build_sorting_tab_content()
             ),
             ft.Tab(
-                text="Icone",
-                icon=ft.Icons.IMAGE,
-                content=self._build_icons_tab_content()
-            ),
-            ft.Tab(
                 text="Versione",
                 icon=ft.Icons.INFO_OUTLINE,
                 content=self._build_version_tab_content()
@@ -179,8 +172,7 @@ class AdminPanelView:
             color=ft.Colors.WHITE
         )
 
-        if self.upload_icon_picker not in self.page.overlay:
-            self.page.overlay.append(self.upload_icon_picker)
+
 
         return ft.View(
             "/admin",
@@ -1265,123 +1257,7 @@ class AdminPanelView:
     # --- ICONS TAB LOGIC ---
     # =========================================================================
     def _init_icons_tab_ui(self):
-        self.icons_grid = ft.GridView(
-            expand=True,
-            runs_count=5,
-            max_extent=150,
-            child_aspect_ratio=1.0,
-            spacing=10,
-            run_spacing=10,
-        )
-        
-        self.upload_icon_picker = ft.FilePicker(on_result=self._upload_icon_result)
-        # Add to overlay later in build or init if possible, 
-        # but AdminPanelView receives page in init, so we can try adding safely in load.
-
-    def _build_icons_tab_content(self):
-        return ft.Container(
-            content=ft.Column([
-                ft.Row([
-                    ft.Text("Gestione Icone Personalizzate", size=20, weight=ft.FontWeight.BOLD),
-                    ft.ElevatedButton(
-                        "Carica Nuova Icona", 
-                        icon=ft.Icons.UPLOAD, 
-                        on_click=lambda _: self.upload_icon_picker.pick_files(allowed_extensions=["png", "jpg", "jpeg"]),
-                        bgcolor=ft.Colors.GREEN, color=ft.Colors.WHITE
-                    )
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                ft.Text("Gestisci le immagini caricate per la personalizzazione di conti e carte.", size=12, color=ft.Colors.GREY),
-                ft.Divider(),
-                self.icons_grid
-            ], expand=True),
-            padding=20, expand=True
-        )
-
-    def _load_icons(self):
-        from db.gestione_db import lista_icone_personalizzate
-        files = lista_icone_personalizzate()
-        
-        self.icons_grid.controls.clear()
-        
-        if not files:
-            self.icons_grid.controls.append(ft.Text("Nessuna icona personalizzata trovata."))
-        
-        for f in files:
-            self.icons_grid.controls.append(
-                ft.Container(
-                    content=ft.Column([
-                        ft.Image(src=f"/icons/custom/{f}",  width=64, height=64, fit=ft.ImageFit.CONTAIN),
-                        ft.Text(f, size=10, no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS),
-                        ft.IconButton(
-                            icon=ft.Icons.DELETE, 
-                            icon_color=ft.Colors.RED, 
-                            tooltip="Elimina Icona",
-                            on_click=lambda e, fname=f: self._delete_icon(fname)
-                        )
-                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
-                    padding=10,
-                    border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
-                    border_radius=8,
-                    bgcolor=ft.Colors.WHITE,
-                    alignment=ft.alignment.center
-                )
-            )
-        self.page.update()
-
-    def _upload_icon_result(self, e: ft.FilePickerResultEvent):
-        if not e.files:
-            return
-        
-        file = e.files[0]
-        from db.gestione_db import salva_icona_personalizzata
-        import datetime
-        
-        # Genera nome sicuro
-        ext = file.name.split('.')[-1]
-        safe_name = f"custom_admin_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.{ext}"
-        
-        try:
-            # Flet web/desktop handles file differently. 
-            # In desktop 'file.path' exists. In web it might need upload URL handling.
-            # Assuming desktop/local execution based on context.
-            with open(file.path, "rb") as f:
-                file_bytes = f.read()
-                
-            if salva_icona_personalizzata(safe_name, file_bytes):
-                self.page.snack_bar = ft.SnackBar(ft.Text(f"Icona {safe_name} caricata!"), bgcolor=ft.Colors.GREEN)
-                self._load_icons()
-            else:
-                self.page.snack_bar = ft.SnackBar(ft.Text("Errore salvataggio file."), bgcolor=ft.Colors.RED)
-        except Exception as ex:
-             self.page.snack_bar = ft.SnackBar(ft.Text(f"Errore upload: {ex}"), bgcolor=ft.Colors.RED)
-        
-        self.page.snack_bar.open = True
-        self.page.update()
-
-    def _delete_icon(self, file_name):
-        from db.gestione_db import elimina_icona_personalizzata
-        
-        def confirm_delete(_):
-            if elimina_icona_personalizzata(file_name):
-                self.page.snack_bar = ft.SnackBar(ft.Text("Icona eliminata."), bgcolor=ft.Colors.GREEN)
-                self._load_icons()
-            else:
-                self.page.snack_bar = ft.SnackBar(ft.Text("Errore eliminazione."), bgcolor=ft.Colors.RED)
-            self.page.close(self.confirm_dlg) # Using page.close directly on ref? No, standard dialog close logic.
-            # Since we are in an event handler, safer to close the specific dialog instance
-            self.page.snack_bar.open = True
-            self.page.update()
-
-        self.confirm_dlg = ft.AlertDialog(
-            title=ft.Text("Conferma Eliminazione"),
-            content=ft.Text(f"Vuoi davvero eliminare {file_name}?"),
-            actions=[
-                ft.TextButton("Annulla", on_click=lambda e: self.page.close(self.confirm_dlg)),
-                ft.TextButton("Elimina", on_click=confirm_delete, style=ft.ButtonStyle(color=ft.Colors.RED)),
-            ]
-        )
-        self.page.open(self.confirm_dlg)
-
+        pass # No longer needed, removed content
 
     def _load_config(self):
         from db.gestione_db import get_smtp_config, get_configurazione

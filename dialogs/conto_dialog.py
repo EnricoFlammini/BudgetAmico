@@ -64,8 +64,7 @@ class ContoDialog(ft.AlertDialog):
             ]
         )
 
-        # FilePicker per icone personalizzate
-        self.file_picker_icona = ft.FilePicker(on_result=self._on_file_picker_result, on_upload=self._on_upload_complete)
+
 
         # Controlli del dialogo principale
         self.dd_scope_conto = ft.Dropdown(
@@ -700,9 +699,7 @@ class ContoDialog(ft.AlertDialog):
         if self.file_picker_icona not in self.controller.page.overlay:
             self.controller.page.overlay.append(self.file_picker_icona)
             
-        # Assicura SEMPRE che gli eventi siano collegati all'istanza corrente
-        self.file_picker_icona.on_result = self._on_file_picker_result
-        self.file_picker_icona.on_upload = self._on_upload_complete
+
         
         # Carica icona e colore se presenti
         self.selected_icon_value = conto_data.get('icona') if conto_data else None
@@ -973,137 +970,94 @@ class ContoDialog(ft.AlertDialog):
             self.container_personalizzazione.update()
 
     def _apri_selettore_icona(self, e):
-        # Selettore semplice con alcune icone comuni e opzione Custom
-        icone_comuni = [
+        """Apre un selettore di icone categorizzato (Standard, Conti, Carte, Comuni)."""
+        items = []
+
+        # 1. Icone Standard Flet
+        icone_standard = [
             ("Default", None),
-            ("Banca", "ACCOUNT_BALANCE"),
-            ("Carta", "CREDIT_CARD"),
-            ("Contanti", "MONEY"),
-            ("Risparmio", "SAVINGS"),
-            ("Investimenti", "TRENDING_UP"),
-            ("Pensione", "WAVES"),
-            ("Shopping", "SHOPPING_CART"),
-            ("Auto", "DIRECTIONS_CAR"),
-            ("Casa", "HOME"),
-            ("Viaggi", "FLIGHT"),
-            ("Salute", "LOCAL_HOSPITAL"),
+            ("Banca", "ACCOUNT_BALANCE"), ("Carta", "CREDIT_CARD"),
+            ("Contanti", "MONEY"), ("Risparmio", "SAVINGS"),
+            ("Investimenti", "TRENDING_UP"), ("Pensione", "WAVES"),
+            ("Shopping", "SHOPPING_CART"), ("Auto", "DIRECTIONS_CAR"),
+            ("Casa", "HOME"), ("Viaggi", "FLIGHT"), ("Salute", "LOCAL_HOSPITAL"),
         ]
         
-        items = []
-        for nome, val in icone_comuni:
-            items.append(
-                ft.ListTile(
-                    leading=ft.Icon(getattr(ft.Icons, val) if val else ft.Icons.ACCOUNT_BALANCE),
-                    title=ft.Text(nome),
-                    on_click=lambda ev, v=val: self._seleziona_icona(v)
+        items.append(AppStyles.subheader_text("Icone Standard"))
+        standard_grid = ft.GridView(runs_count=4, max_extent=80, spacing=5, run_spacing=5, height=120)
+        for nome, val in icone_standard:
+            standard_grid.controls.append(
+                ft.Container(
+                    content=ft.Column([
+                        ft.Icon(getattr(ft.Icons, val) if val else ft.Icons.ACCOUNT_BALANCE, size=24),
+                        ft.Text(nome, size=10, text_align=ft.TextAlign.CENTER, no_wrap=True)
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
+                    padding=5,
+                    border_radius=5,
+                    on_click=lambda ev, v=val: self._seleziona_icona_flet(v),
+                    ink=True
                 )
             )
-            
-        # --- Icone Custom ---
-        try:
-            from db.gestione_db import lista_icone_personalizzate
-            custom_icons = lista_icone_personalizzate()
-            
-            if custom_icons:
-                items.append(ft.Divider())
-                items.append(ft.Text("Icone Personalizzate", size=12, color=ft.Colors.GREY, weight=ft.FontWeight.BOLD))
-                
-                for icon_file in custom_icons:
-                    items.append(
-                        ft.ListTile(
-                            leading=ft.Image(src=f"/icons/custom/{icon_file}", width=32, height=32, fit=ft.ImageFit.CONTAIN),
-                            title=ft.Text(icon_file, size=12),
-                            on_click=lambda ev, v=f"custom/{icon_file}": self._seleziona_icona(v)
-                        )
-                    )
-        except Exception as ex:
-            print(f"Errore caricamento icone custom: {ex}")
-
+        items.append(standard_grid)
         items.append(ft.Divider())
-        items.append(
-             ft.ListTile(
-                leading=ft.Icon(ft.Icons.UPLOAD),
-                title=ft.Text("Carica Icona PNG..."),
-                on_click=self._avvia_upload_icona
-            )
-        )
+
+        # 2. Icone Categorizzate dal Filesystem
+        icone_cat = AppStyles.ottieni_icone_categorizzate()
+        
+        # Mappa nomi categorie per visualizzazione
+        cat_labels = {
+            "conti": "Loghi Banche / Conti",
+            "carte": "Loghi Carte di Credito",
+            "comuni": "Icone Comuni",
+            "custom": "Altre Icone"
+        }
+
+        for cat_name, files in icone_cat.items():
+            items.append(AppStyles.subheader_text(cat_labels.get(cat_name, cat_name.capitalize())))
+            grid = ft.GridView(runs_count=3, max_extent=100, spacing=10, run_spacing=10, height=150)
+            
+            for f in files:
+                # Label pulita senza estensione
+                label = os.path.splitext(f)[0]
+                grid.controls.append(
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Image(src=f"/icons/{cat_name}/{f}", width=32, height=32, fit=ft.ImageFit.CONTAIN),
+                            ft.Text(label, size=9, text_align=ft.TextAlign.CENTER, no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS)
+                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
+                        padding=5,
+                        border_radius=5,
+                        on_click=lambda ev, v=f"{cat_name}/{f}": self._seleziona_icona(v),
+                        ink=True
+                    )
+                )
+            items.append(grid)
+            items.append(ft.Divider())
 
         self._picker_dlg = ft.AlertDialog(
             title=ft.Text("Seleziona Icona"),
             content=ft.Container(
-                content=ft.Column(items, scroll=ft.ScrollMode.AUTO, height=300),
-                width=300
+                content=ft.Column(items, scroll=ft.ScrollMode.AUTO, height=500),
+                width=400
             )
         )
         self.controller.page.open(self._picker_dlg)
 
-    def _seleziona_icona(self, icon_name):
+    def _seleziona_icona_flet(self, icon_name):
+        # Per le icone flet passiamo solo il nome (es. "ACCOUNT_BALANCE")
         self.selected_icon_value = icon_name
         self._aggiorna_preview_personalizzazione()
-        self.controller.page.close(self._picker_dlg)
+        if hasattr(self, '_picker_dlg'):
+            self.controller.page.close(self._picker_dlg)
 
-    def _avvia_upload_icona(self, e):
-        self.file_picker_icona.pick_files(allowed_extensions=["png", "jpg", "jpeg"])
+    def _seleziona_icona(self, icon_path):
+        # Per le icone asset passiamo il percorso relativo (es. "conti/mio.png")
+        self.selected_icon_value = icon_path
+        self._aggiorna_preview_personalizzazione()
+        if hasattr(self, '_picker_dlg'):
+            self.controller.page.close(self._picker_dlg)
 
-    async def _on_file_picker_result(self, e: ft.FilePickerResultEvent):
-        print(f"[DEBUG UPLOAD] _on_file_picker_result triggered! Files: {e.files}")
-        # DEBUG VISIBILE UTENTE
-        self.controller.show_snack_bar(f"Debug: File selezionato? {bool(e.files)}", success=True)
-        
-        if not e.files:
-            return
-        
-        file = e.files[0]
-        self.controller.show_snack_bar(f"Debug: Inizio upload per {file.name}", success=True)
 
-        # Web-compatible upload logic
-        try:
-            print(f"[DEBUG UPLOAD] Generazione upload URL per {file.name}")
-            upload_url = self.controller.page.get_upload_url(file.name, 600)
-            print(f"[DEBUG UPLOAD] URL generato: {upload_url}")
-            self.controller.show_snack_bar(f"Debug: URL generato, avvio upload...", success=True)
-            
-            print(f"[DEBUG UPLOAD] Avvio upload...")
-            self.file_picker_icona.upload(
-                [
-                    ft.FilePickerUploadFile(
-                        file.name,
-                        upload_url=upload_url,
-                    )
-                ]
-            )
-            print(f"[DEBUG UPLOAD] Chiamata upload inviata.")
-            self.controller.show_loading("Caricamento icona in corso...", 0.5) 
-            # Note: The actual processing happens in _on_upload_complete event handler
-        except Exception as ex:
-             print(f"[DEBUG UPLOAD] ERRORE avvio upload: {ex}")
-             self.controller.show_snack_bar(f"Errore avvio caricamento: {ex}", success=False)
-
-    async def _on_upload_complete(self, e: ft.FilePickerUploadEvent):
-        print(f"[DEBUG UPLOAD] _on_upload_complete triggered! File: {e.file_name}, Progress: {e.progress}, Error: {e.error}")
-        if e.error:
-            self.controller.hide_loading()
-            self.controller.show_snack_bar(f"Errore caricamento: {e.error}", success=False)
-            return
-
-        # Aspetta che l'upload sia completo al 100%
-        if e.progress < 1.0:
-            return
-
-        from db.gestione_db import processa_icona_upload
-        # e.file_name is the name of the file uploaded to upload_dir
-        relative_path = processa_icona_upload(e.file_name)
-        
-        if relative_path:
-            self.selected_icon_value = relative_path
-            self._aggiorna_preview_personalizzazione()
-            if hasattr(self, '_picker_dlg') and self._picker_dlg:
-                self.controller.page.close(self._picker_dlg)
-            self.controller.show_snack_bar("Icona caricata!", success=True)
-        else:
-            self.controller.show_snack_bar("Errore nel processamento dell'icona.", success=False)
-            
-        self.controller.hide_loading()
 
     def _apri_selettore_colore(self, e):
         from utils.color_utils import MATERIAL_COLORS

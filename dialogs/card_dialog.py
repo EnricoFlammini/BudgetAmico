@@ -4,6 +4,8 @@ from db.gestione_db import (
     aggiungi_carta, modifica_carta
 )
 import datetime
+import os
+from utils.styles import AppStyles
 
 class CardDialog:
     def __init__(self, page, callback, card=None):
@@ -13,7 +15,7 @@ class CardDialog:
         self.is_edit = card is not None
         
         self.dlg = None
-        self.file_picker_icona = ft.FilePicker(on_result=self._on_file_picker_result)
+
         self._build_dialog()
 
         # Personalizzazione
@@ -109,7 +111,7 @@ class CardDialog:
         ], visible=(self.dd_tipo.value == "credito"))
 
         # Personalizzazione UI
-        from utils.styles import AppStyles
+
         self.icon_preview = ft.Icon(ft.Icons.CREDIT_CARD, size=30)
         self.btn_icon_selector = ft.IconButton(
             icon=ft.Icons.AUTO_AWESOME_OUTLINED,
@@ -205,8 +207,7 @@ class CardDialog:
             self.page.dialog = self.dlg
             self.dlg.open = True
             
-        if self.file_picker_icona not in self.page.overlay:
-            self.page.overlay.append(self.file_picker_icona)
+
             
         self._aggiorna_preview_personalizzazione()
         self.page.update()
@@ -316,7 +317,7 @@ class CardDialog:
             self._close(None)
 
     def _aggiorna_preview_personalizzazione(self):
-        from utils.styles import AppStyles
+
         self.icon_preview.content = AppStyles.get_logo_control(
             tipo=self.dd_tipo.value or "debito",
             circuito=self.dd_circuito.value,
@@ -329,77 +330,86 @@ class CardDialog:
             self.container_personalizzazione.update()
 
     def _apri_selettore_icona(self, e):
-        icone_comuni = [
-            ("Default", None),
-            ("Carta 1", "CREDIT_CARD"),
-            ("Carta 2", "PAYMENT"),
-            ("Shopping", "SHOPPING_CART"),
-            ("Contanti", "MONEY"),
-        ]
+        """Apre un selettore di icone categorizzato (Standard, Conti, Carte, Comuni)."""
         items = []
-        for nome, val in icone_comuni:
-            items.append(
-                ft.ListTile(
-                    leading=ft.Icon(getattr(ft.Icons, val) if val else ft.Icons.CREDIT_CARD),
-                    title=ft.Text(nome),
-                    on_click=lambda ev, v=val: self._seleziona_icona(v)
+
+        # 1. Icone Standard Flet
+        icone_standard = [
+            ("Default", None),
+            ("Carta 1", "CREDIT_CARD"), ("Carta 2", "PAYMENT"),
+            ("Shopping", "SHOPPING_CART"), ("Contanti", "MONEY"),
+        ]
+        
+        items.append(AppStyles.subheader_text("Icone Standard"))
+        standard_grid = ft.GridView(runs_count=4, max_extent=80, spacing=5, run_spacing=5, height=120)
+        for nome, val in icone_standard:
+            standard_grid.controls.append(
+                ft.Container(
+                    content=ft.Column([
+                        ft.Icon(getattr(ft.Icons, val) if val else ft.Icons.CREDIT_CARD, size=24),
+                        ft.Text(nome, size=10, text_align=ft.TextAlign.CENTER, no_wrap=True)
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
+                    padding=5,
+                    border_radius=5,
+                    on_click=lambda ev, v=val: self._seleziona_icona_flet(v),
+                    ink=True
                 )
             )
-        # --- Icone Custom ---
-        try:
-            from db.gestione_db import lista_icone_personalizzate
-            custom_icons = lista_icone_personalizzate()
-            
-            if custom_icons:
-                items.append(ft.Divider())
-                items.append(ft.Text("Icone Personalizzate", size=12, color=ft.Colors.GREY, weight=ft.FontWeight.BOLD))
-                
-                for icon_file in custom_icons:
-                    items.append(
-                        ft.ListTile(
-                            leading=ft.Image(src=f"/icons/custom/{icon_file}", width=32, height=32, fit=ft.ImageFit.CONTAIN),
-                            title=ft.Text(icon_file, size=12),
-                            on_click=lambda ev, v=f"custom/{icon_file}": self._seleziona_icona(v)
-                        )
-                    )
-        except Exception as ex:
-            print(f"Errore caricamento icone custom: {ex}")
-
+        items.append(standard_grid)
         items.append(ft.Divider())
-        items.append(
-             ft.ListTile(
-                leading=ft.Icon(ft.Icons.UPLOAD),
-                title=ft.Text("Carica Icona PNG..."),
-                on_click=self._avvia_upload_icona
-            )
-        )
+
+        # 2. Icone Categorizzate dal Filesystem
+        icone_cat = AppStyles.ottieni_icone_categorizzate()
+        
+        # Mappa nomi categorie per visualizzazione
+        cat_labels = {
+            "conti": "Loghi Banche / Conti",
+            "carte": "Loghi Carte di Credito",
+            "comuni": "Icone Comuni",
+            "custom": "Altre Icone"
+        }
+
+        for cat_name, files in icone_cat.items():
+            items.append(AppStyles.subheader_text(cat_labels.get(cat_name, cat_name.capitalize())))
+            grid = ft.GridView(runs_count=3, max_extent=100, spacing=10, run_spacing=10, height=150)
+            
+            for f in files:
+                label = os.path.splitext(f)[0]
+                grid.controls.append(
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Image(src=f"/icons/{cat_name}/{f}", width=32, height=32, fit=ft.ImageFit.CONTAIN),
+                            ft.Text(label, size=9, text_align=ft.TextAlign.CENTER, no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS)
+                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
+                        padding=5,
+                        border_radius=5,
+                        on_click=lambda ev, v=f"{cat_name}/{f}": self._seleziona_icona(v),
+                        ink=True
+                    )
+                )
+            items.append(grid)
+            items.append(ft.Divider())
+
         self._picker_dlg = ft.AlertDialog(
             title=ft.Text("Seleziona Icona"),
-            content=ft.Container(content=ft.Column(items, scroll=ft.ScrollMode.AUTO, height=300), width=300)
+            content=ft.Container(
+                content=ft.Column(items, scroll=ft.ScrollMode.AUTO, height=500),
+                width=400
+            )
         )
         self.page.open(self._picker_dlg)
 
-    def _seleziona_icona(self, icon_name):
+    def _seleziona_icona_flet(self, icon_name):
         self.selected_icon_value = icon_name
         self._aggiorna_preview_personalizzazione()
-        self.page.close(self._picker_dlg)
+        if hasattr(self, '_picker_dlg'):
+            self.page.close(self._picker_dlg)
 
-    def _avvia_upload_icona(self, e):
-        self.file_picker_icona.pick_files(allowed_extensions=["png", "jpg", "jpeg"])
-
-    def _on_file_picker_result(self, e: ft.FilePickerResultEvent):
-        if not e.files: return
-        file = e.files[0]
-        from db.gestione_db import salva_icona_personalizzata
-        with open(file.path, "rb") as f:
-            file_bytes = f.read()
-        import datetime
-        ext = file.name.split('.')[-1]
-        safe_name = f"card_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.{ext}"
-        if salva_icona_personalizzata(safe_name, file_bytes):
-            self.selected_icon_value = f"custom/{safe_name}"
-            self._aggiorna_preview_personalizzazione()
-            if hasattr(self, '_picker_dlg') and self._picker_dlg: self.page.close(self._picker_dlg)
+    def _seleziona_icona(self, icon_path):
+        self.selected_icon_value = icon_path
+        self._aggiorna_preview_personalizzazione()
+        if hasattr(self, '_picker_dlg'):
+            self.page.close(self._picker_dlg)
 
     def _apri_selettore_colore(self, e):
         from utils.color_utils import MATERIAL_COLORS
