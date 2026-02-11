@@ -47,19 +47,22 @@ class TransactionDialog(ft.AlertDialog):
         self.selected_account_key = None
         self.selected_account_data = None
         
-        self.container_conto_selector = ft.Container(
-            content=ft.Row([
-                ft.Row([
-                    self.selected_account_logo,
-                    self.selected_account_name,
-                ], expand=True, spacing=10),
-                ft.Icon(ft.Icons.ARROW_DROP_DOWN)
-            ]),
-            padding=ft.padding.all(12),
-            border=ft.border.all(1, ft.Colors.OUTLINE),
-            border_radius=5,
-            on_click=self._apri_bottom_sheet_conti,
-            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+        self.pm_conto = ft.PopupMenuButton(
+            content=ft.Container(
+                content=ft.Row([
+                    ft.Row([
+                        self.selected_account_logo,
+                        self.selected_account_name,
+                    ], expand=True, spacing=10),
+                    ft.Icon(ft.Icons.ARROW_DROP_DOWN)
+                ]),
+                padding=ft.padding.all(12),
+                border=ft.border.all(1, ft.Colors.OUTLINE),
+                border_radius=5,
+                clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+            ),
+            items=[],
+            tooltip="Seleziona Conto"
         )
         self.txt_error_conto = ft.Text("", color=ft.Colors.RED, size=12, visible=False)
         
@@ -68,19 +71,22 @@ class TransactionDialog(ft.AlertDialog):
         self.selected_dest_name = ft.Text("Seleziona Destinazione", size=16)
         self.selected_dest_key = None
         
-        self.container_dest_selector = ft.Container(
-            content=ft.Row([
-                ft.Row([
-                    self.selected_dest_logo,
-                    self.selected_dest_name,
-                ], expand=True, spacing=10),
-                ft.Icon(ft.Icons.ARROW_DROP_DOWN)
-            ]),
-            padding=ft.padding.all(12),
-            border=ft.border.all(1, ft.Colors.OUTLINE),
-            border_radius=5,
-            on_click=lambda e: self._apri_bottom_sheet_conti(e, is_dest=True),
-            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+        self.pm_dest = ft.PopupMenuButton(
+            content=ft.Container(
+                content=ft.Row([
+                    ft.Row([
+                        self.selected_dest_logo,
+                        self.selected_dest_name,
+                    ], expand=True, spacing=10),
+                    ft.Icon(ft.Icons.ARROW_DROP_DOWN)
+                ]),
+                padding=ft.padding.all(12),
+                border=ft.border.all(1, ft.Colors.OUTLINE),
+                border_radius=5,
+                clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+            ),
+            items=[],
+            tooltip="Seleziona Destinazione"
         )
         self.txt_error_dest = ft.Text("", color=ft.Colors.RED, size=12, visible=False)
         
@@ -102,13 +108,13 @@ class TransactionDialog(ft.AlertDialog):
                 self.txt_importo_dialog,
                 ft.Column([
                     ft.Text("Conto", size=12, color=ft.Colors.PRIMARY),
-                    self.container_conto_selector,
+                    self.pm_conto,
                     self.txt_error_conto
                 ], spacing=2),
                 self.dd_paypal_fonte_dialog, # Visibile solo se PayPal
                 ft.Column([
                     ft.Text("Destinazione", size=12, color=ft.Colors.PRIMARY),
-                    self.container_dest_selector,
+                    self.pm_dest,
                     self.txt_error_dest
                 ], spacing=2, visible=False),
                 self.dd_sottocategoria_dialog,
@@ -161,9 +167,6 @@ class TransactionDialog(ft.AlertDialog):
         try:
             self.open = False
             self.controller.page.session.set("transazione_in_modifica", None)
-            # Chiudi anche il BottomSheet se aperto
-            if hasattr(self, 'bs_conti') and self.bs_conti.open:
-                self.bs_conti.open = False
             if self.controller.page:
                 self.controller.page.update()
         except Exception as ex:
@@ -171,60 +174,8 @@ class TransactionDialog(ft.AlertDialog):
             traceback.print_exc()
 
     def _apri_bottom_sheet_conti(self, e, is_dest=False):
-        """Apre un BottomSheet per la selezione del conto con loghi."""
-        from utils.styles import AppStyles
-        
-        lv_conti = ft.ListView(expand=True, spacing=0)
-        
-        def on_conto_selected(e):
-            account_data = e.control.data
-            key = e.control.key
-            self._select_account(key, account_data, is_dest=is_dest)
-            self.bs_conti.open = False
-            self.bs_conti.update()
-            self.update()
-
-        options = self.dd_conto_destinazione_dialog.options if is_dest else self.dd_conto_dialog.options
-
-        for opt in options:
-            c = opt.data
-            suffix = ""
-            if c.get('is_condiviso'): suffix = " " + self.loc.get("shared_suffix")
-            elif str(c.get('id_utente_owner')) != str(self.controller.get_user_id()): 
-                 suffix = f" ({c.get('nome_owner', 'Altro')})"
-
-            # Usa l'utility globale per il logo
-            logo = AppStyles.get_logo_control(
-                tipo=c['tipo'],
-                config_speciale=c.get('config_speciale'),
-                size=24
-            )
-
-            lv_conti.controls.append(
-                ft.ListTile(
-                    leading=logo,
-                    title=ft.Text(f"{c['nome_conto']}{suffix}"),
-                    subtitle=ft.Text(c['tipo'], size=12),
-                    key=opt.key,
-                    data=c,
-                    on_click=on_conto_selected
-                )
-            )
-
-        self.bs_conti = ft.BottomSheet(
-            ft.Container(
-                ft.Column([
-                    ft.Text("Seleziona Destinazione" if is_dest else "Seleziona Conto", size=18, weight="bold", text_align=ft.TextAlign.CENTER),
-                    ft.Divider(),
-                    lv_conti
-                ], tight=True, spacing=10),
-                padding=20,
-                height=400,
-            ),
-            open=True,
-        )
-        self.controller.page.overlay.append(self.bs_conti)
-        self.controller.page.update()
+        """Metodo rimosso in favore di PopupMenuButton."""
+        pass
 
     def _select_account(self, key, account_data, is_dest=False):
         from utils.styles import AppStyles
@@ -233,9 +184,10 @@ class TransactionDialog(ft.AlertDialog):
             self.selected_dest_name.value = account_data['nome_conto']
             new_logo = AppStyles.get_logo_control(tipo=account_data['tipo'], config_speciale=account_data.get('config_speciale'), size=20)
             self.selected_dest_logo = new_logo
-            self.container_dest_selector.content.controls[0].controls[0] = self.selected_dest_logo
+            self.pm_dest.content.content.controls[0].controls[0] = self.selected_dest_logo
             self.dd_conto_destinazione_dialog.value = key
             self.txt_error_dest.visible = False
+            self.pm_dest.update()
         else:
             self.selected_account_key = key
             self.selected_account_data = account_data
@@ -248,10 +200,11 @@ class TransactionDialog(ft.AlertDialog):
                 size=20
             )
             self.selected_account_logo = new_logo
-            self.container_conto_selector.content.controls[0].controls[0] = self.selected_account_logo
+            self.pm_conto.content.content.controls[0].controls[0] = self.selected_account_logo
             
             self.selected_account_name.color = ft.Colors.BLACK if self.controller.page.theme_mode == ft.ThemeMode.LIGHT else ft.Colors.WHITE
             self.txt_error_conto.visible = False
+            self.pm_conto.update()
             
             # Sincronizza con il dropdown nascosto per non rompere la logica esistente
             self.dd_conto_dialog.value = key
@@ -264,14 +217,14 @@ class TransactionDialog(ft.AlertDialog):
         self.selected_account_data = None
         self.selected_account_name.value = "Seleziona Conto"
         self.selected_account_logo = ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=20)
-        self.container_conto_selector.content.controls[0].controls[0] = self.selected_account_logo
+        self.pm_conto.content.content.controls[0].controls[0] = self.selected_account_logo
         self.dd_conto_dialog.value = None
         self.txt_error_conto.visible = False
         
         self.selected_dest_key = None
         self.selected_dest_name.value = "Seleziona Destinazione"
         self.selected_dest_logo = ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=20)
-        self.container_dest_selector.content.controls[0].controls[0] = self.selected_dest_logo
+        self.pm_dest.content.content.controls[0].controls[0] = self.selected_dest_logo
         self.dd_conto_destinazione_dialog.value = None
         self.txt_error_dest.visible = False
 
@@ -392,6 +345,39 @@ class TransactionDialog(ft.AlertDialog):
         self.dd_conto_dialog.options = opzioni_sorgente
         self.dd_conto_destinazione_dialog.options = opzioni_destinazione
 
+        # Popola PopupMenuButton
+        from utils.styles import AppStyles
+        
+        def create_menu_items(options, is_dest):
+            items = []
+            for opt in options:
+                c = opt.data
+                suffix = ""
+                if c.get('is_condiviso'): suffix = " " + self.loc.get("shared_suffix")
+                elif str(c.get('id_utente_owner')) != str(utente_id): 
+                     suffix = f" ({c.get('nome_owner', 'Altro')})"
+
+                logo = AppStyles.get_logo_control(tipo=c['tipo'], config_speciale=c.get('config_speciale'), size=20)
+                
+                items.append(
+                    ft.PopupMenuItem(
+                        content=ft.Row([
+                            logo,
+                            ft.Column([
+                                ft.Text(f"{c['nome_conto']}{suffix}", size=14),
+                                ft.Text(c['tipo'], size=10, color=ft.Colors.GREY_500),
+                            ], spacing=0)
+                        ], spacing=10),
+                        key=opt.key,
+                        data=c,
+                        on_click=lambda e, k=opt.key, d=c, dest=is_dest: self._select_account(k, d, is_dest=dest)
+                    )
+                )
+            return items
+
+        self.pm_conto.items = create_menu_items(opzioni_sorgente, False)
+        self.pm_dest.items = create_menu_items(opzioni_destinazione, True)
+
         # 4. Categories Dropdown
         self.dd_sottocategoria_dialog.options = [
             ft.dropdown.Option(key="", text=self.loc.get("no_category")),
@@ -413,7 +399,7 @@ class TransactionDialog(ft.AlertDialog):
         self._popola_dropdowns()
         
         # Toggle visibilità campi
-        self.container_dest_selector.parent.visible = is_giroconto
+        self.pm_dest.parent.visible = is_giroconto
         self.dd_sottocategoria_dialog.visible = not is_giroconto
         self.cb_importo_nascosto.visible = not is_giroconto
         
