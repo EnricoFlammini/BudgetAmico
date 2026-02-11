@@ -64,7 +64,14 @@ class TransactionDialog(ft.AlertDialog):
             items=[],
             tooltip="Seleziona Conto"
         )
-        self.txt_error_conto = ft.Text("", color=ft.Colors.RED, size=12, visible=False)
+        self.lbl_error_conto = ft.Text("", color=ft.Colors.RED, size=12, visible=False)
+    
+        self.lbl_conto = ft.Text("Conto", size=12, color=ft.Colors.PRIMARY)
+        self.col_conto = ft.Column([
+            self.lbl_conto,
+            self.pm_conto,
+            self.lbl_error_conto
+        ], spacing=2)
         
         # Selettore Destinazione Custom (Giroconto)
         self.selected_dest_logo = ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=20, color=ft.Colors.ON_SURFACE)
@@ -88,7 +95,13 @@ class TransactionDialog(ft.AlertDialog):
             items=[],
             tooltip="Seleziona Destinazione"
         )
-        self.txt_error_dest = ft.Text("", color=ft.Colors.RED, size=12, visible=False)
+        self.lbl_error_dest = ft.Text("", color=ft.Colors.RED, size=12, visible=False)
+        
+        self.col_dest = ft.Column([
+            ft.Text("Destinazione", size=12, color=ft.Colors.PRIMARY),
+            self.pm_dest,
+            self.lbl_error_dest
+        ], spacing=2, visible=False)
         
         self.dd_conto_dialog = ft.Dropdown(visible=False) # Nascosto, usato per compatibilità dati
         self.dd_conto_destinazione_dialog = ft.Dropdown(visible=False) # Nascosto
@@ -104,22 +117,14 @@ class TransactionDialog(ft.AlertDialog):
                     ft.IconButton(icon=ft.Icons.CALENDAR_MONTH, on_click=self.apri_date_picker),
                 ], alignment=ft.MainAxisAlignment.START),
                 self.radio_tipo_transazione,
-                self.txt_descrizione_dialog,
-                self.txt_importo_dialog,
-                ft.Column([
-                    ft.Text("Conto", size=12, color=ft.Colors.PRIMARY),
-                    self.pm_conto,
-                    self.txt_error_conto
-                ], spacing=2),
-                self.dd_paypal_fonte_dialog, # Visibile solo se PayPal
-                ft.Column([
-                    ft.Text("Destinazione", size=12, color=ft.Colors.PRIMARY),
-                    self.pm_dest,
-                    self.txt_error_dest
-                ], spacing=2, visible=False),
-                self.dd_sottocategoria_dialog,
-                self.cb_importo_nascosto,
-            ],
+            self.txt_descrizione_dialog,
+            self.txt_importo_dialog,
+            self.col_conto,
+            self.dd_paypal_fonte_dialog, # Visibile solo se PayPal
+            self.col_dest,
+            self.dd_sottocategoria_dialog,
+            self.cb_importo_nascosto,
+        ],
             tight=True, scroll=ft.ScrollMode.AUTO, width=350,
         )
 
@@ -187,7 +192,7 @@ class TransactionDialog(ft.AlertDialog):
             self.pm_dest.content.content.controls[0].controls[0] = self.selected_dest_logo
             self.selected_dest_name.color = ft.Colors.ON_SURFACE
             self.dd_conto_destinazione_dialog.value = key
-            self.txt_error_dest.visible = False
+            self.lbl_error_dest.visible = False
             self.pm_dest.update()
         else:
             self.selected_account_key = key
@@ -205,7 +210,7 @@ class TransactionDialog(ft.AlertDialog):
             self.pm_conto.content.content.controls[0].controls[0] = self.selected_account_logo
             
             self.selected_account_name.color = ft.Colors.ON_SURFACE
-            self.txt_error_conto.visible = False
+            self.lbl_error_conto.visible = False
             self.pm_conto.update()
             
             # Sincronizza con il dropdown nascosto per non rompere la logica esistente
@@ -221,14 +226,14 @@ class TransactionDialog(ft.AlertDialog):
         self.selected_account_logo = ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=20)
         self.pm_conto.content.content.controls[0].controls[0] = self.selected_account_logo
         self.dd_conto_dialog.value = None
-        self.txt_error_conto.visible = False
+        self.lbl_error_conto.visible = False
         
         self.selected_dest_key = None
         self.selected_dest_name.value = "Seleziona Destinazione"
         self.selected_dest_logo = ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=20)
         self.pm_dest.content.content.controls[0].controls[0] = self.selected_dest_logo
         self.dd_conto_destinazione_dialog.value = None
-        self.txt_error_dest.visible = False
+        self.lbl_error_dest.visible = False
 
     def _popola_dropdowns(self):
         utente_id = self.controller.get_user_id()
@@ -401,23 +406,23 @@ class TransactionDialog(ft.AlertDialog):
         tipo = self.radio_tipo_transazione.value
         is_giroconto = (tipo == "Giroconto")
         
-        # Ricarica dropdown per applicare i filtri specifici del tipo
-        self._popola_dropdowns()
+        # Ricarica dropdown per applicare i filtri specifici del tipo prima di aggiornare la UI
+        try:
+            self._popola_dropdowns()
+        except Exception as ex:
+            print(f"[ERROR] _popola_dropdowns fallito: {ex}")
         
-        # Toggle visibilità campi
-        self.pm_dest.parent.visible = is_giroconto
+        # Toggle visibilità campi tramite ref diretti
+        self.col_dest.visible = is_giroconto
         self.dd_sottocategoria_dialog.visible = not is_giroconto
         self.cb_importo_nascosto.visible = not is_giroconto
         
         # Aggiorna label conto sorgente
         label_text = self.loc.get("from_account", "Da Conto") if is_giroconto else self.loc.get("account")
-        self.content.controls[4].controls[0].value = label_text # Aggiorna la label sopra il selettore custom
+        self.lbl_conto.value = label_text # Aggiorna la label tramite riferimento diretto
         
-        if self.page and e is not None:
-            try:
-                self.page.update()
-            except Exception as ex:
-                logger.error(f"Errore update pagina (_on_tipo_transazione_change): {ex}")
+        if self.page:
+            self.page.update()
 
     def _on_conto_change(self, e):
         # Detect if PayPal and show source selection

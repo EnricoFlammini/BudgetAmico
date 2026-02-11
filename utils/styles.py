@@ -224,7 +224,7 @@ class AppStyles:
             fallback_icon = ft.Icons.SAVINGS
         elif t_low == "fondo pensione":
             logo_file = "conto_pensione_logo.png"
-            fallback_icon = ft.Icons.WAVE_OUTBREAK # o simile
+            fallback_icon = ft.Icons.WAVES # o simile
         elif t_low == "contanti":
             logo_file = "contanti_logo.png"
             fallback_icon = ft.Icons.MONEY
