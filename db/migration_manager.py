@@ -987,13 +987,13 @@ def _migra_da_v26_a_v27(con):
     print("Esecuzione migrazione da v26 a v27...")
     try:
         cur = con.cursor()
-
-        # Aumentiamo il timeout per questa sessione di migrazione (Postgres)
+        print("  - Impostazione timeout illimitato per migrazione v27...")
         try:
-            cur.execute("SET statement_timeout = '600s'") # 10 minuti
-            print("  - Timeout sessione aumentato a 10 minuti.")
-        except:
-            pass
+            cur.execute("SET statement_timeout = 0") # Illimitato per questa sessione
+            con.commit()
+            print("    [OK] Timeout sessione impostato a illimitato.")
+        except Exception as e:
+            print(f"    [!] Impossibile impostare timeout illimitato (non Postgres?): {e}")
 
         # Check for locks and KILL blocking processes (Postgres only - Nuclear Option)
         try:

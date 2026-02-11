@@ -69,45 +69,81 @@ def main(page: ft.Page):
     page.go(page.route)
 
 
-# Avvio dell'applicazione in modalità WEB
-if __name__ == "__main__":
-    # --- Esegui migrazione database PRIMA di avviare qualsiasi servizio ---
-    print("Verifica connessione e migrazione database...")
+import threading
+
+def run_startup_sequence():
+    """
+    Esegue migrazione database e avvio Background Service in un thread separato
+    per evitare di bloccare l'health check di Koyeb.
+    """
+    print("[STARTUP] Avvio sequenza di inizializzazione asincrona...")
+    
+    # 1. Verifica e Migrazione Database
     if SupabaseManager.test_connection():
         try:
             from db.crea_database import SCHEMA_VERSION
             from db.supabase_manager import get_db_connection
+            from db.migration_manager import migra_database
             
             versione_corrente_db = int(ottieni_versione_db())
-            print(f"Versione DB attuale: {versione_corrente_db}, Schema richiesto: {SCHEMA_VERSION}")
+            print(f"[STARTUP] Versione DB attuale: {versione_corrente_db}, Schema richiesto: {SCHEMA_VERSION}")
             
             if versione_corrente_db < SCHEMA_VERSION:
-                print(f"Migrazione necessaria: v{versione_corrente_db} -> v{SCHEMA_VERSION}")
-                from db.migration_manager import migra_database
+                print(f"[STARTUP] Migrazione necessaria: v{versione_corrente_db} -> v{SCHEMA_VERSION}")
                 with get_db_connection() as con:
                     migra_database(con, versione_corrente_db, SCHEMA_VERSION)
-                print("Migrazione completata con successo.")
+                print("[STARTUP] Migrazione completata con successo.")
+            else:
+                print("[STARTUP] Database già aggiornato.")
         except Exception as e:
-            print(f"[ERRORE] Migrazione database fallita: {e}")
+            print(f"[ERRORE STARTUP] Migrazione database fallita: {e}")
     else:
-        print("[ERRORE] Connessione database fallita!")
+        print("[ERRORE STARTUP] Connessione database fallita!")
 
-    # Inizializza DBLogHandler per intercettare i log Python
+    # 2. Inizializza DBLogHandler
     try:
         from utils.db_log_handler import attach_db_handler_to_all_loggers
         attach_db_handler_to_all_loggers()
-        print("[INFO] DBLogHandler inizializzato per tutti i logger.")
+        print("[STARTUP] DBLogHandler inizializzato.")
     except Exception as e:
-        print(f"[WARNING] Impossibile inizializzare DBLogHandler: {e}")
+        print(f"[WARNING STARTUP] Impossibile inizializzare DBLogHandler: {e}")
 
-    # Avvio Background Service per automazione server
+    # 3. Avvio Background Service
     try:
         from services.background_service import BackgroundService
         bg_service = BackgroundService()
         bg_service.start()
-        print("[INFO] Background Service avviato.")
+        print("[STARTUP] Background Service avviato.")
     except Exception as e:
-        print(f"[ERRORE] Impossibile avviare Background Service: {e}")
+        print(f"[ERRORE STARTUP] Impossibile avviare Background Service: {e}")
+    
+    print("[STARTUP] Sequenza completata.")
+
+
+def main(page: ft.Page):
+    # Impostazioni iniziali della pagina Web
+    page.title = "Budget Amico Web"
+    # Mobile-first settings
+    page.theme_mode = ft.ThemeMode.SYSTEM
+    page.theme = ft.Theme(color_scheme_seed="blue", font_family="Roboto")
+    
+    # Enable scrolling generally
+    page.scroll = ft.ScrollMode.ADAPTIVE
+
+    # Crea l'istanza del controller WEB
+    app = WebAppController(page)
+
+    # Imposta la funzione di routing del controller
+    page.on_route_change = app.route_change
+
+    # Avvia l'app andando alla route iniziale
+    page.go(page.route)
+
+
+# Avvio dell'applicazione in modalità WEB
+if __name__ == "__main__":
+    # Avvia la sequenza di startup in background per non bloccare ft.app
+    threading.Thread(target=run_startup_sequence, daemon=True).start()
 
     port = int(os.environ.get("PORT", 8556))
     print(f"Avvio server web... Apri il browser su: http://localhost:{port}")
