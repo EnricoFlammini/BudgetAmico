@@ -35,4 +35,4 @@ def main(page: ft.Page):
         ft.ElevatedButton("Carica File", on_click=lambda _: fp.pick_files())
     )
 
-ft.app(target=main, upload_dir="uploads")
+# ft.app(target=main, upload_dir="uploads")
