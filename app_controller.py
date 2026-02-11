@@ -284,6 +284,26 @@ class AppController:
                 self.page.views.append(self._build_public_divisore_view())
             elif route_path == "/admin/login" or route_path == "/admin":
                 self._handle_admin_route(route_path)
+            elif route_path == "/test-upload":
+                 try:
+                    import test_upload
+                    # Poiché route_change si aspetta di popolare page.views,
+                    # e test_upload.main lavora direttamente su page.add,
+                    # dobbiamo adattare un minimo.
+                    # Ma test_upload.main(page) pulisce tutto.
+                    # Quindi chiamiamolo e basta.
+                    self.page.views.clear()
+                    test_upload.main(self.page) 
+                    # Nota: test_upload.main fa page.add, che su una view vuota non va bene se usiamo page.views.
+                    # Flet gestisce page.views O page.controls (legacy).
+                    # Se test_upload usa page.add, mischiato con views...
+                    # Meglio se test_upload restituisce una View.
+                    # MA PER ORA:
+                    # Lasciamo che test_upload faccia il suo lavoro, ma intercettiamo prima che il controller sovrascriva.
+                    return 
+                 except Exception as e:
+                     logger.error(f"Errore test upload: {e}")
+                     self.page.go("/")
             else:
                 self.page.go("/")
             self.page.update()
