@@ -132,8 +132,6 @@ class AdminDialogs:
 
     def _chiudi_dialog_categoria(self, e):
         self.dialog_modifica_cat.open = False
-        if self.dialog_modifica_cat in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_modifica_cat)
         self.controller.page.update()
 
     def _salva_categoria_cliccato(self, e):
@@ -154,8 +152,6 @@ class AdminDialogs:
         if success:
             self.controller.show_snack_bar("Categoria salvata con successo!", success=True)
             self.dialog_modifica_cat.open = False
-        if self.dialog_modifica_cat in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_modifica_cat)
             self.controller.db_write_operation()
         else:
             self.controller.show_snack_bar("Errore: Categoria già esistente o errore DB.", success=False)
@@ -185,8 +181,6 @@ class AdminDialogs:
 
     def _chiudi_dialog_sottocategoria(self, e):
         self.dialog_sottocategoria.open = False
-        if self.dialog_sottocategoria in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_sottocategoria)
         self.controller.page.update()
 
     def _salva_sottocategoria_cliccato(self, e):
@@ -205,8 +199,6 @@ class AdminDialogs:
         if success:
             self.controller.show_snack_bar("Sottocategoria salvata con successo!", success=True)
             self.dialog_sottocategoria.open = False
-        if self.dialog_sottocategoria in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_sottocategoria)
             self.controller.db_write_operation()
         else:
             self.controller.show_snack_bar("Errore: Sottocategoria già esistente o errore DB.", success=False)
@@ -243,8 +235,6 @@ class AdminDialogs:
     def _chiudi_dialog_invito(self, e=None):
         # Usa page.close() per chiudere correttamente il dialog
         self.dialog_invito_membri.open = False
-        if self.dialog_invito_membri in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_invito_membri)
         self.controller.page.update()
 
     def _invita_membro_cliccato(self, e):
@@ -329,8 +319,6 @@ class AdminDialogs:
     def _chiudi_dialog_modifica_ruolo(self, e):
         self.dialog_modifica_ruolo.open = False
         self.controller.page.update()
-        if self.dialog_modifica_ruolo in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_modifica_ruolo)
         self.controller.page.update()
 
     def _salva_ruolo_cliccato(self, e):
@@ -389,8 +377,6 @@ class AdminDialogs:
     def _chiudi_dialog_imposta_budget(self, e):
         # Use page.close
         self.dialog_imposta_budget.open = False
-        if self.dialog_imposta_budget in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_imposta_budget)
         self.controller.page.update()
 
     def _salva_budget_cliccato(self, e):

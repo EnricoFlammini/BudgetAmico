@@ -90,8 +90,6 @@ class FondoPensioneDialog(ft.AlertDialog):
     def chiudi_dialog(self, e=None):
         self.open = False
         if self.controller.page: self.controller.page.update()
-        if self in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self)
         if self.controller.page: self.controller.page.update()
 
     def _aggiorna_valore_cliccato(self, e):

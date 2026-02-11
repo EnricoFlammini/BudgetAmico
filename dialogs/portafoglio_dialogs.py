@@ -264,8 +264,6 @@ class PortafoglioDialogs:
 
     def _chiudi_dialog_portafoglio(self, e):
         self.dialog_portafoglio.open = False
-        if self.dialog_portafoglio in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_portafoglio)
         self.controller.page.update()
 
     def _aggiorna_tabella_portafoglio(self):
@@ -375,8 +373,6 @@ class PortafoglioDialogs:
 
     def _chiudi_dialog_operazione(self, e):
         self.dialog_operazione_asset.open = False
-        if self.dialog_operazione_asset in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_operazione_asset)
         self.controller.page.update()
 
     def _on_asset_selezionato(self, e):
@@ -569,8 +565,6 @@ class PortafoglioDialogs:
 
     def _chiudi_dialog_aggiorna_prezzo(self, e):
         self.dialog_aggiorna_prezzo.open = False
-        if self.dialog_aggiorna_prezzo in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_aggiorna_prezzo)
         self.controller.page.update()
 
     def _salva_nuovo_prezzo(self, e):
@@ -602,8 +596,6 @@ class PortafoglioDialogs:
 
     def _chiudi_dialog_modifica_asset(self, e):
         self.dialog_modifica_asset.open = False
-        if self.dialog_modifica_asset in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_modifica_asset)
         self.controller.page.update()
 
     def _salva_modifica_asset(self, e):
@@ -637,8 +629,6 @@ class PortafoglioDialogs:
         asset = e.control.data
         def on_confirm_delete(e_confirm):
             dlg_confirm.open = False
-        if dlg_confirm in self.controller.page.overlay:
-            self.controller.page.overlay.remove(dlg_confirm)
             if elimina_asset(asset['id_asset']):
                 self.controller.db_write_operation()
                 self._aggiorna_tabella_portafoglio()
@@ -648,8 +638,6 @@ class PortafoglioDialogs:
 
         def on_cancel_delete(e_cancel):
             dlg_confirm.open = False
-        if dlg_confirm in self.controller.page.overlay:
-            self.controller.page.overlay.remove(dlg_confirm)
 
         dlg_confirm = ft.AlertDialog(
             modal=True,
@@ -700,8 +688,6 @@ class PortafoglioDialogs:
 
     def _chiudi_dialog_asset_esistente(self, e):
         self.dialog_operazione_asset.open = False
-        if self.dialog_operazione_asset in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self.dialog_operazione_asset)
         self.controller.page.update()
 
     def _salva_asset_esistente(self, e):

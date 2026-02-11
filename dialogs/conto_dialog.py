@@ -571,8 +571,6 @@ class ContoDialog(ft.AlertDialog):
     def _chiudi_dialog_conto(self, e):
         print("[DEBUG] _chiudi_dialog_conto called")
         self.open = False
-        if self in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self)
         self.controller.page.update()
 
     def apri_dialog_conto(self, e, conto_data=None, escludi_investimento=False, is_shared_edit=False, shared_default=False):
@@ -1075,8 +1073,6 @@ class ContoDialog(ft.AlertDialog):
         # Per le icone flet passiamo solo il nome (es. "ACCOUNT_BALANCE")
         self.selected_icon_value = icon_name
         self._picker_dlg.open = False
-        if self._picker_dlg in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self._picker_dlg)
         self.open = True
         self.controller.page.update()
         self._aggiorna_preview_personalizzazione()
@@ -1085,16 +1081,12 @@ class ContoDialog(ft.AlertDialog):
         # Per le icone asset passiamo il percorso relativo (es. "conti/mio.png")
         self.selected_icon_value = icon_path
         self._picker_dlg.open = False
-        if self._picker_dlg in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self._picker_dlg)
         self.open = True
         self.controller.page.update()
         self._aggiorna_preview_personalizzazione()
 
     def _chiudi_picker_e_torna(self):
         self._picker_dlg.open = False
-        if self._picker_dlg in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self._picker_dlg)
         self.open = True
         self.controller.page.update()
 
@@ -1133,8 +1125,6 @@ class ContoDialog(ft.AlertDialog):
     def _seleziona_colore(self, color):
         self.selected_color_value = color
         self._picker_dlg.open = False
-        if self._picker_dlg in self.controller.page.overlay:
-            self.controller.page.overlay.remove(self._picker_dlg)
         self.open = True
         self.controller.page.update()
         self._aggiorna_preview_personalizzazione()

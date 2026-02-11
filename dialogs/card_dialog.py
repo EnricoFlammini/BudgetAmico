@@ -211,8 +211,6 @@ class CardDialog:
     def _close(self, e):
         print("[DEBUG] Closing CardDialog")
         self.dlg.open = False
-        if self.dlg in self.page.overlay:
-            self.page.overlay.remove(self.dlg)
         self.page.update()
 
     def _save(self, e):
@@ -415,8 +413,6 @@ class CardDialog:
     def _seleziona_icona_flet(self, icon_name):
         self.selected_icon_value = icon_name
         self._picker_dlg.open = False
-        if self._picker_dlg in self.page.overlay:
-            self.page.overlay.remove(self._picker_dlg)
         self.dlg.open = True
         self.page.update()
         self._aggiorna_preview_personalizzazione()
@@ -424,8 +420,6 @@ class CardDialog:
     def _seleziona_icona(self, icon_path):
         self.selected_icon_value = icon_path
         self._picker_dlg.open = False
-        if self._picker_dlg in self.page.overlay:
-            self.page.overlay.remove(self._picker_dlg)
         self.dlg.open = True
         self.page.update()
         self._aggiorna_preview_personalizzazione()
@@ -455,16 +449,12 @@ class CardDialog:
     def _seleziona_colore(self, color):
         self.selected_color_value = color
         self._picker_dlg.open = False
-        if self._picker_dlg in self.page.overlay:
-            self.page.overlay.remove(self._picker_dlg)
         self.dlg.open = True
         self.page.update()
         self._aggiorna_preview_personalizzazione()
 
     def _chiudi_picker_e_torna(self):
         self._picker_dlg.open = False
-        if self._picker_dlg in self.page.overlay:
-            self.page.overlay.remove(self._picker_dlg)
         self.dlg.open = True
         self.page.update()
 
