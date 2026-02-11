@@ -3,7 +3,18 @@ import hashlib
 import datetime
 import os
 import sys
-from typing import Optional, List, Dict, Any, Union, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Union
+import threading
+
+# Cache globale per le configurazioni di sistema (thread-safe)
+_CONFIG_CACHE = {}
+_CONFIG_CACHE_LOCK = threading.Lock()
+
+def invalidate_config_cache():
+    """Svuota la cache delle configurazioni."""
+    with _CONFIG_CACHE_LOCK:
+        _CONFIG_CACHE.clear()
+        logger.info("Cache configurazioni svuotata.")
 from dateutil.relativedelta import relativedelta
 from dateutil.parser import parse as parse_date
 import mimetypes
@@ -871,18 +882,14 @@ def valida_iban_semplice(iban):
 # --- Funzioni Configurazioni ---
 def get_configurazione(chiave: str, id_famiglia: Optional[str] = None, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> Optional[str]:
     """
-    Recupera il valore di una configurazione.
-    
-    Args:
-        chiave: La chiave della configurazione da recuperare.
-        id_famiglia: L'ID della famiglia (opzionale). Se None, cerca una configurazione globale.
-        master_key_b64: La master key codificata in base64 (opzionale) per decriptare valori sensibili.
-        id_utente: L'ID dell'utente (opzionale) per recuperare la family key.
-
-    Returns:
-        Il valore della configurazione come stringa, oppure None se non trovata.
-        I valori SMTP vengono decriptati con family_key o system key.
+    Recupera il valore di una configurazione (con cache per quelle globali).
     """
+    # 1. Prova dalla cache (solo per configurazioni globali senza id_famiglia)
+    if id_famiglia is None:
+        with _CONFIG_CACHE_LOCK:
+            if chiave in _CONFIG_CACHE:
+                return _CONFIG_CACHE[chiave]
+
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -897,18 +904,20 @@ def get_configurazione(chiave: str, id_famiglia: Optional[str] = None, master_ke
             
             valore = res['valore']
             
-            # Decrypt sensitive config values
             sensitive_keys = ['smtp_server', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_from_email', 'smtp_sender']
             
             if chiave in sensitive_keys:
-                # SMTP credentials are ALWAYS encrypted with SERVER_KEY (not family_key)
-                # This allows decryption without user context (e.g., for password reset)
                 try:
                     decrypted = decrypt_system_data(valore)
                     if decrypted:
                         valore = decrypted
                 except Exception as e:
                     logger.warning(f"Failed to system-decrypt {chiave}: {e}")
+            
+            # 2. Aggiorna la cache globale
+            if id_famiglia is None:
+                with _CONFIG_CACHE_LOCK:
+                    _CONFIG_CACHE[chiave] = valore
             
             return valore
     except Exception as e:
@@ -11059,13 +11068,22 @@ def elimina_contatto(id_contatto: int, id_utente: str) -> bool:
 # --- CONFIGURAZIONE SICUREZZA PASSWORD (v0.48) ---
 
 def get_password_complexity_config():
-    """Recupera la configurazione della complessità password."""
-    return {
-        "min_length": int(get_configurazione("pwd_min_length") or 8),
-        "require_special": get_configurazione("pwd_require_special") == "true",
-        "require_digits": get_configurazione("pwd_require_digits") == "true",
-        "require_uppercase": get_configurazione("pwd_require_uppercase") == "true"
-    }
+    """Recupera la configurazione della complessità password, con fallback di sicurezza."""
+    try:
+        return {
+            "min_length": int(get_configurazione("pwd_min_length") or 8),
+            "require_special": get_configurazione("pwd_require_special") == "true",
+            "require_digits": get_configurazione("pwd_require_digits") == "true",
+            "require_uppercase": get_configurazione("pwd_require_uppercase") == "true"
+        }
+    except Exception as e:
+        logger.warning(f"Errore caricamento config password (uso default): {e}")
+        return {
+            "min_length": 8,
+            "require_special": False,
+            "require_digits": False,
+            "require_uppercase": False
+        }
 
 def save_password_complexity_config(config, id_utente=None):
     """Salva la configurazione della complessità password."""
