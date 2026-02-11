@@ -8,9 +8,10 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ### v0.50.01 (11/02/2026)
 - **Fix Stabilità UI (AssertionError)**:
-    - Eliminato completamente l'errore `AssertionError: Control must be added to the page first` sostituendo tutte le chiamate `page.open()`/`page.close()` con il pattern sicuro basato su overlay manuale.
-    - Applicato a tutti i dialog: `ContoDialog`, `CardDialog`, `PortafoglioDialogs`, `AdminDialogs`.
-    - Aggiunto guard `if control.page:` a tutte le chiamate `.update()` premature nei dialog.
+    - Eliminato completamente l'errore `AssertionError: Control must be added to the page first`.
+    - Migrati **tutti** i dialog al pattern sicuro overlay manuale: apertura con `overlay.append()` + `dialog.open = True`, chiusura con `dialog.open = False` + `overlay.remove()`.
+    - Applicato a: `ContoDialog`, `CardDialog`, `PortafoglioDialogs` (7 metodi), `AdminDialogs` (7 metodi).
+    - Aggiunto guard `if control.page:` a tutte le chiamate `.update()` premature.
 - **Fix Contrasto Icone**:
     - Le icone (Flet standard e PNG custom) sono ora avvolte in un container bianco circolare con ombra, garantendo visibilità su qualsiasi sfondo colorato personalizzato.
     - Colore icone di default impostato a nero per massimo contrasto.
