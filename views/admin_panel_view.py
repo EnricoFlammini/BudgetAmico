@@ -1439,9 +1439,34 @@ class AdminPanelView:
             self.db_version_text.value = "Versione Database: Errore"
             print(f"Errore caricamento versione DB: {e}")
             
-        # Info Ambiente
+        # Info Ambiente avanzate
         is_dev = os.getenv("DEBUG", "false").lower() == "true"
-        self.env_type_text.value = f"Ambiente: {'Sviluppo (Debug)' if is_dev else 'Produzione'}"
+        supabase_url = os.getenv("SUPABASE_URL", "")
+        
+        # Identificazione DB (basata su project ID Supabase)
+        db_type = "Produzione"
+        if "rcwdfjayzotvsbqpubcm" in supabase_url:
+            db_type = "Test (rcwdf...)"
+        elif "zvuesichckiryhkbztgr" in supabase_url:
+            db_type = "Produzione (zvues...)"
+            
+        # Identificazione Branch
+        branch_name = "N/A"
+        try:
+            import subprocess
+            branch_name = subprocess.check_output(["git", "branch", "--show-current"], 
+                                                stderr=subprocess.DEVNULL).decode().strip()
+        except:
+            pass
+
+        env_str = f"Ambiente: {db_type}"
+        if is_dev:
+            env_str += " [DEBUG]"
+        if branch_name != "N/A":
+            env_str += f" | Branch: {branch_name}"
+            
+        self.env_type_text.value = env_str
+        self.page.update()
 
 
 class AdminLoginView:
