@@ -1072,6 +1072,34 @@ def _migra_da_v26_a_v27(con):
         return False
 
 
+def _migra_da_v27_a_v28(con):
+    """
+    Logica specifica per migrare un DB dalla versione 27 alla 28.
+    - Aggiunge la colonna ultimo_accesso alla tabella Utenti.
+    """
+    print("Esecuzione migrazione da v27 a v28...")
+    try:
+        cur = con.cursor()
+        print("  - Aggiunta colonna ultimo_accesso a Utenti...")
+        try:
+            # Postgres supports ADD COLUMN standard
+            cur.execute("ALTER TABLE Utenti ADD COLUMN ultimo_accesso TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        except Exception as e:
+            if "duplicate column" in str(e) or "already exists" in str(e):
+                print("    Colonna 'ultimo_accesso' già esistente.")
+            else:
+                raise e
+
+        con.commit()
+        print("Migrazione a v28 completata con successo.")
+        return True
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v27 a v28: {e}")
+        try: con.rollback() 
+        except: pass
+        return False
+
+
 def migra_database(con, versione_vecchia=None, versione_nuova=None):
     """
     Funzione principale che gestisce il processo di migrazione.
@@ -1235,6 +1263,11 @@ def migra_database(con, versione_vecchia=None, versione_nuova=None):
             if not _migra_da_v26_a_v27(con):
                  raise Exception("Migrazione da v26 a v27 fallita.")
             versione_vecchia = 27
+
+        if versione_vecchia == 27 and versione_nuova >= 28:
+            if not _migra_da_v27_a_v28(con):
+                 raise Exception("Migrazione da v27 a v28 fallita.")
+            versione_vecchia = 28
 
         # Se tutto è andato bene, aggiorna la versione del DB
         # Per Postgres usiamo InfoDB, per SQLite PRAGMA

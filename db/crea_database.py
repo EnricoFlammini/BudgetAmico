@@ -14,8 +14,8 @@ if not os.path.exists(APP_DATA_DIR):
 DB_FILE = os.path.join(APP_DATA_DIR, 'budget_amico.db')
 
 # --- SCHEMA DATABASE ---
-# Versione 27: Aggiunta indici performance su Transazioni e Storico
-SCHEMA_VERSION = 27
+# Versione 28: Aggiunta ultimo_accesso su Utenti
+SCHEMA_VERSION = 28
 
 TABLES = {
     "Utenti": """
@@ -34,7 +34,8 @@ TABLES = {
             id_carta_default INTEGER REFERENCES Carte(id_carta) ON DELETE SET NULL,
             forza_cambio_password BOOLEAN DEFAULT FALSE,
             email_verificata BOOLEAN DEFAULT FALSE,
-            codice_utente_enc TEXT
+            codice_utente_enc TEXT,
+            ultimo_accesso TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         CREATE UNIQUE INDEX IF NOT EXISTS idx_utenti_username_bindex ON Utenti(username_bindex);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_utenti_email_bindex ON Utenti(email_bindex);

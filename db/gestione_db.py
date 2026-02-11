@@ -298,6 +298,21 @@ def get_user_count():
         return -1
 
 
+def aggiorna_ultimo_accesso(id_utente: int) -> bool:
+    """Aggiorna il timestamp di ultimo accesso/attività dell'utente."""
+    if not id_utente:
+        return False
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("UPDATE Utenti SET ultimo_accesso = CURRENT_TIMESTAMP WHERE id_utente = %s", (id_utente,))
+            con.commit()
+            return True
+    except Exception as e:
+        logger.error(f"Errore aggiorna_ultimo_accesso per utente {id_utente}: {e}")
+        return False
+
+
 def ottieni_statistiche_accessi() -> Dict[str, Any]:
     """
     Calcola le statistiche degli accessi basandoci sui log di sistema.
@@ -329,14 +344,12 @@ def ottieni_statistiche_accessi() -> Dict[str, Any]:
         with get_db_connection() as con:
             cur = con.cursor()
             
-            # 1. Attivi ora (qualsiasi log negli ultimi 15 minuti) + Recupero nomi
+            # 1. Attivi ora (qualsiasi attività negli ultimi 15 minuti) + Recupero nomi
+            # Usiamo la nuova colonna ultimo_accesso per maggiore precisione
             cur.execute("""
-                SELECT DISTINCT id_utente, 
-                       (SELECT username FROM Utenti WHERE id_utente = l.id_utente) as user_plain,
-                       (SELECT username_enc FROM Utenti WHERE id_utente = l.id_utente) as user_enc
-                FROM Log_Sistema l
-                WHERE l.timestamp > CURRENT_TIMESTAMP - INTERVAL '15 minutes'
-                AND l.id_utente IS NOT NULL
+                SELECT id_utente, username as user_plain, username_enc as user_enc
+                FROM Utenti
+                WHERE ultimo_accesso > CURRENT_TIMESTAMP - INTERVAL '15 minutes'
             """)
             
             attivi_nomi = []
@@ -369,6 +382,19 @@ def ottieni_statistiche_accessi() -> Dict[str, Any]:
                         AND timestamp > CURRENT_TIMESTAMP - (INTERVAL '1 hour' * %s)
                     """, (hours,))
                 res = cur.fetchone()
+                
+                # fallback unici dalla colonna ultimo_accesso per periodi recenti (se i log sono disattivati)
+                if not all_time and (hours and hours <= 72):
+                    cur.execute("""
+                        SELECT COUNT(*) as unici_from_table
+                        FROM Utenti
+                        WHERE ultimo_accesso > CURRENT_TIMESTAMP - (INTERVAL '1 hour' * %s)
+                    """, (hours,))
+                    res_alt = cur.fetchone()
+                    unici_db = res_alt['unici_from_table'] or 0
+                    if unici_db > (res['unici'] or 0):
+                        return {'unici': unici_db, 'totali': max(res['totali'] or 0, unici_db)}
+
                 return {'unici': res['unici'] or 0, 'totali': res['totali'] or 0}
 
             # 2. Accessi varie finestre temporali

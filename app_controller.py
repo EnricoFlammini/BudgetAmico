@@ -37,7 +37,7 @@ from db.gestione_db import (
     aggiungi_categorie_iniziali, cerca_utente_per_username, aggiungi_utente_a_famiglia,
     ottieni_versione_db, crea_invito, ottieni_invito_per_token,
     ottieni_utenti_senza_famiglia, ensure_family_key, trigger_budget_history_update,
-    is_server_automation_enabled,
+    is_server_automation_enabled, aggiorna_ultimo_accesso,
     ottieni_backup_completo_famiglia
 )
 
@@ -247,6 +247,8 @@ class AppController:
             id_famiglia = self.get_family_id()
             if id_utente:
                 logger.info(f"[ACTIVITY] Route changed to: {route_path}", extra={'id_utente': id_utente, 'id_famiglia': id_famiglia})
+                # Aggiorna ultimo accesso per statistiche "Attivi Ora"
+                aggiorna_ultimo_accesso(id_utente)
 
             if query_params.get("token") and route_path == "/registrazione":
                 self._handle_registration_token(query_params["token"])
@@ -716,6 +718,9 @@ class AppController:
         id_utente = utente['id']
         id_famiglia = ottieni_prima_famiglia_utente(id_utente)
         self.page.session.set("utente_loggato", utente)
+        
+        # Refresh activity timestamp on login
+        aggiorna_ultimo_accesso(id_utente)
         
         # Save master_key to session for encryption/decryption
         if utente.get("master_key"):
