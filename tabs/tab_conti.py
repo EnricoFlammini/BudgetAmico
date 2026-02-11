@@ -227,7 +227,8 @@ class ContiTab(ft.Container):
         logo_control = AppStyles.get_logo_control(
             tipo=tipo, 
             config_speciale=conto.get('config_speciale'),
-            size=30
+            size=30,
+            color=ft.Colors.WHITE
         )
 
         # Content Column

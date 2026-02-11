@@ -101,7 +101,8 @@ class TabCarte(ft.Container):
         logo_control = AppStyles.get_logo_control(
             tipo=card_data['tipo_carta'],
             circuito=card_data['circuito'],
-            size=30
+            size=30,
+            color=ft.Colors.WHITE
         )
         
         # Custom Header (Replacing ListTile to fix styling issues)

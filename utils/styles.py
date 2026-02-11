@@ -199,7 +199,7 @@ class AppStyles:
         )
 
     @staticmethod
-    def get_logo_control(tipo: str, config_speciale: str = None, circuito: str = None, size: int = 24) -> ft.Control:
+    def get_logo_control(tipo: str, config_speciale: str = None, circuito: str = None, size: int = 24, color: str = None) -> ft.Control:
         """
         Restituisce il controllo (Immagine o Icona) per il logo richiesto.
         Implementa logica di fallback se le immagini ufficiali mancano.
@@ -209,7 +209,7 @@ class AppStyles:
         # 1. Determinazione file logo e fallback
         logo_file = None
         fallback_icon = ft.Icons.ACCOUNT_BALANCE
-        fallback_color = ft.Colors.WHITE
+        fallback_color = color # Use provided color or None
         fallback_text = ""
         fallback_bg = ft.Colors.GREY_700
         
@@ -270,7 +270,7 @@ class AppStyles:
                 height=size,
                 fit=ft.ImageFit.CONTAIN,
                 error_content=ft.Container(
-                    content=ft.Text(fallback_text, size=min(14, size-4), weight="bold", color=ft.Colors.WHITE) if fallback_text else ft.Icon(fallback_icon, size=size, color=fallback_color),
+                    content=ft.Text(fallback_text, size=min(14, size-4), weight="bold", color=fallback_color or ft.Colors.WHITE) if fallback_text else ft.Icon(fallback_icon, size=size, color=fallback_color),
                     bgcolor=fallback_bg if fallback_text else None,
                     width=size, height=size,
                     border_radius=size/2,

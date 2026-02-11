@@ -42,8 +42,8 @@ class TransactionDialog(ft.AlertDialog):
         self.txt_importo_dialog = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
         
         # Nuovo Selettore Conto Custom
-        self.selected_account_logo = ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=20)
-        self.selected_account_name = ft.Text("Seleziona Conto", size=16)
+        self.selected_account_logo = ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=20, color=ft.Colors.ON_SURFACE)
+        self.selected_account_name = ft.Text("Seleziona Conto", size=16, color=ft.Colors.ON_SURFACE)
         self.selected_account_key = None
         self.selected_account_data = None
         
@@ -67,8 +67,8 @@ class TransactionDialog(ft.AlertDialog):
         self.txt_error_conto = ft.Text("", color=ft.Colors.RED, size=12, visible=False)
         
         # Selettore Destinazione Custom (Giroconto)
-        self.selected_dest_logo = ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=20)
-        self.selected_dest_name = ft.Text("Seleziona Destinazione", size=16)
+        self.selected_dest_logo = ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=20, color=ft.Colors.ON_SURFACE)
+        self.selected_dest_name = ft.Text("Seleziona Destinazione", size=16, color=ft.Colors.ON_SURFACE)
         self.selected_dest_key = None
         
         self.pm_dest = ft.PopupMenuButton(
@@ -182,9 +182,10 @@ class TransactionDialog(ft.AlertDialog):
         if is_dest:
             self.selected_dest_key = key
             self.selected_dest_name.value = account_data['nome_conto']
-            new_logo = AppStyles.get_logo_control(tipo=account_data['tipo'], config_speciale=account_data.get('config_speciale'), size=20)
+            new_logo = AppStyles.get_logo_control(tipo=account_data['tipo'], config_speciale=account_data.get('config_speciale'), size=20, color=ft.Colors.ON_SURFACE)
             self.selected_dest_logo = new_logo
             self.pm_dest.content.content.controls[0].controls[0] = self.selected_dest_logo
+            self.selected_dest_name.color = ft.Colors.ON_SURFACE
             self.dd_conto_destinazione_dialog.value = key
             self.txt_error_dest.visible = False
             self.pm_dest.update()
@@ -197,12 +198,13 @@ class TransactionDialog(ft.AlertDialog):
             new_logo = AppStyles.get_logo_control(
                 tipo=account_data['tipo'],
                 config_speciale=account_data.get('config_speciale'),
-                size=20
+                size=20,
+                color=ft.Colors.ON_SURFACE
             )
             self.selected_account_logo = new_logo
             self.pm_conto.content.content.controls[0].controls[0] = self.selected_account_logo
             
-            self.selected_account_name.color = ft.Colors.BLACK if self.controller.page.theme_mode == ft.ThemeMode.LIGHT else ft.Colors.WHITE
+            self.selected_account_name.color = ft.Colors.ON_SURFACE
             self.txt_error_conto.visible = False
             self.pm_conto.update()
             
@@ -357,14 +359,19 @@ class TransactionDialog(ft.AlertDialog):
                 elif str(c.get('id_utente_owner')) != str(utente_id): 
                      suffix = f" ({c.get('nome_owner', 'Altro')})"
 
-                logo = AppStyles.get_logo_control(tipo=c['tipo'], config_speciale=c.get('config_speciale'), size=20)
+                logo = AppStyles.get_logo_control(
+                    tipo=c['tipo'], 
+                    config_speciale=c.get('config_speciale'), 
+                    size=20, 
+                    color=ft.Colors.ON_SURFACE
+                )
                 
                 items.append(
                     ft.PopupMenuItem(
                         content=ft.Row([
                             logo,
                             ft.Column([
-                                ft.Text(f"{c['nome_conto']}{suffix}", size=14),
+                                ft.Text(f"{c['nome_conto']}{suffix}", size=14, color=ft.Colors.ON_SURFACE),
                                 ft.Text(c['tipo'], size=10, color=ft.Colors.GREY_500),
                             ], spacing=0)
                         ], spacing=10),
