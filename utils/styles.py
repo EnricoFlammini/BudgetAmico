@@ -214,13 +214,13 @@ class AppStyles:
         if icona:
             if icona.startswith("custom/"):
                 # Icona PNG personalizzata
-                icon_path = os.path.join("icons", icona) # Flet assets path relative to assets/
+                icon_path = f"/icons/{icona}" # Usa forward slash per URL asset
                 return ft.Image(
                     src=icon_path,
                     width=size,
                     height=size,
                     fit=ft.ImageFit.CONTAIN,
-                    color=used_color # Tint if provided
+                    # color=used_color # Rimosso tint per icone custom (spesso loghi colorati)
                 )
             else:
                 # Icona Flet standard

@@ -170,7 +170,10 @@ class ContiTab(ft.Container):
         
         # Determine colors
         # Background: Use assigned unique color OR fallback to hash
-        if assigned_color:
+        # Background: Use user defined color OR assigned unique color OR fallback to hash
+        if conto.get('colore'):
+            bg_color = conto['colore']
+        elif assigned_color:
             bg_color = assigned_color
         else:
             bg_color = get_color_from_string(str(id_conto) + nome)
