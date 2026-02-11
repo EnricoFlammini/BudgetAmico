@@ -108,22 +108,7 @@ def main(page: ft.Page):
     page.update()
 
     try:
-        # TEST ROUTE PER UPLOAD (DEBUG)
-        if page.route == "/test-upload":
-            try:
-                print("[DEBUG] Loading Test Upload Page")
-                import test_upload
-                importlib.reload(test_upload)
-                if asyncio.iscoroutinefunction(test_upload.main):
-                    page.run_task(test_upload.main, page)
-                else:
-                    test_upload.main(page)
-                print("[DEBUG] Test Upload Page Task Started")
-            except Exception as e:
-                page.add(ft.Text(f"Errore caricamento test upload: {e}"))
-                traceback.print_exc()
-            page.update()
-            return
+
 
         # Crea l'istanza del controller WEB dedicato
         print(f"[SESSION] Creazione WebAppController per sessione {page.session_id}...")
