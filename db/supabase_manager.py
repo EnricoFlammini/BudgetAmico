@@ -93,11 +93,13 @@ class SupabaseManager:
                     'port': result.port or 5432,
                     'database': result.path[1:],
                     'ssl_context': True,
-                    'timeout': 10  # Timeout di connessione di 10 secondi
+                    'timeout': 10
                 }
                 cls._initialized = True
+                print(f"[DB] Parametri configurati per host: {result.hostname}")
                 logger.info(f"Parametri database inizializzati per host: {result.hostname}")
             except Exception as e:
+                print(f"[DB] Errore critico nel parsing dell'URL: {e}")
                 logger.error(f"Errore parsing Database URL: {e}")
                 raise
 
@@ -194,6 +196,8 @@ class SupabaseManager:
             cls.release_connection(conn)
             return True
         except Exception as e:
+            # Stampa direttamente su console per evitare cicli di log durante lo startup
+            print(f"[DB] TEST CONNESSIONE FALLITO: {e}")
             logger.error(f"Test connessione fallito: {e}")
             return False
 

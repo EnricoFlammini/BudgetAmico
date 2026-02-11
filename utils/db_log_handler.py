@@ -11,10 +11,15 @@ import threading
 from typing import Optional, Dict, Set
 from db.supabase_manager import get_db_connection
 
-# Cache delle configurazioni (aggiornata periodicamente)
-_config_cache: Dict[str, dict] = {}
-_cache_lock = threading.Lock()
-_cache_last_update = 0
+# Guard per prevenire ricorsione infinita (thread-local)
+_recursion_guard = threading.local()
+
+def _is_in_recursion() -> bool:
+    return getattr(_recursion_guard, 'in_log_process', False)
+
+def _set_recursion_guard(state: bool):
+    _recursion_guard.in_log_process = state
+
 CACHE_TTL_SECONDS = 60  # Ricarica configurazione ogni 60 secondi
 
 
@@ -30,19 +35,13 @@ def _get_level_value(level_name: str) -> int:
     return levels.get(level_name.upper(), logging.INFO)
 
 
-def load_logger_config() -> Dict[str, dict]:
-    """Carica la configurazione dei logger dal database."""
-    global _config_cache, _cache_last_update
-    
-    import time
-    current_time = time.time()
-    
-    # Usa cache se ancora valida
-    with _cache_lock:
-        if current_time - _cache_last_update < CACHE_TTL_SECONDS and _config_cache:
-            return _config_cache.copy()
-    
+    # Protezione ricorsione: se siamo già dentro un processo di log, usa la cache
+    if _is_in_recursion():
+        with _cache_lock:
+            return _config_cache.copy() if _config_cache else {}
+
     try:
+        _set_recursion_guard(True)
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute("SELECT componente, abilitato, livello_minimo FROM Config_Logger")
@@ -62,8 +61,12 @@ def load_logger_config() -> Dict[str, dict]:
             
             return new_config
     except Exception as e:
-        print(f"[DBLogHandler] Errore caricamento config: {e}")
-        return _config_cache.copy() if _config_cache else {}
+        # Usa print invece di logger per evitare ricorsione
+        print(f"[DBLogHandler] Errore critico caricamento config: {e}")
+        with _cache_lock:
+            return _config_cache.copy() if _config_cache else {}
+    finally:
+        _set_recursion_guard(False)
 
 
 def invalidate_config_cache():
@@ -162,7 +165,11 @@ class DBLogHandler(logging.Handler):
     
     def emit(self, record: logging.LogRecord):
         """Emette un record di log sul database se abilitato."""
+        if _is_in_recursion():
+            return
+
         try:
+            _set_recursion_guard(True)
             # Carica configurazione
             config = load_logger_config()
             
@@ -182,11 +189,17 @@ class DBLogHandler(logging.Handler):
         except Exception:
             # Non propagare errori dal handler
             pass
+        finally:
+            _set_recursion_guard(False)
     
     def _write_to_db(self, record: logging.LogRecord):
         """Scrive il record nel database in modo asincrono."""
         def _insert():
+            if _is_in_recursion():
+                return
+
             try:
+                _set_recursion_guard(True)
                 with get_db_connection() as conn:
                     cur = conn.cursor()
                     
@@ -218,6 +231,8 @@ class DBLogHandler(logging.Handler):
             except Exception as e:
                 # Fallback: stampa su console
                 print(f"[DBLogHandler] Errore scrittura DB: {e}")
+            finally:
+                _set_recursion_guard(False)
         
         # Esegui in thread separato
         thread = threading.Thread(target=_insert, daemon=True)

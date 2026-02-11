@@ -49,19 +49,20 @@ def run_startup_sequence():
                 print("[STARTUP] Migrazione completata con successo.")
             else:
                 print("[STARTUP] Database già aggiornato.")
+            
+            # 2. Inizializza DBLogHandler SOLO SE siamo connessi
+            try:
+                from utils.db_log_handler import attach_db_handler_to_all_loggers
+                attach_db_handler_to_all_loggers()
+                print("[STARTUP] DBLogHandler inizializzato.")
+            except Exception as e:
+                print(f"[WARNING STARTUP] Impossibile inizializzare DBLogHandler: {e}")
+
         except Exception as e:
             print(f"[ERRORE STARTUP] Migrazione database fallita: {e}")
             traceback.print_exc()
     else:
-        print("[ERRORE STARTUP] Connessione database fallita dopo 3 tentativi!")
-
-    # 2. Inizializza DBLogHandler
-    try:
-        from utils.db_log_handler import attach_db_handler_to_all_loggers
-        attach_db_handler_to_all_loggers()
-        print("[STARTUP] DBLogHandler inizializzato.")
-    except Exception as e:
-        print(f"[WARNING STARTUP] Impossibile inizializzare DBLogHandler: {e}")
+        print("[ERRORE STARTUP] Connessione database fallita dopo 3 tentativi! DBLogHandler NON verrà attivato.")
 
     # 3. Avvio Background Service
     try:
