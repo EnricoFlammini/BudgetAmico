@@ -368,7 +368,6 @@ class TransactionDialog(ft.AlertDialog):
                                 ft.Text(c['tipo'], size=10, color=ft.Colors.GREY_500),
                             ], spacing=0)
                         ], spacing=10),
-                        key=opt.key,
                         data=c,
                         on_click=lambda e, k=opt.key, d=c, dest=is_dest: self._select_account(k, d, is_dest=dest)
                     )
