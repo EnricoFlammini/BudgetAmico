@@ -40,9 +40,8 @@ class AuthView:
         self.pwd_strength_text = ft.Text("", size=12, color=ft.Colors.GREY_600, visible=False)
         self.txt_reg_password.on_change = self._on_password_change
 
-        # Cache complexities
-        from db.gestione_db import get_password_complexity_config
-        self.pwd_config = get_password_complexity_config()
+        # Lazy complexitiy config
+        self._pwd_config = None
 
         # Controlli per il Recupero Password
         self.txt_recovery_email = ft.TextField(autofocus=True)
@@ -56,7 +55,13 @@ class AuthView:
         self.txt_reset_confirm_password = ft.TextField(password=True, can_reveal_password=True)
         self.reset_status_text = ft.Text(visible=False)
 
-
+    def _get_pwd_config(self):
+        """Recupera la configurazione password in modo lazy."""
+        if self._pwd_config is None:
+            from db.gestione_db import get_password_complexity_config
+            # get_password_complexity_config ha già i fallback interni implementati
+            self._pwd_config = get_password_complexity_config()
+        return self._pwd_config
     def get_login_view(self) -> ft.View:
         """Costruisce e restituisce la vista di Login."""
         loc = self.loc
@@ -247,9 +252,10 @@ class AuthView:
         self.pwd_strength_bar.visible = True
         self.pwd_strength_text.visible = True
         
-        # Strength logic
+        # Validazione robusta lato client e server
         score = 0
-        min_len = int(self.pwd_config.get("min_length", 8))
+        pwd_config = self._get_pwd_config()
+        min_len = int(pwd_config.get("min_length", 8))
         if len(pwd) >= min_len: score += 1
         if any(c.isupper() for c in pwd): score += 1
         if any(c.isdigit() for c in pwd): score += 1

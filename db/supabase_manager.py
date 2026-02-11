@@ -77,34 +77,28 @@ class SupabaseManager:
             if cls._initialized:
                 return
             
-            db_url = os.getenv('SUPABASE_DB_URL')
-            if not db_url:
-                # Se non c'è la variabile, proviamo a caricare il .env come ultima spiaggia
-                try:
-                    from dotenv import load_dotenv
-                    load_dotenv()
-                    db_url = os.getenv('SUPABASE_DB_URL')
-                except ImportError:
-                    pass
+            db_url = os.getenv('SUPABASE_DB_URL') or os.getenv('DATABASE_URL')
             
             if not db_url:
-                logger.error("SUPABASE_DB_URL non trovato nell'ambiente!")
-                raise ValueError("Configurazione DATABASE mancante (SUPABASE_DB_URL)")
+                logger.error("Database URL non trovato nell'ambiente (SUPABASE_DB_URL o DATABASE_URL)!")
+                raise ValueError("Configurazione DATABASE mancante")
 
             try:
                 result = urlparse(db_url)
+                logger.debug(f"Parsing DB URL per host: {result.hostname}")
                 cls._conn_params = {
                     'user': result.username,
                     'password': result.password,
                     'host': result.hostname,
                     'port': result.port or 5432,
                     'database': result.path[1:],
-                    'ssl_context': True
+                    'ssl_context': True,
+                    'timeout': 10  # Timeout di connessione di 10 secondi
                 }
                 cls._initialized = True
                 logger.info(f"Parametri database inizializzati per host: {result.hostname}")
             except Exception as e:
-                logger.error(f"Errore parsing SUPABASE_DB_URL: {e}")
+                logger.error(f"Errore parsing Database URL: {e}")
                 raise
 
     @classmethod
@@ -142,14 +136,16 @@ class SupabaseManager:
         # 2. Se non nel pool, creane una nuova
         if conn is None:
             try:
+                logger.debug("Creazione nuova connessione database...")
                 conn = cls._create_connection()
+                logger.debug("Connessione database creata con successo.")
             except Exception as e:
                 logger.warning(f"Impossibile creare nuova connessione ({e}), attendo pool liberi...")
                 try:
-                    conn = cls._pool_queue.get(block=True, timeout=15)
+                    conn = cls._pool_queue.get(block=True, timeout=10)
                 except queue.Empty:
-                    logger.error("Database connection pool exhausted and unable to create new one.")
-                    raise Exception("Database non raggiungibile (Pool esausto)")
+                    logger.error(f"Database non raggiungibile (Timeout o Pool esausto): {e}")
+                    raise Exception(f"Database non raggiungibile: {e}")
 
         # 3. Imposta RLS Context
         try:
