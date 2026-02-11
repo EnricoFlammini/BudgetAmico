@@ -111,7 +111,7 @@ class AdminSubTabSorting(ft.Container):
                 padding=10,
                 border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
                 border_radius=8,
-                bgcolor=ft.Colors.SURFACE_VARIANT if item['is_conto'] else ft.Colors.SURFACE
+                bgcolor=AppColors.SURFACE_VARIANT if item['is_conto'] else ft.Colors.SURFACE
             )
             self.lv_sorting.controls.append(row)
 

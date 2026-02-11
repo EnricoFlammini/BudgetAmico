@@ -19,7 +19,6 @@ from db.gestione_db import (
     esegui_giroconto_salvadanaio,
     ottieni_ids_conti_tecnici_carte,
     get_configurazione,
-    ottieni_ordinamento_conti_carte
 )
 from utils.logger import setup_logger
 
@@ -359,26 +358,57 @@ class TransactionDialog(ft.AlertDialog):
             if tipo_op == "Giroconto" and is_allowed(c, scope, matrix_dest):
                 opzioni_destinazione.append(opt)
 
-        # --- APPLICA ORDINAMENTO PERSONALIZZATO ---
-        order_data = ottieni_ordinamento_conti_carte(famiglia_id)
-        if order_data and order_data.get('order'):
-            order_keys = order_data['order']
+        # --- APPLICA ORDINAMENTO GLOBALE PER TIPO ---
+        raw_sort_order = get_configurazione("global_fop_sort_order")
+        if raw_sort_order:
+            try:
+                global_sort_keys = json.loads(raw_sort_order)  # es. ["satispay", "carta_debito", "carta_credito", ...]
+            except:
+                global_sort_keys = []
             
-            def get_sort_index(opt_key):
-                # opt_key può essere 'P123', 'C456' o 'CARD_ID_ACC_FLAG'
-                k = str(opt_key)
-                if k.startswith("CARD_"):
-                    # Estrai ID carta: CARD_12_34_P -> 12
-                    try:
-                        card_id = k.split('_')[1]
-                        if card_id in order_keys: return order_keys.index(card_id)
-                    except: pass
-                elif k in order_keys:
-                    return order_keys.index(k)
-                return 999 # In fondo se non trovato
-            
-            opzioni_sorgente.sort(key=lambda o: get_sort_index(o.key))
-            opzioni_destinazione.sort(key=lambda o: get_sort_index(o.key))
+            if global_sort_keys:
+                # Mappatura tipo DB -> sorting key globale
+                def _get_type_sort_key(account_data):
+                    t_db = str(account_data.get('tipo') or "").strip().lower()
+                    
+                    # Portafoglio Elettronico -> Satispay/PayPal
+                    if t_db == "portafoglio elettronico":
+                        try:
+                            config = json.loads(account_data.get('config_speciale') or '{}')
+                            sottotipo = config.get('sottotipo', '').strip().lower()
+                            if sottotipo == 'satispay': return "satispay"
+                            elif sottotipo == 'paypal': return "paypal"
+                        except: pass
+                        return "portafoglio_elettronico"
+                    
+                    # Carte (credito/debito)
+                    if t_db in ["carta", "carta di credito", "prepagata"]:
+                        circuito = str(account_data.get('circuito') or "").strip().lower()
+                        tipo_carta = str(account_data.get('tipo_carta') or "").strip().lower()
+                        if tipo_carta == "credito" or t_db == "carta di credito": return "carta_credito"
+                        if tipo_carta == "debito" or t_db == "prepagata": return "carta_debito"
+                        return "carta_credito"  # default
+                    
+                    # Conti
+                    type_mapping = {
+                        "conto corrente": "conto_corrente", "conto": "conto_corrente", "corrente": "conto_corrente",
+                        "risparmio": "conto_risparmio", "conto deposito": "conto_risparmio",
+                        "contanti": "contanti",
+                        "investimenti": "investimento", "investimento": "investimento",
+                        "crypto": "investimento", "azioni": "investimento", "obbligazioni": "investimento",
+                        "etf": "investimento", "fondo": "investimento",
+                        "fondo pensione": "fondo_pensione",
+                        "salvadanaio": "conto_risparmio",
+                    }
+                    return type_mapping.get(t_db, "conto_corrente")
+
+                def get_sort_index(opt):
+                    sort_key = _get_type_sort_key(opt.data)
+                    try: return global_sort_keys.index(sort_key)
+                    except ValueError: return 999
+                
+                opzioni_sorgente.sort(key=get_sort_index)
+                opzioni_destinazione.sort(key=get_sort_index)
         # ------------------------------------------
 
         self.dd_conto_dialog.options = opzioni_sorgente

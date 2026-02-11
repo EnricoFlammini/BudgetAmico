@@ -234,6 +234,8 @@ class AppStyles:
         logo_file = None
         fallback_icon = ft.Icons.ACCOUNT_BALANCE
         fallback_color = used_color
+        fallback_text = None
+        fallback_bg = None
         
         # Logica per Conti
         if t_low in ["conto corrente", "corrente", "conto"]:

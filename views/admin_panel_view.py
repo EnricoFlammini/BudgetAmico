@@ -77,6 +77,7 @@ class AdminPanelView:
         self._init_fop_tab_ui()
         self._init_access_stats_ui()
         self._init_version_tab_ui()
+        self._init_sorting_tab_ui()
 
     def _sort_datatable(self, e, table: ft.DataTable, data_list: list, update_method):
         """Helper generico per ordinare le tabelle."""
@@ -105,6 +106,7 @@ class AdminPanelView:
         self._load_db_stats()
         self._load_fop_matrix()
         self._load_version_info()
+        self._load_sorting_data()
 
         # Definisci le tabs
         self.tabs.tabs = [
@@ -142,6 +144,11 @@ class AdminPanelView:
                 text="Gestione FOP",
                 icon=ft.Icons.LIST_ALT,
                 content=self._build_fop_tab_content()
+            ),
+            ft.Tab(
+                text="Ordinamento",
+                icon=ft.Icons.SORT,
+                content=self._build_sorting_tab_content()
             ),
             ft.Tab(
                 text="Versione",
@@ -1114,6 +1121,136 @@ class AdminPanelView:
         
         self.page.snack_bar.open = True
         self.page.update()
+
+    # =========================================================================
+    # --- SORTING TAB LOGIC ---
+    # =========================================================================
+    
+    # Lista predefinita di tutti i tipi di strumenti finanziari
+    DEFAULT_INSTRUMENT_TYPES = [
+        {"key": "conto_corrente",        "label": "Conto Corrente",           "icon": "🏦"},
+        {"key": "conto_risparmio",       "label": "Conto Risparmio",          "icon": "🐷"},
+        {"key": "carta_credito",         "label": "Carta di Credito",         "icon": "💳"},
+        {"key": "carta_debito",          "label": "Carta di Debito",          "icon": "💳"},
+        {"key": "contanti",              "label": "Contanti",                 "icon": "💵"},
+        {"key": "satispay",              "label": "Satispay",                 "icon": "📱"},
+        {"key": "paypal",                "label": "PayPal",                   "icon": "🅿️"},
+        {"key": "investimento",          "label": "Conto Investimento",       "icon": "📈"},
+        {"key": "fondo_pensione",        "label": "Fondo Pensione",           "icon": "🏖️"},
+        {"key": "portafoglio_elettronico","label": "Portafoglio Elettronico", "icon": "📲"},
+    ]
+
+    def _init_sorting_tab_ui(self):
+        self.sorting_items_list = []  # List of dict {key, label, icon}
+        self.sorting_list_container = ft.Column(scroll=ft.ScrollMode.AUTO, expand=True, spacing=5)
+
+    def _build_sorting_tab_content(self):
+        return ft.Container(
+            content=ft.Column([
+                ft.Text("Ordinamento Tipologie Strumenti", size=20, weight=ft.FontWeight.BOLD),
+                ft.Text(
+                    "Definisci l'ordine di visualizzazione delle tipologie di conti e carte nei menu dropdown. "
+                    "Questa impostazione è globale e si applica a tutte le famiglie.",
+                    size=12, color=ft.Colors.GREY
+                ),
+                ft.Divider(),
+                ft.Row([
+                    ft.ElevatedButton("Salva Ordinamento", icon=ft.Icons.SAVE, on_click=self._save_sorting, bgcolor=ft.Colors.BLUE, color=ft.Colors.WHITE),
+                    ft.TextButton("Reset Default", icon=ft.Icons.REFRESH, on_click=self._reset_sorting)
+                ]),
+                self.sorting_list_container
+            ], expand=True),
+            padding=20, expand=True
+        )
+
+    def _load_sorting_data(self):
+        """Carica l'ordinamento globale dei tipi di strumenti."""
+        from db.gestione_db import get_configurazione
+        import json
+        
+        # Carica ordine salvato
+        raw = get_configurazione("global_fop_sort_order")
+        saved_order = []
+        if raw:
+            try:
+                saved_order = json.loads(raw)  # lista di keys
+            except:
+                pass
+        
+        # Costruisci items dal default, applicando l'ordine salvato
+        all_types = list(self.DEFAULT_INSTRUMENT_TYPES)
+        
+        if saved_order:
+            def get_index(item):
+                try:
+                    return saved_order.index(item['key'])
+                except ValueError:
+                    return 999
+            all_types.sort(key=get_index)
+        
+        self.sorting_items_list = [dict(t) for t in all_types]  # copy
+        self._refresh_sorting_ui()
+
+    def _refresh_sorting_ui(self):
+        self.sorting_list_container.controls.clear()
+        for idx, item in enumerate(self.sorting_items_list):
+            row = ft.Container(
+                content=ft.Row([
+                    ft.Row([
+                        ft.Text(item['icon'], size=20),
+                        ft.Text(item['label'], size=14, weight=ft.FontWeight.W_500),
+                    ], expand=True, spacing=10),
+                    ft.Row([
+                        ft.IconButton(
+                            ft.Icons.ARROW_UPWARD, 
+                            on_click=lambda e, i=idx: self._move_sorting_item(i, -1), 
+                            visible=(idx > 0),
+                            tooltip="Sposta su"
+                        ),
+                        ft.IconButton(
+                            ft.Icons.ARROW_DOWNWARD, 
+                            on_click=lambda e, i=idx: self._move_sorting_item(i, 1), 
+                            visible=(idx < len(self.sorting_items_list)-1),
+                            tooltip="Sposta giù"
+                        ),
+                    ], spacing=0)
+                ]),
+                padding=10,
+                border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                border_radius=8,
+                bgcolor=ft.Colors.WHITE
+            )
+            self.sorting_list_container.controls.append(row)
+
+    def _move_sorting_item(self, index, direction):
+        new_index = index + direction
+        if 0 <= new_index < len(self.sorting_items_list):
+            self.sorting_items_list[index], self.sorting_items_list[new_index] = self.sorting_items_list[new_index], self.sorting_items_list[index]
+            self._refresh_sorting_ui()
+            self.page.update()
+
+    def _save_sorting(self, e):
+        from db.gestione_db import save_system_config
+        import json
+        
+        order_keys = [item['key'] for item in self.sorting_items_list]
+        json_data = json.dumps(order_keys)
+        
+        current_user_id = self.page.client_storage.get("user_id") or 1
+        
+        if save_system_config("global_fop_sort_order", json_data, id_utente=current_user_id):
+            self.page.snack_bar = ft.SnackBar(ft.Text("Ordinamento salvato con successo!"), bgcolor=ft.Colors.GREEN)
+        else:
+            self.page.snack_bar = ft.SnackBar(ft.Text("Errore durante il salvataggio."), bgcolor=ft.Colors.RED)
+        self.page.snack_bar.open = True
+        self.page.update()
+
+    def _reset_sorting(self, e):
+        """Ripristina l'ordine predefinito."""
+        self.sorting_items_list = [dict(t) for t in self.DEFAULT_INSTRUMENT_TYPES]
+        self._refresh_sorting_ui()
+        self.page.update()
+
 
     def _load_config(self):
         from db.gestione_db import get_smtp_config, get_configurazione

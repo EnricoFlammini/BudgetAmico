@@ -44,7 +44,7 @@ class AdminSubTabMembri(ft.Column):
             ],
             border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
             border_radius=10,
-            heading_row_color=ft.Colors.SURFACE_VARIANT,
+            heading_row_color="surfaceVariant",
             data_row_max_height=40,
         )
 

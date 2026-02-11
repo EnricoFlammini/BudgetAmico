@@ -2,6 +2,11 @@ import os
 import sys
 import threading
 import traceback
+from dotenv import load_dotenv
+
+# Carica variabili d'ambiente da .env (necessario per esecuzione locale)
+load_dotenv()
+
 import flet as ft
 from controllers.web_app_controller import WebAppController
 from db.supabase_manager import SupabaseManager
