@@ -65,7 +65,7 @@ class ContoDialog(ft.AlertDialog):
         )
 
         # FilePicker per icone personalizzate
-        self.file_picker_icona = ft.FilePicker(on_result=self._on_file_picker_result)
+        self.file_picker_icona = ft.FilePicker(on_result=self._on_file_picker_result, on_upload=self._on_upload_complete)
 
         # Controlli del dialogo principale
         self.dd_scope_conto = ft.Dropdown(
@@ -1046,22 +1046,42 @@ class ContoDialog(ft.AlertDialog):
             return
         
         file = e.files[0]
-        # Leggi i bytes e salva tramite backend
-        from db.gestione_db import salva_icona_personalizzata
-        with open(file.path, "rb") as f:
-            file_bytes = f.read()
+        # Web-compatible upload logic
+        try:
+            upload_url = self.controller.page.get_upload_url(file.name, 600)
+            self.file_picker_icona.upload(
+                [
+                    ft.FilePickerUploadFile(
+                        file.name,
+                        upload_url=upload_url,
+                    )
+                ]
+            )
+            self.controller.show_loading("Caricamento icona...", 0.5) 
+            # Note: The actual processing happens in _on_upload_complete event handler
+        except Exception as ex:
+             print(f"Errore avvio upload: {ex}")
+             self.controller.show_snack_bar("Errore avvio caricamento.", success=False)
+    def _on_upload_complete(self, e: ft.FilePickerUploadEvent):
+        if e.error:
+            self.controller.hide_loading()
+            self.controller.show_snack_bar(f"Errore caricamento: {e.error}", success=False)
+            return
+
+        from db.gestione_db import processa_icona_upload
+        # e.file_name is the name of the file uploaded to upload_dir
+        relative_path = processa_icona_upload(e.file_name)
         
-        # Genera un nome file sicuro
-        ext = file.name.split('.')[-1]
-        safe_name = f"custom_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.{ext}"
-        
-        if salva_icona_personalizzata(safe_name, file_bytes):
-            self.selected_icon_value = f"custom/{safe_name}"
+        if relative_path:
+            self.selected_icon_value = relative_path
             self._aggiorna_preview_personalizzazione()
             if hasattr(self, '_picker_dlg') and self._picker_dlg:
                 self.controller.page.close(self._picker_dlg)
+            self.controller.show_snack_bar("Icona caricata!", success=True)
         else:
-            self.controller.show_snack_bar("Errore nel salvataggio dell'icona.", success=False)
+            self.controller.show_snack_bar("Errore nel processamento dell'icona.", success=False)
+            
+        self.controller.hide_loading()
 
     def _apri_selettore_colore(self, e):
         from utils.color_utils import MATERIAL_COLORS

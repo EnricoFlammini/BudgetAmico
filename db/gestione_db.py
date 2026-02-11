@@ -2,6 +2,7 @@ from db.supabase_manager import get_db_connection
 import hashlib
 import datetime
 import os
+import shutil
 import sys
 from typing import List, Dict, Any, Optional, Tuple, Union
 import threading
@@ -11220,3 +11221,35 @@ def check_registration_availability(username, email):
     except Exception as e:
         logger.error(f"Errore check_registration_availability: {e}")
         return False
+
+def processa_icona_upload(temp_filename: str) -> str:
+    """
+    Processa un file caricato nella cartella temporanea (upload_dir).
+    Lo sposta nella cartella assets/icons/custom e ritorna il path relativo.
+    """
+    try:
+        # Percorso temporaneo (assumendo che upload_dir sia "temp_uploads")
+        # In Flet server (o locale con upload_dir settato), i nomi file sono preservati.
+        source_path = os.path.join("temp_uploads", temp_filename)
+        
+        if not os.path.exists(source_path):
+            logger.error(f"File upload non trovato: {source_path}")
+            return None
+            
+        # Genera nome sicuro
+        ext = temp_filename.split('.')[-1]
+        safe_name = f"custom_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.{ext}"
+        
+        target_dir = os.path.join("assets", "icons", "custom")
+        if not os.path.exists(target_dir):
+            os.makedirs(target_dir, exist_ok=True)
+            
+        target_path = os.path.join(target_dir, safe_name)
+        
+        # Sposta il file
+        shutil.move(source_path, target_path)
+        
+        return f"custom/{safe_name}"
+    except Exception as e:
+        logger.error(f"Errore processamento upload icona: {e}")
+        return None
