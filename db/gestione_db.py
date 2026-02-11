@@ -1032,6 +1032,32 @@ def salva_icona_personalizzata(file_name: str, file_bytes: bytes) -> bool:
         logger.error(f"Errore salvataggio icona personalizzata: {e}")
         return False
 
+def lista_icone_personalizzate():
+    """Restituisce una lista di nomi file delle icone personalizzate."""
+    try:
+        target_dir = os.path.join("assets", "icons", "custom")
+        if not os.path.exists(target_dir):
+            return []
+        
+        files = [f for f in os.listdir(target_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+        return sorted(files, key=lambda x: os.path.getmtime(os.path.join(target_dir, x)), reverse=True)
+    except Exception as e:
+        logger.error(f"Errore lettura icone personalizzate: {e}")
+        return []
+
+def elimina_icona_personalizzata(file_name: str) -> bool:
+    """Elimina un'icona personalizzata."""
+    try:
+        target_dir = os.path.join("assets", "icons", "custom")
+        file_path = os.path.join(target_dir, file_name)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Errore eliminazione icona personalizzata: {e}")
+        return False
+
 def elimina_icona_personalizzata(file_name: str) -> bool:
     """Elimina un'icona personalizzata."""
     try:

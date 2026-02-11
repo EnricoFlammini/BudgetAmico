@@ -345,6 +345,26 @@ class CardDialog:
                     on_click=lambda ev, v=val: self._seleziona_icona(v)
                 )
             )
+        # --- Icone Custom ---
+        try:
+            from db.gestione_db import lista_icone_personalizzate
+            custom_icons = lista_icone_personalizzate()
+            
+            if custom_icons:
+                items.append(ft.Divider())
+                items.append(ft.Text("Icone Personalizzate", size=12, color=ft.Colors.GREY, weight=ft.FontWeight.BOLD))
+                
+                for icon_file in custom_icons:
+                    items.append(
+                        ft.ListTile(
+                            leading=ft.Image(src=f"/icons/custom/{icon_file}", width=32, height=32, fit=ft.ImageFit.CONTAIN),
+                            title=ft.Text(icon_file, size=12),
+                            on_click=lambda ev, v=f"custom/{icon_file}": self._seleziona_icona(v)
+                        )
+                    )
+        except Exception as ex:
+            print(f"Errore caricamento icone custom: {ex}")
+
         items.append(ft.Divider())
         items.append(
              ft.ListTile(
