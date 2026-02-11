@@ -7,6 +7,9 @@
 -- Appartenenza_Famiglia
 CREATE INDEX IF NOT EXISTS idx_appartenenza_famiglia_id_famiglia ON public.Appartenenza_Famiglia(id_famiglia);
 
+-- Budget_Storico
+CREATE INDEX IF NOT EXISTS idx_budget_storico_lookup ON public.Budget_Storico(id_famiglia, anno, mese);
+
 -- Budget
 CREATE INDEX IF NOT EXISTS idx_budget_id_sottocategoria ON public.Budget(id_sottocategoria);
 
@@ -71,12 +74,14 @@ CREATE INDEX IF NOT EXISTS idx_storico_asset_id_conto ON public.Storico_Asset(id
 CREATE INDEX IF NOT EXISTS idx_transazioni_id_carta ON public.Transazioni(id_carta);
 CREATE INDEX IF NOT EXISTS idx_transazioni_id_conto ON public.Transazioni(id_conto);
 CREATE INDEX IF NOT EXISTS idx_transazioni_id_sottocategoria ON public.Transazioni(id_sottocategoria);
+CREATE INDEX IF NOT EXISTS idx_transazioni_data ON public.Transazioni(data);
 
 -- TransazioniCondivise
 CREATE INDEX IF NOT EXISTS idx_transazionicondivise_id_carta ON public.TransazioniCondivise(id_carta);
 CREATE INDEX IF NOT EXISTS idx_transazionicondivise_id_conto_condiviso ON public.TransazioniCondivise(id_conto_condiviso);
 CREATE INDEX IF NOT EXISTS idx_transazionicondivise_id_sottocategoria ON public.TransazioniCondivise(id_sottocategoria);
 CREATE INDEX IF NOT EXISTS idx_transazionicondivise_id_utente_autore ON public.TransazioniCondivise(id_utente_autore);
+CREATE INDEX IF NOT EXISTS idx_transazionicondivise_data ON public.TransazioniCondivise(data);
 
 -- Utenti
 CREATE INDEX IF NOT EXISTS idx_utenti_id_conto_condiviso_default ON public.Utenti(id_conto_condiviso_default);

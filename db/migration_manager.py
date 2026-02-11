@@ -714,6 +714,45 @@ def _migra_da_v24_a_v25(con):
         return False
 
 
+def _migra_da_v25_a_v26(con):
+    """
+    Logica specifica per migrare un DB dalla versione 25 alla 26.
+    - Aggiunge la colonna config_speciale alle tabelle Conti e ContiCondivisi.
+    """
+    print("Esecuzione migrazione da v25 a v26...")
+    try:
+        cur = con.cursor()
+
+        # 1. Aggiungi colonna config_speciale a Conti
+        print("  - Aggiunta colonna config_speciale a Conti...")
+        try:
+            cur.execute("ALTER TABLE Conti ADD COLUMN config_speciale TEXT")
+        except Exception as e:
+            if "duplicate column" in str(e) or "already exists" in str(e):
+                print("    Colonna 'config_speciale' già esistente in Conti.")
+            else:
+                raise e
+
+        # 2. Aggiungi colonna config_speciale a ContiCondivisi
+        print("  - Aggiunta colonna config_speciale a ContiCondivisi...")
+        try:
+            cur.execute("ALTER TABLE ContiCondivisi ADD COLUMN config_speciale TEXT")
+        except Exception as e:
+            if "duplicate column" in str(e) or "already exists" in str(e):
+                print("    Colonna 'config_speciale' già esistente in ContiCondivisi.")
+            else:
+                raise e
+
+        con.commit()
+        print("Migrazione a v26 completata con successo.")
+        return True
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v25 a v26: {e}")
+        try: con.rollback() 
+        except: pass
+        return False
+
+
 
 
 def _migra_da_v7_a_v8(con: sqlite3.Connection):
@@ -939,6 +978,100 @@ def _migra_da_v14_a_v15(con: sqlite3.Connection):
         con.rollback()
         return False
 
+
+def _migra_da_v26_a_v27(con):
+    """
+    Logica specifica per migrare un DB dalla versione 26 alla 27.
+    - Aggiunge indici di performance su Transazioni, TransazioniCondivise e Budget_Storico.
+    """
+    print("Esecuzione migrazione da v26 a v27...")
+    try:
+        cur = con.cursor()
+
+        # Aumentiamo il timeout per questa sessione di migrazione (Postgres)
+        try:
+            cur.execute("SET statement_timeout = '600s'") # 10 minuti
+            print("  - Timeout sessione aumentato a 10 minuti.")
+        except:
+            pass
+
+        # Check for locks and KILL blocking processes (Postgres only - Nuclear Option)
+        try:
+            print("  - Analisi blocchi e pulizia processi concorrenti...")
+            cur.execute("""
+                SELECT DISTINCT b.pid, b.query
+                FROM pg_stat_activity a
+                JOIN pg_stat_activity b ON b.pid = ANY(pg_blocking_pids(a.pid))
+                WHERE b.query LIKE '%Budget_Storico%' 
+                   OR b.query LIKE '%Transazioni%'
+                   OR b.query LIKE '%CREATE INDEX%';
+            """)
+            targets = cur.fetchall()
+            if targets:
+                print(f"    [!] Trovati {len(targets)} processi bloccanti. Tentativo di terminazione...")
+                for t in targets:
+                    pid = t['pid']
+                    print(f"    -> Terminazione PID {pid} (Query: {t['query'][:50]}...)")
+                    cur.execute("SELECT pg_terminate_backend(%s)", (pid,))
+                con.commit()
+                print("    [OK] Processi terminati. Attesa 2 secondi...")
+                import time
+                time.sleep(2)
+            else:
+                # Check for "Ghosts" from old failed migrations that might still be running
+                cur.execute("""
+                    SELECT pid FROM pg_stat_activity 
+                    WHERE (query LIKE '%idx_budget_storico_lookup%' OR query LIKE '%idx_transazioni_data%')
+                      AND pid != pg_backend_pid();
+                """)
+                ghosts = cur.fetchall()
+                for g in ghosts:
+                   print(f"    -> Terminazione processo fantasma PID {g['pid']}")
+                   cur.execute("SELECT pg_terminate_backend(%s)", (g['pid'],))
+                if ghosts: 
+                    con.commit()
+                    time.sleep(1)
+                else:
+                    print("    Nessun blocco critico rilevato.")
+        except Exception as e:
+            print(f"    (Nota: Impossibile pulire processi: {e})")
+
+        # 1. Indici su Transazioni
+        print("  - Creazione indici su Transazioni... (Potrebbe richiedere tempo)")
+        try:
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_transazioni_data ON Transazioni(data)")
+            con.commit() # Commit immediato per finire questa parte
+            print("    [OK] Indice idx_transazioni_data creato e committato.")
+        except Exception as e:
+            print(f"    Warning su idx_transazioni_data: {e}")
+
+        # 2. Indici su TransazioniCondivise
+        print("  - Creazione indici su TransazioniCondivise...")
+        try:
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_transazionicondivise_data ON TransazioniCondivise(data)")
+            con.commit()
+            print("    [OK] Indice idx_transazionicondivise_data creato e committato.")
+        except Exception as e:
+            print(f"    Warning su idx_transazionicondivise_data: {e}")
+
+        # 3. Indici su Budget_Storico
+        print("  - Creazione indici su Budget_Storico...")
+        try:
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_budget_storico_lookup ON Budget_Storico(id_famiglia, anno, mese)")
+            con.commit()
+            print("    [OK] Indice idx_budget_storico_lookup creato e committato.")
+        except Exception as e:
+            print(f"    Warning su idx_budget_storico_lookup: {e}")
+
+        print("Migrazione a v27 completata con successo.")
+        return True
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v26 a v27: {e}")
+        try: con.rollback() 
+        except: pass
+        return False
+
+
 def migra_database(con, versione_vecchia=None, versione_nuova=None):
     """
     Funzione principale che gestisce il processo di migrazione.
@@ -1092,6 +1225,16 @@ def migra_database(con, versione_vecchia=None, versione_nuova=None):
             if not _migra_da_v24_a_v25(con):
                  raise Exception("Migrazione da v24 a v25 fallita.")
             versione_vecchia = 25
+
+        if versione_vecchia == 25 and versione_nuova >= 26:
+            if not _migra_da_v25_a_v26(con):
+                 raise Exception("Migrazione da v25 a v26 fallita.")
+            versione_vecchia = 26
+
+        if versione_vecchia == 26 and versione_nuova >= 27:
+            if not _migra_da_v26_a_v27(con):
+                 raise Exception("Migrazione da v26 a v27 fallita.")
+            versione_vecchia = 27
 
         # Se tutto è andato bene, aggiorna la versione del DB
         # Per Postgres usiamo InfoDB, per SQLite PRAGMA

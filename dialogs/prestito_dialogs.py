@@ -262,19 +262,37 @@ class PrestitoDialogs:
             "Investimenti": ["Investimenti", "Investimento", "Crypto", "Azioni", "Obbligazioni", "ETF", "Fondo"],
             "Contanti": ["Contanti"],
             "Fondo Pensione": ["Fondo Pensione"],
-            "Salvadanaio": ["Salvadanaio"]
+            "Salvadanaio": ["Salvadanaio"],
+            "Satispay": ["Satispay"],
+            "PayPal": ["PayPal"]
         }
 
-        def is_allowed(tipo_db, scope):
-            if not tipo_db: return False
-            tipo_clean = str(tipo_db).strip().lower()
+        def is_allowed(account_data, scope):
+            t_db = str(account_data.get('tipo') or "").strip().lower()
             cat_fop = None
-            for cat, db_list in tipo_map.items():
-                if any(tipo_clean == x.strip().lower() for x in db_list):
-                    cat_fop = cat
-                    break
+            
+            # Special handling for e-wallets
+            if t_db == "portafoglio elettronico":
+                try:
+                    config = json.loads(account_data.get('config_speciale') or '{}')
+                    sottotipo = config.get('sottotipo', '').strip().lower()
+                    if sottotipo == 'satispay': cat_fop = "Satispay"
+                    elif sottotipo == 'paypal': cat_fop = "PayPal"
+                except: pass
+            
+            if not cat_fop:
+                for cat, db_list in tipo_map.items():
+                    if any(t_db == x.strip().lower() for x in db_list):
+                        cat_fop = cat
+                        break
+            
             if not cat_fop: return False
-            return matrix_prestiti.get(cat_fop, {}).get(scope, False)
+            
+            # Check FOP with fallback
+            scope_perms = matrix_prestiti.get(cat_fop)
+            if scope_perms is not None:
+                return scope_perms.get(scope, False)
+            return True if scope != "Altri Familiari" else False
 
         opzioni_conti = []
         for c in conti_famiglia:
@@ -286,7 +304,7 @@ class PrestitoDialogs:
             elif str(c['id_utente_owner']) == str(id_utente): scope = "Personale"
             else: scope = "Altri Familiari"
 
-            if is_allowed(c['tipo'], scope):
+            if is_allowed(c, scope):
                 prefix = "C" if c['is_condiviso'] else "P"
                 suffix = ""
                 if scope == "Condiviso": suffix = " (Condiviso)"
@@ -294,6 +312,7 @@ class PrestitoDialogs:
 
                 icon = "🏦"
                 if c['tipo'] in tipo_map["Carte"]: icon = "💳"
+                elif c['tipo'] == "Portafoglio Elettronico": icon = "📱"
                 
                 key = c['id_conto'] if c['tipo'] in tipo_map["Carte"] else f"{prefix}{c['id_conto']}"
                 opzioni_conti.append(ft.dropdown.Option(key=key, text=f"{icon} {c['nome_conto']}{suffix}"))
@@ -598,7 +617,7 @@ class PrestitoDialogs:
             elif str(c['id_utente_owner']) == str(id_utente): scope = "Personale"
             else: scope = "Altri Familiari"
 
-            if is_allowed(c['tipo'], scope):
+            if is_allowed(c, scope):
                 prefix = "C" if c['is_condiviso'] else "P"
                 suffix = ""
                 if scope == "Condiviso": suffix = " (Condiviso)"
@@ -606,6 +625,7 @@ class PrestitoDialogs:
 
                 icon = "🏦"
                 if c['tipo'] in tipo_map["Carte"]: icon = "💳"
+                elif c['tipo'] == "Portafoglio Elettronico": icon = "📱"
                 
                 key = c['id_conto'] if c['tipo'] in tipo_map["Carte"] else f"{prefix}{c['id_conto']}"
                 opzioni_conti.append(ft.dropdown.Option(key=key, text=f"{icon} {c['nome_conto']}{suffix}"))

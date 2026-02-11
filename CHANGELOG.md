@@ -6,6 +6,18 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.50.00 (11/02/2026)
+- **Ottimizzazione Database (Performance)**:
+    - Implementata migrazione **v27** con indici mirati su `Transazioni(data)`, `TransazioniCondivise(data)` e `Budget_Storico(id_famiglia, anno, mese)`.
+    - Ridotto drasticamente il timeout del caricamento budget mensile e storico.
+    - Introdotta logica avanzata di rilevamento lock e **"Opzione Nucleare"** per terminare processi bloccanti durante le migrazioni.
+- **Admin Panel Enhancements**:
+    - Nuova scheda **"Versione"** che mostra versione App, versione Schema DB e Ambiente (Dev/Prod).
+    - Note di rilascio rapide visibili direttamente nel portale admin.
+- **Branding & UI**:
+    - Aggiunti asset grafici ufficiali per **PayPal** e **Satispay**.
+    - Migliorata la leggibilità delle informazioni di sistema.
+
 ### v0.49.00 (07/02/2026)
 - **Ottimizzazione Mobile**: Revisione globale di tutti i dialoghi (15+) per garantire una corretta visualizzazione su smartphone:
     - Introdotto scrolling automatico per prevenire overflow con la tastiera attiva.

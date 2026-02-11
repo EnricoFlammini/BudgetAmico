@@ -215,6 +215,13 @@ class AuthView:
                 if utente.get("forza_cambio_password"):
                     self.page.session.set("_temp_password_for_reencrypt", password)
                 self.controller.post_login_setup(utente)
+                
+                # Ripristino Satispay (v0.50)
+                try:
+                    from db.gestione_db import controlla_ripristini_satispay
+                    controlla_ripristini_satispay(utente['id'], master_key_b64=utente.get('master_key'))
+                except Exception as e:
+                    logger.error(f"Errore ripristino Satispay al login: {e}")
             else:
                 logger.warning(f"LOGIN FALLITO per {username}: {errore}")
                 self.txt_errore_login.value = errore or "Username o password errati."

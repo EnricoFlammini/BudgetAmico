@@ -1,6 +1,7 @@
 import flet as ft
 import datetime
 import traceback
+import json
 from utils.styles import AppStyles
 from db.gestione_db import (
     aggiungi_conto,
@@ -13,20 +14,20 @@ from db.gestione_db import (
     ottieni_conti_utente,  # Importa per popolare il dropdown
     ottieni_saldo_iniziale_conto,
     aggiorna_saldo_iniziale_conto,
-    ottieni_saldo_iniziale_conto,
-    aggiorna_saldo_iniziale_conto,
     admin_imposta_saldo_conto_condiviso,
     # Shared Account Imports
     crea_conto_condiviso,
     modifica_conto_condiviso,
-    ottieni_utenti_famiglia,
     ottieni_utenti_famiglia,
     ottieni_dettagli_conto_condiviso,
     # PB Imports
     ottieni_salvadanai_conto,
     admin_rettifica_salvadanaio,
     elimina_salvadanaio,
-    ottieni_prima_famiglia_utente
+    ottieni_prima_famiglia_utente,
+    get_configurazione,
+    ottieni_tutti_i_conti_famiglia,
+    ottieni_ids_conti_tecnici_carte
 )
 
 
@@ -36,7 +37,6 @@ class ContoDialog(ft.AlertDialog):
         self.controller = controller
         # self.controller.page = controller.page # Removed for Flet 0.80 compatibility
         self.loc = controller.loc
-        self.conto_id_in_modifica = None
         self.conto_id_in_modifica = None
         self.is_condiviso_in_modifica = False
         self.is_shared_mode = False # Toggle state
@@ -115,6 +115,35 @@ class ContoDialog(ft.AlertDialog):
         )
         self.partecipanti_title = ft.Text("Seleziona Partecipanti", weight="bold", visible=False)
         self.lv_partecipanti = ft.Column(scroll=ft.ScrollMode.ADAPTIVE, height=150, visible=False)
+        # E-Wallet Specific Fields
+        self.dd_ewallet_sottotipo = ft.Dropdown(
+            options=[
+                ft.dropdown.Option("satispay", "Satispay"),
+                ft.dropdown.Option("paypal", "PayPal"),
+                ft.dropdown.Option("altro", "Altro")
+            ],
+            label="Sottotipo Portafoglio",
+            on_change=self._on_ewallet_sottotipo_change,
+            visible=False
+        )
+        
+        # Satispay Fields
+        self.txt_satispay_budget = ft.TextField(label="Budget Settimanale", keyboard_type=ft.KeyboardType.NUMBER, visible=False)
+        self.dd_satispay_conto_collegato = ft.Dropdown(label="Conto di Addebito/Accredito", visible=False, width=350)
+        
+        # PayPal Fields
+        self.lv_paypal_fonti = ft.Column(visible=False, spacing=5)
+        self.dd_paypal_fonte_preferita = ft.Dropdown(label="Fonte Preferita", visible=False, width=350)
+        
+        self.container_ewallet_settings = ft.Column([
+            self.dd_ewallet_sottotipo,
+            self.txt_satispay_budget,
+            self.dd_satispay_conto_collegato,
+            ft.Text("Seleziona Fonti Collegate (PayPal):", weight="bold", size=12, visible=False),
+            self.lv_paypal_fonti,
+            self.dd_paypal_fonte_preferita
+        ], visible=False, spacing=10)
+
         self.container_partecipanti = ft.Container(
             content=ft.Column([
                 self.partecipanti_title,
@@ -135,6 +164,7 @@ class ContoDialog(ft.AlertDialog):
                 self.container_partecipanti,
                 self.txt_conto_iban,
                 ft.Divider(),
+                self.container_ewallet_settings,
                 self.container_saldo_iniziale,
                 self.container_asset_iniziali,
                 self.chk_conto_default
@@ -150,6 +180,19 @@ class ContoDialog(ft.AlertDialog):
         ]
         self.actions_alignment = ft.MainAxisAlignment.END
 
+        # Mappatura tipi matrice -> tipi DB (usata per filtraggio FOP)
+        self.tipo_map = {
+            "Conto Corrente": ["Conto Corrente", "Conto", "Corrente"],
+            "Carte": ["Carta", "Carta di Credito", "Prepagata"],
+            "Risparmio": ["Risparmio", "Conto Deposito"],
+            "Investimenti": ["Investimenti", "Investimento", "Crypto", "Azioni", "Obbligazioni", "ETF", "Fondo"],
+            "Contanti": ["Contanti"],
+            "Fondo Pensione": ["Fondo Pensione"],
+            "Salvadanaio": ["Salvadanaio"],
+            "Satispay": ["Satispay"],
+            "PayPal": ["PayPal"]
+        }
+
     def _update_texts(self):
         """Aggiorna tutti i testi fissi con le traduzioni correnti."""
         loc = self.loc
@@ -163,6 +206,7 @@ class ContoDialog(ft.AlertDialog):
         self.dd_conto_tipo.options = [
             ft.dropdown.Option("Conto Corrente"), ft.dropdown.Option("Risparmio"),
             ft.dropdown.Option("Fondo Pensione"), ft.dropdown.Option("Contanti"),
+            ft.dropdown.Option("Portafoglio Elettronico"),
         ]
         self.txt_conto_iban.label = loc.get("iban_optional")
         self.container_saldo_iniziale.content.controls[0].value = loc.get("set_initial_balance")
@@ -217,12 +261,10 @@ class ContoDialog(ft.AlertDialog):
         riga_asset.controls[0].controls[2].data = riga_asset
 
         self.lv_asset_iniziali.controls.append(riga_asset)
-        self.lv_asset_iniziali.controls.append(riga_asset)
         if self.open and self.content.page:
             self.content.update()
 
     def _rimuovi_riga_asset_iniziale(self, riga_control):
-        self.lv_asset_iniziali.controls.remove(riga_control)
         self.lv_asset_iniziali.controls.remove(riga_control)
         if self.open and self.content.page:
             self.content.update()
@@ -231,7 +273,14 @@ class ContoDialog(ft.AlertDialog):
         tipo = self.dd_conto_tipo.value
         is_shared = self.dd_scope_conto.value == 'condiviso'
         
-        self.chk_conto_default.visible = (tipo not in ['Investimento', 'Fondo Pensione']) and not is_shared
+        # E-Wallet logic
+        is_ewallet = tipo == 'Portafoglio Elettronico'
+        self.container_ewallet_settings.visible = is_ewallet
+        if is_ewallet:
+             self.dd_ewallet_sottotipo.visible = True
+             self._on_ewallet_sottotipo_change(None)
+        
+        self.chk_conto_default.visible = (tipo not in ['Investimento', 'Fondo Pensione', 'Portafoglio Elettronico']) and not is_shared
         
         if is_shared:
              # Shared account logic for visibility
@@ -277,13 +326,183 @@ class ContoDialog(ft.AlertDialog):
         if self.open:
             self.content.update()
 
+    def _on_ewallet_sottotipo_change(self, e):
+        sottotipo = self.dd_ewallet_sottotipo.value
+        
+        # Satispay visibility
+        is_satispay = sottotipo == 'satispay'
+        self.txt_satispay_budget.visible = is_satispay
+        self.dd_satispay_conto_collegato.visible = is_satispay
+        
+        # PayPal visibility
+        is_paypal = sottotipo == 'paypal'
+        self.container_ewallet_settings.controls[3].visible = is_paypal # Text title
+        self.lv_paypal_fonti.visible = is_paypal
+        self.dd_paypal_fonte_preferita.visible = is_paypal
+        
+        if is_satispay:
+            self._popola_conti_collegati()
+        elif is_paypal:
+            self._popola_fonti_paypal()
+            
+        if self.open:
+            self.content.update()
+
+    def _popola_conti_collegati(self):
+        id_utente = self.controller.get_user_id()
+        id_famiglia = self.controller.get_family_id()
+        master_key_b64 = self.controller.page.session.get("master_key")
+        
+        # Recupera tutti i conti della famiglia per permettere selezione estesa come in Transazioni
+        conti = ottieni_tutti_i_conti_famiglia(id_famiglia, id_utente, master_key_b64=master_key_b64)
+        ids_conti_tecnici = ottieni_ids_conti_tecnici_carte(id_utente)
+        
+        # FOP Matrix filtering
+        raw_matrix = get_configurazione("global_fop_matrix")
+        matrix = {}
+        if raw_matrix:
+            try: matrix = json.loads(raw_matrix)
+            except: pass
+            
+        op_satispay = "Satispay (Collegamento)"
+        
+        allowed_options = []
+        for c in conti:
+            # Filtro conti tecnici e nascosti
+            if c.get('nascosto') or c['tipo'] == 'Portafoglio Elettronico':
+                continue
+            if c['id_conto'] in ids_conti_tecnici or "Saldo" in (c.get('nome_conto') or ""):
+                continue
+            
+            # Check FOP
+            t_db = str(c.get('tipo') or "").strip().lower()
+            cat_fop = None
+            for cat, db_list in self.tipo_map.items():
+                if any(t_db == x.strip().lower() for x in db_list):
+                    cat_fop = cat
+                    break
+            
+            if not cat_fop: continue
+            
+            # Ambito
+            if c['is_condiviso']: scope = "Condiviso"
+            elif str(c['id_utente_owner']) == str(id_utente): scope = "Personale"
+            else: scope = "Altri Familiari"
+            
+            # Check FOP with fallback if operation is not in matrix
+            if matrix:
+                op_perm = matrix.get(op_satispay)
+                if op_perm:
+                    if not op_perm.get(cat_fop, {}).get(scope, False):
+                        continue
+                else:
+                    # Fallback default: Conto Corrente (Personale/Condiviso)
+                    default = False
+                    if cat_fop == "Conto Corrente" and scope != "Altri Familiari": default = True
+                    if not default: continue
+
+            suffix = ""
+            if scope == "Condiviso": suffix = " (Condiviso)"
+            elif scope == "Altri Familiari": suffix = f" ({c.get('nome_owner', 'Altro')})"
+
+            # Icona e tipo per chiarezza
+            icon = "🏦"
+            if cat_fop == "Carte": icon = "💳"
+            elif cat_fop == "Contanti": icon = "💵"
+            elif cat_fop == "Salvadanaio": icon = "🐷"
+            
+            display_text = f"{icon} {c['nome_conto']} [{cat_fop}]{suffix}"
+            allowed_options.append(ft.dropdown.Option(str(c['id_conto']), display_text))
+
+        self.dd_satispay_conto_collegato.options = allowed_options
+
+    def _popola_fonti_paypal(self):
+        id_utente = self.controller.get_user_id()
+        id_famiglia = self.controller.get_family_id()
+        master_key_b64 = self.controller.page.session.get("master_key")
+        
+        # Recupera tutti i conti della famiglia per permettere selezione estesa come in Transazioni
+        conti = ottieni_tutti_i_conti_famiglia(id_famiglia, id_utente, master_key_b64=master_key_b64)
+        ids_conti_tecnici = ottieni_ids_conti_tecnici_carte(id_utente)
+        
+        # FOP Matrix filtering
+        raw_matrix = get_configurazione("global_fop_matrix")
+        matrix = {}
+        if raw_matrix:
+            try: matrix = json.loads(raw_matrix)
+            except: pass
+            
+        op_paypal = "PayPal (Fonti)"
+        
+        self.lv_paypal_fonti.controls.clear()
+        self.dd_paypal_fonte_preferita.options.clear()
+        
+        for c in conti:
+            # Filtro conti tecnici e nascosti
+            if c.get('nascosto') or c['tipo'] == 'Portafoglio Elettronico':
+                continue
+            if c['id_conto'] in ids_conti_tecnici or "Saldo" in (c.get('nome_conto') or ""):
+                continue
+                
+            # Check FOP
+            t_db = str(c.get('tipo') or "").strip().lower()
+            cat_fop = None
+            for cat, db_list in self.tipo_map.items():
+                if any(t_db == x.strip().lower() for x in db_list):
+                    cat_fop = cat
+                    break
+            
+            if not cat_fop: continue
+
+            # Ambito
+            if c['is_condiviso']: scope = "Condiviso"
+            elif str(c['id_utente_owner']) == str(id_utente): scope = "Personale"
+            else: scope = "Altri Familiari"
+            
+            # Check FOP with fallback if operation is not in matrix
+            if matrix:
+                op_perm = matrix.get(op_paypal)
+                if op_perm:
+                    if not op_perm.get(cat_fop, {}).get(scope, False):
+                        continue
+                else:
+                    # Fallback default: Conto Corrente & Carte (Personale/Condiviso)
+                    default = False
+                    if cat_fop in ["Conto Corrente", "Carte"] and scope != "Altri Familiari": default = True
+                    if not default: continue
+
+            suffix = ""
+            if scope == "Condiviso": suffix = " (Condiviso)"
+            elif scope == "Altri Familiari": suffix = f" ({c.get('nome_owner', 'Altro')})"
+
+            # Icona e tipo per chiarezza
+            icon = "🏦"
+            if cat_fop == "Carte": icon = "💳"
+            elif cat_fop == "Contanti": icon = "💵"
+            elif cat_fop == "Salvadanaio": icon = "🐷"
+
+            display_lbl = f"{icon} {c['nome_conto']} [{cat_fop}]{suffix}"
+            chk = ft.Checkbox(label=display_lbl, data=c['id_conto'], on_change=self._on_paypal_fonti_change)
+            self.lv_paypal_fonti.controls.append(chk)
+
+    def _on_paypal_fonti_change(self, e):
+        # Update preferred source dropdown based on selected checkboxes
+        selected_options = []
+        for ctrl in self.lv_paypal_fonti.controls:
+            if isinstance(ctrl, ft.Checkbox) and ctrl.value:
+                selected_options.append(ft.dropdown.Option(str(ctrl.data), ctrl.label))
+        
+        self.dd_paypal_fonte_preferita.options = selected_options
+        if not any(opt.key == self.dd_paypal_fonte_preferita.value for opt in selected_options):
+            self.dd_paypal_fonte_preferita.value = None
+        self.dd_paypal_fonte_preferita.update()
+
     def _on_tipo_condivisione_change(self, e):
         if self.dd_tipo_condivisione.value == 'utenti':
             self.container_partecipanti.visible = True
             self._popola_lista_utenti()
         else:
             self.container_partecipanti.visible = False
-            # self.lv_partecipanti.controls.clear() # Keep them in memory maybe?
             
         self.content.update()
 
@@ -367,6 +586,26 @@ class ContoDialog(ft.AlertDialog):
             self.txt_conto_iban.value = conto_data.get('iban', "")
 
             # Gestione visibilità in base al tipo
+            # Load E-Wallet settings if present
+            if tipo_corrente == 'Portafoglio Elettronico':
+                try:
+                    config = json.loads(conto_data.get('config_speciale') or '{}')
+                    sottotipo = config.get('sottotipo')
+                    self.dd_ewallet_sottotipo.value = sottotipo
+                    if sottotipo == 'satispay':
+                        self.txt_satispay_budget.value = config.get('budget_settimanale', '')
+                        self.dd_satispay_conto_collegato.value = config.get('id_conto_collegato')
+                    elif sottotipo == 'paypal':
+                        fonti_ids = config.get('fonti_collegate', [])
+                        self._popola_fonti_paypal()
+                        for ctrl in self.lv_paypal_fonti.controls:
+                            if isinstance(ctrl, ft.Checkbox) and ctrl.data in fonti_ids:
+                                ctrl.value = True
+                        self._on_paypal_fonti_change(None)
+                        self.dd_paypal_fonte_preferita.value = config.get('fonte_preferita')
+                except Exception as ex:
+                    print(f"[ERRORE] Caricamento config ewallet: {ex}")
+            
             # Saldo iniziale NON modificabile in edit mode (solo tramite rettifica admin)
             self.container_saldo_iniziale.visible = False
             self.container_asset_iniziali.visible = (conto_data['tipo'] == 'Investimento' and not is_shared)
@@ -450,6 +689,24 @@ class ContoDialog(ft.AlertDialog):
             tipo = self.dd_conto_tipo.value
             iban = self.txt_conto_iban.value if self.txt_conto_iban.visible else None
             is_shared = self.dd_scope_conto.value == 'condiviso'
+            is_ewallet = tipo == 'Portafoglio Elettronico'
+            
+            config_spec_json = None
+            if is_ewallet:
+                sottotipo = self.dd_ewallet_sottotipo.value
+                config_dict = {'sottotipo': sottotipo}
+                if sottotipo == 'satispay':
+                    config_dict['budget_settimanale'] = self.txt_satispay_budget.value
+                    config_dict['id_conto_collegato'] = self.dd_satispay_conto_collegato.value
+                elif sottotipo == 'paypal':
+                    fonti_ids = []
+                    for ctrl in self.lv_paypal_fonti.controls:
+                        if isinstance(ctrl, ft.Checkbox) and ctrl.value:
+                            fonti_ids.append(ctrl.data)
+                    config_dict['fonti_collegate'] = fonti_ids
+                    config_dict['fonte_preferita'] = self.dd_paypal_fonte_preferita.value
+                
+                config_spec_json = json.dumps(config_dict)
 
             if not nome:
                 self.txt_conto_nome.error_text = self.loc.get("fill_all_fields")
@@ -547,7 +804,8 @@ class ContoDialog(ft.AlertDialog):
                         tipo_condivisione=self.dd_tipo_condivisione.value,
                         lista_utenti=lista_utenti_selezionati if self.dd_tipo_condivisione.value == 'utenti' else None,
                         id_utente=utente_id,
-                        master_key_b64=master_key_b64
+                        master_key_b64=master_key_b64,
+                        config_speciale=config_spec_json
                     )
                      messaggio = "modificato" if success else "errore modifica"
                      new_conto_id = self.conto_id_in_modifica
@@ -560,7 +818,8 @@ class ContoDialog(ft.AlertDialog):
                         self.dd_tipo_condivisione.value,
                         lista_utenti_selezionati if self.dd_tipo_condivisione.value == 'utenti' else None,
                         id_utente=utente_id,
-                        master_key_b64=master_key_b64
+                        master_key_b64=master_key_b64,
+                        config_speciale=config_spec_json
                     )
                     success = new_conto_id is not None
                     messaggio = "aggiunto" if success else "errore aggiunta"
@@ -578,7 +837,7 @@ class ContoDialog(ft.AlertDialog):
                     # Passa il saldo_iniziale come valore_manuale solo se il tipo è 'Fondo Pensione'
                     valore_manuale_modifica = saldo_iniziale if tipo == 'Fondo Pensione' else None
                     
-                    success, msg = modifica_conto(self.conto_id_in_modifica, utente_id, nome, tipo, iban, valore_manuale=valore_manuale_modifica, master_key_b64=master_key_b64, id_famiglia=id_famiglia)
+                    success, msg = modifica_conto(self.conto_id_in_modifica, utente_id, nome, tipo, iban, valore_manuale=valore_manuale_modifica, master_key_b64=master_key_b64, id_famiglia=id_famiglia, config_speciale=config_spec_json)
                     messaggio = "modificato" if success else "errore modifica"
                     new_conto_id = self.conto_id_in_modifica
                     
@@ -589,7 +848,7 @@ class ContoDialog(ft.AlertDialog):
                 else:
                     # Passa il saldo_iniziale come valore_manuale solo se il tipo è 'Fondo Pensione'
                     valore_manuale_iniziale = saldo_iniziale if tipo == 'Fondo Pensione' else 0.0
-                    res = aggiungi_conto(utente_id, nome, tipo, iban, valore_manuale=valore_manuale_iniziale, master_key_b64=master_key_b64, id_famiglia=id_famiglia)
+                    res = aggiungi_conto(utente_id, nome, tipo, iban, valore_manuale=valore_manuale_iniziale, master_key_b64=master_key_b64, id_famiglia=id_famiglia, config_speciale=config_spec_json)
                     if isinstance(res, tuple):
                         new_conto_id, msg = res
                     else:

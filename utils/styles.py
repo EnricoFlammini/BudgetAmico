@@ -16,6 +16,10 @@ class AppColors:
     TEXT_SECONDARY = ft.Colors.ON_SURFACE_VARIANT
     TEXT_DISABLED = ft.Colors.OUTLINE
     
+    # E-Wallet Colors
+    PAYPAL_BLUE = "#003087"
+    SATISPAY_RED = "#e30613"
+    
     # Colori per sfondi specifici
     SURFACE_VARIANT = "surfaceVariant"
     
@@ -193,6 +197,88 @@ class AppStyles:
             alignment=ft.MainAxisAlignment.CENTER,
             expand=True
         )
+
+    @staticmethod
+    def get_logo_control(tipo: str, config_speciale: str = None, circuito: str = None, size: int = 24) -> ft.Control:
+        """
+        Restituisce il controllo (Immagine o Icona) per il logo richiesto.
+        Implementa logica di fallback se le immagini ufficiali mancano.
+        """
+        import json
+        
+        # 1. Determinazione file logo e fallback
+        logo_file = None
+        fallback_icon = ft.Icons.ACCOUNT_BALANCE
+        fallback_color = ft.Colors.WHITE
+        fallback_text = ""
+        fallback_bg = ft.Colors.GREY_700
+        
+        t_low = tipo.lower()
+        
+        # Logica per Conti
+        if t_low in ["conto corrente", "corrente", "conto"]:
+            logo_file = "conto_corrente_logo.png"
+            fallback_icon = ft.Icons.ACCOUNT_BALANCE
+        elif t_low == "risparmio":
+            logo_file = "conto_risparmio_logo.png"
+            fallback_icon = ft.Icons.SAVINGS
+        elif t_low == "fondo pensione":
+            logo_file = "conto_pensione_logo.png"
+            fallback_icon = ft.Icons.WAVE_OUTBREAK # o simile
+        elif t_low == "contanti":
+            logo_file = "contanti_logo.png"
+            fallback_icon = ft.Icons.MONEY
+        elif t_low == "investimento":
+            logo_file = "conto_investimento_logo.png"
+            fallback_icon = ft.Icons.TRENDING_UP
+        elif t_low == "portafoglio elettronico":
+            fallback_icon = ft.Icons.SMARTPHONE
+            if config_speciale:
+                try:
+                    config = json.loads(config_speciale or '{}')
+                    sottotipo = config.get('sottotipo', '').lower()
+                    if sottotipo == 'satispay':
+                        logo_file = "satispay_logo.png"
+                        fallback_text = "S"
+                        fallback_bg = AppColors.SATISPAY_RED
+                    elif sottotipo == 'paypal':
+                        logo_file = "paypal_logo.png"
+                        fallback_text = "PP"
+                        fallback_bg = AppColors.PAYPAL_BLUE
+                except: pass
+        
+        # Logica per Carte
+        elif circuito:
+            c_low = circuito.lower()
+            if "visa" in c_low: logo_file = "visa_logo.png"
+            elif "mastercard" in c_low: logo_file = "mastercard_logo.png"
+            elif "amex" in c_low or "american" in c_low: logo_file = "amex_logo.png"
+            elif "diners" in c_low: logo_file = "diners_logo.png"
+            
+            if not logo_file: # Fallback su tipologia carta
+                if t_low == "credito": logo_file = "carta_credito_logo.png"
+                else: logo_file = "carta_debito_logo.png"
+            
+            fallback_icon = ft.Icons.CREDIT_CARD
+        
+        # 2. Costruzione del controllo
+        if logo_file:
+            # Container per mantenere dimensioni fisse e gestire fallback
+            return ft.Image(
+                src=logo_file,
+                width=size,
+                height=size,
+                fit=ft.ImageFit.CONTAIN,
+                error_content=ft.Container(
+                    content=ft.Text(fallback_text, size=min(14, size-4), weight="bold", color=ft.Colors.WHITE) if fallback_text else ft.Icon(fallback_icon, size=size, color=fallback_color),
+                    bgcolor=fallback_bg if fallback_text else None,
+                    width=size, height=size,
+                    border_radius=size/2,
+                    alignment=ft.alignment.center,
+                )
+            )
+        else:
+            return ft.Icon(fallback_icon, size=size, color=fallback_color)
 
     @staticmethod
     def scrollable_list(spacing: int = 10) -> ft.Column:

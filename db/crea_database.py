@@ -14,8 +14,8 @@ if not os.path.exists(APP_DATA_DIR):
 DB_FILE = os.path.join(APP_DATA_DIR, 'budget_amico.db')
 
 # --- SCHEMA DATABASE ---
-# Versione 24: Aggiunta codici_univoci_enc a Utenti e Famiglie
-SCHEMA_VERSION = 25
+# Versione 27: Aggiunta indici performance su Transazioni e Storico
+SCHEMA_VERSION = 27
 
 TABLES = {
     "Utenti": """
@@ -75,7 +75,8 @@ TABLES = {
             valore_manuale REAL DEFAULT 0.0,
             rettifica_saldo REAL DEFAULT 0.0,
             borsa_default TEXT,
-            nascosto BOOLEAN DEFAULT FALSE
+            nascosto BOOLEAN DEFAULT FALSE,
+            config_speciale TEXT
         );
     """,
     "ContiCondivisi": """
@@ -85,7 +86,8 @@ TABLES = {
             nome_conto TEXT NOT NULL,
             tipo TEXT NOT NULL,
             tipo_condivisione TEXT NOT NULL CHECK(tipo_condivisione IN ('famiglia', 'utenti')),
-            rettifica_saldo REAL DEFAULT 0.0
+            rettifica_saldo REAL DEFAULT 0.0,
+            config_speciale TEXT
         );
     """,
     "PartecipazioneContoCondiviso": """
@@ -110,6 +112,7 @@ TABLES = {
             nome_sottocategoria TEXT NOT NULL,
             UNIQUE(id_categoria, nome_sottocategoria)
         );
+        CREATE INDEX IF NOT EXISTS idx_sottocategorie_id_categoria ON Sottocategorie(id_categoria);
     """,
     "Transazioni": """
         CREATE TABLE Transazioni (
@@ -121,6 +124,7 @@ TABLES = {
             descrizione TEXT NOT NULL,
             importo REAL NOT NULL
         );
+        CREATE INDEX IF NOT EXISTS idx_transazioni_data ON Transazioni(data);
     """,
     "TransazioniCondivise": """
         CREATE TABLE TransazioniCondivise (
@@ -134,6 +138,7 @@ TABLES = {
             id_carta INTEGER REFERENCES Carte(id_carta) ON DELETE SET NULL,
             importo_nascosto BOOLEAN DEFAULT FALSE
         );
+        CREATE INDEX IF NOT EXISTS idx_transazionicondivise_data ON TransazioniCondivise(data);
     """,
     "Budget": """
         CREATE TABLE Budget (
@@ -157,6 +162,7 @@ TABLES = {
             importo_speso TEXT NOT NULL,
             UNIQUE(id_famiglia, id_sottocategoria, anno, mese)
         );
+        CREATE INDEX IF NOT EXISTS idx_budget_storico_lookup ON Budget_Storico(id_famiglia, anno, mese);
     """,
     "Prestiti": """
         CREATE TABLE Prestiti (

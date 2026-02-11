@@ -98,11 +98,15 @@ class TabCarte(ft.Container):
         # Type indicator color
         type_color = get_type_color(card_data['tipo_carta'])
         
-        icon = ft.Icons.CREDIT_CARD if is_credit else ft.Icons.CREDIT_CARD_OFF_OUTLINED
+        logo_control = AppStyles.get_logo_control(
+            tipo=card_data['tipo_carta'],
+            circuito=card_data['circuito'],
+            size=30
+        )
         
         # Custom Header (Replacing ListTile to fix styling issues)
         header_row = ft.Row([
-            ft.Icon(icon, color=ft.Colors.WHITE, size=30),
+            logo_control,
             ft.Column([
                 AppStyles.subheader_text(card_data['nome_carta'], color=ft.Colors.WHITE),
                 ft.Row([

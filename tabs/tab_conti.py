@@ -188,6 +188,21 @@ class ContiTab(ft.Container):
         if tipo == 'Contanti': icon = ft.Icons.MONEY
         elif tipo == 'Risparmio': icon = ft.Icons.SAVINGS
         elif is_shared: icon = ft.Icons.GROUP
+        
+        # E-Wallet Specialization
+        if tipo == 'Portafoglio Elettronico':
+            import json
+            try:
+                config = json.loads(conto.get('config_speciale') or '{}')
+                sottotipo = config.get('sottotipo', '').lower()
+                if sottotipo == 'satispay':
+                    icon = ft.Icons.PHONELINK_RING
+                    if not assigned_color: bg_color = ft.Colors.RED_400 # Satispay Red-ish
+                elif sottotipo == 'paypal':
+                    icon = ft.Icons.PAYMENTS
+                    if not assigned_color: bg_color = ft.Colors.BLUE_800 # PayPal Blue
+            except:
+                icon = ft.Icons.SMARTPHONE
 
         saldo_val = conto['saldo_calcolato']
         
@@ -208,11 +223,19 @@ class ContiTab(ft.Container):
         # Total Worth = Available + Savings PBs
         total_worth = available + pb_risparmio
         
+        # Logo/Icon selection
+        logo_control = AppStyles.get_logo_control(
+            tipo=tipo, 
+            config_speciale=conto.get('config_speciale'),
+            size=30
+        )
+
         # Content Column
         content_col = [
             ft.Row([
                 ft.Row([
-                    ft.Icon(icon, color=ft.Colors.WHITE, size=24),
+                    logo_control,
+                    ft.Container(width=5), # Small spacer
                     AppStyles.subheader_text(nome, color=ft.Colors.WHITE),
                 ], expand=True),
                 

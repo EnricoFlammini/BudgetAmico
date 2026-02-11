@@ -40,8 +40,53 @@ class TransactionDialog(ft.AlertDialog):
         self.radio_tipo_transazione = ft.RadioGroup(content=ft.Row(wrap=True, spacing=5))
         self.txt_descrizione_dialog = ft.TextField()
         self.txt_importo_dialog = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER)
-        self.dd_conto_dialog = ft.Dropdown()
-        self.dd_conto_destinazione_dialog = ft.Dropdown(visible=False) # Nuovo per Giroconto
+        
+        # Nuovo Selettore Conto Custom
+        self.selected_account_logo = ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=20)
+        self.selected_account_name = ft.Text("Seleziona Conto", size=16)
+        self.selected_account_key = None
+        self.selected_account_data = None
+        
+        self.container_conto_selector = ft.Container(
+            content=ft.Row([
+                ft.Row([
+                    self.selected_account_logo,
+                    self.selected_account_name,
+                ], expand=True, spacing=10),
+                ft.Icon(ft.Icons.ARROW_DROP_DOWN)
+            ]),
+            padding=ft.padding.all(12),
+            border=ft.border.all(1, ft.Colors.OUTLINE),
+            border_radius=5,
+            on_click=self._apri_bottom_sheet_conti,
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+        )
+        self.txt_error_conto = ft.Text("", color=ft.Colors.RED, size=12, visible=False)
+        
+        # Selettore Destinazione Custom (Giroconto)
+        self.selected_dest_logo = ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=20)
+        self.selected_dest_name = ft.Text("Seleziona Destinazione", size=16)
+        self.selected_dest_key = None
+        
+        self.container_dest_selector = ft.Container(
+            content=ft.Row([
+                ft.Row([
+                    self.selected_dest_logo,
+                    self.selected_dest_name,
+                ], expand=True, spacing=10),
+                ft.Icon(ft.Icons.ARROW_DROP_DOWN)
+            ]),
+            padding=ft.padding.all(12),
+            border=ft.border.all(1, ft.Colors.OUTLINE),
+            border_radius=5,
+            on_click=lambda e: self._apri_bottom_sheet_conti(e, is_dest=True),
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+        )
+        self.txt_error_dest = ft.Text("", color=ft.Colors.RED, size=12, visible=False)
+        
+        self.dd_conto_dialog = ft.Dropdown(visible=False) # Nascosto, usato per compatibilità dati
+        self.dd_conto_destinazione_dialog = ft.Dropdown(visible=False) # Nascosto
+        self.dd_paypal_fonte_dialog = ft.Dropdown(label="Fonte PayPal", visible=False) # Nuovo per PayPal
         self.dd_sottocategoria_dialog = ft.Dropdown()
         self.cb_importo_nascosto = ft.Checkbox(value=False)
         
@@ -55,8 +100,17 @@ class TransactionDialog(ft.AlertDialog):
                 self.radio_tipo_transazione,
                 self.txt_descrizione_dialog,
                 self.txt_importo_dialog,
-                self.dd_conto_dialog,
-                self.dd_conto_destinazione_dialog, # Visibile solo se Giroconto
+                ft.Column([
+                    ft.Text("Conto", size=12, color=ft.Colors.PRIMARY),
+                    self.container_conto_selector,
+                    self.txt_error_conto
+                ], spacing=2),
+                self.dd_paypal_fonte_dialog, # Visibile solo se PayPal
+                ft.Column([
+                    ft.Text("Destinazione", size=12, color=ft.Colors.PRIMARY),
+                    self.container_dest_selector,
+                    self.txt_error_dest
+                ], spacing=2, visible=False),
                 self.dd_sottocategoria_dialog,
                 self.cb_importo_nascosto,
             ],
@@ -83,6 +137,8 @@ class TransactionDialog(ft.AlertDialog):
         self.txt_importo_dialog.label = self.loc.get("amount")
         self.txt_importo_dialog.prefix_text = self.loc.currencies[self.loc.currency]['symbol']
         self.dd_conto_dialog.label = self.loc.get("account")
+        self.dd_conto_dialog.on_change = self._on_conto_change
+        self.dd_paypal_fonte_dialog.label = "Fonte PayPal (Obbligatoria)"
         self.dd_conto_destinazione_dialog.label = self.loc.get("to_account", "Conto Destinazione")
         self.dd_sottocategoria_dialog.label = self.loc.get("subcategory")
         self.cb_importo_nascosto.label = self.loc.get("hide_amount_in_family")
@@ -105,11 +161,119 @@ class TransactionDialog(ft.AlertDialog):
         try:
             self.open = False
             self.controller.page.session.set("transazione_in_modifica", None)
+            # Chiudi anche il BottomSheet se aperto
+            if hasattr(self, 'bs_conti') and self.bs_conti.open:
+                self.bs_conti.open = False
             if self.controller.page:
                 self.controller.page.update()
         except Exception as ex:
             logger.error(f"Errore chiusura dialog transazione: {ex}")
             traceback.print_exc()
+
+    def _apri_bottom_sheet_conti(self, e, is_dest=False):
+        """Apre un BottomSheet per la selezione del conto con loghi."""
+        from utils.styles import AppStyles
+        
+        lv_conti = ft.ListView(expand=True, spacing=0)
+        
+        def on_conto_selected(e):
+            account_data = e.control.data
+            key = e.control.key
+            self._select_account(key, account_data, is_dest=is_dest)
+            self.bs_conti.open = False
+            self.bs_conti.update()
+            self.update()
+
+        options = self.dd_conto_destinazione_dialog.options if is_dest else self.dd_conto_dialog.options
+
+        for opt in options:
+            c = opt.data
+            suffix = ""
+            if c.get('is_condiviso'): suffix = " " + self.loc.get("shared_suffix")
+            elif str(c.get('id_utente_owner')) != str(self.controller.get_user_id()): 
+                 suffix = f" ({c.get('nome_owner', 'Altro')})"
+
+            # Usa l'utility globale per il logo
+            logo = AppStyles.get_logo_control(
+                tipo=c['tipo'],
+                config_speciale=c.get('config_speciale'),
+                size=24
+            )
+
+            lv_conti.controls.append(
+                ft.ListTile(
+                    leading=logo,
+                    title=ft.Text(f"{c['nome_conto']}{suffix}"),
+                    subtitle=ft.Text(c['tipo'], size=12),
+                    key=opt.key,
+                    data=c,
+                    on_click=on_conto_selected
+                )
+            )
+
+        self.bs_conti = ft.BottomSheet(
+            ft.Container(
+                ft.Column([
+                    ft.Text("Seleziona Destinazione" if is_dest else "Seleziona Conto", size=18, weight="bold", text_align=ft.TextAlign.CENTER),
+                    ft.Divider(),
+                    lv_conti
+                ], tight=True, spacing=10),
+                padding=20,
+                height=400,
+            ),
+            open=True,
+        )
+        self.controller.page.overlay.append(self.bs_conti)
+        self.controller.page.update()
+
+    def _select_account(self, key, account_data, is_dest=False):
+        from utils.styles import AppStyles
+        if is_dest:
+            self.selected_dest_key = key
+            self.selected_dest_name.value = account_data['nome_conto']
+            new_logo = AppStyles.get_logo_control(tipo=account_data['tipo'], config_speciale=account_data.get('config_speciale'), size=20)
+            self.selected_dest_logo = new_logo
+            self.container_dest_selector.content.controls[0].controls[0] = self.selected_dest_logo
+            self.dd_conto_destinazione_dialog.value = key
+            self.txt_error_dest.visible = False
+        else:
+            self.selected_account_key = key
+            self.selected_account_data = account_data
+            self.selected_account_name.value = account_data['nome_conto']
+            
+            # Aggiorna il logo nel container
+            new_logo = AppStyles.get_logo_control(
+                tipo=account_data['tipo'],
+                config_speciale=account_data.get('config_speciale'),
+                size=20
+            )
+            self.selected_account_logo = new_logo
+            self.container_conto_selector.content.controls[0].controls[0] = self.selected_account_logo
+            
+            self.selected_account_name.color = ft.Colors.BLACK if self.controller.page.theme_mode == ft.ThemeMode.LIGHT else ft.Colors.WHITE
+            self.txt_error_conto.visible = False
+            
+            # Sincronizza con il dropdown nascosto per non rompere la logica esistente
+            self.dd_conto_dialog.value = key
+            
+            # Attiva il change handler originale
+            self._on_conto_change(None)
+
+    def _reset_account_selector(self):
+        self.selected_account_key = None
+        self.selected_account_data = None
+        self.selected_account_name.value = "Seleziona Conto"
+        self.selected_account_logo = ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=20)
+        self.container_conto_selector.content.controls[0].controls[0] = self.selected_account_logo
+        self.dd_conto_dialog.value = None
+        self.txt_error_conto.visible = False
+        
+        self.selected_dest_key = None
+        self.selected_dest_name.value = "Seleziona Destinazione"
+        self.selected_dest_logo = ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=20)
+        self.container_dest_selector.content.controls[0].controls[0] = self.selected_dest_logo
+        self.dd_conto_destinazione_dialog.value = None
+        self.txt_error_dest.visible = False
 
     def _popola_dropdowns(self):
         utente_id = self.controller.get_user_id()
@@ -160,19 +324,37 @@ class TransactionDialog(ft.AlertDialog):
             "Investimenti": ["Investimenti", "Investimento", "Crypto", "Azioni", "Obbligazioni", "ETF", "Fondo"],
             "Contanti": ["Contanti"],
             "Fondo Pensione": ["Fondo Pensione"],
-            "Salvadanaio": ["Salvadanaio"]
+            "Salvadanaio": ["Salvadanaio"],
+            "Satispay": ["Satispay"],
+            "PayPal": ["PayPal"]
         }
 
-        def is_allowed(tipo_db, scope, matrix_to_check):
-            if not tipo_db: return False
-            tipo_clean = str(tipo_db).strip().lower()
+        def is_allowed(account_data, scope, matrix_to_check):
+            t_db = str(account_data.get('tipo') or "").strip().lower()
             cat_fop = None
-            for cat, db_list in tipo_map.items():
-                if any(tipo_clean == x.strip().lower() for x in db_list):
-                    cat_fop = cat
-                    break
+            
+            # Special handling for Portafoglio Elettronico
+            if t_db == "portafoglio elettronico":
+                try:
+                    config = json.loads(account_data.get('config_speciale') or '{}')
+                    sottotipo = config.get('sottotipo', '').strip().lower()
+                    if sottotipo == 'satispay': cat_fop = "Satispay"
+                    elif sottotipo == 'paypal': cat_fop = "PayPal"
+                except: pass
+            
+            if not cat_fop:
+                for cat, db_list in tipo_map.items():
+                    if any(t_db == x.strip().lower() for x in db_list):
+                        cat_fop = cat
+                        break
+            
             if not cat_fop: return False
-            return matrix_to_check.get(cat_fop, {}).get(scope, False)
+            
+            # Check FOP with fallback
+            scope_perms = matrix_to_check.get(cat_fop)
+            if scope_perms is not None:
+                return scope_perms.get(scope, False)
+            return True if scope != "Altri Familiari" else False
 
         opzioni_sorgente = []
         opzioni_destinazione = []
@@ -194,16 +376,17 @@ class TransactionDialog(ft.AlertDialog):
             if c['tipo'] in tipo_map["Carte"]: icon = "💳"
             elif c['tipo'] == "Salvadanaio": icon = "🐷"
             elif c['tipo'] == "Contanti": icon = "💵"
+            elif c['tipo'] == "Portafoglio Elettronico": icon = "📱"
             
             key = f"{prefix}{c['id_conto']}"
             if c['tipo'] in tipo_map["Carte"]: key = c['id_conto'] 
 
-            opt = ft.dropdown.Option(key=key, text=f"{icon} {c['nome_conto']}{suffix}")
+            opt = ft.dropdown.Option(key=key, text=f"{icon} {c['nome_conto']}{suffix}", data=c)
             
-            if is_allowed(c['tipo'], scope, matrix_source):
+            if is_allowed(c, scope, matrix_source):
                 opzioni_sorgente.append(opt)
             
-            if tipo_op == "Giroconto" and is_allowed(c['tipo'], scope, matrix_dest):
+            if tipo_op == "Giroconto" and is_allowed(c, scope, matrix_dest):
                 opzioni_destinazione.append(opt)
 
         self.dd_conto_dialog.options = opzioni_sorgente
@@ -230,18 +413,64 @@ class TransactionDialog(ft.AlertDialog):
         self._popola_dropdowns()
         
         # Toggle visibilità campi
-        self.dd_conto_destinazione_dialog.visible = is_giroconto
+        self.container_dest_selector.parent.visible = is_giroconto
         self.dd_sottocategoria_dialog.visible = not is_giroconto
         self.cb_importo_nascosto.visible = not is_giroconto
         
         # Aggiorna label conto sorgente
-        self.dd_conto_dialog.label = self.loc.get("from_account", "Da Conto") if is_giroconto else self.loc.get("account")
+        label_text = self.loc.get("from_account", "Da Conto") if is_giroconto else self.loc.get("account")
+        self.content.controls[4].controls[0].value = label_text # Aggiorna la label sopra il selettore custom
         
         if self.page and e is not None:
             try:
                 self.page.update()
             except Exception as ex:
                 logger.error(f"Errore update pagina (_on_tipo_transazione_change): {ex}")
+
+    def _on_conto_change(self, e):
+        # Detect if PayPal and show source selection
+        val = self.dd_conto_dialog.value
+        selected_opt = next((opt for opt in self.dd_conto_dialog.options if opt.key == val), None)
+        
+        show_paypal = False
+        if selected_opt and selected_opt.data:
+            c = selected_opt.data
+            if c.get('tipo') == 'Portafoglio Elettronico':
+                try:
+                    config = json.loads(c.get('config_speciale') or '{}')
+                    if config.get('sottotipo') == 'paypal':
+                        show_paypal = True
+                        self._popola_fonti_paypal_dialog(config)
+                except: pass
+        
+        self.dd_paypal_fonte_dialog.visible = show_paypal
+        if self.page:
+            self.page.update()
+
+    def _popola_fonti_paypal_dialog(self, config):
+        fonti_ids = config.get('fonti_collegate', [])
+        preferita = config.get('fonte_preferita')
+        
+        # We need the list of accounts to get names.
+        # But we already have it in popola_dropdowns... wait, we filter it.
+        # Let's just fetch all family accounts again or pass them.
+        # Simpler: just use IDs if we don't want to re-fetch names here.
+        # But better to show names.
+        
+        id_utente = self.controller.get_user_id()
+        famiglia_id = self.controller.get_family_id()
+        master_key_b64 = self.controller.page.session.get("master_key")
+        conti = ottieni_tutti_i_conti_famiglia(famiglia_id, id_utente, master_key_b64=master_key_b64)
+        
+        self.dd_paypal_fonte_dialog.options = [
+            ft.dropdown.Option(str(c['id_conto']), c['nome_conto'])
+            for c in conti if c['id_conto'] in fonti_ids
+        ]
+        
+        if preferita and any(opt.key == str(preferita) for opt in self.dd_paypal_fonte_dialog.options):
+            self.dd_paypal_fonte_dialog.value = str(preferita)
+        elif self.dd_paypal_fonte_dialog.options:
+            self.dd_paypal_fonte_dialog.value = self.dd_paypal_fonte_dialog.options[0].key
 
     def _reset_campi(self):
         self.txt_descrizione_dialog.error_text = None
@@ -253,10 +482,12 @@ class TransactionDialog(ft.AlertDialog):
         self.radio_tipo_transazione.value = "Spesa"
         self.txt_descrizione_dialog.value = ""
         self.txt_importo_dialog.value = ""
-        self.dd_conto_dialog.value = None
+        self._reset_account_selector()
         self.dd_conto_destinazione_dialog.value = None
         self.dd_sottocategoria_dialog.value = ""
         self.cb_importo_nascosto.value = False
+        self.dd_paypal_fonte_dialog.value = None
+        self.dd_paypal_fonte_dialog.visible = False
         
         # Reset visibility state
         self._on_tipo_transazione_change(None)
@@ -284,6 +515,11 @@ class TransactionDialog(ft.AlertDialog):
                     self.dd_conto_dialog.value = f"C{conto_default_info['id']}"
                 else:
                     self.dd_conto_dialog.value = f"P{conto_default_info['id']}"
+                
+            # Aggiorna UI Selettore Custom
+            if self.dd_conto_dialog.value:
+                opt = next((o for o in self.dd_conto_dialog.options if o.key == self.dd_conto_dialog.value), None)
+                if opt: self._select_account(opt.key, opt.data)
                 
             if self not in self.controller.page.overlay:
                 self.controller.page.overlay.append(self)
@@ -326,6 +562,11 @@ class TransactionDialog(ft.AlertDialog):
             self.dd_sottocategoria_dialog.value = transazione_dati.get('id_sottocategoria') or ""
             self.cb_importo_nascosto.value = transazione_dati.get('importo_nascosto', False)
 
+            # Aggiorna UI Selettore Custom
+            if self.dd_conto_dialog.value:
+                opt = next((o for o in self.dd_conto_dialog.options if o.key == self.dd_conto_dialog.value), None)
+                if opt: self._select_account(opt.key, opt.data)
+
             self.controller.page.session.set("transazione_in_modifica", transazione_dati)
             if self not in self.controller.page.overlay:
                 self.controller.page.overlay.append(self)
@@ -353,17 +594,25 @@ class TransactionDialog(ft.AlertDialog):
             if not self.txt_descrizione_dialog.value:
                 self.txt_descrizione_dialog.error_text = self.loc.get("description_required")
                 is_valid = False
-            if not self.dd_conto_dialog.value:
-                self.dd_conto_dialog.error_text = self.loc.get("select_an_account")
+            if not self.selected_account_key:
+                self.txt_error_conto.value = self.loc.get("select_an_account")
+                self.txt_error_conto.visible = True
                 is_valid = False
             
             if tipo == "Giroconto":
-                if not self.dd_conto_destinazione_dialog.value:
-                    self.dd_conto_destinazione_dialog.error_text = self.loc.get("select_destination_account", "Seleziona destinazione")
+                if not self.selected_dest_key:
+                    self.txt_error_dest.value = self.loc.get("select_destination_account", "Seleziona destinazione")
+                    self.txt_error_dest.visible = True
                     is_valid = False
-                elif self.dd_conto_dialog.value == self.dd_conto_destinazione_dialog.value:
-                    self.dd_conto_destinazione_dialog.error_text = self.loc.get("accounts_must_be_different", "Conti devono essere diversi")
+                elif self.selected_account_key == self.selected_dest_key:
+                    self.txt_error_dest.value = self.loc.get("accounts_must_be_different", "Conti devono essere diversi")
+                    self.txt_error_dest.visible = True
                     is_valid = False
+            
+            # PayPal Mandatory Source check
+            if self.dd_paypal_fonte_dialog.visible and not self.dd_paypal_fonte_dialog.value:
+                self.dd_paypal_fonte_dialog.error_text = "Seleziona una fonte PayPal"
+                is_valid = False
 
             importo = 0.0
             try:
@@ -438,7 +687,7 @@ class TransactionDialog(ft.AlertDialog):
                 "importo_nascosto": self.cb_importo_nascosto.value,
                 "id_carta": id_carta,
                 "tipo_transazione": self.radio_tipo_transazione.value,
-                "id_conto_destinazione_key": self.dd_conto_destinazione_dialog.value if self.radio_tipo_transazione.value == "Giroconto" else None
+                "id_conto_destinazione_key": self.selected_dest_key if self.radio_tipo_transazione.value == "Giroconto" else None
             }
         except Exception as ex:
             logger.error(f"Errore validazione dati transazione: {ex}")
@@ -502,8 +751,8 @@ class TransactionDialog(ft.AlertDialog):
             
     def _esegui_giroconto(self, dati):
         """Esegue logica giroconto riutilizzando gestione_db"""
-        sorgente_key = self.dd_conto_dialog.value
-        destinazione_key = dati['id_conto_destinazione_key']
+        sorgente_key = self.selected_account_key
+        destinazione_key = self.selected_dest_key
         importo = dati['importo']
         
         master_key_b64 = self.controller.page.session.get("master_key")
@@ -610,6 +859,29 @@ class TransactionDialog(ft.AlertDialog):
                 else:
                     success = self._esegui_aggiunta(dati_validati)
                     messaggio = "aggiunta" if success else "errore nell'aggiunta"
+                    
+                    # Logica Automatica PayPal (v0.50)
+                    if success and self.dd_paypal_fonte_dialog.visible and self.dd_paypal_fonte_dialog.value:
+                        try:
+                            mkey = self.controller.page.session.get("master_key")
+                            uid = self.controller.get_user_id()
+                            f_id = self.controller.get_family_id()
+                            
+                            id_fonte = int(self.dd_paypal_fonte_dialog.value)
+                            id_paypal = dati_validati['id_conto']
+                            importo_assoluto = abs(dati_validati['importo'])
+                            
+                            # Se è una spesa, il giroconto va da Fonte -> PayPal
+                            # Se è un incasso, il giroconto va da PayPal -> Fonte (opzionale, ma logico per svuotare il contenitore)
+                            if dati_validati['importo'] < 0:
+                                esegui_giroconto(
+                                    id_fonte, id_paypal, importo_assoluto, dati_validati['data'],
+                                    f"Ricarica PayPal per: {dati_validati['descrizione']}",
+                                    master_key_b64=mkey, id_utente_autore=uid, id_famiglia=f_id,
+                                    tipo_origine="personale", tipo_destinazione="personale" # Assume personal for now
+                                )
+                        except Exception as ep:
+                            logger.error(f"Errore giroconto automatico PayPal: {ep}")
 
             if success:
                 # 2. Chiudi il dialog PRIMA di aggiornare la dashboard

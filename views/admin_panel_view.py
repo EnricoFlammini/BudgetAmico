@@ -12,6 +12,7 @@ from typing import Optional
 from utils.db_logger import get_logs, get_log_stats, get_distinct_components, cleanup_old_logs
 from utils.db_log_handler import get_all_components, update_logger_config, invalidate_config_cache
 from utils.styles import AppColors
+from db.gestione_db import ottieni_versione_db
 
 
 def verifica_admin_sistema(username: str, password: str) -> bool:
@@ -75,6 +76,7 @@ class AdminPanelView:
         self._init_db_stats_tab_ui()
         self._init_fop_tab_ui()
         self._init_access_stats_ui()
+        self._init_version_tab_ui()
 
     def _sort_datatable(self, e, table: ft.DataTable, data_list: list, update_method):
         """Helper generico per ordinare le tabelle."""
@@ -102,6 +104,7 @@ class AdminPanelView:
         self._load_config()
         self._load_db_stats()
         self._load_fop_matrix()
+        self._load_version_info()
 
         # Definisci le tabs
         self.tabs.tabs = [
@@ -139,6 +142,11 @@ class AdminPanelView:
                 text="Gestione FOP",
                 icon=ft.Icons.LIST_ALT,
                 content=self._build_fop_tab_content()
+            ),
+            ft.Tab(
+                text="Versione",
+                icon=ft.Icons.INFO_OUTLINE,
+                content=self._build_version_tab_content()
             ),
         ]
 
@@ -1034,8 +1042,8 @@ class AdminPanelView:
             try: saved_data = json.loads(raw)
             except: logger.error("Errore parsing global_fop_matrix")
 
-        operations = ["Spesa", "Incasso", "Giroconto (Mittente)", "Giroconto (Ricevente)", "Spesa Fissa", "Prestiti"]
-        types = ["Conto Corrente", "Carte", "Risparmio", "Investimenti", "Contanti", "Fondo Pensione", "Salvadanaio"]
+        operations = ["Spesa", "Incasso", "Giroconto (Mittente)", "Giroconto (Ricevente)", "Spesa Fissa", "Prestiti", "Satispay (Collegamento)", "PayPal (Fonti)"]
+        types = ["Conto Corrente", "Carte", "Risparmio", "Investimenti", "Contanti", "Fondo Pensione", "Salvadanaio", "Satispay", "PayPal"]
         scopes = ["Personale", "Condiviso", "Altri Familiari"]
         
         self.fop_container.controls.clear()
@@ -1067,8 +1075,10 @@ class AdminPanelView:
                     # Default values if not in DB
                     default = False
                     if op == "Incasso" and t == "Conto Corrente" and s != "Altri Familiari": default = True
-                    if op == "Spesa" and t in ["Conto Corrente", "Carte"] and s != "Altri Familiari": default = True
+                    if op == "Spesa" and t in ["Conto Corrente", "Carte", "Satispay", "PayPal"] and s != "Altri Familiari": default = True
                     if op in ["Giroconto (Mittente)", "Giroconto (Ricevente)"] and t in ["Conto Corrente", "Salvadanaio"]: default = True
+                    if op == "Satispay (Collegamento)" and t == "Conto Corrente" and s != "Altri Familiari": default = True
+                    if op == "PayPal (Fonti)" and t in ["Conto Corrente", "Carte"] and s != "Altri Familiari": default = True
                     
                     val = op_data.get(t, {}).get(s, default)
                     cb = ft.Checkbox(value=val, data={"op": op, "type": t, "scope": s})
@@ -1424,3 +1434,75 @@ class AdminLoginView:
                 )
             ]
         )
+
+
+    # =========================================================================
+    # --- VERSION TAB LOGIC ---
+    # =========================================================================
+    def _init_version_tab_ui(self):
+        self.app_version_text = ft.Text("Versione Applicazione: -", size=18, weight=ft.FontWeight.BOLD)
+        self.db_version_text = ft.Text("Versione Database: -", size=18, weight=ft.FontWeight.BOLD)
+        self.env_type_text = ft.Text("Ambiente: -", size=14, italic=True)
+
+    def _build_version_tab_content(self):
+        return ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Icon(ft.Icons.INFO_OUTLINE, size=32, color=ft.Colors.BLUE),
+                    ft.Text("Informazioni Versione", size=24, weight=ft.FontWeight.BOLD),
+                ], alignment=ft.MainAxisAlignment.CENTER),
+                ft.Divider(height=40),
+                
+                ft.Container(
+                    content=ft.Column([
+                        ft.Row([
+                            ft.Icon(ft.Icons.APP_REGISTRATION, color=ft.Colors.BLUE_800),
+                            self.app_version_text
+                        ], alignment=ft.MainAxisAlignment.CENTER),
+                        ft.Row([
+                            ft.Icon(ft.Icons.STORAGE, color=ft.Colors.GREEN_800),
+                            self.db_version_text
+                        ], alignment=ft.MainAxisAlignment.CENTER),
+                        ft.Container(height=10),
+                        ft.Row([
+                            ft.Icon(ft.Icons.DASHBOARD_CUSTOMIZE, color=ft.Colors.GREY_700, size=16),
+                            self.env_type_text
+                        ], alignment=ft.MainAxisAlignment.CENTER),
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=15),
+                    padding=40,
+                    bgcolor=ft.Colors.BLUE_GREY_50,
+                    border_radius=15,
+                    border=ft.border.all(1, ft.Colors.BLUE_GREY_100),
+                    alignment=ft.alignment.center,
+                ),
+                
+                ft.Container(height=40),
+                ft.Text("Note di Rilascio", size=16, weight=ft.FontWeight.BOLD),
+                ft.Text("Ultimo aggiornamento schema: v27 (Indici di performance)", size=12, color=ft.Colors.GREY_600),
+                
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, scroll=ft.ScrollMode.AUTO),
+            padding=40,
+            expand=True,
+            alignment=ft.alignment.top_center
+        )
+
+    def _load_version_info(self):
+        try:
+            from app_controller import VERSION
+            self.app_version_text.value = f"Versione Applicazione: v{VERSION}"
+        except Exception as e:
+            self.app_version_text.value = "Versione Applicazione: N/A"
+            print(f"Errore caricamento versione app: {e}")
+
+        try:
+            db_ver = ottieni_versione_db()
+            self.db_version_text.value = f"Versione Database: Schema v{db_ver}"
+        except Exception as e:
+            self.db_version_text.value = "Versione Database: Errore"
+            print(f"Errore caricamento versione DB: {e}")
+            
+        # Info Ambiente
+        is_dev = os.getenv("DEBUG", "false").lower() == "true"
+        self.env_type_text.value = f"Ambiente: {'Sviluppo (Debug)' if is_dev else 'Produzione'}"
+        
+        self.page.update()
