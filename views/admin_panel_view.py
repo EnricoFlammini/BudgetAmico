@@ -1570,7 +1570,7 @@ class AdminPanelView:
                 
                 ft.Container(height=40),
                 ft.Text("Note di Rilascio", size=16, weight=ft.FontWeight.BOLD),
-                ft.Text("Ultimo aggiornamento schema: v27 (Indici di performance)", size=12, color=ft.Colors.GREY_600),
+                ft.Text("Ultimo aggiornamento schema: v30 (Crittografia Selettiva & Tipi Numerici)", size=12, color=ft.Colors.GREY_600),
                 
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, scroll=ft.ScrollMode.AUTO),
             padding=40,
@@ -1594,27 +1594,28 @@ class AdminPanelView:
             
         # Info Ambiente avanzate
         is_dev = os.getenv("DEBUG", "false").lower() == "true"
-        supabase_url = os.getenv("SUPABASE_URL", "")
+        supabase_url = os.getenv("SUPABASE_URL", "") or os.getenv("SUPABASE_DB_URL", "")
         
         # Identificazione DB (basata su project ID Supabase)
-        db_type = "Produzione"
+        db_type = "Ambiente Personalizzato"
         if "rcwdfjayzotvsbqpubcm" in supabase_url:
-            db_type = "Test (rcwdf...)"
+            db_type = "Ambiente di TEST (rcwdf...)"
         elif "zvuesichckiryhkbztgr" in supabase_url:
-            db_type = "Produzione (zvues...)"
+            db_type = "Ambiente di PRODUZIONE (zvues...)"
             
         # Identificazione Branch
         branch_name = "N/A"
         try:
+            # Tenta di leggere la branch corrente se git è disponibile
             import subprocess
             branch_name = subprocess.check_output(["git", "branch", "--show-current"], 
                                                 stderr=subprocess.DEVNULL).decode().strip()
         except:
             pass
 
-        env_str = f"Ambiente: {db_type}"
+        env_str = f"{db_type}"
         if is_dev:
-            env_str += " [DEBUG]"
+            env_str += " [DEBUG MODE]"
         if branch_name != "N/A":
             env_str += f" | Branch: {branch_name}"
             
