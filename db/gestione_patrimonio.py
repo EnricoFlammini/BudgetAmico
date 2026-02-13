@@ -222,11 +222,12 @@ def modifica_prestito(id_prestito, nome, tipo, descrizione, data_inizio, numero_
                         """, (encrypted_nome, tipo, encrypted_descrizione, data_inizio, numero_mesi_totali, importo_finanziato,
                               importo_interessi, importo_residuo, importo_rata, giorno_scadenza_rata, id_conto_default,
                               id_conto_condiviso_default, id_sottocategoria_default, bool(addebito_automatico), id_prestito))
+        
+        # Gestione Quote DOPO il commit della transazione principale
+        if lista_quote is not None:
+            gestisci_quote_prestito(id_prestito, lista_quote)
             
-            if lista_quote is not None:
-                gestisci_quote_prestito(id_prestito, lista_quote)
-            
-            return True
+        return True
     except Exception as e:
         print(f"[ERRORE] Errore generico durante la modifica del prestito: {e}")
         return False
@@ -599,6 +600,7 @@ def aggiungi_immobile(id_famiglia, nome, via, citta, valore_acquisto, valore_att
     encrypted_via = _encrypt_if_key(via, family_key, crypto)
     encrypted_citta = _encrypt_if_key(citta, family_key, crypto)
 
+    id_new = None
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -611,10 +613,10 @@ def aggiungi_immobile(id_famiglia, nome, via, citta, valore_acquisto, valore_att
                         (id_famiglia, encrypted_nome, encrypted_via, encrypted_citta, valore_acquisto, valore_attuale, bool(nuda_proprieta),
                          db_id_prestito))
             id_new = cur.fetchone()['id_immobile']
-            
-            # Gestione Quote
-            if id_new and lista_quote:
-                gestisci_quote_immobile(id_new, lista_quote)
+        
+        # Gestione Quote DOPO il commit della transazione principale
+        if id_new and lista_quote:
+            gestisci_quote_immobile(id_new, lista_quote)
                 
             return id_new
     except Exception as e:
@@ -673,12 +675,12 @@ def modifica_immobile(id_immobile, nome, via, citta, valore_acquisto, valore_att
                         """,
                         (encrypted_nome, encrypted_via, encrypted_citta, valore_acquisto, valore_attuale, bool(nuda_proprieta), db_id_prestito,
                          id_immobile))
-            
-            # Gestione Quote
-            if lista_quote is not None:
-                gestisci_quote_immobile(id_immobile, lista_quote)
+        
+        # Gestione Quote DOPO il commit della transazione principale
+        if lista_quote is not None:
+            gestisci_quote_immobile(id_immobile, lista_quote)
 
-            return True
+        return True
     except Exception as e:
         print(f"[ERRORE] Errore generico durante la modifica dell'immobile: {e}")
         return False
