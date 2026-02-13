@@ -60,10 +60,14 @@ class PianoAmmortamentoDialog:
                 ], scroll=ft.ScrollMode.ADAPTIVE),
                 ft.Divider(),
                 ft.Container(
-                    content=ft.Column([self.data_table], scroll=ft.ScrollMode.AUTO),
-                    height=300, border=ft.border.all(1, "grey"), border_radius=5
+                    content=ft.Row(
+                        [self.data_table],
+                        scroll=ft.ScrollMode.AUTO,  # scroll orizzontale
+                    ),
+                    height=400, border=ft.border.all(1, "grey"), border_radius=5,
+                    expand=True,
                 )
-            ], width=350, scroll=ft.ScrollMode.AUTO),
+            ], width=900, scroll=ft.ScrollMode.AUTO),
             actions=[
                 ft.ElevatedButton("Conferma e Torna", on_click=self._chiudi_dialog)
             ],
