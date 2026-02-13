@@ -6,7 +6,7 @@ from db.gestione_db import (
     crea_obiettivo, ottieni_obiettivi, aggiorna_obiettivo, elimina_obiettivo,
     crea_salvadanaio, ottieni_salvadanai_obiettivo, elimina_salvadanaio,
     ottieni_conti, ottieni_asset_conto, ottieni_salvadanai_conto,
-    collega_salvadanaio_objective, ottieni_prima_famiglia_utente,
+    collega_salvadanaio_obiettivo, ottieni_prima_famiglia_utente,
     ottieni_conti_condivisi_famiglia, scollega_salvadanaio_obiettivo,
     get_configurazione, ottieni_tutti_i_conti_famiglia, ottieni_ids_conti_tecnici_carte
 )
