@@ -305,18 +305,24 @@ class AppController:
             self.page.go("/")
 
     def _carica_dashboard(self):
+        logger.debug("DEBUG_LOGIN: Inizio _carica_dashboard")
         self.page.views.clear()
         
         # RE-CREATE DASHBOARD VIEW TO ENSURE FRESH STATE (Fixes data leakage)
         # Re-inizializza la vista e tutte le tab per garantire che non ci siano dati residui
+        logger.debug("DEBUG_LOGIN: Inizializzazione DashboardView...")
         self.dashboard_view = DashboardView(self)
         
+        logger.debug("DEBUG_LOGIN: Append DashboardView to views...")
         self.page.views.append(self.dashboard_view.build_view())
+        logger.debug("DEBUG_LOGIN: Update sidebar...")
         self.dashboard_view.update_sidebar()
         
         # Force immediate UI update to show dashboard structure and remove spinner
+        logger.debug("DEBUG_LOGIN: Esecuzione page.update e hide_loading...")
         self.page.update()
         self.hide_loading()
+        logger.debug("DEBUG_LOGIN: _carica_dashboard - UI inizializzata e spinner rimosso")
 
         saved_lang = self.page.client_storage.get("settings.language")
         if saved_lang: self.loc.set_language(saved_lang)
@@ -715,10 +721,12 @@ class AppController:
             self.hide_loading()
 
     def post_login_setup(self, utente):
+        logger.debug(f"DEBUG_LOGIN: Inizio post_login_setup per utente {utente.get('id')}")
         id_utente = utente['id']
         id_famiglia = ottieni_prima_famiglia_utente(id_utente)
         self.page.session.set("utente_loggato", utente)
-        
+        logger.debug(f"DEBUG_LOGIN: Famiglia identificata: {id_famiglia}")
+
         # Refresh activity timestamp on login
         aggiorna_ultimo_accesso(id_utente)
         
@@ -730,16 +738,21 @@ class AppController:
             logger.warning("ATTENZIONE: Nessuna Master Key trovata nell'oggetto utente!")
 
         if utente.get("forza_cambio_password"):
+            logger.debug("DEBUG_LOGIN: Reindirizzamento a cambio password forzato")
             self.page.go("/force-change-password")
             return
 
         if id_famiglia:
             # Ensure encryption key for family exists
             if utente.get("master_key"):
+                logger.debug("DEBUG_LOGIN: Chiamata ensure_family_key...")
                 ensure_family_key(id_utente, id_famiglia, utente["master_key"])
+                logger.debug("DEBUG_LOGIN: ensure_family_key terminato")
 
             self.page.session.set("id_famiglia", id_famiglia)
+            logger.debug("DEBUG_LOGIN: Recupero ruolo utente...")
             self.page.session.set("ruolo_utente", ottieni_ruolo_utente(id_utente, id_famiglia))
+            logger.debug(f"DEBUG_LOGIN: Ruolo recuperato: {self.page.session.get('ruolo_utente')}")
             
              # Set display name for UI
             display_name = "Utente"
@@ -749,14 +762,20 @@ class AppController:
                 display_name = utente['username']
             
             self.page.session.set("nome_visualizzato", display_name)
+            logger.debug(f"DEBUG_LOGIN: Nome visualizzato: {display_name}")
             
             # --- Auto-Update History Snapshot & Credit Card Settlement on Login ---
             # SKIP if Server Automation is active
-            if not is_server_automation_enabled(id_famiglia):
+            logger.debug(f"DEBUG_LOGIN: Verifica automazione server per famiglia {id_famiglia}...")
+            server_automation_active = is_server_automation_enabled(id_famiglia)
+            logger.debug(f"DEBUG_LOGIN: Automazione server attiva: {server_automation_active}")
+
+            if not server_automation_active:
                 try:
                     from utils.async_task import AsyncTask
                     from utils.card_processing import process_credit_card_settlements
                     
+                    logger.debug("DEBUG_LOGIN: Avvio task background locali...")
                     def _bg_tasks():
                         master_key_b64 = utente.get("master_key")
                         now = datetime.datetime.now()
