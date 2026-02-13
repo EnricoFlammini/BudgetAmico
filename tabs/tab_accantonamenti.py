@@ -6,9 +6,13 @@ from db.gestione_db import (
     crea_obiettivo, ottieni_obiettivi, aggiorna_obiettivo, elimina_obiettivo,
     crea_salvadanaio, ottieni_salvadanai_obiettivo, elimina_salvadanaio,
     ottieni_conti, ottieni_asset_conto, ottieni_salvadanai_conto,
-    collega_salvadanaio_obiettivo, ottieni_prima_famiglia_utente,
-    ottieni_conti_condivisi_famiglia, scollega_salvadanaio_obiettivo
+    collega_salvadanaio_objective, ottieni_prima_famiglia_utente,
+    ottieni_conti_condivisi_famiglia, scollega_salvadanaio_obiettivo,
+    get_configurazione, ottieni_tutti_i_conti_famiglia, ottieni_ids_conti_tecnici_carte
 )
+import json
+import logging
+logger = logging.getLogger(__name__)
 
 class AccantonamentiTab(ft.Container):
     def __init__(self, controller):
@@ -292,14 +296,88 @@ class AccantonamentiTab(ft.Container):
     def _load_conti_options(self, update_ui=True):
         id_utente = self.controller.get_user_id()
         master_key_b64 = self.controller.page.session.get("master_key")
-        id_famiglia = ottieni_prima_famiglia_utente(id_utente)
+        id_famiglia = self.controller.get_family_id()
         
-        conti = ottieni_conti(id_utente, master_key_b64)
+        if not id_famiglia:
+            id_famiglia = ottieni_prima_famiglia_utente(id_utente)
+
+        # 0. Recupera Matrice FOP Globale per Accantonamenti
+        raw_matrix = get_configurazione("global_fop_matrix")
+        matrix_acc = {}
+        if raw_matrix:
+            try:
+                matrix_all = json.loads(raw_matrix)
+                matrix_acc = matrix_all.get("Accantonamenti", {})
+            except:
+                pass
         
-        if id_famiglia:
-            condivisi = ottieni_conti_condivisi_famiglia(id_famiglia, id_utente, master_key_b64)
-            conti.extend(condivisi)
+        # Default fallback se matrice vuota: permette Corrente e Risparmio (Personale e Condiviso)
+        if not matrix_acc:
+            matrix_acc = {
+                "Conto Corrente": {"Personale": True, "Condiviso": True, "Altri Familiari": False},
+                "Risparmio": {"Personale": True, "Condiviso": True, "Altri Familiari": False}
+            }
+
+        # 1. Recupera tutti i conti della famiglia e conti tecnici
+        conti = ottieni_tutti_i_conti_famiglia(id_famiglia, id_utente, master_key_b64=master_key_b64)
+        ids_conti_tecnici = ottieni_ids_conti_tecnici_carte(id_utente)
         
+        # Mappatura tipi per FOP (coerente con spesa_fissa_dialog)
+        tipo_map = {
+            "Conto Corrente": ["Conto Corrente", "Conto", "Corrente"],
+            "Carte": ["Carta", "Carta di Credito", "Prepagata"],
+            "Risparmio": ["Risparmio", "Conto Deposito"],
+            "Investimenti": ["Investimenti", "Investimento", "Crypto", "Azioni", "Obbligazioni", "ETF", "Fondo"],
+            "Contanti": ["Contanti"],
+            "Fondo Pensione": ["Fondo Pensione"],
+            "Salvadanaio": ["Salvadanaio"],
+            "Satispay": ["Satispay"],
+            "PayPal": ["PayPal"]
+        }
+
+        def is_allowed(account_data):
+            # Escludi conti tecnici e saldi fittizi
+            if account_data['id_conto'] in ids_conti_tecnici or "Saldo" in (account_data.get('nome_conto') or ""):
+                return False
+
+            t_db = str(account_data.get('tipo') or "").strip().lower()
+            
+            # Scope
+            is_shared = account_data.get('condiviso', False)
+            owner_id = account_data.get('id_utente')
+            if is_shared:
+                scope = "Condiviso"
+            elif owner_id == id_utente:
+                scope = "Personale"
+            else:
+                scope = "Altri Familiari"
+
+            cat_fop = None
+            # Special handling for e-wallets
+            if t_db == "portafoglio elettronico":
+                try:
+                    config = json.loads(account_data.get('config_speciale') or '{}')
+                    sottotipo = config.get('sottotipo', '').strip().lower()
+                    if sottotipo == 'satispay': cat_fop = "Satispay"
+                    elif sottotipo == 'paypal': cat_fop = "PayPal"
+                except: pass
+            
+            if not cat_fop:
+                for cat, db_list in tipo_map.items():
+                    if any(t_db == x.strip().lower() for x in db_list):
+                        cat_fop = cat
+                        break
+            
+            if not cat_fop: return False
+            
+            # Check FOP matrix
+            scope_perms = matrix_acc.get(cat_fop)
+            if scope_perms is not None:
+                return scope_perms.get(scope, False)
+            
+            # Fallback default
+            return True if scope != "Altri Familiari" else False
+
         # Get currently assigned sources to filter duplicates
         assigned_pbs = ottieni_salvadanai_obiettivo(self.current_obj_for_funds['id'], id_famiglia, master_key_b64, id_utente)
         used_accounts = set()
@@ -313,13 +391,14 @@ class AccantonamentiTab(ft.Container):
             
         options = []
         for c in conti:
+            if not is_allowed(c):
+                continue
+
             if c['tipo'] == 'Investimento':
-                # Drill down to Assets
+                # Gli investimenti/asset sono ora gestiti via FOP (solitamente disabilitati per accantonamenti)
                 is_shared_acc = c.get('condiviso', False)
                 assets = ottieni_asset_conto(c['id_conto'], master_key_b64, is_shared=is_shared_acc, id_utente=id_utente)
                 if not assets:
-                    # Option to select Broker itself? Maybe not if user wants specific asset.
-                    # check if broker account is used (unlikely for assets but possible if we support it)
                     if c['id_conto'] not in used_accounts:
                         options.append(ft.dropdown.Option(key=f"account_{c['id_conto']}", text=f"{c['nome_conto']} (Vuoto)"))
                 else:
@@ -330,11 +409,9 @@ class AccantonamentiTab(ft.Container):
                              text=f"Asset: {a['ticker']} - {a['nome']} ({c['nome_conto']})"
                          ))
             else:
-                # Standard Account
                 is_shared = c.get('condiviso', False)
                 target_id = c.get('id_conto_condiviso') if is_shared else c['id_conto']
                 
-                # Check if already used
                 if is_shared:
                     if target_id in used_shared_accounts: continue
                     key_prefix = "account_S_"
@@ -344,15 +421,13 @@ class AccantonamentiTab(ft.Container):
                 
                 options.append(ft.dropdown.Option(key=f"{key_prefix}{target_id}", text=c['nome_conto']))
                 
-                # Associated PBs ?
+                # Salvadanai associati (mostra solo se il conto è permesso)
                 if id_famiglia:
                      pbs = ottieni_salvadanai_conto(c['id_conto'], id_famiglia, master_key_b64, id_utente, is_condiviso=is_shared)
                      for pb in pbs:
-                         # Exclude if already assigned to THIS goal
                          if pb.get('id_obiettivo') == self.current_obj_for_funds['id']:
                              continue
-                             
-                         # Warning: if assigned to OTHER goal? Maybe show it?
+                         
                          text = f"Salvadanaio: {pb['nome']} ({c['nome_conto']})"
                          if pb.get('id_obiettivo'):
                              text += " [In uso]"
@@ -364,6 +439,8 @@ class AccantonamentiTab(ft.Container):
         
         self.dd_conti.options = options
         if options: self.dd_conti.value = options[0].key
+        else: self.dd_conti.value = None
+        
         if update_ui and self.dialog_fondi: self.dialog_fondi.update()
 
     def _refresh_salvadanai_list(self, update_ui=True):

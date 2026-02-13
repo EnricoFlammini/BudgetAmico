@@ -167,23 +167,21 @@ class ContiTab(ft.Container):
         tipo = conto['tipo']
         nome = conto['nome_conto']
         id_conto = conto['id_conto']
-        print(f"[DEBUG] UI Building Card for Account {id_conto} ({nome}). DB Icon: {conto.get('icona')}, DB Color: {conto.get('colore')}")
+
         
         # Determine colors
         # Background: Use user defined color OR assigned unique color
         db_color = conto.get('colore')
         db_icon = conto.get('icona')
-        print(f"[DEBUG] ContiTab - Account {nome} (id:{id_conto}): DB_Color='{db_color}', DB_Icon='{db_icon}'")
+
         
         if db_color and str(db_color).strip():
             bg_color = db_color
-            print(f"[DEBUG]  -> Using DB Color: {bg_color}")
         elif assigned_color:
             bg_color = assigned_color
-            print(f"[DEBUG]  -> Using Assigned Color: {bg_color}")
         else:
             bg_color = get_color_from_string(str(id_conto) + nome)
-            print(f"[DEBUG]  -> Using Hash Color: {bg_color}")
+
         
         # Type Indicator Color
         type_color = get_type_color(tipo)

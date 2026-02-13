@@ -243,8 +243,7 @@ def ottieni_dettagli_conti_utente(id_utente, master_key_b64=None):
                         ORDER BY C.nome_conto
                         """, (id_utente,))
             results = [dict(row) for row in cur.fetchall()]
-            for r in results:
-                print(f"[DEBUG] DB Fetch Account {r.get('id_conto')} (Enc Name: {str(r.get('nome_conto'))[:10]}...). Icon: {r.get('icona')}, Color: {r.get('colore')}")
+
             
             # Decrypt if key available
             crypto, master_key = _get_crypto_and_key(master_key_b64)
@@ -326,7 +325,7 @@ def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valor
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            print(f"[DEBUG] DB Update Account {id_conto} for user {id_utente}. Icon: {icona}, Color: {colore}")
+
             # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase 
             # Se il valore manuale non viene passato, non lo aggiorniamo (manteniamo quello esistente)
             if valore_manuale is not None:
@@ -337,7 +336,7 @@ def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valor
                              (encrypted_nome, tipo_conto, encrypted_iban, borsa_default, encrypted_config, icona, colore, id_conto, id_utente))
             
             rows_affected = cur.rowcount
-            print(f"[DEBUG] DB Update result: {rows_affected} rows affected.")
+
             con.commit()
             return rows_affected > 0, "Conto modificato con successo"
     except Exception as e:
@@ -903,7 +902,7 @@ def modifica_conto_condiviso(id_conto_condiviso, nome_conto, tipo=None, tipo_con
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            print(f"[DEBUG] DB Update Shared Account {id_conto_condiviso}. Icon: {icona}, Color: {colore}")
+
             
             # Update Nome, Tipo, TipoCondivisione, config_speciale, icona, colore
             sql = "UPDATE ContiCondivisi SET nome_conto = %s, config_speciale = %s, icona = %s, colore = %s"
