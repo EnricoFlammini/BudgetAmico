@@ -92,14 +92,20 @@ MIGRATION_CONFIG = [
     }
 ]
 
-def migrate():
+def migrate(con=None):
     # 0. Load Env
     if not os.getenv("SERVER_SECRET_KEY"):
         load_env_file(".env")
     
     crypto = CryptoManager()
     
-    with get_db_connection() as con:
+    # Se la connessione è passata, usala. Altrimenti creane una nuova.
+    close_conn = False
+    if con is None:
+        con = get_db_connection()
+        close_conn = True
+
+    try:
         cur = con.cursor()
         
         # 1. Recupera tutte le famiglie e le relative chiavi
@@ -191,7 +197,12 @@ def migrate():
                         print(f"FALLITO: {e}")
                         con.rollback()
 
-    print("\n[FINISH] Migrazione completata.")
+        print("\n[FINISH] Migrazione completata.")
+    
+    finally:
+        if close_conn and con:
+            con.close()
+
 
 if __name__ == "__main__":
     migrate()

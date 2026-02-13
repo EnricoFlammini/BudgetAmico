@@ -1133,6 +1133,28 @@ def _migra_da_v28_a_v29(con):
         return False
 
 
+def _migra_da_v29_a_v30(con):
+    """
+    Logica specifica per migrare un DB dalla versione 29 alla 30.
+    - Crittografia Selettiva (Fase 3): Decripta campi non sensibili.
+    - Converte importi numerici a tipo NUMERIC nativo.
+    """
+    print("Esecuzione migrazione da v29 a v30...")
+    try:
+        from db.migrate_selective_encryption import migrate
+        # migrate() ora accetta la connessione
+        migrate(con)
+        
+        # Nota: migrate() fa i suoi commit, quindi qui siamo a posto.
+        print("Migrazione a v30 completata con successo.")
+        return True
+    except Exception as e:
+        print(f"❌ Errore critico durante la migrazione da v29 a v30: {e}")
+        try: con.rollback() 
+        except: pass
+        return False
+
+
 def migra_database(con, versione_vecchia=None, versione_nuova=None):
     """
     Funzione principale che gestisce il processo di migrazione.
@@ -1307,7 +1329,18 @@ def migra_database(con, versione_vecchia=None, versione_nuova=None):
                  raise Exception("Migrazione da v28 a v29 fallita.")
             versione_vecchia = 29
 
+        if versione_vecchia == 29 and versione_nuova >= 30:
+            if not _migra_da_v29_a_v30(con):
+                 raise Exception("Migrazione da v29 a v30 fallita.")
+            versione_vecchia = 30
+
+
+
+
+        
+
         # Se tutto è andato bene, aggiorna la versione del DB
+
         # Per Postgres usiamo InfoDB, per SQLite PRAGMA
         try:
              # Postgres/Table approach

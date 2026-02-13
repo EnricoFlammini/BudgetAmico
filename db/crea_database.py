@@ -14,8 +14,8 @@ if not os.path.exists(APP_DATA_DIR):
 DB_FILE = os.path.join(APP_DATA_DIR, 'budget_amico.db')
 
 # --- SCHEMA DATABASE ---
-# Versione 29: Aggiunta icona e colore su Conti, ContiCondivisi e Carte
-SCHEMA_VERSION = 29
+# Versione 30: Crittografia Selettiva (Plaintext) e Tipi Numerici
+SCHEMA_VERSION = 30
 
 TABLES = {
     "Utenti": """
@@ -380,7 +380,7 @@ TABLES = {
             id_asset INTEGER REFERENCES Asset(id_asset) ON DELETE SET NULL,
             id_obiettivo INTEGER REFERENCES Obiettivi_Risparmio(id) ON DELETE SET NULL,
             nome TEXT NOT NULL,
-            importo_assegnato TEXT NOT NULL,
+            importo_assegnato NUMERIC NOT NULL,
             incide_su_liquidita BOOLEAN DEFAULT FALSE,
             note TEXT,
             data_creazione TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -392,7 +392,7 @@ TABLES = {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             id_famiglia INTEGER REFERENCES Famiglie(id_famiglia) ON DELETE CASCADE,
             nome TEXT NOT NULL,
-            importo_obiettivo TEXT NOT NULL,
+            importo_obiettivo NUMERIC NOT NULL,
             data_obiettivo DATE NOT NULL,
             note TEXT,
             data_creazione TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
