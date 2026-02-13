@@ -798,6 +798,7 @@ class AppController:
             else:
                 logger.info("Server Automation Active: Skipping local History & Card tasks.")
 
+            logger.debug("DEBUG_LOGIN: Reindirizzamento a /dashboard")
             self.page.go("/dashboard")
         else:
             # Se l'utente non ha una famiglia, lo reindirizziamo alla creazione
