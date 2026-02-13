@@ -47,3 +47,5 @@ from db.crypto_helpers import (
     is_server_automation_enabled,
     compute_blind_index
 )
+
+from db.gestione_famiglie import get_family_summary

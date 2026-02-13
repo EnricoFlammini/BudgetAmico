@@ -505,6 +505,63 @@ def ottieni_totali_famiglia(id_famiglia, master_key_b64=None, id_utente_richiede
         return []
 
 
+def get_family_summary(id_famiglia: str, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """
+    Restituisce un riassunto (nome e codice decriptati) per una famiglia.
+    Tenta di decriptare il nome usando:
+    1. Server Key (se disponibile e decriptabile con chiave di sistema)
+    2. User Family Key (se master_key_b64 e id_utente sono forniti)
+    """
+    try:
+        with get_db_connection() as con:
+            cur = con.cursor()
+            cur.execute("SELECT nome_famiglia, server_encrypted_key, codice_famiglia_enc FROM Famiglie WHERE id_famiglia = %s", (id_famiglia,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            
+            d = {}
+            crypto = CryptoManager()
+            
+            # --- Decrypt Name ---
+            enc_name = row['nome_famiglia']
+            decrypted_nome = None
+            
+            # 1. Try via Server Key (System Key)
+            srv_key_enc = row.get('server_encrypted_key')
+            if srv_key_enc:
+                try:
+                    fk_b64 = decrypt_system_data(srv_key_enc)
+                    if fk_b64:
+                        fk_bytes = base64.b64decode(fk_b64.encode())
+                        decrypted_nome = _decrypt_if_key(enc_name, fk_bytes, crypto, silent=True)
+                except Exception as e:
+                    # logger.debug(f"Server Key decryption failed: {e}")
+                    pass
+            
+            # 2. Try via User Family Key (if Server Key failed/missing and we have context)
+            if (not decrypted_nome or decrypted_nome == enc_name or CryptoManager.is_encrypted(decrypted_nome)) and master_key_b64 and id_utente:
+                try:
+                    _, master_key = _get_crypto_and_key(master_key_b64)
+                    if master_key:
+                        family_key_bytes = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+                        if family_key_bytes:
+                            decrypted_nome = _decrypt_if_key(enc_name, family_key_bytes, crypto, silent=True)
+                except Exception as e_user:
+                     logger.warning(f"User Key decryption for family name failed: {e_user}")
+            
+            # Fallback
+            d['nome'] = decrypted_nome if decrypted_nome else enc_name
+                
+            # --- Decrypt Code ---
+            cod_enc = row.get('codice_famiglia_enc')
+            d['codice'] = decrypt_system_data(cod_enc) or "-"
+            
+            return d
+    except Exception as e:
+        logger.error(f"Errore get_family_summary: {e}")
+        return None
+
 def ottieni_dettagli_famiglia(id_famiglia, anno, mese, master_key_b64=None, id_utente=None):
     data_inizio = f"{anno}-{mese:02d}-01"
     ultimo_giorno = (datetime.date(anno, mese, 1) + relativedelta(months=1) - relativedelta(days=1)).day

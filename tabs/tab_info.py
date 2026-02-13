@@ -51,7 +51,9 @@ class InfoTab(ft.Container):
         info_famiglia = None
         if id_famiglia:
             from db.gestione_db import get_family_summary
-            info_famiglia = get_family_summary(id_famiglia)
+            master_key = self.controller.page.session.get("master_key")
+            id_utente_str = utente.get('id')
+            info_famiglia = get_family_summary(id_famiglia, master_key_b64=master_key, id_utente=id_utente_str)
 
         info_rows = []
         if info_famiglia:
