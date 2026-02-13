@@ -260,23 +260,21 @@ def elimina_sottocategoria(id_sottocategoria):
 
 def ottieni_categorie_e_sottocategorie(id_famiglia, master_key_b64=None, id_utente=None):
     """
-    Recupera categorie e sottocategorie. Usa la cache per performance migliore.
+    Recupera categorie e sottocategorie. Usa la cache in-memory per performance ottimale.
     """
     try:
-        # Prova prima dalla cache
-        cached = cache_manager.get_stale("categories", id_famiglia)
-        if cached is not None:
-            return cached
-        
-        # Se non in cache, fetch dal DB
-        categorie = ottieni_categorie(id_famiglia, master_key_b64, id_utente)
-        for cat in categorie:
-            cat['sottocategorie'] = ottieni_sottocategorie(cat['id_categoria'], master_key_b64, id_utente)
-        
-        # Salva in cache per prossimi accessi
-        cache_manager.set("categories", categorie, id_famiglia)
-        
-        return categorie
+        def fetch_and_decrypt():
+            categorie = ottieni_categorie(id_famiglia, master_key_b64, id_utente)
+            for cat in categorie:
+                cat['sottocategorie'] = ottieni_sottocategorie(cat['id_categoria'], master_key_b64, id_utente)
+            return categorie
+
+        # Usa get_or_compute per gestire il livello in-memory con TTL (10 minuti default)
+        return cache_manager.get_or_compute(
+            key="categories", 
+            compute_fn=fetch_and_decrypt, 
+            id_famiglia=id_famiglia
+        )
     except Exception as e:
         print(f"[ERRORE] Errore recupero categorie e sottocategorie: {e}")
         return []

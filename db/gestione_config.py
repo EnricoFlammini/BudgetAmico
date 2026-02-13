@@ -9,9 +9,8 @@ from typing import List, Dict, Any, Optional, Tuple, Union
 import datetime
 import os
 
-logger = setup_logger(__name__)
+from utils.cache_manager import cache_manager
 import json
-import threading
 
 from db.crypto_helpers import (
     _encrypt_if_key, _decrypt_if_key, 
@@ -22,67 +21,52 @@ from db.crypto_helpers import (
     crypto as _crypto_instance
 )
 
-
-
-
 # --- Funzioni Configurazioni ---
 def get_configurazione(chiave: str, id_famiglia: Optional[str] = None, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> Optional[str]:
     """
-    Recupera il valore di una configurazione (con cache per quelle globali).
+    Recupera il valore di una configurazione usando la cache in-memory.
     """
-    # 1. Prova dalla cache (solo per configurazioni globali senza id_famiglia)
-    if id_famiglia is None:
-        with _CONFIG_CACHE_LOCK:
-            if chiave in _CONFIG_CACHE:
-                return _CONFIG_CACHE[chiave]
-
     try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            if id_famiglia is None:
-                cur.execute("SELECT valore FROM Configurazioni WHERE chiave = %s AND id_famiglia IS NULL", (chiave,))
-            else:
-                cur.execute("SELECT valore FROM Configurazioni WHERE chiave = %s AND id_famiglia = %s", (chiave, id_famiglia))
-            
-            res = cur.fetchone()
-            if not res:
-                return None
-            
-            valore = res['valore']
-            
-            sensitive_keys = ['smtp_server', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_from_email', 'smtp_sender']
-            
-            if chiave in sensitive_keys:
-                try:
-                    decrypted = decrypt_system_data(valore)
-                    if decrypted:
-                        valore = decrypted
-                except Exception as e:
-                    logger.warning(f"Failed to system-decrypt {chiave}: {e}")
-            
-            # 2. Aggiorna la cache globale
-            if id_famiglia is None:
-                with _CONFIG_CACHE_LOCK:
-                    _CONFIG_CACHE[chiave] = valore
-            
-            return valore
+        def fetch_from_db():
+            with get_db_connection() as con:
+                cur = con.cursor()
+                if id_famiglia is None:
+                    cur.execute("SELECT valore FROM Configurazioni WHERE chiave = %s AND id_famiglia IS NULL", (chiave,))
+                else:
+                    cur.execute("SELECT valore FROM Configurazioni WHERE chiave = %s AND id_famiglia = %s", (chiave, id_famiglia))
+                
+                res = cur.fetchone()
+                if not res:
+                    return None
+                
+                valore = res['valore']
+                
+                sensitive_keys = ['smtp_server', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_from_email', 'smtp_sender']
+                
+                if chiave in sensitive_keys:
+                    try:
+                        decrypted = decrypt_system_data(valore)
+                        if decrypted:
+                            valore = decrypted
+                    except Exception as e:
+                        logger.warning(f"Failed to system-decrypt {chiave}: {e}")
+                return valore
+
+        # Usa get_or_compute per cache in-memory (TTL 10 minuti)
+        cache_key = f"db_config:{chiave}"
+        return cache_manager.get_or_compute(
+            key=cache_key,
+            compute_fn=fetch_from_db,
+            id_famiglia=id_famiglia,
+            ttl_seconds=600
+        )
     except Exception as e:
         logger.error(f"Errore recupero configurazione {chiave}: {e}")
         return None
 
 def set_configurazione(chiave: str, valore: str, id_famiglia: Optional[str] = None, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> bool:
     """
-    Imposta o aggiorna una configurazione.
-
-    Args:
-        chiave: La chiave della configurazione.
-        valore: Il valore da impostare.
-        id_famiglia: L'ID della famiglia (opzionale). Se None, imposta una configurazione globale.
-        master_key_b64: La master key codificata in base64 (opzionale) per criptare valori sensibili.
-        id_utente: L'ID dell'utente (opzionale) per recuperare la family key.
-
-    Returns:
-        True se il salvataggio è avvenuto con successo, False altrimenti.
+    Imposta o aggiorna una configurazione e invalida la cache.
     """
     try:
         # Encrypt sensitive config values
@@ -90,8 +74,6 @@ def set_configurazione(chiave: str, valore: str, id_famiglia: Optional[str] = No
         sensitive_keys = ['smtp_server', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_from_email', 'smtp_sender']
         
         if chiave in sensitive_keys and SERVER_SECRET_KEY:
-            # SMTP credentials are ALWAYS encrypted with SERVER_KEY (not family_key)
-            # This allows the server to decrypt them for password reset without user context
             try:
                 encrypted_valore = encrypt_system_data(valore)
             except Exception as e:
@@ -114,7 +96,13 @@ def set_configurazione(chiave: str, valore: str, id_famiglia: Optional[str] = No
                     DO UPDATE SET valore = EXCLUDED.valore
                 """, (chiave, encrypted_valore, id_famiglia))
             con.commit()
+            
+            # Invalida cache
+            cache_manager.invalidate(f"db_config:{chiave}", id_famiglia)
             return True
+    except Exception as e:
+        logger.error(f"Errore salvataggio configurazione {chiave}: {e}")
+        return False
     except Exception as e:
         logger.error(f"Errore salvataggio configurazione {chiave}: {e}")
         return False

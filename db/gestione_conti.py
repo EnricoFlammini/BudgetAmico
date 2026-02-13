@@ -172,6 +172,9 @@ def aggiungi_conto(id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=
                 (id_utente, encrypted_nome, tipo_conto, encrypted_iban, valore_manuale, borsa_default, encrypted_config, icona, colore))
             id_nuovo_conto = cur.fetchone()['id_conto']
             con.commit()
+            # Invalida cache
+            cache_manager.invalidate(f"user_accounts_basic:{id_utente}")
+            cache_manager.invalidate(f"user_accounts_details:{id_utente}")
             return id_nuovo_conto, "Conto creato con successo"
     except Exception as e:
         print(f"[ERRORE] Errore generico: {e}")
@@ -180,36 +183,42 @@ def aggiungi_conto(id_utente, nome_conto, tipo_conto, iban=None, valore_manuale=
 
 def ottieni_conti_utente(id_utente, master_key_b64=None):
     try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            cur.execute("SELECT id_conto, nome_conto, tipo, icona, colore FROM Conti WHERE id_utente = %s AND (nascosto = FALSE OR nascosto IS NULL)", (id_utente,))
-            results = [dict(row) for row in cur.fetchall()]
-            
-            crypto, master_key = _get_crypto_and_key(master_key_b64)
-            family_key = None
-            if master_key:
-                cur.execute("SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s", (id_utente,))
-                fam_res = cur.fetchone()
-                if fam_res and fam_res['id_famiglia']:
-                    family_key = _get_family_key_for_user(fam_res['id_famiglia'], id_utente, master_key, crypto)
-            
-            for row in results:
-                # Try family_key first, then master_key as fallback
-                dec_nome = None
-                if family_key:
-                    dec_nome = _decrypt_if_key(row['nome_conto'], family_key, crypto, silent=True)
+        def fetch_and_decrypt():
+            with get_db_connection() as con:
+                cur = con.cursor()
+                cur.execute("SELECT id_conto, nome_conto, tipo, icona, colore FROM Conti WHERE id_utente = %s AND (nascosto = FALSE OR nascosto IS NULL)", (id_utente,))
+                results = [dict(row) for row in cur.fetchall()]
                 
-                if dec_nome and dec_nome != "[ENCRYPTED]" and not dec_nome.startswith("gAAAAA"):
-                    row['nome_conto'] = dec_nome
-                    row['tipo'] = _decrypt_if_key(row['tipo'], family_key, crypto, silent=True)
-                elif master_key:
-                    row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto, silent=True)
-                    row['tipo'] = _decrypt_if_key(row['tipo'], master_key, crypto, silent=True)
-                else:
-                    row['nome_conto'] = "[ENCRYPTED]"
-                    row['tipo'] = "[ENCRYPTED]"
-            
-            return results
+                crypto, master_key = _get_crypto_and_key(master_key_b64)
+                family_key = None
+                if master_key:
+                    cur.execute("SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s", (id_utente,))
+                    fam_res = cur.fetchone()
+                    if fam_res and fam_res['id_famiglia']:
+                        family_key = _get_family_key_for_user(fam_res['id_famiglia'], id_utente, master_key, crypto)
+                
+                for row in results:
+                    # Try family_key first, then master_key as fallback
+                    dec_nome = None
+                    if family_key:
+                        dec_nome = _decrypt_if_key(row['nome_conto'], family_key, crypto, silent=True)
+                    
+                    if dec_nome and dec_nome != "[ENCRYPTED]" and not dec_nome.startswith("gAAAAA"):
+                        row['nome_conto'] = dec_nome
+                        row['tipo'] = _decrypt_if_key(row['tipo'], family_key, crypto, silent=True)
+                    elif master_key:
+                        row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto, silent=True)
+                        row['tipo'] = _decrypt_if_key(row['tipo'], master_key, crypto, silent=True)
+                    else:
+                        row['nome_conto'] = "[ENCRYPTED]"
+                        row['tipo'] = "[ENCRYPTED]"
+                return results
+
+        return cache_manager.get_or_compute(
+            key=f"user_accounts_basic:{id_utente}",
+            compute_fn=fetch_and_decrypt,
+            ttl_seconds=300 # 5 minuti
+        )
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero conti: {e}")
         return []
@@ -217,87 +226,84 @@ def ottieni_conti_utente(id_utente, master_key_b64=None):
 
 def ottieni_dettagli_conti_utente(id_utente, master_key_b64=None):
     try:
-        with get_db_connection() as con:
-            # con.row_factory = sqlite3.Row # Removed for Supabase
-            cur = con.cursor()
-            cur.execute("""
-                        SELECT C.id_conto,
-                               C.nome_conto,
-                               C.tipo,
-                               C.iban,
-                               C.borsa_default,
-                               C.config_speciale,
-                               C.icona,
-                               C.colore,
-                               CASE
-                                   WHEN C.tipo = 'Fondo Pensione' THEN COALESCE(CAST(C.valore_manuale AS TEXT), '0.0')
-                                   WHEN C.tipo = 'Investimento'
-                                       THEN CAST((SELECT COALESCE(SUM(A.quantita * A.prezzo_attuale_manuale), 0.0)
-                                             FROM Asset A
-                                             WHERE A.id_conto = C.id_conto) AS TEXT)
-                                   ELSE CAST((SELECT COALESCE(SUM(T.importo), 0.0) FROM Transazioni T WHERE T.id_conto = C.id_conto) +
-                                        COALESCE(CAST(NULLIF(CAST(C.rettifica_saldo AS TEXT), '') AS NUMERIC), 0.0) AS TEXT)
-                                   END AS saldo_calcolato
-                        FROM Conti C
-                        WHERE C.id_utente = %s AND (C.nascosto = FALSE OR C.nascosto IS NULL)
-                        ORDER BY C.nome_conto
-                        """, (id_utente,))
-            results = [dict(row) for row in cur.fetchall()]
+        def fetch_and_decrypt():
+            with get_db_connection() as con:
+                cur = con.cursor()
+                cur.execute("""
+                            SELECT C.id_conto,
+                                   C.nome_conto,
+                                   C.tipo,
+                                   C.iban,
+                                   C.borsa_default,
+                                   C.config_speciale,
+                                   C.icona,
+                                   C.colore,
+                                   CASE
+                                       WHEN C.tipo = 'Fondo Pensione' THEN COALESCE(CAST(C.valore_manuale AS TEXT), '0.0')
+                                       WHEN C.tipo = 'Investimento'
+                                           THEN CAST((SELECT COALESCE(SUM(A.quantita * A.prezzo_attuale_manuale), 0.0)
+                                                 FROM Asset A
+                                                 WHERE A.id_conto = C.id_conto) AS TEXT)
+                                       ELSE CAST((SELECT COALESCE(SUM(T.importo), 0.0) FROM Transazioni T WHERE T.id_conto = C.id_conto) +
+                                            COALESCE(CAST(NULLIF(CAST(C.rettifica_saldo AS TEXT), '') AS NUMERIC), 0.0) AS TEXT)
+                                       END AS saldo_calcolato
+                            FROM Conti C
+                            WHERE C.id_utente = %s AND (C.nascosto = FALSE OR C.nascosto IS NULL)
+                            ORDER BY C.nome_conto
+                            """, (id_utente,))
+                results = [dict(row) for row in cur.fetchall()]
 
-            
-            # Decrypt if key available
-            crypto, master_key = _get_crypto_and_key(master_key_b64)
-            
-            # Get family_key for this user (accounts may be encrypted with it)
-            family_key = None
-            if master_key:
-                cur.execute("SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s", (id_utente,))
-                fam_res = cur.fetchone()
-                if fam_res and fam_res['id_famiglia']:
-                    family_key = _get_family_key_for_user(fam_res['id_famiglia'], id_utente, master_key, crypto)
-            
-            for row in results:
-                # Try family_key first, then master_key as fallback
-                decrypted_nome = None
-                if family_key:
-                    decrypted_nome = _decrypt_if_key(row['nome_conto'], family_key, crypto, silent=True)
-                
-                if decrypted_nome and decrypted_nome != "[ENCRYPTED]" and not decrypted_nome.startswith("gAAAAA"):
-                    row['nome_conto'] = decrypted_nome
-                    row['tipo'] = _decrypt_if_key(row['tipo'], family_key, crypto, silent=True)
-                elif master_key:
-                    # Fallback to master_key for legacy data
-                    row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto, silent=True)
-                    row['tipo'] = _decrypt_if_key(row['tipo'], master_key, crypto, silent=True)
-                
-                # IBAN always uses master_key (personal data)
+                crypto, master_key = _get_crypto_and_key(master_key_b64)
+                family_key = None
                 if master_key:
-                    row['iban'] = _decrypt_if_key(row['iban'], master_key, crypto, silent=True)
+                    cur.execute("SELECT id_famiglia FROM Appartenenza_Famiglia WHERE id_utente = %s", (id_utente,))
+                    fam_res = cur.fetchone()
+                    if fam_res and fam_res['id_famiglia']:
+                        family_key = _get_family_key_for_user(fam_res['id_famiglia'], id_utente, master_key, crypto)
                 
-                # Decrypt config_speciale
-                config_spec = row.get('config_speciale')
-                if config_spec:
-                    dec_config = None
+                for row in results:
+                    # Try family_key first, then master_key as fallback
+                    decrypted_nome = None
                     if family_key:
-                        dec_config = _decrypt_if_key(config_spec, family_key, crypto, silent=True)
-                    if (not dec_config or dec_config == "[ENCRYPTED]" or dec_config.startswith("gAAAAA")) and master_key:
-                        dec_config = _decrypt_if_key(config_spec, master_key, crypto, silent=True)
-                    row['config_speciale'] = dec_config
-                else:
-                    row['config_speciale'] = None
-                
-                # Handle saldo_calcolato
-                saldo_str = row['saldo_calcolato']
-                if row['tipo'] == 'Fondo Pensione':
+                        decrypted_nome = _decrypt_if_key(row['nome_conto'], family_key, crypto, silent=True)
+                    
+                    if decrypted_nome and decrypted_nome != "[ENCRYPTED]" and not decrypted_nome.startswith("gAAAAA"):
+                        row['nome_conto'] = decrypted_nome
+                        row['tipo'] = _decrypt_if_key(row['tipo'], family_key, crypto, silent=True)
+                    elif master_key:
+                        row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto, silent=True)
+                        row['tipo'] = _decrypt_if_key(row['tipo'], master_key, crypto, silent=True)
+                    
                     if master_key:
-                        saldo_str = _decrypt_if_key(saldo_str, master_key, crypto, silent=True)
-                
-                try:
-                    row['saldo_calcolato'] = float(saldo_str) if saldo_str else 0.0
-                except (ValueError, TypeError):
-                    row['saldo_calcolato'] = 0.0
-            
-            return results
+                        row['iban'] = _decrypt_if_key(row['iban'], master_key, crypto, silent=True)
+                    
+                    config_spec = row.get('config_speciale')
+                    if config_spec:
+                        dec_config = None
+                        if family_key:
+                            dec_config = _decrypt_if_key(config_spec, family_key, crypto, silent=True)
+                        if (not dec_config or dec_config == "[ENCRYPTED]" or dec_config.startswith("gAAAAA")) and master_key:
+                            dec_config = _decrypt_if_key(config_spec, master_key, crypto, silent=True)
+                        row['config_speciale'] = dec_config
+                    else:
+                        row['config_speciale'] = None
+                    
+                    saldo_str = row['saldo_calcolato']
+                    if row['tipo'] == 'Fondo Pensione':
+                        if master_key:
+                            saldo_str = _decrypt_if_key(saldo_str, master_key, crypto, silent=True)
+                    
+                    try:
+                        row['saldo_calcolato'] = float(saldo_str) if saldo_str else 0.0
+                    except (ValueError, TypeError):
+                        row['saldo_calcolato'] = 0.0
+                return results
+
+        return cache_manager.get_or_compute(
+            key=f"user_accounts_details:{id_utente}",
+            compute_fn=fetch_and_decrypt,
+            ttl_seconds=120 # 2 minuti per saldi
+        )
     except Exception as e:
         print(f"[ERRORE] Errore generico durante il recupero dettagli conti: {e}")
         return []
@@ -338,6 +344,9 @@ def modifica_conto(id_conto, id_utente, nome_conto, tipo_conto, iban=None, valor
             rows_affected = cur.rowcount
 
             con.commit()
+            if rows_affected > 0:
+                cache_manager.invalidate(f"user_accounts_basic:{id_utente}")
+                cache_manager.invalidate(f"user_accounts_details:{id_utente}")
             return rows_affected > 0, "Conto modificato con successo"
     except Exception as e:
         print(f"[ERRORE] Errore generico: {e}")
@@ -556,7 +565,11 @@ def elimina_conto(id_conto, id_utente):
 
             # Se non ci sono transazioni, elimina veramente
             cur.execute("DELETE FROM Conti WHERE id_conto = %s AND id_utente = %s", (id_conto, id_utente))
-            return cur.rowcount > 0
+            result = cur.rowcount > 0
+            if result:
+                cache_manager.invalidate(f"user_accounts_basic:{id_utente}")
+                cache_manager.invalidate(f"user_accounts_details:{id_utente}")
+            return result
     except Exception as e:
         error_message = f"Errore generico durante l'eliminazione del conto: {e}"
         print(f"[ERRORE] {error_message}")
