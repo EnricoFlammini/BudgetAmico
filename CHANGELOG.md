@@ -10,7 +10,9 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 - **Fix Critici**:
     - **Background Service**: Risolto errore `Impossibile decriptare chiave famiglia` all'avvio del servizio. Implementato **Lazy Loading** per le chiavi di sistema (`SYSTEM_FERNET_KEY`, `SERVER_SECRET_KEY`) per evitare problemi di importazione circolare e caricamento variabili d'ambiente.
     - **Giroconto Salvadanaio**: Risolto bug che non aggiornava il saldo del salvadanaio nella dashboard dopo un trasferimento. Aggiunta l'invalidazione della cache `family_piggy_banks` dopo ogni operazione di scrittura.
+    - **Fix Critici**: Risolto errore `AttributeError: 'AuthView' object has no attribute 'pwd_config'` in registrazione.
 - **UI & Experience**:
+    - **Fix UI Spinner**: Implementata chiusura automatica spinner (`hide_loading`) ad ogni cambio route per evitare blocchi UI (es. setup-admin) e redirezioni post-login.
     - **Menu Salvadanai**: Migliorata la visualizzazione nel menu a tendina della scheda Conto. I nomi lunghi ora vanno a capo correttamente senza "uscire" dalla scheda.
     - **Highlight Risparmi**: L'icona del salvadanaio sulla scheda conto si colora di **Oro (Amber)** se sono presenti fondi accantonati, permettendo di identificare a colpo d'occhio i conti con risparmi attivi.
 
