@@ -19,8 +19,8 @@ from db.crypto_helpers import (
     _encrypt_if_key, _decrypt_if_key, 
     _get_crypto_and_key, _valida_id_int,
     compute_blind_index, encrypt_system_data, decrypt_system_data,
-    generate_unique_code, _get_system_keys,
-    HASH_SALT, SYSTEM_FERNET_KEY, SERVER_SECRET_KEY,
+    generate_unique_code,
+    SERVER_SECRET_KEY,
     crypto as _crypto_instance
 )
 
@@ -799,7 +799,7 @@ def ottieni_transazioni_utente(id_utente, anno, mese, master_key_b64=None):
                     if family_key:
                         nome_conto_decrypted = _decrypt_if_key(row['nome_conto'], family_key, crypto, silent=True)
                     
-                    if nome_conto_decrypted and nome_conto_decrypted != "[ENCRYPTED]" and not nome_conto_decrypted.startswith("gAAAAA"):
+                    if nome_conto_decrypted and nome_conto_decrypted != "[ENCRYPTED]" and not CryptoManager.is_encrypted(nome_conto_decrypted):
                         row['nome_conto'] = nome_conto_decrypted
                     elif master_key:
                         # Fallback to master_key for legacy data

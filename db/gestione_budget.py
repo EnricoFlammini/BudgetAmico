@@ -19,7 +19,7 @@ from db.crypto_helpers import (
     _get_crypto_and_key, _valida_id_int,
     compute_blind_index, encrypt_system_data, decrypt_system_data,
     generate_unique_code, _get_system_keys,
-    HASH_SALT, SYSTEM_FERNET_KEY, SERVER_SECRET_KEY,
+    SERVER_SECRET_KEY,
     crypto as _crypto_instance
 )
 
@@ -771,7 +771,7 @@ def ottieni_riepilogo_budget_mensile(id_famiglia, anno, mese, master_key_b64=Non
                 if family_key:
                     decrypted_limite = _decrypt_if_key(row['importo_limite'], family_key, crypto, silent=True)
                     # If decryption failed (returns [ENCRYPTED]) and it looks encrypted, try master_key
-                    if decrypted_limite == "[ENCRYPTED]" and isinstance(row['importo_limite'], str) and row['importo_limite'].startswith("gAAAAA"):
+                    if decrypted_limite == "[ENCRYPTED]" and isinstance(row['importo_limite'], str) and CryptoManager.is_encrypted(row['importo_limite']):
                          decrypted_limite = _decrypt_if_key(row['importo_limite'], master_key, crypto, silent=True)
                 else:
                     decrypted_limite = row['importo_limite'] # Cannot decrypt without family key

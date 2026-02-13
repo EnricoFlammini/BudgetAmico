@@ -1437,7 +1437,7 @@ class AdminPanelView:
             
             for t in raw_tables:
                 t_name = t.get("table_name", "").lower()
-                if t_name in whitelist_set:
+                if t_name in PROGRAM_TABLES:
                     self._cached_db_stats_tables.append(t)
             
             # 3. Recupera metriche pool

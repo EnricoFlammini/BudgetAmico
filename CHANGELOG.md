@@ -6,6 +6,15 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.52.01 (13/02/2026)
+- **Fix Critici**:
+    - **Background Service**: Risolto errore `Impossibile decriptare chiave famiglia` all'avvio del servizio. Implementato **Lazy Loading** per le chiavi di sistema (`SYSTEM_FERNET_KEY`, `SERVER_SECRET_KEY`) per evitare problemi di importazione circolare e caricamento variabili d'ambiente.
+    - **Giroconto Salvadanaio**: Risolto bug che non aggiornava il saldo del salvadanaio nella dashboard dopo un trasferimento. Aggiunta l'invalidazione della cache `family_piggy_banks` dopo ogni operazione di scrittura.
+- **UI & Experience**:
+    - **Menu Salvadanai**: Migliorata la visualizzazione nel menu a tendina della scheda Conto. I nomi lunghi ora vanno a capo correttamente senza "uscire" dalla scheda.
+    - **Highlight Risparmi**: L'icona del salvadanaio sulla scheda conto si colora di **Oro (Amber)** se sono presenti fondi accantonati, permettendo di identificare a colpo d'occhio i conti con risparmi attivi.
+
+
 ### v0.52.00 (13/02/2026)
 - **Crittografia Selettiva (Fase 3)**:
     - **Plaintext Data**: Migrati i campi non sensibili (`nome_categoria`, `nome_sottocategoria`, `ticker`, `nome_asset`) in chiaro per migliorare drasticamente le performance di ricerca, filtri e ordinamento.

@@ -387,7 +387,7 @@ class AppController:
                 # Ottieni prezzi per tutti i ticker
                 tickers = list(set([
                     asset['ticker'] for asset in tutti_asset 
-                    if asset.get('ticker') and asset['ticker'] != "[ENCRYPTED]" and not asset['ticker'].startswith("gAAAAA")
+                    if asset.get('ticker') and asset['ticker'] != "[ENCRYPTED]" and not CryptoManager.is_encrypted(asset['ticker'])
                 ]))
                 logger.info(f"Aggiornamento automatico prezzi per {len(tickers)} ticker...")
                 prezzi = ottieni_prezzi_multipli(tickers)

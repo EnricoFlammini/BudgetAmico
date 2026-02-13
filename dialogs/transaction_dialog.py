@@ -15,10 +15,12 @@ from db.gestione_db import (
     ottieni_carte_utente,
     ottieni_tutti_i_conti_famiglia,
     esegui_giroconto,
-    ottieni_salvadanai_conto,
-    esegui_giroconto_salvadanaio,
     ottieni_ids_conti_tecnici_carte,
     get_configurazione,
+)
+from db.gestione_obiettivi import (
+    ottieni_salvadanai_conto,
+    esegui_giroconto_salvadanaio
 )
 from utils.logger import setup_logger
 
@@ -77,6 +79,7 @@ class TransactionDialog(ft.AlertDialog):
         self.selected_dest_logo = ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=20, color=ft.Colors.ON_SURFACE)
         self.selected_dest_name = ft.Text("Seleziona Destinazione", size=16, color=ft.Colors.ON_SURFACE)
         self.selected_dest_key = None
+        self.selected_dest_data = None
         
         self.pm_dest = ft.PopupMenuButton(
             content=ft.Container(
@@ -103,6 +106,14 @@ class TransactionDialog(ft.AlertDialog):
             self.lbl_error_dest
         ], spacing=2, visible=False)
         
+        self.btn_swap = ft.IconButton(
+            icon=ft.Icons.SWAP_VERT,
+            tooltip="Inverti Mittente/Destinatario",
+            icon_color=ft.Colors.PRIMARY,
+            on_click=self._swap_accounts,
+            visible=False
+        )
+        
         self.dd_conto_dialog = ft.Dropdown(visible=False) # Nascosto, usato per compatibilità dati
         self.dd_conto_destinazione_dialog = ft.Dropdown(visible=False) # Nascosto
         self.dd_paypal_fonte_dialog = ft.Dropdown(label="Fonte PayPal", visible=False) # Nuovo per PayPal
@@ -120,6 +131,7 @@ class TransactionDialog(ft.AlertDialog):
             self.txt_descrizione_dialog,
             self.txt_importo_dialog,
             self.col_conto,
+            self.btn_swap,
             self.dd_paypal_fonte_dialog, # Visibile solo se PayPal
             self.col_dest,
             self.dd_sottocategoria_dialog,
@@ -186,6 +198,7 @@ class TransactionDialog(ft.AlertDialog):
         from utils.styles import AppStyles
         if is_dest:
             self.selected_dest_key = key
+            self.selected_dest_data = account_data
             self.selected_dest_name.value = account_data['nome_conto']
             new_logo = AppStyles.get_logo_control(
                 tipo=account_data['tipo'], 
@@ -240,6 +253,7 @@ class TransactionDialog(ft.AlertDialog):
         self.lbl_error_conto.visible = False
         
         self.selected_dest_key = None
+        self.selected_dest_data = None
         self.selected_dest_name.value = "Seleziona Destinazione"
         self.selected_dest_logo = ft.Icon(ft.Icons.ACCOUNT_BALANCE, size=20)
         self.pm_dest.content.content.controls[0].controls[0] = self.selected_dest_logo
@@ -350,7 +364,8 @@ class TransactionDialog(ft.AlertDialog):
             elif c['tipo'] == "Portafoglio Elettronico": icon = "📱"
             
             key = f"{prefix}{c['id_conto']}"
-            if c['tipo'] in tipo_map["Carte"]: key = c['id_conto'] 
+            if c['tipo'] in tipo_map["Carte"] or c['tipo'] == "Salvadanaio": 
+                key = c['id_conto'] 
 
             opt = ft.dropdown.Option(key=key, text=f"{icon} {c['nome_conto']}{suffix}", data=c)
             
@@ -480,6 +495,7 @@ class TransactionDialog(ft.AlertDialog):
         
         # Toggle visibilità campi tramite ref diretti
         self.col_dest.visible = is_giroconto
+        self.btn_swap.visible = is_giroconto
         self.dd_sottocategoria_dialog.visible = not is_giroconto
         self.cb_importo_nascosto.visible = not is_giroconto
         
@@ -554,6 +570,59 @@ class TransactionDialog(ft.AlertDialog):
         
         # Reset visibility state
         self._on_tipo_transazione_change(None)
+
+    def _swap_accounts(self, e):
+        """Inverte conto mittente e destinatario nel giroconto."""
+        s_key, s_data = self.selected_account_key, self.selected_account_data
+        d_key, d_data = self.selected_dest_key, self.selected_dest_data
+        
+        # Reset visivo per evitare flash di dati inconsistenti
+        self._reset_account_selector()
+        
+        # Riapplica invertiti
+        if d_key and d_data:
+            self._select_account(d_key, d_data, is_dest=False)
+        if s_key and s_data:
+            self._select_account(s_key, s_data, is_dest=True)
+            
+        if self.page:
+            self.page.update()
+
+    def apri_dialog_giroconto(self, id_sorgente_key, id_destinazione_key=None, destinazione_data=None):
+        """Apre il dialogo pre-impostato per un giroconto."""
+        logger.info(f"[DIALOG] Opening pre-configured Giroconto: {id_sorgente_key} -> {id_destinazione_key}")
+        try:
+            self._update_texts()
+            # _reset_campi chiama _on_tipo_transazione_change -> _popola_dropdowns
+            self._reset_campi()
+            
+            # Forza tipo Giroconto
+            self.radio_tipo_transazione.value = "Giroconto"
+            self._on_tipo_transazione_change(None) # Aggiorna campi visibili
+            
+            # Seleziona Mittente
+            if id_sorgente_key:
+                opt = next((o for o in self.dd_conto_dialog.options if o.key == id_sorgente_key), None)
+                if opt: self._select_account(opt.key, opt.data, is_dest=False)
+            
+            # Seleziona Destinatario
+            if id_destinazione_key:
+                opt = next((o for o in self.dd_conto_destinazione_dialog.options if o.key == id_destinazione_key), None)
+                if opt: 
+                    self._select_account(opt.key, opt.data, is_dest=True)
+                elif destinazione_data:
+                    # Fallback: se la chiave non è nelle opzioni (es. Salvadanaio), usiamo i dati forniti esplicitamente
+                    logger.info("Destinazione non in lista, uso dati espliciti.")
+                    self._select_account(id_destinazione_key, destinazione_data, is_dest=True)
+            
+            if self not in self.controller.page.overlay:
+                self.controller.page.overlay.append(self)
+            self.open = True
+            if self.controller.page:
+                self.controller.page.update()
+        except Exception as ex:
+            logger.error(f"Errore apertura giroconto pre-configurato: {ex}")
+            traceback.print_exc()
 
     def apri_dialog_nuova_transazione(self, e=None):
         logger.info("[DIALOG] Opening: New Transaction")

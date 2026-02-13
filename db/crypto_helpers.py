@@ -63,37 +63,69 @@ def _valida_id_int(val):
     return None
 
 # --- System Key Helpers ---
-def _get_system_keys():
-    if not SERVER_SECRET_KEY: return None, None
-    import hashlib
-    # 1. Hashing Salt (Use Key directly)
-    hash_salt = SERVER_SECRET_KEY
-    # 2. Encryption Key (Fernet)
-    srv_key_bytes = hashlib.sha256(SERVER_SECRET_KEY.encode()).digest()
-    srv_fernet_key_b64 = base64.urlsafe_b64encode(srv_key_bytes)
-    return hash_salt, srv_fernet_key_b64
+_SYSTEM_FERNET_KEY = None
+_HASH_SALT = None
 
-HASH_SALT, SYSTEM_FERNET_KEY = _get_system_keys()
+def _ensure_system_keys_loaded():
+    global _SYSTEM_FERNET_KEY, _HASH_SALT
+    # If already loaded, return
+    if _SYSTEM_FERNET_KEY and _HASH_SALT:
+        return
+
+    secret = os.getenv("SERVER_SECRET_KEY")
+    if not secret:
+        # logger.warning("SERVER_SECRET_KEY non trovata durante inizializzazione chiavi sistema.")
+        return
+
+    import hashlib
+    # 1. Hashing Salt
+    _HASH_SALT = secret
+    # 2. Encryption Key (Fernet)
+    srv_key_bytes = hashlib.sha256(secret.encode()).digest()
+    _SYSTEM_FERNET_KEY = base64.urlsafe_b64encode(srv_key_bytes)
+
+def get_system_fernet_key():
+    _ensure_system_keys_loaded()
+    return _SYSTEM_FERNET_KEY
+
+def get_hash_salt():
+    _ensure_system_keys_loaded()
+    return _HASH_SALT
+
+# HASH_SALT, SYSTEM_FERNET_KEY = _get_system_keys() # RIMOSSO
 
 def compute_blind_index(value):
-    if not value or not HASH_SALT: return None
+    salt = get_hash_salt()
+    if not value or not salt: return None
     import hashlib
-    return hashlib.sha256((value.lower().strip() + HASH_SALT).encode()).hexdigest()
+    return hashlib.sha256((value.lower().strip() + salt).encode()).hexdigest()
 
 def encrypt_system_data(value):
-    if not value or not SYSTEM_FERNET_KEY: return None
-    from cryptography.fernet import Fernet
-    cipher = Fernet(SYSTEM_FERNET_KEY)
-    return cipher.encrypt(value.encode()).decode()
+    key = get_system_fernet_key()
+    if not value or not key: return None
+    # Usiamo CryptoManager per supportare v2 (AES-GCM)
+    from utils.crypto_manager import CryptoManager
+    cm = CryptoManager()
+    return cm.encrypt_data(value, key)
 
 def decrypt_system_data(value_enc):
-    if not value_enc or not SYSTEM_FERNET_KEY: return None
-    from cryptography.fernet import Fernet
-    cipher = Fernet(SYSTEM_FERNET_KEY)
-    try:
-        return cipher.decrypt(value_enc.encode()).decode()
-    except Exception:
+    if not value_enc: return None
+    
+    key = get_system_fernet_key()
+    if not key:
+        logger.error("[DEBUG] decrypt_system_data: SERVER_SECRET_KEY is missing (Lazy Load failed)!")
         return None
+        
+    from utils.crypto_manager import CryptoManager
+    cm = CryptoManager()
+    # decrypt_data gestisce automaticamente prefisso v2 o fallback Fernet
+    dec = cm.decrypt_data(value_enc, key, silent=True)
+    
+    if dec == "[ENCRYPTED]":
+        logger.error(f"[DEBUG] decrypt_system_data failed. Value prefix: {value_enc[:10]}...")
+        return None
+        
+    return dec
 
 def generate_unique_code(prefix="", length=8):
     """Genera un codice randomico hex."""
@@ -105,7 +137,11 @@ def get_server_family_key(id_famiglia):
     """
     Recupera la Family Key decriptata (usando SERVER_SECRET_KEY) per l'automazione background.
     """
-    if not SERVER_SECRET_KEY: return None
+    # Force check env again just in case
+    if not get_system_fernet_key():
+         logger.error("[DEBUG] get_server_family_key: SERVER_SECRET_KEY missing.")
+         return None
+         
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -115,6 +151,8 @@ def get_server_family_key(id_famiglia):
                  # Decrypt: Server Encrypted Key -> Family Key B64
                  fk_b64_enc = row['server_encrypted_key']
                  fk_b64 = decrypt_system_data(fk_b64_enc)
+                 if not fk_b64:
+                     logger.error(f"[DEBUG] get_server_family_key: Decryption returned None for family {id_famiglia}")
                  return fk_b64
     except Exception as e:
         logger.error(f"Error retrieving server family key: {e}")
@@ -253,8 +291,8 @@ def _decrypt_if_key(encrypted_data, master_key, crypto=None, silent=False):
     if not isinstance(encrypted_data, str):
         return encrypted_data
 
-    # Check if data looks like a Fernet token (starts with gAAAAA)
-    if not encrypted_data.startswith("gAAAAA"):
+    # Check if data looks like an encrypted token (v2 GCM or legacy Fernet)
+    if not CryptoManager.is_encrypted(encrypted_data):
         return encrypted_data
 
     decrypted = crypto.decrypt_data(encrypted_data, master_key, silent=silent)

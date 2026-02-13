@@ -18,8 +18,8 @@ from db.crypto_helpers import (
     _encrypt_if_key, _decrypt_if_key, 
     _get_crypto_and_key, _valida_id_int,
     compute_blind_index, encrypt_system_data, decrypt_system_data,
-    generate_unique_code, _get_system_keys,
-    HASH_SALT, SYSTEM_FERNET_KEY, SERVER_SECRET_KEY,
+    generate_unique_code,
+    SERVER_SECRET_KEY,
     crypto as _crypto_instance
 )
 
@@ -198,7 +198,7 @@ def ottieni_conti_utente(id_utente, master_key_b64=None):
                     if family_key:
                         dec_nome = _decrypt_if_key(row['nome_conto'], family_key, crypto, silent=True)
                     
-                    if dec_nome and dec_nome != "[ENCRYPTED]" and not dec_nome.startswith("gAAAAA"):
+                    if dec_nome and dec_nome != "[ENCRYPTED]" and not CryptoManager.is_encrypted(dec_nome):
                         row['nome_conto'] = dec_nome
                         row['tipo'] = _decrypt_if_key(row['tipo'], family_key, crypto, silent=True)
                     elif master_key:
@@ -262,7 +262,7 @@ def ottieni_dettagli_conti_utente(id_utente, master_key_b64=None):
                     if family_key:
                         decrypted_nome = _decrypt_if_key(row['nome_conto'], family_key, crypto, silent=True)
                     
-                    if decrypted_nome and decrypted_nome != "[ENCRYPTED]" and not decrypted_nome.startswith("gAAAAA"):
+                    if decrypted_nome and decrypted_nome != "[ENCRYPTED]" and not CryptoManager.is_encrypted(decrypted_nome):
                         row['nome_conto'] = decrypted_nome
                         row['tipo'] = _decrypt_if_key(row['tipo'], family_key, crypto, silent=True)
                     elif master_key:
@@ -277,9 +277,14 @@ def ottieni_dettagli_conti_utente(id_utente, master_key_b64=None):
                         dec_config = None
                         if family_key:
                             dec_config = _decrypt_if_key(config_spec, family_key, crypto, silent=True)
-                        if (not dec_config or dec_config == "[ENCRYPTED]" or dec_config.startswith("gAAAAA")) and master_key:
+                        if (not dec_config or dec_config == "[ENCRYPTED]" or CryptoManager.is_encrypted(dec_config)) and master_key:
                             dec_config = _decrypt_if_key(config_spec, master_key, crypto, silent=True)
-                        row['config_speciale'] = dec_config
+                        
+                        # If still encrypted, set to None to avoid JSON parsing errors in app_controller
+                        if dec_config and CryptoManager.is_encrypted(dec_config):
+                             row['config_speciale'] = None
+                        else:
+                             row['config_speciale'] = dec_config
                     else:
                         row['config_speciale'] = None
                     
@@ -631,7 +636,7 @@ def ottieni_dettagli_conto(id_conto, master_key_b64=None):
             dec_nome = None
             if family_key:
                 dec_nome = _decrypt_if_key(c['nome_conto'], family_key, crypto, silent=True)
-            if not dec_nome or dec_nome == "[ENCRYPTED]" or dec_nome.startswith("gAAAAA"):
+            if not dec_nome or dec_nome == "[ENCRYPTED]" or CryptoManager.is_encrypted(dec_nome):
                 dec_nome = _decrypt_if_key(c['nome_conto'], master_key, crypto, silent=True)
             c['nome_conto'] = dec_nome
 
@@ -639,7 +644,7 @@ def ottieni_dettagli_conto(id_conto, master_key_b64=None):
             dec_tipo = None
             if family_key:
                 dec_tipo = _decrypt_if_key(c['tipo'], family_key, crypto, silent=True)
-            if not dec_tipo or dec_tipo == "[ENCRYPTED]" or dec_tipo.startswith("gAAAAA"):
+            if not dec_tipo or dec_tipo == "[ENCRYPTED]" or CryptoManager.is_encrypted(dec_tipo):
                 dec_tipo = _decrypt_if_key(c['tipo'], master_key, crypto, silent=True)
             c['tipo'] = dec_tipo
 
@@ -650,7 +655,7 @@ def ottieni_dettagli_conto(id_conto, master_key_b64=None):
             dec_config = None
             if family_key:
                 dec_config = _decrypt_if_key(c['config_speciale'], family_key, crypto, silent=True)
-            if not dec_config or dec_config == "[ENCRYPTED]" or dec_config.startswith("gAAAAA"):
+            if not dec_config or dec_config == "[ENCRYPTED]" or CryptoManager.is_encrypted(dec_config):
                 dec_config = _decrypt_if_key(c['config_speciale'], master_key, crypto, silent=True)
             c['config_speciale'] = dec_config
             
@@ -691,7 +696,7 @@ def ottieni_dettagli_conto_condiviso(id_conto_condiviso, master_key_b64=None, id
                  dec_nome = None
                  if family_key:
                      dec_nome = _decrypt_if_key(dettagli['nome_conto'], family_key, crypto, silent=True)
-                 if not dec_nome or dec_nome == "[ENCRYPTED]" or dec_nome.startswith("gAAAAA"):
+                 if not dec_nome or dec_nome == "[ENCRYPTED]" or CryptoManager.is_encrypted(dec_nome):
                      dec_nome = _decrypt_if_key(dettagli['nome_conto'], master_key, crypto, silent=True)
                  dettagli['nome_conto'] = dec_nome
 
@@ -699,7 +704,7 @@ def ottieni_dettagli_conto_condiviso(id_conto_condiviso, master_key_b64=None, id
                  dec_config = None
                  if family_key:
                      dec_config = _decrypt_if_key(dettagli['config_speciale'], family_key, crypto, silent=True)
-                 if not dec_config or dec_config == "[ENCRYPTED]" or dec_config.startswith("gAAAAA"):
+                 if not dec_config or dec_config == "[ENCRYPTED]" or CryptoManager.is_encrypted(dec_config):
                      dec_config = _decrypt_if_key(dettagli['config_speciale'], master_key, crypto, silent=True)
                  dettagli['config_speciale'] = dec_config
 
@@ -788,7 +793,7 @@ def ottieni_conti_condivisi_famiglia(id_famiglia, id_utente, master_key_b64=None
                     dec_config = None
                     if family_key:
                         dec_config = _decrypt_if_key(config_spec, family_key, crypto, silent=True)
-                    if (not dec_config or dec_config == "[ENCRYPTED]" or dec_config.startswith("gAAAAA")) and master_key:
+                    if (not dec_config or dec_config == "[ENCRYPTED]" or CryptoManager.is_encrypted(dec_config)) and master_key:
                         # Fallback to master_key (unlikely for shared, but for safety)
                         dec_config = _decrypt_if_key(config_spec, master_key, crypto, silent=True)
                     c['config_speciale'] = dec_config
@@ -1023,10 +1028,12 @@ def ottieni_conti_condivisi_utente(id_utente, master_key_b64=None):
                     for row in results:
                         fam_id = row.get('id_famiglia')
                         if fam_id and fam_id in family_keys:
-                            row['nome_conto'] = _decrypt_if_key(row['nome_conto'], family_keys[fam_id], crypto, silent=True)
+                            orig_nome = row['nome_conto']
+                            dec_nome = _decrypt_if_key(orig_nome, family_keys[fam_id], crypto, silent=True)
                             # Fallback to master_key if family_key decryption fails
-                            if row['nome_conto'] == "[ENCRYPTED]" and isinstance(row['nome_conto'], str) and row['nome_conto'].startswith("gAAAAA"):
-                                row['nome_conto'] = _decrypt_if_key(row['nome_conto'], master_key, crypto)
+                            if dec_nome == "[ENCRYPTED]" and CryptoManager.is_encrypted(orig_nome) and master_key:
+                                dec_nome = _decrypt_if_key(orig_nome, master_key, crypto)
+                            row['nome_conto'] = dec_nome
                 except Exception as e:
                     print(f"[ERRORE] Decryption error in ottieni_conti_condivisi_utente: {e}")
             
@@ -1138,23 +1145,26 @@ def ottieni_tutti_i_conti_famiglia(id_famiglia, id_utente_richiedente, master_ke
                     # 2. Fallback to master_key if it's the owner's account and first attempt failed/skipped
                     if uid == id_utente_richiedente and master_key:
                         # Se è ancora criptato o ha fallito, prova master_key
-                        if dec_nome == "[ENCRYPTED]" or (isinstance(dec_nome, str) and dec_nome.startswith("gAAAAA")):
+                        if dec_nome == "[ENCRYPTED]" or (isinstance(dec_nome, str) and CryptoManager.is_encrypted(dec_nome)):
                             dec_nome = _decrypt_if_key(r['nome_conto'], master_key, crypto, silent=True)
-                        if dec_tipo == "[ENCRYPTED]" or (isinstance(dec_tipo, str) and dec_tipo.startswith("gAAAAA")):
+                        if dec_tipo == "[ENCRYPTED]" or (isinstance(dec_tipo, str) and CryptoManager.is_encrypted(dec_tipo)):
                             dec_tipo = _decrypt_if_key(r['tipo'], master_key, crypto, silent=True)
-                        if dec_config == "[ENCRYPTED]" or (isinstance(dec_config, str) and dec_config.startswith("gAAAAA")):
+                        if dec_config == "[ENCRYPTED]" or (isinstance(dec_config, str) and CryptoManager.is_encrypted(dec_config)):
                             dec_config = _decrypt_if_key(r['config_speciale'], master_key, crypto, silent=True)
                     
                     r['nome_conto'] = dec_nome
                     r['tipo'] = dec_tipo
-                    r['config_speciale'] = dec_config
+                    if dec_config and CryptoManager.is_encrypted(dec_config):
+                         r['config_speciale'] = None
+                    else:
+                         r['config_speciale'] = dec_config
                     risultato.append(r)
                     
                 # Carte di questo utente
                 cur.execute("SELECT id_carta, nome_carta, id_conto_contabile, id_conto_contabile_condiviso, icona, colore FROM Carte WHERE id_utente = %s", (uid,))
                 for row in cur.fetchall():
                     dec_nome = _decrypt_if_key(row['nome_carta'], family_key, crypto, silent=True)
-                    if (dec_nome == "[ENCRYPTED]" or (isinstance(dec_nome, str) and dec_nome.startswith("gAAAAA"))) and uid == id_utente_richiedente and master_key:
+                    if (dec_nome == "[ENCRYPTED]" or (isinstance(dec_nome, str) and CryptoManager.is_encrypted(dec_nome))) and uid == id_utente_richiedente and master_key:
                         dec_nome = _decrypt_if_key(row['nome_carta'], master_key, crypto, silent=True)
                     
                     id_acc = row['id_conto_contabile'] or row['id_conto_contabile_condiviso']
@@ -1192,7 +1202,7 @@ def ottieni_tutti_i_conti_famiglia(id_famiglia, id_utente_richiedente, master_ke
                      'tipo': 'Salvadanaio',
                      'id_utente_owner': None,
                      'nome_owner': "Famiglia",
-                     'is_condiviso': False
+                     'is_condiviso': True
                  })
 
         return risultato

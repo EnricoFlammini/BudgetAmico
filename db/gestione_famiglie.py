@@ -18,8 +18,8 @@ from db.crypto_helpers import (
     _encrypt_if_key, _decrypt_if_key, 
     _get_crypto_and_key, _valida_id_int,
     compute_blind_index, encrypt_system_data, decrypt_system_data,
-    generate_unique_code, _get_system_keys,
-    HASH_SALT, SYSTEM_FERNET_KEY, SERVER_SECRET_KEY,
+    generate_unique_code,
+    SERVER_SECRET_KEY,
     crypto as _crypto_instance
 )
 
@@ -592,9 +592,9 @@ def ottieni_dettagli_famiglia(id_famiglia, anno, mese, master_key_b64=None, id_u
                      cognome_raw = ''
                 
                 # Cleanup encrypted strings for display
-                if isinstance(nome_raw, str) and nome_raw.startswith('gAAAAA'): 
+                if CryptoManager.is_encrypted(nome_raw): 
                      nome_raw = '' # Hide encrypted blob
-                if isinstance(cognome_raw, str) and cognome_raw.startswith('gAAAAA'):
+                if CryptoManager.is_encrypted(cognome_raw):
                      cognome_raw = ''
 
                 # Build display name: prefer nome+cognome, fallback to username

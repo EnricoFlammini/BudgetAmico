@@ -35,3 +35,15 @@ MIGRAZIONE PROGRESSIVA:
 # I moduli tematici sono la versione organizzata dello stesso codice,
 # pronti per la migrazione progressiva.
 from db._gestione_db_monolith import *  # noqa: F401, F403
+
+# OVERRIDE: Usa le versioni fixate/refactored dei moduli tematici
+# Fix per BackgroundService Key Loading (Lazy Load)
+from db.crypto_helpers import (
+    get_server_family_key,
+    decrypt_system_data,
+    encrypt_system_data,
+    enable_server_automation,
+    disable_server_automation,
+    is_server_automation_enabled,
+    compute_blind_index
+)

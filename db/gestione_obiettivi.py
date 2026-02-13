@@ -17,10 +17,11 @@ from db.crypto_helpers import (
     _encrypt_if_key, _decrypt_if_key, 
     _get_crypto_and_key, _valida_id_int,
     compute_blind_index, encrypt_system_data, decrypt_system_data,
-    generate_unique_code, _get_system_keys,
-    HASH_SALT, SYSTEM_FERNET_KEY, SERVER_SECRET_KEY,
-    crypto as _crypto_instance
+    generate_unique_code,
+    SERVER_SECRET_KEY,
+    crypto as _crypto_instance, _get_family_key_for_user
 )
+from utils.cache_manager import cache_manager
 
 
 # --- GESTIONE OBIETTIVI RISPARMIO (ACCANTONAMENTI) ---
@@ -150,6 +151,8 @@ def aggiorna_obiettivo(id_obiettivo: int, id_famiglia: str, nome: str, importo_o
                 WHERE id = %s AND id_famiglia = %s
             """, (nome_enc, importo_obiettivo, data_obiettivo, note_enc, mostra_suggerimento, id_obiettivo, id_famiglia))
             con.commit()
+            if id_famiglia:
+                 cache_manager.invalidate_pattern(f"family_piggy_banks:{id_famiglia}") # Objs linked to PBs
             return True
     except Exception as e:
         logger.error(f"Errore aggiornamento obiettivo: {e}")
@@ -176,6 +179,8 @@ def elimina_obiettivo(id_obiettivo: int, id_famiglia: str) -> bool:
             cur.execute("DELETE FROM Obiettivi_Risparmio WHERE id = %s AND id_famiglia = %s", (id_obiettivo, id_famiglia))
             
             con.commit()
+            if id_famiglia:
+                 cache_manager.invalidate_pattern(f"family_piggy_banks:{id_famiglia}")
             return True
     except Exception as e:
         logger.error(f"Errore eliminazione obiettivo: {e}")
@@ -222,6 +227,8 @@ def crea_salvadanaio(id_famiglia: str, nome: str, importo: float, id_obiettivo: 
             con.commit()
             
             if row:
+                if id_famiglia:
+                    cache_manager.invalidate_pattern(f"family_piggy_banks:{id_famiglia}")
                 return row['id_salvadanaio']
             return None
             
@@ -242,6 +249,8 @@ def scollega_salvadanaio_obiettivo(id_salvadanaio: int, id_famiglia: str) -> boo
                 WHERE id_salvadanaio = %s AND id_famiglia = %s
             """, (id_salvadanaio, id_famiglia))
             con.commit()
+            if id_famiglia:
+                 cache_manager.invalidate_pattern(f"family_piggy_banks:{id_famiglia}")
             return cur.rowcount > 0
     except Exception as e:
         logger.error(f"Errore scollega_salvadanaio_obiettivo: {e}")
@@ -318,6 +327,60 @@ def ottieni_salvadanai_conto(id_conto: int, id_famiglia: str, master_key_b64: Op
             return results
     except Exception as e:
         logger.error(f"Errore ottieni_salvadanai_conto: {e}")
+        return []
+
+def ottieni_tutti_salvadanai_famiglia(id_famiglia: str, master_key_b64: Optional[str] = None, id_utente: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Recupera TUTTI i salvadanai della famiglia in un'unica query.
+    Ottimizzato per la Tab Conti per evitare N+1 query.
+    """
+    try:
+        def fetch_and_decrypt():
+            with get_db_connection() as con:
+                cur = con.cursor()
+                cur.execute("SELECT * FROM Salvadanai WHERE id_famiglia = %s", (id_famiglia,))
+                rows = [dict(row) for row in cur.fetchall()]
+                
+                crypto, master_key = _get_crypto_and_key(master_key_b64)
+                family_key = None
+                if master_key and id_utente:
+                    family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+                
+                # Nomi salvadanai sono criptati, importi sono NUMERIC (Phase 3)
+                keys_to_try = []
+                if family_key: keys_to_try.append(family_key)
+                if master_key: keys_to_try.append(master_key)
+                
+                def try_decrypt(val, keys):
+                    for k in keys:
+                        if not k: continue
+                        try:
+                            res = _decrypt_if_key(val, k, crypto, silent=True)
+                            if res != "[ENCRYPTED]": return res
+                        except: continue
+                    return "[ENCRYPTED]"
+
+                results = []
+                for r in rows:
+                    results.append({
+                        'id': r['id_salvadanaio'],
+                        'id_conto': r['id_conto'],
+                        'id_conto_condiviso': r['id_conto_condiviso'],
+                        'nome': try_decrypt(r['nome'], keys_to_try),
+                        'importo': float(r['importo_assegnato']) if r['importo_assegnato'] else 0.0,
+                        'id_obiettivo': r['id_obiettivo'],
+                        'incide_su_liquidita': bool(r.get('incide_su_liquidita', False))
+                    })
+                return results
+
+        return cache_manager.get_or_compute(
+            key=f"family_piggy_banks:{id_famiglia}",
+            compute_fn=fetch_and_decrypt,
+            ttl_seconds=120
+        )
+    except Exception as e:
+        logger.error(f"Errore ottieni_tutti_salvadanai_famiglia: {e}")
+        return []
         return []
 
 def esegui_giroconto_salvadanaio(
@@ -409,6 +472,11 @@ def esegui_giroconto_salvadanaio(
             cur.execute("UPDATE Salvadanai SET importo_assegnato = %s WHERE id_salvadanaio = %s", (new_pb_amount, id_salvadanaio))
             
             con.commit()
+            
+            # Invalidate Cache to show new balance immediately
+            if id_famiglia:
+                cache_manager.invalidate_pattern(f"family_piggy_banks:{id_famiglia}")
+                
             return True
 
     except Exception as e:

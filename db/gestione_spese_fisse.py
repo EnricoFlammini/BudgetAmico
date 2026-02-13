@@ -16,8 +16,8 @@ from db.crypto_helpers import (
     _encrypt_if_key, _decrypt_if_key, 
     _get_crypto_and_key, _valida_id_int,
     compute_blind_index, encrypt_system_data, decrypt_system_data,
-    generate_unique_code, _get_system_keys,
-    HASH_SALT, SYSTEM_FERNET_KEY, SERVER_SECRET_KEY,
+    generate_unique_code,
+    SERVER_SECRET_KEY,
     crypto as _crypto_instance
 )
 
@@ -167,8 +167,6 @@ def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=Non
                 except Exception:
                     pass
 
-            def is_encrypted(val):
-                return val == "[ENCRYPTED]" or (isinstance(val, str) and val.startswith("gAAAAA"))
 
             if family_key:
                 for spesa in spese:
@@ -189,7 +187,7 @@ def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=Non
                              spesa['nome_conto'] = _decrypt_if_key(spesa['nome_conto'], master_key, crypto, silent=True) # Usa master key utente corrente
                              
                              # Se fallisce decriptazione e abbiamo username proprietario
-                             if is_encrypted(spesa['nome_conto']):
+                             if CryptoManager.is_encrypted(spesa['nome_conto']):
                                  user_conto_enc = spesa.get('username_enc_conto')
                                  if user_conto_enc:
                                      user_conto = decrypt_system_data(user_conto_enc)
@@ -197,15 +195,15 @@ def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=Non
                                         spesa['nome_conto'] = f"Conto di {user_conto}"
 
                     if spesa.get('nome_carta'):
-                         spesa['nome_carta'] = _decrypt_if_key(spesa['nome_carta'], family_key, crypto, silent=True)
-                         if is_encrypted(spesa['nome_carta']) and family_key != master_key:
-                             test_dec = _decrypt_if_key(spesa['nome_carta'], master_key, crypto, silent=True)
-                             if test_dec and not is_encrypted(test_dec): 
-                                 spesa['nome_carta'] = test_dec
-                             elif spesa.get('username_enc_carta'):
-                                 user_carta = decrypt_system_data(spesa.get('username_enc_carta'))
-                                 if user_carta:
-                                     spesa['nome_carta'] = f"Carta di {user_carta}"
+                        spesa['nome_carta'] = _decrypt_if_key(spesa['nome_carta'], family_key, crypto, silent=True)
+                        if CryptoManager.is_encrypted(spesa['nome_carta']) and family_key != master_key:
+                            test_dec = _decrypt_if_key(spesa['nome_carta'], master_key, crypto, silent=True)
+                            if test_dec and not CryptoManager.is_encrypted(test_dec): 
+                                spesa['nome_carta'] = test_dec
+                            elif spesa.get('username_enc_carta'):
+                                user_carta = decrypt_system_data(spesa.get('username_enc_carta'))
+                                if user_carta:
+                                    spesa['nome_carta'] = f"Carta di {user_carta}"
 
                     # Sovrascrivi nome_conto se c'è una carta
                     if spesa.get('id_carta') and spesa.get('nome_carta'):
@@ -218,7 +216,7 @@ def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=Non
                          # Decrypt card if present
                          if spesa.get('id_carta') and spesa.get('nome_carta'):
                              dec = _decrypt_if_key(spesa['nome_carta'], master_key, crypto, silent=True)
-                             if dec and not is_encrypted(dec): 
+                             if dec and not CryptoManager.is_encrypted(dec): 
                                  spesa['nome_carta'] = dec
                              elif spesa.get('username_enc_carta'):
                                  user_carta = decrypt_system_data(spesa.get('username_enc_carta'))
@@ -230,7 +228,7 @@ def ottieni_spese_fisse_famiglia(id_famiglia, master_key_b64=None, id_utente=Non
                          elif spesa.get('nome_conto') and not spesa.get('id_conto_condiviso_addebito'):
                              # Try decrypt personal account
                              dec = _decrypt_if_key(spesa['nome_conto'], master_key, crypto, silent=True)
-                             if dec and not is_encrypted(dec):
+                             if dec and not CryptoManager.is_encrypted(dec):
                                  spesa['nome_conto'] = dec
                              elif spesa.get('username_enc_conto'):
                                  user_conto = decrypt_system_data(spesa.get('username_enc_conto'))

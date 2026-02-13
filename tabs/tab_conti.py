@@ -5,10 +5,13 @@ from db.gestione_db import (
     ottieni_dettagli_conti_utente,
     elimina_conto,
     ottieni_prima_famiglia_utente,
-    ottieni_salvadanai_conto,
-    crea_salvadanaio,
     elimina_conto_condiviso,
-    ottieni_conti_condivisi_famiglia
+    ottieni_conti_condivisi_famiglia,
+)
+from db.gestione_obiettivi import (
+    crea_salvadanaio,
+    ottieni_salvadanai_conto,
+    ottieni_tutti_salvadanai_famiglia
 )
 from utils.async_task import AsyncTask
 from utils.styles import AppStyles, AppColors, PageConstants
@@ -99,20 +102,43 @@ class ContiTab(ft.Container):
         task.start()
 
     def _fetch_data(self, utente_id, master_key_b64):
+        # 1. Recupera i dettagli di base dei conti (già cacheati dal DB layer)
         conti = ottieni_dettagli_conti_utente(utente_id, master_key_b64=master_key_b64)
         personali = [c for c in conti if c['tipo'] not in ['Investimento', 'Carta di Credito']]
         
         id_famiglia = ottieni_prima_famiglia_utente(utente_id)
         
-        if id_famiglia:
-            for c in personali:
-                c['salvadanai'] = ottieni_salvadanai_conto(c['id_conto'], id_famiglia, master_key_b64, utente_id, is_condiviso=False)
-        
         condivisi = []
         if id_famiglia:
             condivisi = ottieni_conti_condivisi_famiglia(id_famiglia, utente_id, master_key_b64=master_key_b64)
-            for c in condivisi:
-                 c['salvadanai'] = ottieni_salvadanai_conto(c['id_conto'], id_famiglia, master_key_b64, utente_id, is_condiviso=True)
+        
+        # 2. Ottimizzazione: Carica TUTTI i salvadanai della famiglia in un'unica query (BATCH)
+        tutti_salvadanai = []
+        if id_famiglia:
+            tutti_salvadanai = ottieni_tutti_salvadanai_famiglia(id_famiglia, master_key_b64, utente_id)
+        
+        # 3. Mappatura in memoria per velocità massima (O(N))
+        pb_map_personali = {} # id_conto -> [pbs]
+        pb_map_condivisi = {} # id_conto_condiviso -> [pbs]
+        
+        for pb in tutti_salvadanai:
+            if pb.get('id_conto') is not None:
+                cid = pb['id_conto']
+                if cid not in pb_map_personali: pb_map_personali[cid] = []
+                pb_map_personali[cid].append(pb)
+            elif pb.get('id_conto_condiviso') is not None:
+                cid = pb['id_conto_condiviso']
+                if cid not in pb_map_condivisi: pb_map_condivisi[cid] = []
+                pb_map_condivisi[cid].append(pb)
+        
+        # 4. Assegna i salvadanai mappati ai conti
+        for c in personali:
+            c['salvadanai'] = pb_map_personali.get(c['id_conto'], [])
+        
+        for c in condivisi:
+            # Nota: ottieni_conti_condivisi_famiglia mette id_conto = id_conto_condiviso per compatibilità
+            key = c.get('id_conto_condiviso') or c.get('id_conto')
+            c['salvadanai'] = pb_map_condivisi.get(key, [])
             
         return personali, condivisi
 
@@ -301,26 +327,43 @@ class ContiTab(ft.Container):
         if not is_investimento and not is_fondo:
              # Menù salvadanai
              menu_items = []
-             menu_items.append(ft.PopupMenuItem(content=ft.Text("Risparmi:", weight=ft.FontWeight.BOLD), disabled=True))
+             menu_items.append(ft.PopupMenuItem(content=ft.Text("Risparmi:", weight=ft.FontWeight.BOLD, color=ft.Colors.ON_SURFACE), disabled=True))
              
-             if pb_risparmio > 0:
-                 for s in salvadanai_list:
-                     # Mostra solo i salvadanai di risparmio (non liquidità) che compongono la cifra risparmiata
-                     if not s.get('incide_su_liquidita', False):
-                        menu_items.append(
-                             ft.PopupMenuItem(
-                                 content=ft.Row([
-                                     ft.Icon(ft.Icons.SAVINGS, size=16, color=ft.Colors.AMBER),
-                                     ft.Text(f"{s['nome']}: € {s['importo']:,.2f}")
-                                 ], spacing=5)
-                             )
+             # Filtra i salvadanai che non incidono sulla liquidità (risparmi effettivi)
+             list_risparmio = [s for s in salvadanai_list if not s.get('incide_su_liquidita', False)]
+
+             if list_risparmio:
+                 for s in list_risparmio:
+                     menu_items.append(
+                        ft.PopupMenuItem(
+                            content=ft.Row([
+                                ft.Icon(ft.Icons.SAVINGS, size=16, color=ft.Colors.AMBER if s['importo'] > 0 else ft.Colors.GREY_400),
+                                ft.Column([
+                                     ft.Text(s['nome'], size=13, weight=ft.FontWeight.BOLD, no_wrap=False, width=200),
+                                     ft.Text(f"€ {s['importo']:,.2f}", size=12, color=ft.Colors.ON_SURFACE if s['importo'] > 0 else ft.Colors.ON_SURFACE_VARIANT)
+                                ], spacing=2)
+                            ], spacing=10, alignment=ft.MainAxisAlignment.START),
+                            on_click=lambda e, s_data=s, cid=conto['id_conto'], is_sh=is_shared: 
+                                self.controller.transaction_dialog.apri_dialog_giroconto(
+                                    id_sorgente_key=f"{'C' if is_sh else 'P'}{cid}",
+                                    id_destinazione_key=f"S{s_data['id']}_DIRECT",
+                                    destinazione_data={
+                                        'nome_conto': s_data['nome'],
+                                        'tipo': 'Salvadanaio',
+                                        'icona': None,
+                                        'colore': None,
+                                        'config_speciale': None
+                                    }
+                                )
                         )
+                    )
+                 
                  menu_items.append(ft.PopupMenuItem(content=ft.Divider(height=1), disabled=True))
                  menu_items.append(
                      ft.PopupMenuItem(
                          content=ft.Row([
                              ft.Icon(ft.Icons.MONETIZATION_ON, size=16, color=ft.Colors.GREEN),
-                             ft.Text(f"Totale: € {pb_risparmio:,.2f}", weight=ft.FontWeight.BOLD)
+                             ft.Text(f"Totale: € {pb_risparmio:,.2f}", weight=ft.FontWeight.BOLD, color=ft.Colors.ON_SURFACE)
                          ], spacing=5), disabled=True
                      )
                  )
@@ -337,11 +380,14 @@ class ContiTab(ft.Container):
                  )
              )
 
+             # Highlight if active savings exist
+             has_savings = pb_risparmio > 0
+             
              actions.append(
                 ft.PopupMenuButton(
                     icon=ft.Icons.SAVINGS,
                     tooltip="Menu Salvadanai",
-                    icon_color=ft.Colors.WHITE,
+                    icon_color=ft.Colors.AMBER if has_savings else ft.Colors.WHITE,
                     items=menu_items
                 )
              )
