@@ -273,7 +273,7 @@ class AuthView:
 
     def _check_password_complexity(self, password):
         """Verifica se la password rispetta i criteri Admin."""
-        cfg = self.pwd_config
+        cfg = self._get_pwd_config()
         errors = []
         if len(password) < int(cfg.get("min_length", 8)):
             errors.append(f"Almeno {cfg['min_length']} caratteri")
