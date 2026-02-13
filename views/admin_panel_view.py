@@ -1388,6 +1388,7 @@ class AdminPanelView:
             sort_ascending=False,
         )
         self.total_db_size_text = ft.Text("Dimensione Totale DB: -", size=16, weight=ft.FontWeight.BOLD)
+        self.pool_metrics_text = ft.Text("Pool Connessioni: -", size=14, color=ft.Colors.BLUE_GREY_600)
         
         # Cache locale per i dati grezzi (per evitare query continue su search/sort)
         self._cached_db_stats_tables = []
@@ -1402,7 +1403,10 @@ class AdminPanelView:
                 ft.Row([self.db_stats_search]),
                 ft.Container(height=10),
                 ft.Container(
-                    content=self.total_db_size_text,
+                    content=ft.Column([
+                        self.total_db_size_text,
+                        self.pool_metrics_text
+                    ], spacing=5),
                     bgcolor=ft.Colors.BLUE_50, padding=10, border_radius=5
                 ),
                 ft.Container(height=10),
@@ -1431,14 +1435,18 @@ class AdminPanelView:
             raw_tables = stats.get("tables", [])
             self._cached_db_stats_tables = []
             
-            # NORMALIZZAZIONE: Crea set lowercase per controllo veloce
-            whitelist_set = set(t.lower() for t in PROGRAM_TABLES)
-            
             for t in raw_tables:
                 t_name = t.get("table_name", "").lower()
-                # Verifica se il nome tabella è nella whitelist (o inizia con 'program_' se volgiamo essere laschi, ma qui usiamo exact match list)
                 if t_name in whitelist_set:
                     self._cached_db_stats_tables.append(t)
+            
+            # 3. Recupera metriche pool
+            from db.supabase_manager import SupabaseManager
+            m = SupabaseManager.get_metrics()
+            self.pool_metrics_text.value = (
+                f"Connessioni Pool: {m['pool_idle']} idle, {m['active_now']} attive | "
+                f"Totale: {m['created']} create, {m['expired']} scadute/chiuse"
+            )
         
         # 1. Filtro Search
         search_query = self.db_stats_search.value.lower() if self.db_stats_search.value else ""

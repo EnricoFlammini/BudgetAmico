@@ -7,6 +7,7 @@ import pg8000.dbapi
 import os
 import threading
 import queue
+import time
 from urllib.parse import urlparse
 from typing import Optional
 from utils.logger import setup_logger
@@ -65,10 +66,21 @@ class SupabaseManager:
     Gestisce un pool di connessioni pg8000 per PostgreSQL (Supabase).
     Thread-safe, gestisce il contesto RLS.
     """
-    _pool_queue = queue.Queue(maxsize=20)
+    _pool_queue = queue.Queue(maxsize=10) # Ridotto a 10
     _conn_params = None
     _initialized = False
     _lock = threading.Lock()
+    
+    # Metriche
+    _metrics = {
+        "created": 0,
+        "acquired": 0,
+        "released": 0,
+        "expired": 0,
+        "active_now": 0
+    }
+    
+    _TTL_SECONDS = 300 # 5 minuti
     
     @classmethod
     def _initialize(cls):
@@ -112,11 +124,13 @@ class SupabaseManager:
         last_error = None
         for attempt in range(1, 3): # 2 tentativi interni
             try:
-                return pg8000.dbapi.connect(**cls._conn_params)
+                conn = pg8000.dbapi.connect(**cls._conn_params)
+                with cls._lock:
+                    cls._metrics["created"] += 1
+                return conn
             except Exception as e:
                 last_error = e
                 if attempt < 2:
-                    import time
                     time.sleep(2)
         raise last_error
 
@@ -130,34 +144,56 @@ class SupabaseManager:
             cls._initialize()
 
         conn = None
-        # 1. Prova a prendere dal pool
-        try:
-            conn = cls._pool_queue.get(block=False)
-            # Verifica se la connessione è ancora attiva
+        now = time.time()
+        
+        # 1. Prova a prendere dal pool (loop finché non troviamo una valida o il pool è vuoto)
+        while True:
             try:
-                cur = conn.cursor()
-                cur.execute("SELECT 1")
-                cur.close()
-            except:
-                try: conn.close()
-                except: pass
-                conn = None
-        except queue.Empty:
-            pass
+                # La coda ora contiene tuple (conn, timestamp_rilascio)
+                item = cls._pool_queue.get(block=False)
+                raw_conn, released_at = item
+                
+                # Verifica TTL
+                if now - released_at > cls._TTL_SECONDS:
+                    with cls._lock:
+                        cls._metrics["expired"] += 1
+                    try: raw_conn.close()
+                    except: pass
+                    continue
+                
+                # Verifica se la connessione è ancora attiva
+                try:
+                    cur = raw_conn.cursor()
+                    cur.execute("SELECT 1")
+                    cur.close()
+                    conn = raw_conn
+                    break # Trovata valida
+                except:
+                    with cls._lock:
+                        cls._metrics["expired"] += 1
+                    try: raw_conn.close()
+                    except: pass
+                    continue
+                    
+            except queue.Empty:
+                break
 
-        # 2. Se non nel pool, creane una nuova
         if conn is None:
             try:
-                logger.debug("Creazione nuova connessione database...")
                 conn = cls._create_connection()
-                logger.debug("Connessione database creata con successo.")
             except Exception as e:
                 logger.warning(f"Impossibile creare nuova connessione ({e}), attendo pool liberi...")
                 try:
-                    conn = cls._pool_queue.get(block=True, timeout=10)
+                    # Se non possiamo crearne di nuove, attendiamo che qualcuno rilasci
+                    item = cls._pool_queue.get(block=True, timeout=10)
+                    conn, _ = item
                 except queue.Empty:
                     logger.error(f"Database non raggiungibile (Timeout o Pool esausto): {e}")
                     raise Exception(f"Database non raggiungibile: {e}")
+
+        with cls._lock:
+            cls._metrics["acquired"] += 1
+            cls._metrics["active_now"] += 1
 
         # 3. Imposta RLS Context
         try:
@@ -189,14 +225,32 @@ class SupabaseManager:
             cur.close()
             raw_conn.commit()
             
-            cls._pool_queue.put(raw_conn, block=False)
+            # Mettiamo in coda con il timestamp attuale
+            cls._pool_queue.put((raw_conn, time.time()), block=False)
+            
+            with cls._lock:
+                cls._metrics["released"] += 1
+                cls._metrics["active_now"] = max(0, cls._metrics["active_now"] - 1)
+                
         except queue.Full:
+            with cls._lock:
+                cls._metrics["active_now"] = max(0, cls._metrics["active_now"] - 1)
             try: raw_conn.close()
             except: pass
         except Exception as e:
             logger.warning(f"Errore rilascio connessione (chiusura forzata): {e}")
+            with cls._lock:
+                cls._metrics["active_now"] = max(0, cls._metrics["active_now"] - 1)
             try: raw_conn.close()
             except: pass
+
+    @classmethod
+    def get_metrics(cls) -> dict:
+        """Restituisce le statistiche del pool."""
+        with cls._lock:
+            m = dict(cls._metrics)
+            m["pool_idle"] = cls._pool_queue.qsize()
+            return m
 
     @classmethod
     def test_connection(cls) -> bool:
@@ -217,7 +271,8 @@ class SupabaseManager:
         count = 0
         while not cls._pool_queue.empty():
             try:
-                conn = cls._pool_queue.get(block=False)
+                item = cls._pool_queue.get(block=False)
+                conn = item[0] if isinstance(item, tuple) else item
                 conn.close()
                 count += 1
             except: pass
