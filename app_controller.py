@@ -46,7 +46,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 MAX_RECENT_FILES = 5
-VERSION = "0.50.00"
+VERSION = "0.52.00"
 
 class BackupEncoder(json.JSONEncoder):
     def default(self, obj):

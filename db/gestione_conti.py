@@ -69,14 +69,9 @@ def ottieni_conti(id_utente: str, master_key_b64: Optional[str] = None) -> List[
                     if 'config_speciale' in conto:
                         conto['config_speciale'] = try_decrypt(conto['config_speciale'], keys_to_try)
                     
-                    # Handle numeric fields that might be encrypted
-                    for field in ['valore_manuale', 'rettifica_saldo']:
-                        if field in conto and conto[field] is not None:
-                            decrypted = try_decrypt(conto[field], keys_to_try)
-                            try:
-                                conto[field] = float(decrypted)
-                            except (ValueError, TypeError):
-                                conto[field] = decrypted # Keep as is if not a number
+                    # Numeric fields (already plain numbers in DB)
+                    conto['valore_manuale'] = float(conto['valore_manuale']) if conto.get('valore_manuale') is not None else 0.0
+                    conto['rettifica_saldo'] = float(conto['rettifica_saldo']) if conto.get('rettifica_saldo') is not None else 0.0
             
             return conti
     except Exception as e:
@@ -288,13 +283,9 @@ def ottieni_dettagli_conti_utente(id_utente, master_key_b64=None):
                     else:
                         row['config_speciale'] = None
                     
-                    saldo_str = row['saldo_calcolato']
-                    if row['tipo'] == 'Fondo Pensione':
-                        if master_key:
-                            saldo_str = _decrypt_if_key(saldo_str, master_key, crypto, silent=True)
-                    
+                    # Saldo is now direct numeric from CASE
                     try:
-                        row['saldo_calcolato'] = float(saldo_str) if saldo_str else 0.0
+                        row['saldo_calcolato'] = float(row['saldo_calcolato']) if row['saldo_calcolato'] is not None else 0.0
                     except (ValueError, TypeError):
                         row['saldo_calcolato'] = 0.0
                 return results
@@ -529,12 +520,12 @@ def elimina_conto(id_conto, id_utente):
     try:
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("SELECT tipo, valore_manuale, COALESCE(CAST(rettifica_saldo AS NUMERIC), 0.0) as rettifica_saldo FROM Conti WHERE id_conto = %s AND id_utente = %s", (id_conto, id_utente))
+            cur.execute("SELECT tipo, valore_manuale, COALESCE(rettifica_saldo, 0.0) as rettifica_saldo FROM Conti WHERE id_conto = %s AND id_utente = %s", (id_conto, id_utente))
             res = cur.fetchone()
             if not res: return False
             tipo = res['tipo']
-            valore_manuale = res['valore_manuale']
-            rettifica_saldo = float(res['rettifica_saldo']) if res['rettifica_saldo'] else 0.0
+            valore_manuale = float(res['valore_manuale']) if res['valore_manuale'] is not None else 0.0
+            rettifica_saldo = float(res['rettifica_saldo'])
 
             saldo = 0.0
             num_transazioni = 0

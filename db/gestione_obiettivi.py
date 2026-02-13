@@ -41,9 +41,8 @@ def crea_obiettivo(id_famiglia: str, nome: str, importo_obiettivo: float, data_o
         
         key_to_use = family_key if family_key else master_key
         
-        # Encrypt data
+        # Encrypt data (Names and notes stay encrypted)
         nome_enc = _encrypt_if_key(nome, key_to_use, crypto)
-        importo_enc = _encrypt_if_key(str(importo_obiettivo), key_to_use, crypto)
         note_enc = _encrypt_if_key(note, key_to_use, crypto)
         
         with get_db_connection() as con:
@@ -51,7 +50,7 @@ def crea_obiettivo(id_famiglia: str, nome: str, importo_obiettivo: float, data_o
             cur.execute("""
                 INSERT INTO Obiettivi_Risparmio (id_famiglia, nome, importo_obiettivo, data_obiettivo, note, mostra_suggerimento_mensile)
                 VALUES (%s, %s, %s, %s, %s, %s)
-            """, (id_famiglia, nome_enc, importo_enc, data_obiettivo, note_enc, mostra_suggerimento))
+            """, (id_famiglia, nome_enc, importo_obiettivo, data_obiettivo, note_enc, mostra_suggerimento))
             con.commit()
             return True
     except Exception as e:
@@ -89,23 +88,17 @@ def ottieni_obiettivi(id_famiglia: str, master_key_b64: Optional[str] = None, id
                     
                     # Decrypt core data
                     nome = _decrypt_if_key(row['nome'], key_to_use, crypto, silent=True)
-                    importo_obj_str = _decrypt_if_key(row['importo_obiettivo'], key_to_use, crypto, silent=True)
+                    importo_obj = row['importo_obiettivo'] if row['importo_obiettivo'] else 0.0
                     note = _decrypt_if_key(row['note'], key_to_use, crypto, silent=True)
                     
                     # Calculate accumulated amount using Dynamic Logic (min(Assigned, RealBalance))
-                    # Reuse ottieni_salvadanai_obiettivo to ensure consistency with Dialog
-                    # Note: We pass master_key_b64 and id_utente, letting the function handle key derivation internally if needed,
-                    # but since we already have keys here, maybe we could optimize? 
-                    # ottieni_salvadanai_obiettivo re-derives keys. To avoid overhead, we could factor out the logic, 
-                    # but calling it is safer for consistency.
-                    
                     salvadanai = ottieni_salvadanai_obiettivo(goal_id, id_famiglia, master_key_b64, id_utente)
                     totale_accumulato = sum(s['importo'] for s in salvadanai)
 
                     obiettivi.append({
                         'id': goal_id,
                         'nome': nome,
-                        'importo_obiettivo': float(importo_obj_str) if importo_obj_str else 0.0,
+                        'importo_obiettivo': float(importo_obj),
                         'data_obiettivo': row['data_obiettivo'],
                         'importo_accumulato': totale_accumulato, 
                         'note': note,
@@ -143,7 +136,6 @@ def aggiorna_obiettivo(id_obiettivo: int, id_famiglia: str, nome: str, importo_o
         
         # Encrypt data
         nome_enc = _encrypt_if_key(nome, key_to_use, crypto)
-        importo_obj_enc = _encrypt_if_key(str(importo_obiettivo), key_to_use, crypto)
         note_enc = _encrypt_if_key(note, key_to_use, crypto)
         
         with get_db_connection() as con:
@@ -156,7 +148,7 @@ def aggiorna_obiettivo(id_obiettivo: int, id_famiglia: str, nome: str, importo_o
                     note = %s,
                     mostra_suggerimento_mensile = %s
                 WHERE id = %s AND id_famiglia = %s
-            """, (nome_enc, importo_obj_enc, data_obiettivo, note_enc, mostra_suggerimento, id_obiettivo, id_famiglia))
+            """, (nome_enc, importo_obiettivo, data_obiettivo, note_enc, mostra_suggerimento, id_obiettivo, id_famiglia))
             con.commit()
             return True
     except Exception as e:
@@ -213,9 +205,6 @@ def crea_salvadanaio(id_famiglia: str, nome: str, importo: float, id_obiettivo: 
             key_to_use = family_key if family_key else master_key
             if not key_to_use: return None
         
-        # If usa_saldo_totale is True, importo might be ignored (or used solely as cap if compiled). 
-        # But here we encrypt it anyway.
-        importo_enc = _encrypt_if_key(str(importo), key_to_use, crypto)
         note_enc = _encrypt_if_key("", key_to_use, crypto)
         nome_enc = _encrypt_if_key(nome, key_to_use, crypto)
 
@@ -227,7 +216,7 @@ def crea_salvadanaio(id_famiglia: str, nome: str, importo: float, id_obiettivo: 
                 INSERT INTO Salvadanai (id_famiglia, id_obiettivo, id_conto, id_conto_condiviso, id_asset, nome, importo_assegnato, note, incide_su_liquidita, usa_saldo_totale)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id_salvadanaio
-            """, (id_famiglia, id_obiettivo, id_conto, id_conto_condiviso, id_asset, nome_enc, importo_enc, note_enc, incide_su_liquidita, usa_saldo_totale))
+            """, (id_famiglia, id_obiettivo, id_conto, id_conto_condiviso, id_asset, nome_enc, importo, note_enc, incide_su_liquidita, usa_saldo_totale))
             
             row = cur.fetchone()
             con.commit()
@@ -316,12 +305,7 @@ def ottieni_salvadanai_conto(id_conto: int, id_famiglia: str, master_key_b64: Op
             results = []
             for r in rows:
                 nome = try_decrypt(r['nome'], keys_to_try)
-                imp_str = try_decrypt(r['importo_assegnato'], keys_to_try)
-                
-                try:
-                    importo = float(imp_str)
-                except:
-                    importo = 0.0
+                importo = float(r['importo_assegnato']) if r['importo_assegnato'] else 0.0
 
                 results.append({
                     'id': r['id_salvadanaio'],
@@ -379,13 +363,7 @@ def esegui_giroconto_salvadanaio(
             row = cur.fetchone()
             if not row: raise Exception("Salvadanaio non trovato")
             
-            current_pb_amount_enc = row['importo_assegnato']
-            # decryption of amount always uses PB key (which is family key usually or master)
-            current_pb_amount_str = _decrypt_if_key(current_pb_amount_enc, key_to_use, crypto, silent=True)
-            try:
-                current_pb_amount = float(current_pb_amount_str) if current_pb_amount_str else 0.0
-            except:
-                current_pb_amount = 0.0
+            current_pb_amount = float(row['importo_assegnato']) if row['importo_assegnato'] else 0.0
             
             # Determine correct table and column for Account Transaction
             if parent_is_shared:
@@ -428,9 +406,7 @@ def esegui_giroconto_salvadanaio(
             else:
                 raise Exception(f"Direzione sconosciuta: {direzione}")
 
-            # Save new PB amount
-            new_amount_enc = _encrypt_if_key(str(new_pb_amount), key_to_use, crypto)
-            cur.execute("UPDATE Salvadanai SET importo_assegnato = %s WHERE id_salvadanaio = %s", (new_amount_enc, id_salvadanaio))
+            cur.execute("UPDATE Salvadanai SET importo_assegnato = %s WHERE id_salvadanaio = %s", (new_pb_amount, id_salvadanaio))
             
             con.commit()
             return True
@@ -489,7 +465,7 @@ def ottieni_salvadanai_obiettivo(id_obiettivo: int, id_famiglia: str, master_key
                 
                 try:
                     nome = try_decrypt(row['nome'], keys_to_try)
-                    imp_str = try_decrypt(row['importo_assegnato'], keys_to_try)
+                    importo_nominale = float(row['importo_assegnato']) if row['importo_assegnato'] else 0.0
                     
                     source_name = "Manuale / Esterno"
                     source_balance = 0.0
@@ -595,9 +571,7 @@ def ottieni_salvadanai_obiettivo(id_obiettivo: int, id_famiglia: str, master_key
                         except:
                             source_name = "Conto Condiviso" 
                     
-                    # Determine Final Importo
-                    # If not linked to any source (manual), rely on importo_assegnato (imp_str)
-                    importo_nominale = float(imp_str) if imp_str and imp_str != "[ENCRYPTED]" else 0.0
+                    # Final Importo logic remain same
                     
                     final_importo = importo_nominale
                     
@@ -671,17 +645,12 @@ def elimina_salvadanaio(id_salvadanaio: int, id_famiglia: str, master_key_b64: O
             
             if (row['id_conto'] or row['id_conto_condiviso']) and not row['usa_saldo_totale'] and not row['id_asset']:
                 try:
-                    enc_val = row['importo_assegnato']
-                    dec_val = _decrypt_if_key(enc_val, key_to_use, crypto, silent=True)
-                    if dec_val == "[ENCRYPTED]" or dec_val is None:
-                        logger.error("Abort deleting Piggy Bank: Cannot decrypt amount to refund.")
-                        return False # ABORT: Cannot determine refund amount
-                        
-                    amount_to_refund = float(dec_val)
-                    if amount_to_refund > 0:
-                        needs_refund = True
+                    if row['importo_assegnato'] is not None:
+                        amount_to_refund = float(row['importo_assegnato'])
+                        if amount_to_refund > 0:
+                            needs_refund = True
                 except Exception as e:
-                    logger.error(f"Abort deleting Piggy Bank: Decryption error {e}")
+                    logger.error(f"Error reading refund amount: {e}")
                     return False # ABORT
             
             if needs_refund:
@@ -736,11 +705,9 @@ def admin_rettifica_salvadanaio(id_salvadanaio: int, nuovo_importo: float, maste
         else:
             key_to_use = family_key if family_key else master_key
             
-        importo_enc = _encrypt_if_key(str(nuovo_importo), key_to_use, crypto)
-        
         with get_db_connection() as con:
             cur = con.cursor()
-            cur.execute("UPDATE Salvadanai SET importo_assegnato = %s WHERE id_salvadanaio = %s", (importo_enc, id_salvadanaio))
+            cur.execute("UPDATE Salvadanai SET importo_assegnato = %s WHERE id_salvadanaio = %s", (nuovo_importo, id_salvadanaio))
             con.commit()
             return True
     except Exception as e:

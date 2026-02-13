@@ -49,45 +49,19 @@ def compra_asset(id_conto_investimento, ticker, nome_asset, quantita, costo_unit
         with get_db_connection() as con:
             cur = con.cursor()
             
-            # Fetch all assets to find match (since encryption is non-deterministic or mixed keys)
+            # Fetch matching asset directly if exists
             cur.execute(
-                "SELECT id_asset, ticker, quantita, costo_iniziale_unitario, nome_asset FROM Asset WHERE id_conto = %s",
-                (id_conto_investimento,))
-            assets = cur.fetchall()
-            
-            risultato = None
-            
-            # Helper for multi-key decryption
-            def try_decrypt(val, keys):
-                for k in keys:
-                    if not k: continue
-                    try:
-                        res = _decrypt_if_key(val, k, crypto, silent=True)
-                        if res != "[ENCRYPTED]": return res
-                    except: continue
-                # Fallback: try raw match if unencrypted (legacy)
-                return val 
-
-            for asset in assets:
-                db_ticker = asset['ticker']
-                # Decrypt ticker using all available keys
-                decrypted_ticker = try_decrypt(db_ticker, keys_to_try)
-                
-                if decrypted_ticker == ticker_upper:
-                    risultato = asset
-                    break
+                "SELECT id_asset, ticker, quantita, costo_iniziale_unitario, nome_asset FROM Asset WHERE id_conto = %s AND ticker = %s",
+                (id_conto_investimento, ticker_upper))
+            risultato = cur.fetchone()
             
             # Determine encryption key for NEW write
             # Use Family Key if available (shared logic preference), else Master Key
             write_key = family_key if family_key else master_key
             
-            # Encrypt for storage
-            encrypted_ticker = _encrypt_if_key(ticker_upper, write_key, crypto)
-            encrypted_nome_asset = _encrypt_if_key(nome_asset_upper, write_key, crypto)
-
             cur.execute(
                 "INSERT INTO Storico_Asset (id_conto, ticker, data, tipo_movimento, quantita, prezzo_unitario_movimento) VALUES (%s, %s, %s, %s, %s, %s)",
-                (id_conto_investimento, encrypted_ticker, datetime.date.today().strftime('%Y-%m-%d'), tipo_mov, quantita,
+                (id_conto_investimento, ticker_upper, datetime.date.today().strftime('%Y-%m-%d'), tipo_mov, quantita,
                  costo_unitario_nuovo))
                  
             if risultato:
@@ -113,7 +87,7 @@ def compra_asset(id_conto_investimento, ticker, nome_asset, quantita, costo_unit
                 prezzo_attuale = prezzo_attuale_override if prezzo_attuale_override is not None else costo_unitario_nuovo
                 cur.execute(
                     "INSERT INTO Asset (id_conto, ticker, nome_asset, quantita, costo_iniziale_unitario, prezzo_attuale_manuale) VALUES (%s, %s, %s, %s, %s, %s)",
-                    (id_conto_investimento, encrypted_ticker, encrypted_nome_asset, quantita, costo_unitario_nuovo,
+                    (id_conto_investimento, ticker_upper, nome_asset_upper, quantita, costo_unitario_nuovo,
                      prezzo_attuale))
             return True
     except Exception as e:
@@ -134,22 +108,10 @@ def vendi_asset(id_conto_investimento, ticker, quantita_da_vendere, prezzo_di_ve
             cur = con.cursor()
             # cur.execute("PRAGMA foreign_keys = ON;") # Removed for Supabase
             
-            # Fetch all assets to find match (encryption non-deterministic)
-            cur.execute("SELECT id_asset, ticker, quantita FROM Asset WHERE id_conto = %s",
-                        (id_conto_investimento,))
-            assets = cur.fetchall()
-            
-            risultato = None
-            for asset in assets:
-                db_ticker = asset['ticker']
-                # Decrypt logic similar to compra_asset
-                decrypted_ticker = _decrypt_if_key(db_ticker, encryption_key, crypto, silent=True)
-                if (decrypted_ticker == "[ENCRYPTED]" or decrypted_ticker == db_ticker) and encryption_key != master_key:
-                     decrypted_ticker = _decrypt_if_key(db_ticker, master_key, crypto, silent=True)
-
-                if decrypted_ticker == ticker_upper:
-                    risultato = asset
-                    break
+            # Fetch matching asset directly
+            cur.execute("SELECT id_asset, ticker, quantita FROM Asset WHERE id_conto = %s AND ticker = %s",
+                        (id_conto_investimento, ticker_upper))
+            risultato = cur.fetchone()
             
             if not risultato: return False
             
@@ -161,12 +123,9 @@ def vendi_asset(id_conto_investimento, ticker, quantita_da_vendere, prezzo_di_ve
 
             nuova_quantita = quantita_attuale - quantita_da_vendere
             
-            # Encrypt ticker for history
-            encrypted_ticker = _encrypt_if_key(ticker_upper, encryption_key, crypto)
-            
             cur.execute(
                 "INSERT INTO Storico_Asset (id_conto, ticker, data, tipo_movimento, quantita, prezzo_unitario_movimento) VALUES (%s, %s, %s, %s, %s, %s)",
-                (id_conto_investimento, encrypted_ticker, datetime.date.today().strftime('%Y-%m-%d'), 'VENDI',
+                (id_conto_investimento, ticker_upper, datetime.date.today().strftime('%Y-%m-%d'), 'VENDI',
                  quantita_da_vendere, prezzo_di_vendita_unitario))
                  
             if nuova_quantita < 1e-9:
@@ -199,35 +158,12 @@ def ottieni_portafoglio(id_conto_investimento, master_key_b64=None):
                                (quantita * (prezzo_attuale_manuale - costo_iniziale_unitario)) AS gain_loss_totale
                         FROM Asset
                         WHERE id_conto = %s
+                        ORDER BY ticker
                         """, (id_conto_investimento,))
             results = [dict(row) for row in cur.fetchall()]
             
-            # Decrypt fields
-            if master_key:
-                # Determine correct key for this account (Family or Master)
-                encryption_key = _get_key_for_transaction(id_conto_investimento, master_key, crypto)
-                
-                for row in results:
-                    # Preserve original encrypted values for fallback
-                    ticker_orig = row['ticker']
-                    nome_asset_orig = row['nome_asset']
-
-                    # Try encryption_key first (could be Family key)
-                    row['ticker'] = _decrypt_if_key(ticker_orig, encryption_key, crypto, silent=True)
-                    row['nome_asset'] = _decrypt_if_key(nome_asset_orig, encryption_key, crypto, silent=True)
-                    
-                    # Fallback to master_key if failed (and keys are different)
-                    if encryption_key != master_key:
-                        if row['ticker'] == "[ENCRYPTED]" or row['ticker'].startswith("gAAAAA"):
-                             decrypted = _decrypt_if_key(ticker_orig, master_key, crypto, silent=True)
-                             if decrypted and decrypted != "[ENCRYPTED]": row['ticker'] = decrypted
-                        
-                        if row['nome_asset'] == "[ENCRYPTED]" or row['nome_asset'].startswith("gAAAAA"):
-                             decrypted = _decrypt_if_key(nome_asset_orig, master_key, crypto, silent=True)
-                             if decrypted and decrypted != "[ENCRYPTED]": row['nome_asset'] = decrypted
-            
-            # Sort by ticker (in Python because DB has encrypted data)
-            results.sort(key=lambda x: x['ticker'])
+            # Plaintext results
+            return results
             
             return results
     except Exception as e:
@@ -265,20 +201,14 @@ def modifica_asset_dettagli(id_asset, nuovo_ticker, nuovo_nome, nuova_quantita=N
     except Exception as e:
         print(f"[ERRORE] Errore recupero conto per modifica dettagli asset: {e}")
 
-    # Encrypt if key available
-    crypto, master_key = _get_crypto_and_key(master_key_b64)
-    encryption_key = _get_key_for_transaction(id_conto, master_key, crypto)
-    
-    encrypted_ticker = _encrypt_if_key(nuovo_ticker_upper, encryption_key, crypto)
-    encrypted_nome = _encrypt_if_key(nuovo_nome_upper, encryption_key, crypto)
-    
+    # Names are now plaintext
     try:
         with get_db_connection() as con:
             cur = con.cursor()
             
             # Costruisci query dinamica
             query = "UPDATE Asset SET ticker = %s, nome_asset = %s"
-            params = [encrypted_ticker, encrypted_nome]
+            params = [nuovo_ticker_upper, nuovo_nome_upper]
             
             if nuova_quantita is not None:
                 query += ", quantita = %s"
@@ -317,20 +247,13 @@ def elimina_asset(id_asset):
 
 # --- Funzioni Investimenti ---
 def aggiungi_investimento(id_conto, ticker, nome_asset, quantita, costo_unitario, data_acquisto, master_key_b64=None):
-    # Encrypt if key available
-    crypto, master_key = _get_crypto_and_key(master_key_b64)
-    # Determine correct key (Family Key if applicable)
-    encryption_key = _get_key_for_transaction(id_conto, master_key, crypto)
-    
-    encrypted_ticker = _encrypt_if_key(ticker.upper(), encryption_key, crypto)
-    encrypted_nome = _encrypt_if_key(nome_asset, encryption_key, crypto)
-
+    # Plaintext
     try:
         with get_db_connection() as con:
             cur = con.cursor()
             cur.execute(
                 "INSERT INTO Asset (id_conto, ticker, nome_asset, quantita, costo_iniziale_unitario, data_acquisto, prezzo_attuale_manuale) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id_asset",
-                (id_conto, encrypted_ticker, encrypted_nome, quantita, costo_unitario, data_acquisto, costo_unitario))
+                (id_conto, ticker.upper(), nome_asset, quantita, costo_unitario, data_acquisto, costo_unitario))
             return cur.fetchone()['id_asset']
     except Exception as e:
         print(f"[ERRORE] Errore aggiunta investimento: {e}")
@@ -349,19 +272,13 @@ def modifica_investimento(id_asset, ticker, nome_asset, quantita, costo_unitario
     except Exception as e:
         print(f"[ERRORE] Errore recupero conto per modifica asset: {e}")
 
-    # Encrypt if key available
-    crypto, master_key = _get_crypto_and_key(master_key_b64)
-    encryption_key = _get_key_for_transaction(id_conto, master_key, crypto)
-
-    encrypted_ticker = _encrypt_if_key(ticker.upper(), encryption_key, crypto)
-    encrypted_nome = _encrypt_if_key(nome_asset, encryption_key, crypto)
-
+    # Plaintext
     try:
         with get_db_connection() as con:
             cur = con.cursor()
             cur.execute(
                 "UPDATE Asset SET ticker = %s, nome_asset = %s, quantita = %s, costo_iniziale_unitario = %s, data_acquisto = %s WHERE id_asset = %s",
-                (encrypted_ticker, encrypted_nome, quantita, costo_unitario, data_acquisto, id_asset))
+                (ticker.upper(), nome_asset, quantita, costo_unitario, data_acquisto, id_asset))
             return cur.rowcount > 0
     except Exception as e:
         print(f"[ERRORE] Errore modifica investimento: {e}")
@@ -384,25 +301,8 @@ def ottieni_investimenti(id_conto, master_key_b64=None):
             cur.execute("SELECT * FROM Asset WHERE id_conto = %s", (id_conto,))
             assets = [dict(row) for row in cur.fetchall()]
             
-            # Decrypt if key available
-            crypto, master_key = _get_crypto_and_key(master_key_b64)
-            if master_key:
-                # Determine encryption key (Family vs Master)
-                encryption_key = _get_key_for_transaction(id_conto, master_key, crypto)
-                
-                for asset in assets:
-                    asset['ticker'] = _decrypt_if_key(asset['ticker'], encryption_key, crypto, silent=True)
-                    asset['nome_asset'] = _decrypt_if_key(asset['nome_asset'], encryption_key, crypto, silent=True)
-                    
-                    # Fallback to master_key if failed
-                    if encryption_key != master_key:
-                        if asset['ticker'] == "[ENCRYPTED]" or asset['ticker'].startswith("gAAAAA"):
-                             decrypted = _decrypt_if_key(asset['ticker'], master_key, crypto, silent=True)
-                             if decrypted and decrypted != "[ENCRYPTED]": asset['ticker'] = decrypted
-                        
-                        if asset['nome_asset'] == "[ENCRYPTED]" or asset['nome_asset'].startswith("gAAAAA"):
-                             decrypted = _decrypt_if_key(asset['nome_asset'], master_key, crypto, silent=True)
-                             if decrypted and decrypted != "[ENCRYPTED]": asset['nome_asset'] = decrypted
+            # Plaintext
+            return assets
             
             return assets
     except Exception as e:
@@ -417,25 +317,8 @@ def ottieni_dettaglio_asset(id_asset, master_key_b64=None):
             res = cur.fetchone()
             if not res: return None
             
-            asset = dict(res)
-            # Decrypt if key available
-            crypto, master_key = _get_crypto_and_key(master_key_b64)
-            if master_key:
-                # Determine encryption key (Family vs Master)
-                id_conto = asset.get('id_conto')
-                encryption_key = _get_key_for_transaction(id_conto, master_key, crypto)
-                
-                # Decrypt ticker
-                decrypted = _decrypt_if_key(asset['ticker'], encryption_key, crypto, silent=True)
-                if (decrypted == "[ENCRYPTED]" or decrypted == asset['ticker']) and encryption_key != master_key:
-                     decrypted = _decrypt_if_key(asset['ticker'], master_key, crypto, silent=True)
-                if decrypted and decrypted != "[ENCRYPTED]": asset['ticker'] = decrypted
-
-                # Decrypt nome_asset
-                decrypted = _decrypt_if_key(asset['nome_asset'], encryption_key, crypto, silent=True)
-                if (decrypted == "[ENCRYPTED]" or decrypted == asset['nome_asset']) and encryption_key != master_key:
-                     decrypted = _decrypt_if_key(asset['nome_asset'], master_key, crypto, silent=True)
-                if decrypted and decrypted != "[ENCRYPTED]": asset['nome_asset'] = decrypted
+            # Plaintext
+            return asset
             
             return asset
     except Exception as e:

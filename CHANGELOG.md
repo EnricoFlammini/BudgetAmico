@@ -6,6 +6,17 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
 
+### v0.52.00 (13/02/2026)
+- **Crittografia Selettiva (Fase 3)**:
+    - **Plaintext Data**: Migrati i campi non sensibili (`nome_categoria`, `nome_sottocategoria`, `ticker`, `nome_asset`) in chiaro per migliorare drasticamente le performance di ricerca, filtri e ordinamento.
+    - **Native Numeric Types**: Convertiti i campi di importo (`importo_obiettivo`, `importo_assegnato`) da `TEXT` a `NUMERIC` nel database, garantendo precisione nei calcoli e ordinamento numerico corretto.
+    - **SQL Optimization**: Aggiornate tutte le query dei moduli `gestione_investimenti`, `gestione_conti`, `gestione_categorie` e `gestione_obiettivi` per utilizzare l'ordinamento nativo del database (`ORDER BY`).
+    - **Refactoring Sicurezza**: Rimossa la logica di crittografia/decrittografia superflua per i campi migrati, semplificando il codice e riducendo il carico di lavoro del client.
+    - **Storico Asset**: Inclusa la tabella `Storico_Asset` nella migrazione per una gestione coerente dei ticker.
+- **Fix & Stabilità**:
+    - Corretto errore di indentazione nel modulo `gestione_conti.py`.
+    - Migliorata la robustezza dello script di migrazione per la conversione dei tipi numerici.
+
 ### v0.50.01 (11/02/2026)
 - **Fix Stabilità UI (AssertionError)**:
     - Eliminato completamente l'errore `AssertionError: Control must be added to the page first`.
