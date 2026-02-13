@@ -1051,7 +1051,7 @@ class AdminPanelView:
             try: saved_data = json.loads(raw)
             except: logger.error("Errore parsing global_fop_matrix")
 
-        operations = ["Spesa", "Incasso", "Giroconto (Mittente)", "Giroconto (Ricevente)", "Spesa Fissa", "Prestiti", "Satispay (Collegamento)", "PayPal (Fonti)"]
+        operations = ["Spesa", "Incasso", "Giroconto (Mittente)", "Giroconto (Ricevente)", "Spesa Fissa", "Prestiti", "Accantonamenti", "Satispay (Collegamento)", "PayPal (Fonti)"]
         types = ["Conto Corrente", "Carte", "Risparmio", "Investimenti", "Contanti", "Fondo Pensione", "Salvadanaio", "Satispay", "PayPal"]
         scopes = ["Personale", "Condiviso", "Altri Familiari"]
         
@@ -1088,6 +1088,7 @@ class AdminPanelView:
                     if op in ["Giroconto (Mittente)", "Giroconto (Ricevente)"] and t in ["Conto Corrente", "Salvadanaio"]: default = True
                     if op == "Satispay (Collegamento)" and t == "Conto Corrente" and s != "Altri Familiari": default = True
                     if op == "PayPal (Fonti)" and t in ["Conto Corrente", "Carte"] and s != "Altri Familiari": default = True
+                    if op == "Accantonamenti" and t in ["Conto Corrente", "Risparmio"] and s != "Altri Familiari": default = True
                     
                     val = op_data.get(t, {}).get(s, default)
                     cb = ft.Checkbox(value=val, data={"op": op, "type": t, "scope": s})
