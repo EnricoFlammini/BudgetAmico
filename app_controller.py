@@ -19,6 +19,7 @@ from views.export_view import ExportView
 from dialogs.transaction_dialog import TransactionDialog
 from dialogs.conto_dialog import ContoDialog
 from dialogs.card_dialog import CardDialog
+from dialogs.onboarding_dialog import OnboardingDialog
 from dialogs.contact_dialog import ContactDialog
 from dialogs.admin_dialogs import AdminDialogs
 from dialogs.portafoglio_dialogs import PortafoglioDialogs
@@ -46,7 +47,7 @@ from utils.logger import setup_logger
 logger = setup_logger("AppController")
 
 MAX_RECENT_FILES = 5
-VERSION = "0.52.01"
+VERSION = "0.53.00"
 
 class BackupEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -87,6 +88,7 @@ class AppController:
         # Inizializza i dialoghi
         self.transaction_dialog = TransactionDialog(self)
         self.conto_dialog = ContoDialog(self)
+        self.onboarding_dialog = OnboardingDialog(self)
         self.admin_dialogs = AdminDialogs(self)
         self.portafoglio_dialogs = PortafoglioDialogs(self)
         self.prestito_dialogs = PrestitoDialogs(self)
@@ -360,7 +362,32 @@ class AppController:
         # Controlla aggiornamenti in background
         self._controlla_aggiornamenti_in_background()
 
+        # Prova Onboarding
+        self._check_onboarding()
+
+    def _check_onboarding(self):
+        """Controlla se mostrare il tutorial di onboarding."""
+        family_id = self.get_family_id()
+        if not family_id:
+            return
+
+        from db.gestione_config import is_onboarding_completed
+        if not is_onboarding_completed(family_id):
+            # Se siamo qui, il tutorial non è marchiato come completato.
+            # Vediamo se ci sono conti. Se non ce ne sono, partiamo.
+            from db.gestione_conti import ottieni_tutti_i_conti_famiglia
+            conti = ottieni_tutti_i_conti_famiglia(family_id)
+            if not conti:
+                logger.info(f"Triggering onboarding for family {family_id}")
+                self.onboarding_dialog.show()
+            else:
+                # Se ci sono conti ma non è marcato, forse l'utente ha fatto da solo.
+                # Marchiamolo come completato per non disturbare.
+                from db.gestione_config import set_onboarding_completed
+                set_onboarding_completed(family_id)
+
     def _aggiorna_prezzi_asset_in_background(self):
+        # ... (rest of the file)
         """Aggiorna i prezzi degli asset nel portafoglio in background."""
         from utils.async_task import AsyncTask
         from utils.yfinance_manager import ottieni_prezzi_multipli
@@ -952,7 +979,7 @@ class AppController:
         self.show_loading("Apertura dialogo...")
         try:
             def callback():
-                self.update_all_views()
+                self.update_all_views(target_tab="carte")
                 
             dlg = CardDialog(self.page, callback)
             dlg.open()
@@ -1015,17 +1042,25 @@ class AppController:
         finally:
             self.hide_loading()
 
-    def update_all_views(self, is_initial_load=False):
+    def update_all_views(self, is_initial_load=False, target_tab=None):
         if self.dashboard_view:
             self.dashboard_view.update_all_tabs_data(is_initial_load)
+            if target_tab:
+                self.dashboard_view.navigate_to_tab(target_tab)
+        
         if not is_initial_load:
+            # Se siamo in fase di onboarding, riapriamo il dialogo per lo step successivo
+            if hasattr(self, 'onboarding_dialog') and self.onboarding_dialog.open is False:
+                if self.onboarding_dialog.current_step in [3, 4]:
+                    self.onboarding_dialog.show_next_automatic()
+            
             self.page.update()
 
-    def db_write_operation(self):
+    def db_write_operation(self, target_tab=None):
         """Chiamato dopo operazioni di scrittura sul database."""
         self.show_loading("Salvataggio...")
         try:
-            self.update_all_views()
+            self.update_all_views(target_tab=target_tab)
         finally:
             self.hide_loading()
 

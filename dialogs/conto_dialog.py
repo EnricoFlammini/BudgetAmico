@@ -947,7 +947,7 @@ class ContoDialog(ft.AlertDialog):
                 self.controller.page.update()
                 if self in self.controller.page.overlay:
                     self.controller.page.overlay.remove(self)
-                self.controller.update_all_views()  # Aggiorna tutte le viste e sincronizza
+                self.controller.update_all_views(target_tab="conti")  # Aggiorna tutte le viste e sincronizza
             else:
                 if not self.conto_id_in_modifica and not new_conto_id:
                     self.txt_conto_iban.error_text = self.loc.get("iban_in_use_or_invalid")

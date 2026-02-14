@@ -1029,7 +1029,7 @@ class TransactionDialog(ft.AlertDialog):
                 self.controller.page.update()
                 
                 # 3. Ora avvia l'aggiornamento globale (che mostrerà lo spinner correttamente)
-                self.controller.db_write_operation()
+                self.controller.db_write_operation(target_tab="home" if messaggio == "aggiunta" else None)
                 logger.info(f"[DB] Transaction saved successfully: {messaggio}")
                 self.controller.show_snack_bar(f"Transazione {messaggio} con successo!", success=True)
             else:

@@ -262,3 +262,14 @@ def set_disabled_features(id_famiglia: str, features_list: List[str]) -> bool:
         logger.error(f"Errore set_disabled_features: {e}")
         return False
 
+# --- Gestione Onboarding ---
+
+def is_onboarding_completed(id_famiglia: str) -> bool:
+    """Verifica se il tutorial di onboarding è stato completato per la famiglia."""
+    val = get_configurazione('onboarding_completed', id_famiglia=id_famiglia)
+    return val == 'true'
+
+def set_onboarding_completed(id_famiglia: str) -> bool:
+    """Segna il tutorial di onboarding come completato per la famiglia."""
+    return set_configurazione('onboarding_completed', 'true', id_famiglia=id_famiglia)
+

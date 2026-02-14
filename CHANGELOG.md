@@ -5,6 +5,14 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 ---
 
 ## 📅 Changelog
+ 
+### v0.53.00 (14/02/2026)
+- **Nuove Funzionalità**:
+    - **Tutorial di Onboarding**: Introdotta una guida interattiva per i nuovi utenti che aiuta nella configurazione iniziale (Conto, Carta).
+    - **Reindirizzamento Automatico**: Implementata la navigazione automatica dopo la creazione di record (es. reindirizzamento a 'Conti' dopo la creazione di un conto, 'Carte' dopo una carta, 'Home' dopo una transazione).
+    - **Navigazione Programmatica**: Aggiunto supporto nel `DashboardView` per la navigazione a tab specifica tramite chiave identificativa (`navigate_to_tab`).
+- **Database**:
+    - **Persistenza Onboarding**: Aggiunta gestione dello stato di completamento del tutorial nel modulo `gestione_config.py`.
 
 ### v0.52.01 (13/02/2026)
 - **Fix Critici**:

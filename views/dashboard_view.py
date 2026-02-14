@@ -165,6 +165,42 @@ class DashboardView:
         self.update_sidebar()
         self._safe_update(self.page)
 
+    def navigate_to_tab(self, tab_key: str):
+        """
+        Naviga a una tab specifica tramite chiave identificativa.
+        Chiavi supportate: 'home', 'budget', 'conti', 'carte', 'spese_fisse', 
+        'investimenti', 'prestiti', 'immobili', 'accantonamenti', 'famiglia', 'contatti', 'admin', 'impostazioni'.
+        """
+        # Mappa chiavi -> Viste
+        key_map = {
+            "home": self.tab_personale,
+            "budget": self.tab_budget,
+            "conti": self.tab_conti,
+            "carte": self.tab_carte,
+            "spese_fisse": self.tab_spese_fisse,
+            "investimenti": self.tab_investimenti,
+            "prestiti": self.tab_prestiti,
+            "immobili": self.tab_immobili,
+            "accantonamenti": self.tab_accantonamenti,
+            "famiglia": self.tab_famiglia,
+            "contatti": self.tab_contatti,
+            "admin": self.tab_admin,
+            "impostazioni": self.tab_impostazioni
+        }
+        
+        target_view = key_map.get(tab_key.lower())
+        if not target_view:
+            logger.warning(f"Navigate to tab: key '{tab_key}' not found.")
+            return
+
+        # Trova l'indice corretto basandosi sulla sidebar_items corrente
+        for i, item in enumerate(self.sidebar_items):
+            if item['view'] == target_view:
+                self._sidebar_item_clicked(i, target_view)
+                return
+        
+        logger.warning(f"Navigate to tab: view for key '{tab_key}' not present in sidebar (maybe disabled).")
+
     def build_view(self) -> ft.View:
         """
         Costruisce e restituisce la vista del Dashboard con sidebar personalizzata.
