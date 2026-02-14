@@ -11,15 +11,19 @@ import os
 
 logger = setup_logger(__name__)
 import json
-
+import base64
 from db.crypto_helpers import (
     _encrypt_if_key, _decrypt_if_key, 
     _get_crypto_and_key, _valida_id_int,
     compute_blind_index, encrypt_system_data, decrypt_system_data,
     generate_unique_code,
     SERVER_SECRET_KEY,
-    crypto as _crypto_instance
+    crypto as _crypto_instance,
+    _get_family_key_for_user
 )
+
+# Importazioni da altri moduli
+from db.gestione_famiglie import ottieni_prima_famiglia_utente, _trova_admin_famiglia
 
 
 # --- NUOVE FUNZIONI PER SPESE FISSE ---

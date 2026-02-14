@@ -12,7 +12,6 @@ import os
 logger = setup_logger(__name__)
 import json
 import base64
-
 from db.crypto_helpers import (
     _encrypt_if_key, _decrypt_if_key, 
     _get_crypto_and_key, _valida_id_int,
@@ -21,6 +20,9 @@ from db.crypto_helpers import (
     SERVER_SECRET_KEY,
     crypto as _crypto_instance
 )
+
+# Importazioni da altri moduli per evitare NameError
+from db.gestione_conti import aggiungi_conto
 
 
 

@@ -314,22 +314,26 @@ class CardDialog:
                 self.page.update()
 
     def _aggiorna_preview_personalizzazione(self):
-        self.icon_preview.content = AppStyles.get_logo_control(
-            tipo=self.dd_tipo.value or "debito",
-            circuito=self.dd_circuito.value,
-            size=30,
-            icona=self.selected_icon_value,
-            colore=self.selected_color_value
-        )
-        self.color_preview.bgcolor = self.selected_color_value if self.selected_color_value else ft.Colors.BLUE_GREY_700
-        
-        # Forza aggiornamento preview (Solo se montato su una pagina)
-        if self.icon_preview.page:
-            self.icon_preview.update()
-        if self.color_preview.page:
-            self.color_preview.update()
-        if self.container_personalizzazione.page:
-            self.container_personalizzazione.update()
+        try:
+            self.icon_preview.content = AppStyles.get_logo_control(
+                tipo=self.dd_tipo.value or "debito",
+                circuito=self.dd_circuito.value,
+                size=30,
+                icona=self.selected_icon_value,
+                colore=self.selected_color_value
+            )
+            self.color_preview.bgcolor = self.selected_color_value if self.selected_color_value else ft.Colors.BLUE_GREY_700
+            
+            # Forza aggiornamento preview (Solo se montato su una pagina)
+            if self.icon_preview.page:
+                self.icon_preview.update()
+            if self.color_preview.page:
+                self.color_preview.update()
+            if self.container_personalizzazione.page:
+                self.container_personalizzazione.update()
+        except Exception as ex:
+            import logging
+            logging.getLogger("CardDialog").error(f"Errore aggiornamento preview personalizzazione: {ex}")
 
     def _apri_selettore_icona(self, e):
         """Apre un selettore di icone categorizzato (Standard, Conti, Carte, Comuni)."""
@@ -403,8 +407,10 @@ class CardDialog:
             ],
             modal=True
         )
+        # Close main dialog before opening picker to avoid double overlay complexity
         self.dlg.open = False
         self.page.update()
+        
         if self._picker_dlg not in self.page.overlay:
             self.page.overlay.append(self._picker_dlg)
         self._picker_dlg.open = True
@@ -413,6 +419,8 @@ class CardDialog:
     def _seleziona_icona_flet(self, icon_name):
         self.selected_icon_value = icon_name
         self._picker_dlg.open = False
+        if self._picker_dlg in self.page.overlay:
+            self.page.overlay.remove(self._picker_dlg)
         self.dlg.open = True
         self.page.update()
         self._aggiorna_preview_personalizzazione()
@@ -420,6 +428,8 @@ class CardDialog:
     def _seleziona_icona(self, icon_path):
         self.selected_icon_value = icon_path
         self._picker_dlg.open = False
+        if self._picker_dlg in self.page.overlay:
+            self.page.overlay.remove(self._picker_dlg)
         self.dlg.open = True
         self.page.update()
         self._aggiorna_preview_personalizzazione()
@@ -439,8 +449,10 @@ class CardDialog:
             ],
             modal=True
         )
+        # Close main dialog before opening picker to avoid double overlay complexity
         self.dlg.open = False
         self.page.update()
+        
         if self._picker_dlg not in self.page.overlay:
             self.page.overlay.append(self._picker_dlg)
         self._picker_dlg.open = True
@@ -449,12 +461,16 @@ class CardDialog:
     def _seleziona_colore(self, color):
         self.selected_color_value = color
         self._picker_dlg.open = False
+        if self._picker_dlg in self.page.overlay:
+            self.page.overlay.remove(self._picker_dlg)
         self.dlg.open = True
         self.page.update()
         self._aggiorna_preview_personalizzazione()
 
     def _chiudi_picker_e_torna(self):
         self._picker_dlg.open = False
+        if self._picker_dlg in self.page.overlay:
+            self.page.overlay.remove(self._picker_dlg)
         self.dlg.open = True
         self.page.update()
 

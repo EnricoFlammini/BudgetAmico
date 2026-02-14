@@ -234,6 +234,10 @@ class AppStyles:
         """
         import json
         
+        # Guard su tipo
+        if not isinstance(tipo, str):
+            tipo = str(tipo or "Conto")
+        
         t_low = tipo.lower()
         
         # Colore icone: sempre nero per massimo contrasto su sfondo bianco
@@ -241,6 +245,12 @@ class AppStyles:
         
         def _wrap_in_white_box(content: ft.Control, sz: int) -> ft.Container:
             """Avvolge un controllo in un container bianco circolare."""
+            try:
+                opacity_val = 0.15
+                shadow_color = ft.Colors.with_opacity(opacity_val, ft.Colors.BLACK)
+            except:
+                shadow_color = ft.Colors.GREY_300
+
             return ft.Container(
                 content=content,
                 width=sz,
@@ -251,12 +261,12 @@ class AppStyles:
                 shadow=ft.BoxShadow(
                     spread_radius=0,
                     blur_radius=2,
-                    color=ft.Colors.with_opacity(0.15, ft.Colors.BLACK),
+                    color=shadow_color,
                 ),
             )
         
         # 0. Priorità: Icona Personalizzata
-        if icona:
+        if icona and isinstance(icona, str):
             # Caso 1: Icona con percorso (es. "conti/mio_logo.png" o "custom/...")
             if "/" in icona and icona.lower().endswith(('.png', '.jpg', '.jpeg')):
                 icon_path = f"/icons/{icona}" # Flet mappa assets/icons -> /icons
@@ -308,8 +318,12 @@ class AppStyles:
             fallback_icon = ft.Icons.SMARTPHONE
             if config_speciale:
                 try:
-                    config = json.loads(config_speciale or '{}')
-                    sottotipo = config.get('sottotipo', '').lower()
+                    if isinstance(config_speciale, str):
+                        config = json.loads(config_speciale)
+                    else:
+                        config = config_speciale # Caso in cui sia già dict
+                    
+                    sottotipo = str(config.get('sottotipo', '')).lower()
                     if sottotipo == 'satispay':
                         logo_file = "satispay_logo.png"
                         fallback_text = "S"
@@ -322,7 +336,7 @@ class AppStyles:
         
         # Logica per Carte
         elif circuito:
-            c_low = circuito.lower()
+            c_low = str(circuito).lower()
             if "visa" in c_low: logo_file = "visa_logo.png"
             elif "mastercard" in c_low: logo_file = "mastercard_logo.png"
             elif "amex" in c_low or "american" in c_low: logo_file = "amex_logo.png"
@@ -336,36 +350,46 @@ class AppStyles:
         
         # 2. Costruzione del controllo
         inner_size = int(size * 0.7)
-        if logo_file:
-            # Fallback error_content per immagini mancanti
-            if fallback_text:
-                error_ctrl = ft.Container(
-                    content=ft.Text(fallback_text, size=min(14, inner_size-4), weight="bold", color=ft.Colors.WHITE),
-                    bgcolor=fallback_bg,
-                    width=size, height=size,
-                    border_radius=size/2,
-                    alignment=ft.alignment.center,
+        try:
+            if logo_file:
+                # Fallback error_content per immagini mancanti
+                if fallback_text:
+                    error_ctrl = ft.Container(
+                        content=ft.Text(fallback_text, size=min(14, max(8, inner_size-4)), weight="bold", color=ft.Colors.WHITE),
+                        bgcolor=fallback_bg,
+                        width=size, height=size,
+                        border_radius=size/2,
+                        alignment=ft.alignment.center,
+                    )
+                else:
+                    error_ctrl = _wrap_in_white_box(
+                        ft.Icon(fallback_icon, size=inner_size, color=icon_color),
+                        size
+                    )
+                
+                return _wrap_in_white_box(
+                    ft.Image(
+                        src=logo_file,
+                        width=inner_size,
+                        height=inner_size,
+                        fit=ft.ImageFit.CONTAIN,
+                        error_content=error_ctrl,
+                    ),
+                    size
                 )
             else:
-                error_ctrl = _wrap_in_white_box(
+                return _wrap_in_white_box(
                     ft.Icon(fallback_icon, size=inner_size, color=icon_color),
                     size
                 )
-            
-            return _wrap_in_white_box(
-                ft.Image(
-                    src=logo_file,
-                    width=inner_size,
-                    height=inner_size,
-                    fit=ft.ImageFit.CONTAIN,
-                    error_content=error_ctrl,
-                ),
-                size
-            )
-        else:
-            return _wrap_in_white_box(
-                ft.Icon(fallback_icon, size=inner_size, color=icon_color),
-                size
+        except Exception as e:
+            # Fallback estremo in caso di errore nella costruzione del logo
+            return ft.Container(
+                content=ft.Icon(ft.Icons.ERROR_OUTLINE, size=size*0.7, color=ft.Colors.RED),
+                width=size, height=size,
+                bgcolor=ft.Colors.WHITE,
+                border_radius=size/2,
+                alignment=ft.alignment.center
             )
 
     @staticmethod

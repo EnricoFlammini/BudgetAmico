@@ -19,8 +19,14 @@ from db.crypto_helpers import (
     compute_blind_index, encrypt_system_data, decrypt_system_data,
     generate_unique_code,
     SERVER_SECRET_KEY,
-    crypto as _crypto_instance
+    crypto as _crypto_instance,
+    _get_family_key_for_user
 )
+
+# Importazioni da altri moduli per evitare NameError
+from db.gestione_spese_fisse import ottieni_spese_fisse_famiglia
+from db.gestione_transazioni import aggiungi_transazione, aggiungi_transazione_condivisa, _get_key_for_transaction
+from db.gestione_famiglie import ottieni_prima_famiglia_utente, _get_family_key_for_user, _trova_admin_famiglia
 
 
 

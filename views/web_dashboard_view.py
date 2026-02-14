@@ -257,6 +257,56 @@ class WebDashboardView:
         self.page.close(self.drawer)
         self.page.update()
 
+    def navigate_to_tab(self, tab_key: str):
+        """
+        Naviga a una tab specifica tramite chiave identificativa.
+        Chiavi supportate: 'home', 'budget', 'conti', 'carte', 'spese_fisse', 
+        'investimenti', 'prestiti', 'immobili', 'accantonamenti', 'famiglia', 'contatti', 'admin', 'impostazioni'.
+        """
+        # Mappa chiavi -> Viste
+        key_map = {
+            "home": self.tab_personale,
+            "budget": self.tab_budget,
+            "conti": self.tab_conti,
+            "carte": self.tab_carte,
+            "spese_fisse": self.tab_spese_fisse,
+            "investimenti": self.tab_investimenti,
+            "prestiti": self.tab_prestiti,
+            "immobili": self.tab_immobili,
+            "accantonamenti": self.tab_accantonamenti,
+            "famiglia": self.tab_famiglia,
+            "contatti": self.tab_contatti,
+            "admin": self.tab_admin,
+            "impostazioni": self.tab_impostazioni,
+            "info": self.tab_info
+        }
+        
+        target_view = key_map.get(tab_key.lower())
+        if not target_view:
+            logger.warning(f"[WEB] Navigate to tab: key '{tab_key}' not found.")
+            return
+
+        # Trova l'indice corretto basandosi sulla active_tabs corrente
+        for i, (view, icon, label) in enumerate(self.active_tabs):
+            if view == target_view:
+                logger.info(f"[WEB] Navigating to tab {tab_key} (index {i})")
+                self.selected_index = i
+                self.content_area.content = view
+                
+                # Aggiorna il Drawer se presente
+                if self.drawer:
+                    self.drawer.selected_index = i
+                
+                if hasattr(view, 'update_view_data'):
+                    view.update_view_data()
+                elif hasattr(view, 'update_all_admin_tabs_data'):
+                    view.update_all_admin_tabs_data()
+                
+                self.page.update()
+                return
+        
+        logger.warning(f"[WEB] Navigate to tab: view for key '{tab_key}' not present in active tabs.")
+
     def _open_add_menu(self, e):
         """Apre un BottomSheet con le opzioni di aggiunta."""
         logger.info("[WEB] FAB '+' clicked: Opening add menu")

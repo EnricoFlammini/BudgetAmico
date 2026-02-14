@@ -11,15 +11,18 @@ import os
 
 logger = setup_logger(__name__)
 import base64
-
 from db.crypto_helpers import (
     _encrypt_if_key, _decrypt_if_key, 
     _get_crypto_and_key, _valida_id_int,
     compute_blind_index, encrypt_system_data, decrypt_system_data,
     generate_unique_code,
     SERVER_SECRET_KEY,
-    crypto as _crypto_instance
+    crypto as _crypto_instance,
+    _get_family_key_for_user
 )
+
+# Importazioni da altri moduli per evitare NameError
+from db.gestione_famiglie import ottieni_prima_famiglia_utente
 
 
 def crea_contatto(id_utente: str, nome: str, cognome: str, societa: str, iban: str, email: str, telefono: str, tipo_condivisione: str, contatti_condivisi_ids: list = None, id_famiglia: str = None, master_key_b64: str = None, colore: str = '#424242') -> bool:

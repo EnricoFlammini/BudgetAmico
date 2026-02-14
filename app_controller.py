@@ -1045,7 +1045,7 @@ class AppController:
     def update_all_views(self, is_initial_load=False, target_tab=None):
         if self.dashboard_view:
             self.dashboard_view.update_all_tabs_data(is_initial_load)
-            if target_tab:
+            if target_tab and hasattr(self.dashboard_view, 'navigate_to_tab'):
                 self.dashboard_view.navigate_to_tab(target_tab)
         
         if not is_initial_load:

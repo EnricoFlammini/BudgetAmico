@@ -967,24 +967,28 @@ class ContoDialog(ft.AlertDialog):
             if self.controller.page: self.controller.page.update()
 
     def _aggiorna_preview_personalizzazione(self):
-        # Preview Icona
-        self.icon_preview.content = AppStyles.get_logo_control(
-            tipo=self.dd_conto_tipo.value or "Conto",
-            config_speciale=None,
-            size=30,
-            icona=self.selected_icon_value,
-            colore=self.selected_color_value
-        )
-        # Preview Colore
-        self.color_preview.bgcolor = self.selected_color_value if self.selected_color_value else ft.Colors.BLUE_GREY_700
-        
-        # Forza aggiornamento preview (Solo se montato su una pagina)
-        if self.icon_preview.page:
-            self.icon_preview.update()
-        if self.color_preview.page:
-            self.color_preview.update()
-        if self.container_personalizzazione.page:
-            self.container_personalizzazione.update()
+        try:
+            # Preview Icona
+            self.icon_preview.content = AppStyles.get_logo_control(
+                tipo=self.dd_conto_tipo.value or "Conto",
+                config_speciale=None,
+                size=30,
+                icona=self.selected_icon_value,
+                colore=self.selected_color_value
+            )
+            # Preview Colore
+            self.color_preview.bgcolor = self.selected_color_value if self.selected_color_value else ft.Colors.BLUE_GREY_700
+            
+            # Forza aggiornamento preview (Solo se montato su una pagina)
+            if self.icon_preview.page:
+                self.icon_preview.update()
+            if self.color_preview.page:
+                self.color_preview.update()
+            if self.container_personalizzazione.page:
+                self.container_personalizzazione.update()
+        except Exception as ex:
+            import logging
+            logging.getLogger("ContoDialog").error(f"Errore aggiornamento preview personalizzazione: {ex}")
 
     def _apri_selettore_icona(self, e):
         """Apre un selettore di icone categorizzato (Standard, Conti, Carte, Comuni)."""
@@ -1073,6 +1077,8 @@ class ContoDialog(ft.AlertDialog):
         # Per le icone flet passiamo solo il nome (es. "ACCOUNT_BALANCE")
         self.selected_icon_value = icon_name
         self._picker_dlg.open = False
+        if self._picker_dlg in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self._picker_dlg)
         self.open = True
         self.controller.page.update()
         self._aggiorna_preview_personalizzazione()
@@ -1081,12 +1087,16 @@ class ContoDialog(ft.AlertDialog):
         # Per le icone asset passiamo il percorso relativo (es. "conti/mio.png")
         self.selected_icon_value = icon_path
         self._picker_dlg.open = False
+        if self._picker_dlg in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self._picker_dlg)
         self.open = True
         self.controller.page.update()
         self._aggiorna_preview_personalizzazione()
 
     def _chiudi_picker_e_torna(self):
         self._picker_dlg.open = False
+        if self._picker_dlg in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self._picker_dlg)
         self.open = True
         self.controller.page.update()
 
@@ -1115,8 +1125,10 @@ class ContoDialog(ft.AlertDialog):
             ],
             modal=True
         )
+        # Close main dialog before opening picker to avoid double overlay complexity
         self.open = False
         self.controller.page.update()
+        
         if self._picker_dlg not in self.controller.page.overlay:
             self.controller.page.overlay.append(self._picker_dlg)
         self._picker_dlg.open = True
@@ -1125,6 +1137,8 @@ class ContoDialog(ft.AlertDialog):
     def _seleziona_colore(self, color):
         self.selected_color_value = color
         self._picker_dlg.open = False
+        if self._picker_dlg in self.controller.page.overlay:
+            self.controller.page.overlay.remove(self._picker_dlg)
         self.open = True
         self.controller.page.update()
         self._aggiorna_preview_personalizzazione()

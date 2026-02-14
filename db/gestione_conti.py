@@ -13,6 +13,7 @@ logger = setup_logger(__name__)
 import json
 import base64
 from dateutil.relativedelta import relativedelta
+from utils.cache_manager import cache_manager
 
 from db.crypto_helpers import (
     _encrypt_if_key, _decrypt_if_key, 
@@ -22,6 +23,11 @@ from db.crypto_helpers import (
     SERVER_SECRET_KEY,
     crypto as _crypto_instance
 )
+
+# Importazioni da altri moduli per evitare NameError
+from db.gestione_famiglie import ottieni_prima_famiglia_utente, _get_family_key_for_user
+from db.gestione_transazioni import aggiungi_transazione
+from db.crypto_helpers import valida_iban_semplice
 
 
 # --- Funzioni Conti ---

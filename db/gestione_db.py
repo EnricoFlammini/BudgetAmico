@@ -31,21 +31,26 @@ MIGRAZIONE PROGRESSIVA:
     from db.gestione_db import ottieni_budget_famiglia
 """
 
-# Re-export completo dal monolite per compatibilità al 100%.
-# I moduli tematici sono la versione organizzata dello stesso codice,
-# pronti per la migrazione progressiva.
+# Re-export completo dal monolite per compatibilità legacy (verrà rimosso gradualmente).
 from db._gestione_db_monolith import *  # noqa: F401, F403
 
-# OVERRIDE: Usa le versioni fixate/refactored dei moduli tematici
-# Fix per BackgroundService Key Loading (Lazy Load)
-from db.crypto_helpers import (
-    get_server_family_key,
-    decrypt_system_data,
-    encrypt_system_data,
-    enable_server_automation,
-    disable_server_automation,
-    is_server_automation_enabled,
-    compute_blind_index
-)
-
-from db.gestione_famiglie import get_family_summary
+# OVERRIDE MASSIVO: Usa le versioni rifattorizzate (v0.51) dei moduli tematici.
+# L'ordine garantisce che le funzioni nei nuovi moduli sovrascrivano quelle nel monolito.
+from db.crypto_helpers import *
+from db.gestione_admin import *
+from db.gestione_config import *
+from db.gestione_budget import *
+from db.gestione_utenti import *
+from db.gestione_famiglie import *
+from db.gestione_categorie import *
+from db.gestione_conti import *
+from db.gestione_inviti import *
+from db.gestione_transazioni import *
+from db.gestione_patrimonio import *
+from db.gestione_investimenti import *
+from db.gestione_giroconti import *
+from db.gestione_export import *
+from db.gestione_spese_fisse import *
+from db.gestione_carte import *
+from db.gestione_obiettivi import *
+from db.gestione_contatti import *

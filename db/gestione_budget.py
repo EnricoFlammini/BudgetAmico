@@ -13,6 +13,7 @@ logger = setup_logger(__name__)
 from dateutil.relativedelta import relativedelta
 from dateutil.parser import parse as parse_date
 import json
+import base64
 
 from db.crypto_helpers import (
     _encrypt_if_key, _decrypt_if_key, 
@@ -22,6 +23,9 @@ from db.crypto_helpers import (
     SERVER_SECRET_KEY,
     crypto as _crypto_instance
 )
+
+# Importazioni da altri moduli per evitare NameError
+from db.gestione_config import get_configurazione, set_configurazione
 
 
 def get_impostazioni_budget_famiglia(id_famiglia: str, anno: int = None, mese: int = None) -> Dict[str, Union[float, str]]:

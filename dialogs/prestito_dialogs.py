@@ -68,6 +68,13 @@ class PrestitoDialogs:
 
         # Progress bar per operazioni lunghe
         self.progress_bar = ft.ProgressBar(width=400, color="blue", bgcolor="#eeeeee", visible=False)
+        self.txt_loading_msg = ft.Text(
+            "L'operazione potrebbe impiegare parecchi secondi prima di terminare...",
+            color=ft.Colors.BLUE_700,
+            italic=True,
+            size=12,
+            visible=False
+        )
 
 
         self.dialog_prestito = ft.AlertDialog(
@@ -75,7 +82,8 @@ class PrestitoDialogs:
             title=ft.Text(),
             content=ft.Column(
                 [
-                    self.progress_bar, # Spostata in alto per visibilità
+                    self.progress_bar, 
+                    self.txt_loading_msg,
                     self.txt_nome, self.dd_tipo, self.txt_descrizione,
                     self.btn_piano_ammortamento, # Spostato in alto come richiesto
                     self.txt_data_inizio,
@@ -387,8 +395,8 @@ class PrestitoDialogs:
         try:
             # Blocca UI
             self.progress_bar.visible = True
-            self.dialog_prestito.actions[0].disabled = True
-            self.dialog_prestito.actions[1].disabled = True
+            self.txt_loading_msg.visible = True
+            self._set_inputs_disabled(True)
             self.controller.page.update()
             if not self._valida_campi_prestito():
                 self.controller.hide_loading()
@@ -508,7 +516,7 @@ class PrestitoDialogs:
 
                 self.controller.show_snack_bar("Prestito salvato con successo!", success=True)
                 self.dialog_prestito.open = False
-                self.controller.db_write_operation()
+                self.controller.db_write_operation(target_tab='prestiti')
             else:
                 self.controller.show_snack_bar("Errore durante il salvataggio del prestito (DB returned False).", success=False)
 
@@ -520,8 +528,8 @@ class PrestitoDialogs:
             self.controller.hide_loading()
             # Sblocca UI
             self.progress_bar.visible = False
-            self.dialog_prestito.actions[0].disabled = False
-            self.dialog_prestito.actions[1].disabled = False
+            self.txt_loading_msg.visible = False
+            self._set_inputs_disabled(False)
             self.controller.page.update()
 
     def _valida_campi_prestito(self):
@@ -747,8 +755,6 @@ class PrestitoDialogs:
 
     def _aggiorna_dati_da_piano(self):
         """Aggiorna i campi del prestito in base al piano di ammortamento temporaneo."""
-    def _aggiorna_dati_da_piano(self):
-        """Aggiorna i campi del prestito in base al piano di ammortamento temporaneo."""
         try:
             if self.temp_piano_ammortamento:
                 num_rate = len(self.temp_piano_ammortamento)
@@ -842,5 +848,32 @@ class PrestitoDialogs:
         if self.txt_data_inizio.suffix:
             self.txt_data_inizio.suffix.disabled = locked
             self.txt_data_inizio.suffix.icon_color = ft.Colors.GREY if locked else None
+            
+        self.dialog_prestito.update()
+
+    def _set_inputs_disabled(self, disabled: bool):
+        """Disabilita/Abilita tutti gli input del dialogo durante il salvataggio."""
+        self.txt_nome.disabled = disabled
+        self.dd_tipo.disabled = disabled
+        self.txt_descrizione.disabled = disabled
+        self.txt_data_inizio.disabled = disabled
+        self.txt_numero_rate.disabled = disabled
+        self.txt_rate_residue.disabled = disabled
+        self.txt_importo_finanziato.disabled = disabled
+        self.txt_importo_interessi.disabled = disabled
+        self.txt_importo_rata.disabled = disabled
+        self.dd_giorno_scadenza.disabled = disabled
+        self.dd_conto_default.disabled = disabled
+        self.dd_sottocategoria_default.disabled = disabled
+        self.cb_addebito_automatico.disabled = disabled
+        self.btn_piano_ammortamento.disabled = disabled
+        
+        # Disabilita anche le quote
+        for input_field in self.quote_inputs.values():
+            input_field.disabled = disabled
+            
+        # Pulsanti azioni
+        for action in self.dialog_prestito.actions:
+            action.disabled = disabled
             
         self.dialog_prestito.update()

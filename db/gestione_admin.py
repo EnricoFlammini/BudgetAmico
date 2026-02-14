@@ -20,9 +20,15 @@ from db.crypto_helpers import (
     _get_crypto_and_key, _valida_id_int,
     compute_blind_index, encrypt_system_data, decrypt_system_data,
     generate_unique_code,
+    hash_password, verify_password_hash,
+    valida_iban_semplice,
     SERVER_SECRET_KEY,
     crypto as _crypto_instance
 )
+
+# Importazioni da altri moduli
+from db.gestione_config import get_configurazione, save_system_config
+from db.gestione_utenti import verifica_login, imposta_password_temporanea
 
 def ottieni_versione_db():
     """Legge la versione dello schema dalla tabella InfoDB del database."""
@@ -603,61 +609,8 @@ def reset_user_password(user_id: int) -> Tuple[bool, str]:
     except Exception as e:
         logger.error(f"Errore reset_user_password: {e}")
         return False, f"Errore generico: {e}"
-def hash_password(password, algo='pbkdf2'):
-    """
-    Genera l'hash della password.
-    Algo supportati: 'sha256' (legacy), 'pbkdf2' (secure).
-    Format PBKDF2: pbkdf2:sha256:iterations:salt_b64:hash_b64
-    """
-    if algo == 'sha256':
-        return hashlib.sha256(password.encode()).hexdigest()
-    
-    # Defaults to PBKDF2
-    salt = os.urandom(16)
-    iterations = 600000
-    hash_bytes = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, iterations)
-    
-    salt_b64 = base64.urlsafe_b64encode(salt).decode()
-    hash_b64 = base64.urlsafe_b64encode(hash_bytes).decode()
-    
-    return f"pbkdf2:sha256:{iterations}:{salt_b64}:{hash_b64}"
-
-def verify_password_hash(password, stored_hash, algo='sha256'):
-    """
-    Verifica una password contro un hash memorizzato.
-    """
-    if algo == 'sha256':
-        return stored_hash == hashlib.sha256(password.encode()).hexdigest()
-    
-    if algo == 'pbkdf2':
-        try:
-            # Parse: pbkdf2:sha256:iter:salt:hash
-            parts = stored_hash.split(':')
-            if len(parts) != 5:
-                # Fallback or error
-                return False
-            
-            _, _, iterations_str, salt_b64, hash_b64 = parts
-            iterations = int(iterations_str)
-            salt = base64.urlsafe_b64decode(salt_b64)
-            stored_bytes = base64.urlsafe_b64decode(hash_b64)
-            
-            computed = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, iterations)
-            
-            # Constant time check
-            return secrets.compare_digest(stored_bytes, computed)
-        except Exception as e:
-            logger.error(f"Error verifying PBKDF2 hash: {e}")
-            return False
-            
-    return False
 
 
-def valida_iban_semplice(iban):
-    if not iban:
-        return True
-    iban_pulito = iban.strip().upper()
-    return iban_pulito.startswith("IT") and len(iban_pulito) == 27 and iban_pulito[2:].isalnum()
 
 def get_database_statistics() -> Dict[str, Any]:
     """

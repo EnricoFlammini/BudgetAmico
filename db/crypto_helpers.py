@@ -92,13 +92,73 @@ def get_hash_salt():
     _ensure_system_keys_loaded()
     return _HASH_SALT
 
-# HASH_SALT, SYSTEM_FERNET_KEY = _get_system_keys() # RIMOSSO
+def _get_system_keys():
+    """Ritorna (hash_salt, system_fernet_key) per compatibilità legacy."""
+    _ensure_system_keys_loaded()
+    return _HASH_SALT, _SYSTEM_FERNET_KEY
+
+def hash_password(password, algo='pbkdf2'):
+    """
+    Genera l'hash della password.
+    Algo supportati: 'sha256' (legacy), 'pbkdf2' (secure).
+    Format PBKDF2: pbkdf2:sha256:iterations:salt_b64:hash_b64
+    """
+    if algo == 'sha256':
+        return hashlib.sha256(password.encode()).hexdigest()
+    
+    # Defaults to PBKDF2
+    salt = os.urandom(16)
+    iterations = 600000
+    hash_bytes = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, iterations)
+    
+    salt_b64 = base64.urlsafe_b64encode(salt).decode()
+    hash_b64 = base64.urlsafe_b64encode(hash_bytes).decode()
+    
+    return f"pbkdf2:sha256:{iterations}:{salt_b64}:{hash_b64}"
+
+def verify_password_hash(password, stored_hash, algo='sha256'):
+    """
+    Verifica una password contro un hash memorizzato.
+    """
+    if not stored_hash: return False
+    
+    if algo == 'sha256':
+        return stored_hash == hashlib.sha256(password.encode()).hexdigest()
+    
+    if algo == 'pbkdf2':
+        try:
+            # Parse: pbkdf2:sha256:iter:salt:hash
+            parts = stored_hash.split(':')
+            if len(parts) != 5:
+                # Fallback or error
+                return False
+            
+            _, _, iterations_str, salt_b64, hash_b64 = parts
+            iterations = int(iterations_str)
+            salt = base64.urlsafe_b64decode(salt_b64)
+            stored_bytes = base64.urlsafe_b64decode(hash_b64)
+            
+            computed = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, iterations)
+            
+            # Constant time check
+            import secrets
+            return secrets.compare_digest(stored_bytes, computed)
+        except Exception:
+            return False
+            
+    return False
 
 def compute_blind_index(value):
     salt = get_hash_salt()
     if not value or not salt: return None
     import hashlib
     return hashlib.sha256((value.lower().strip() + salt).encode()).hexdigest()
+
+def valida_iban_semplice(iban):
+    if not iban:
+        return True
+    iban_pulito = iban.strip().upper()
+    return iban_pulito.startswith("IT") and len(iban_pulito) == 27 and iban_pulito[2:].isalnum()
 
 def encrypt_system_data(value):
     key = get_system_fernet_key()

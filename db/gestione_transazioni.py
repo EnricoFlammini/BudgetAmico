@@ -14,15 +14,20 @@ import json
 import base64
 from dateutil.relativedelta import relativedelta
 from dateutil.parser import parse as parse_date
-
 from db.crypto_helpers import (
     _encrypt_if_key, _decrypt_if_key, 
     _get_crypto_and_key, _valida_id_int,
     compute_blind_index, encrypt_system_data, decrypt_system_data,
     generate_unique_code,
     SERVER_SECRET_KEY,
-    crypto as _crypto_instance
+    crypto as _crypto_instance,
+    _get_family_key_for_user
 )
+
+# Importazioni da altri moduli per evitare NameError
+from db.gestione_budget import trigger_budget_history_update
+from db.crypto_helpers import _get_famiglia_and_utente_from_conto
+from db.gestione_famiglie import ottieni_prima_famiglia_utente
 
 
 # --- Funzioni Transazioni Personali ---
