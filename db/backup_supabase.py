@@ -8,6 +8,9 @@ import decimal
 # Add parent directory to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from dotenv import load_dotenv
+load_dotenv()
+
 try:
     from db.supabase_manager import get_db_connection
 except ImportError:
