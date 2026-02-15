@@ -6,15 +6,18 @@ import os
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+os.environ["SUPABASE_DB_URL"] = "postgresql://user:pass@host:5432/db"
+os.environ["SERVER_SECRET_KEY"] = "test_secret_key_32_chars_long_long"
+
 from db import gestione_db
 
 class TestDecryptionFix(unittest.TestCase):
     
-    @patch('db.gestione_db.get_db_connection')
-    @patch('db.gestione_db._get_crypto_and_key')
-    @patch('db.gestione_db._get_key_for_transaction')
-    @patch('db.gestione_db._decrypt_if_key')
-    def test_ottieni_portafoglio_fallback_bug(self, mock_decrypt, mock_get_key_trans, mock_get_crypto, mock_get_conn):
+    @patch('db.gestione_investimenti.get_db_connection')
+    @patch('db.gestione_investimenti._get_crypto_and_key')
+    @patch('db.gestione_investimenti._get_key_for_transaction')
+    @patch('db.gestione_investimenti._decrypt_if_key')
+    def test_ottieni_portafoglio_fallback_bug(self, mock_decrypt, mock_get_key_trans, mock_get_crypto, mock_get_db):
         """
         Reproduces the bug where failure to decrypt with the first key (Family Key)
         overwrites the data with '[ENCRYPTED]', preventing fallback to Master Key.
@@ -22,7 +25,7 @@ class TestDecryptionFix(unittest.TestCase):
         # 1. Setup Mock DB Connection
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
-        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        mock_get_db.return_value.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value = mock_cursor
         
         # 2. Setup Mock Data (One asset encrypted with Master Key)

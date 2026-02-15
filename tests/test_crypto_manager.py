@@ -57,7 +57,7 @@ class TestCryptoManager(unittest.TestCase):
         
         enc_data = self.crypto.encrypt_data(data, master_key)
         self.assertNotEqual(data, enc_data)
-        self.assertTrue(enc_data.startswith("gAAAAA")) # Standard Fernet prefix
+        self.assertTrue(enc_data.startswith("v2:")) # Standard AES-GCM prefix
         
         dec_data = self.crypto.decrypt_data(enc_data, master_key)
         self.assertEqual(data, dec_data)

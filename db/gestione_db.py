@@ -54,3 +54,12 @@ from db.gestione_spese_fisse import *
 from db.gestione_carte import *
 from db.gestione_obiettivi import *
 from db.gestione_contatti import *
+
+# Esportazioni esplicite per i test (compatibilità legacy dei mock)
+from db.crypto_helpers import (
+    _decrypt_if_key,
+    _encrypt_if_key,
+    _get_crypto_and_key,
+    _get_family_key_for_user,
+    _get_key_for_transaction
+)

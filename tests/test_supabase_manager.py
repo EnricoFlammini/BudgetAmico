@@ -8,13 +8,13 @@ import os
 # Add parent directory to path to allow imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from db.supabase_manager import SupabaseManager, CustomConnectionPool
+from db.supabase_manager import SupabaseManager
 
 class TestSupabaseManager(unittest.TestCase):
     def setUp(self):
         # Reset singleton state
-        SupabaseManager._connection_pool = None
-        SupabaseManager._current_user_id = None
+        SupabaseManager._pool_queue = queue.Queue(maxsize=10)
+        SupabaseManager._initialized = False
         
         # Mock env vars
         self.env_patcher = patch.dict(os.environ, {"SUPABASE_DB_URL": "postgresql://user:pass@host:5432/db"})
@@ -24,15 +24,14 @@ class TestSupabaseManager(unittest.TestCase):
         self.env_patcher.stop()
 
     @patch('pg8000.dbapi.connect')
-    def test_initialize_pool(self, mock_connect):
-        SupabaseManager.initialize_pool()
-        self.assertIsNotNone(SupabaseManager._pool_queue)
+    def test_initialize_params(self, mock_connect):
+        # SupabaseManager non ha più initialize_pool() ma _initialize() che è lazy
+        SupabaseManager._initialize()
+        self.assertTrue(SupabaseManager._initialized)
+        self.assertEqual(SupabaseManager._conn_params['host'], 'host')
         
     @patch('pg8000.dbapi.connect')
     def test_get_connection_creates_new_if_empty(self, mock_connect):
-        # Initializing pool
-        SupabaseManager.initialize_pool()
-        
         # Mock connection
         mock_conn = MagicMock()
         mock_connect.return_value = mock_conn
@@ -45,7 +44,6 @@ class TestSupabaseManager(unittest.TestCase):
         
     @patch('pg8000.dbapi.connect')
     def test_release_connection(self, mock_connect):
-        SupabaseManager.initialize_pool()
         mock_conn = MagicMock()
         mock_connect.return_value = mock_conn
         
@@ -58,7 +56,6 @@ class TestSupabaseManager(unittest.TestCase):
     @patch('pg8000.dbapi.connect')
     def test_context_manager(self, mock_connect):
         from db.supabase_manager import get_db_connection
-        SupabaseManager.initialize_pool()
         
         mock_conn = MagicMock()
         mock_connect.return_value = mock_conn

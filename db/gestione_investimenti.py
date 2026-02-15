@@ -150,7 +150,6 @@ def ottieni_portafoglio(id_conto_investimento, master_key_b64=None):
     
     try:
         with get_db_connection() as con:
-            # con.row_factory = sqlite3.Row # Removed for Supabase
             cur = con.cursor()
             cur.execute("""
                         SELECT id_asset,
@@ -168,8 +167,31 @@ def ottieni_portafoglio(id_conto_investimento, master_key_b64=None):
                         """, (id_conto_investimento,))
             results = [dict(row) for row in cur.fetchall()]
             
-            # Plaintext results
-            return results
+            # Decrypt ticker and name
+            family_key = None
+            if master_key:
+                family_key = _get_key_for_transaction(id_conto_investimento, master_key, crypto)
+
+            # Per semplicità e robustezza (fallback logic):
+            for row in results:
+                for field in ['ticker', 'nome_asset']:
+                    val = row[field]
+                    if not val or not isinstance(val, str): continue
+                    
+                    if not CryptoManager.is_encrypted(val):
+                        continue
+
+                    # 1. Prova con Family Key (se diversa da Master)
+                    decrypted = "[ENCRYPTED]"
+                    if family_key and family_key != master_key:
+                        decrypted = _decrypt_if_key(val, family_key, crypto, silent=True)
+                    
+                    # 2. Fallback su Master Key se fallito o non tentato
+                    if decrypted == "[ENCRYPTED]" and master_key:
+                        decrypted = _decrypt_if_key(val, master_key, crypto, silent=True)
+                    
+                    if decrypted != "[ENCRYPTED]":
+                        row[field] = decrypted
             
             return results
     except Exception as e:
