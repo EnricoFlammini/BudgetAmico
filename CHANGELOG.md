@@ -6,6 +6,12 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
  
+### v0.53.01 (15/02/2026)
+- **Fix Critici**:
+    - **Auto-history**: Risolto errore `NameError: name '_get_family_key_for_user' is not defined` in `gestione_budget.py` che impediva l'aggiornamento dello storico budget.
+    - **Integrità Codice**: Rimossa definizione duplicata di `trigger_budget_history_update` e consolidata la logica di sincronizzazione storico (limiti e spese).
+- **Esperienza Utente (Navigazione)**:
+    - **Standardizzazione Navigazione**: Implementato il reindirizzamento automatico alla tab corretta dopo il salvataggio per: **Immobili** (tab Immobili), **Investimenti** (tab Investimenti), **Conti** (tab Conti, incluso Rettifica Saldo e Fondo Pensione) e **Spese Fisse** (tab Spese Fisse).
 ### v0.53.00 (14/02/2026)
 - **Nuove Funzionalità**:
     - **Tutorial di Onboarding**: Introdotta una guida interattiva per i nuovi utenti che aiuta nella configurazione iniziale (Conto, Carta).

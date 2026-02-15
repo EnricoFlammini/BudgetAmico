@@ -545,7 +545,7 @@ class PortafoglioDialogs:
                 self.controller.show_snack_bar(self.loc.get("fill_all_fields"), success=False)
                 return
 
-            self.controller.db_write_operation()
+            self.controller.db_write_operation(target_tab='investimenti')
             self._aggiorna_tabella_portafoglio()
             self._chiudi_dialog_operazione(e)
             self.controller.show_snack_bar("Operazione completata con successo", success=True)
@@ -571,7 +571,7 @@ class PortafoglioDialogs:
         try:
             nuovo_prezzo = float(self.txt_nuovo_prezzo.value.replace(",", "."))
             aggiorna_prezzo_manuale_asset(self.asset_da_aggiornare['id_asset'], nuovo_prezzo)
-            self.controller.db_write_operation()
+            self.controller.db_write_operation(target_tab='investimenti')
             self._aggiorna_tabella_portafoglio()
             self._chiudi_dialog_aggiorna_prezzo(e)
         except (ValueError, TypeError):
@@ -621,7 +621,7 @@ class PortafoglioDialogs:
                 nuovo_costo_medio=nuovo_costo_medio,
                 master_key_b64=master_key_b64
             )
-            self.controller.db_write_operation()
+            self.controller.db_write_operation(target_tab='investimenti')
             self._aggiorna_tabella_portafoglio()
             self._chiudi_dialog_modifica_asset(e)
 
@@ -630,7 +630,7 @@ class PortafoglioDialogs:
         def on_confirm_delete(e_confirm):
             dlg_confirm.open = False
             if elimina_asset(asset['id_asset']):
-                self.controller.db_write_operation()
+                self.controller.db_write_operation(target_tab='investimenti')
                 self._aggiorna_tabella_portafoglio()
                 self.controller.show_snack_bar(self.loc.get("asset_deleted_successfully"), success=True)
             else:
@@ -732,7 +732,7 @@ class PortafoglioDialogs:
                     id_utente=self.controller.get_user_id()
                 )
 
-                self.controller.db_write_operation()
+                self.controller.db_write_operation(target_tab='investimenti')
                 self._aggiorna_tabella_portafoglio()
                 self.controller.show_snack_bar("Asset aggiunto con successo", success=True)
             finally:

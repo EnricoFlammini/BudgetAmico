@@ -21,7 +21,8 @@ from db.crypto_helpers import (
     compute_blind_index, encrypt_system_data, decrypt_system_data,
     generate_unique_code, _get_system_keys,
     SERVER_SECRET_KEY,
-    crypto as _crypto_instance
+    crypto as _crypto_instance,
+    _get_family_key_for_user
 )
 
 # Importazioni da altri moduli per evitare NameError
@@ -890,34 +891,70 @@ def _get_famiglia_and_utente_from_conto(id_conto):
         print(f"[ERRORE] _get_famiglia_and_utente_from_conto: {e}")
         return None, None
 
-def trigger_budget_history_update(id_famiglia, date_obj, master_key_b64, id_utente):
-    """Updates budget history for a specific month only if family and user are identified."""
-    if not id_famiglia or not id_utente or not date_obj:
-        return
-    try:
-        # Check if it looks like a date/datetime object
-        if hasattr(date_obj, 'year') and hasattr(date_obj, 'month'):
-            pass # It is already a valid date-like object
-        else:
-            # Assume it's a string or convertible to string
-            date_str = str(date_obj)
-            try:
-                # Try standard format first
-                parsed_date = datetime.datetime.strptime(date_str, '%Y-%m-%d')
-            except ValueError:
-                try:
-                    # Fallback to dateutil
-                    parsed_date = parse_date(date_str)
-                except Exception:
-                    # Last resort: try today if parsing fails completely (shouldn't happen but prevents crash)
-                    print(f"[WARN] Failed to parse date: '{date_str}', using today.")
-                    parsed_date = datetime.date.today()
-            date_obj = parsed_date
+def trigger_budget_history_update(id_famiglia, data_riferimento, master_key_b64=None, id_utente=None, cursor=None, forced_family_key_b64=None):
+    """
+    Sincronizza lo storico budget per il mese indicato.
+    Se non viene passato un cursore, calcola anche le spese reali del mese.
+    Se viene passato un cursore (transazione atomica), si limita a sincronizzare i limiti.
+    """
+    if not id_famiglia or not data_riferimento:
+        return False
         
-        # Now safely access .year and .month
-        salva_budget_mese_corrente(id_famiglia, date_obj.year, date_obj.month, master_key_b64, id_utente)
+    try:
+        # Normalizzazione data
+        if not hasattr(data_riferimento, 'year'):
+            data_riferimento = parse_date(str(data_riferimento))
+        
+        anno = data_riferimento.year
+        mese = data_riferimento.month
+        
+        if cursor:
+            # Sincronizzazione veloce dei limiti (senza ricalcolare spese)
+            return _sync_budget_limits_only(id_famiglia, anno, mese, master_key_b64, id_utente, cursor, forced_family_key_b64)
+        else:
+            # Sincronizzazione completa (limiti + spese reali)
+            return salva_budget_mese_corrente(id_famiglia, anno, mese, master_key_b64, id_utente)
+            
     except Exception as e:
-        print(f"[WARN] Failed to auto-update budget history. Data type: {type(date_obj)}. Error: {e}")
+        print(f"[WARN] trigger_budget_history_update failed: {e}")
+        return False
+
+def _sync_budget_limits_only(id_famiglia, anno, mese, master_key_b64=None, id_utente=None, cursor=None, forced_family_key_b64=None):
+    """Helper interno per aggiornare solo i limiti nello storico senza ricalcolare le spese."""
+    try:
+        crypto, master_key = _get_crypto_and_key(master_key_b64)
+        family_key = None
+        if forced_family_key_b64:
+            family_key = base64.b64decode(forced_family_key_b64)
+        elif master_key and id_utente:
+            family_key = _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto)
+        
+        if not family_key:
+            return False
+
+        # Fetch budget correnti
+        cursor.execute("""
+            SELECT B.id_sottocategoria, B.importo_limite, S.nome_sottocategoria 
+            FROM Budget B
+            JOIN Sottocategorie S ON B.id_sottocategoria = S.id_sottocategoria
+            WHERE B.id_famiglia = %s AND B.periodo = 'Mensile'
+        """, (id_famiglia,))
+        rows = cursor.fetchall()
+        
+        zero_enc = _encrypt_if_key("0.0", family_key, crypto)
+        
+        for row in rows:
+            nome_enc = _encrypt_if_key(row['nome_sottocategoria'], family_key, crypto)
+            cursor.execute("""
+                INSERT INTO Budget_Storico (id_famiglia, id_sottocategoria, anno, mese, importo_limite, nome_sottocategoria, importo_speso)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id_famiglia, id_sottocategoria, anno, mese)
+                DO UPDATE SET importo_limite = EXCLUDED.importo_limite
+            """, (id_famiglia, row['id_sottocategoria'], anno, mese, row['importo_limite'], nome_enc, zero_enc))
+        return True
+    except Exception as e:
+        print(f"[ERROR] _sync_budget_limits_only: {e}")
+        return False
 
 
 
@@ -1200,4 +1237,3 @@ def trigger_budget_history_update(id_famiglia, data_riferimento, master_key_b64=
     except Exception as e:
         print(f"[ERRORE] Errore trigger_budget_history_update: {e}")
         return False
-

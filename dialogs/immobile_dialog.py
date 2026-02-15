@@ -235,11 +235,8 @@ class ImmobileDialog(ft.AlertDialog):
 
             if success:
                 self.controller.show_snack_bar("Immobile salvato con successo!", success=True)
-                # Prima chiudo il dialog
-                self.open = False
-                self.controller.page.update()
-                # Poi eseguo l'operazione di aggiornamento
-                self.controller.db_write_operation()
+                self.controller.db_write_operation(target_tab='immobili')
+                self.close()
             else:
                 self.controller.show_snack_bar("Errore durante il salvataggio dell'immobile.", success=False)
 

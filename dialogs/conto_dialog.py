@@ -1301,10 +1301,11 @@ class ContoDialog(ft.AlertDialog):
             # -------------------------------
 
             if success:
-                self.controller.show_snack_bar("Saldo rettificato con successo!", success=True)
-                self.controller.db_write_operation()
+                self.controller.show_snack_bar("Saldo rettificato!", success=True)
+                self.controller.db_write_operation(target_tab='conti')
+                self.close()
             else:
-                self.controller.show_snack_bar("Errore durante la rettifica del saldo.", success=False)
+                self.controller.show_snack_bar("Errore nel salvataggio.", success=False)
             
             self.controller.hide_loading()
         except (ValueError, TypeError):

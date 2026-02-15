@@ -412,7 +412,7 @@ class SpesaFissaDialog(ft.AlertDialog):
             if success:
                 self.controller.show_snack_bar("Spesa fissa salvata!", success=True)
                 self._chiudi_dopo_salvataggio()
-                self.controller.update_all_views()
+                self.controller.db_write_operation(target_tab='spese_fisse')
             else:
                 self.controller.show_snack_bar("Errore nel salvataggio.", success=False)
 

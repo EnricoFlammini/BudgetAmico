@@ -97,11 +97,11 @@ class FondoPensioneDialog(ft.AlertDialog):
             nuovo_valore = float(self.txt_valore_attuale.value.replace(",", "."))
             success = aggiorna_valore_fondo_pensione(self.conto_selezionato['id_conto'], nuovo_valore)
             if success:
-                self.controller.show_snack_bar(self.loc.get("pension_fund_value_updated"), success=True)
-                self.controller.update_all_views()
-                self.chiudi_dialog()
+                self.controller.show_snack_bar("Operazione registrata!", success=True)
+                self.controller.db_write_operation(target_tab='conti')
+                self.close()
             else:
-                self.controller.show_snack_bar(self.loc.get("error_updating_value"), success=False)
+                self.controller.show_snack_bar("Errore nel salvataggio.", success=False)
         except (ValueError, TypeError):
             self.txt_valore_attuale.error_text = self.loc.get("invalid_amount")
             if self.controller.page: self.controller.page.update()
