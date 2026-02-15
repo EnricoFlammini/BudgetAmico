@@ -854,9 +854,9 @@ class TransactionDialog(ft.AlertDialog):
         else:
             # Elimina la vecchia transazione
             if is_originale_condivisa:
-                elimina_transazione_condivisa(transazione_originale['id_transazione_condivisa'])
+                elimina_transazione_condivisa(transazione_originale['id_transazione_condivisa'], master_key_b64=master_key_b64)
             else:
-                elimina_transazione(transazione_originale['id_transazione'])
+                elimina_transazione(transazione_originale['id_transazione'], master_key_b64=master_key_b64)
             
             # Crea la nuova transazione
             return self._esegui_aggiunta(dati_nuovi)

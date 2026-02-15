@@ -435,11 +435,12 @@ class PersonaleTab(ft.Container):
         id_transazione = transazione_data.get('id_transazione')
         id_transazione_condivisa = transazione_data.get('id_transazione_condivisa')
 
+        master_key_b64 = self.controller.page.session.get("master_key")
         success = False
         if id_transazione and id_transazione > 0:
-            success = elimina_transazione(id_transazione)
+            success = elimina_transazione(id_transazione, master_key_b64=master_key_b64)
         elif id_transazione_condivisa and id_transazione_condivisa > 0:
-            success = elimina_transazione_condivisa(id_transazione_condivisa)
+            success = elimina_transazione_condivisa(id_transazione_condivisa, master_key_b64=master_key_b64)
 
         messaggio = "eliminata" if success else "errore nell'eliminazione"
 

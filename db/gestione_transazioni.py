@@ -162,7 +162,7 @@ def modifica_transazione(id_transazione, data, descrizione, importo, id_sottocat
         return False
 
 
-def elimina_transazione(id_transazione):
+def elimina_transazione(id_transazione, master_key_b64=None):
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -178,26 +178,9 @@ def elimina_transazione(id_transazione):
                 if success:
                     try:
                         idf, idu = _get_famiglia_and_utente_from_conto(row['id_conto'])
-                        trigger_budget_history_update(idf, row['data'], None, idu) # MasterKey not avail in delete usually?
-                        # Note: elimina_transazione signature doesn't have master_key_b64.
-                        # However, salva_budget requires keys to decrypt/encrypt limits?
-                        # Yes. If we don't have keys, we might fail or work in restricted mode.
-                        # But typically delete happens from UI which has session.
-                        # Wait, elimina_transazione signature: def elimina_transazione(id_transazione):
-                        # It has NO master_key passed.
-                        # This is a problem. But wait, salva_budget uses keys to ENCRYPT entries.
-                        # If we trigger it without keys, it might fail or produce bad data.
-                        # Hack: We can't easily auto-update on delete without keys.
-                        # But wait, does app_controller pass keys?
-                        # No.
-                        # We will skip auto-update on delete for now or update signature?
-                        # Updating signature is risky (break calls).
-                        # Let's verify existing calls.
-                        # For now, skip auto-update on delete OR assume we prioritize Add/Edit.
-                        # Or better, just print a warning.
-                        pass 
-                    except Exception:
-                        pass
+                        trigger_budget_history_update(idf, row['data'], master_key_b64, idu)
+                    except Exception as e:
+                        print(f"[WARN] Auto-history failed in delete: {e}")
 
             return success
     except Exception as e:
@@ -928,12 +911,31 @@ def modifica_transazione_condivisa(id_transazione_condivisa, data, descrizione, 
 
 
 
-def elimina_transazione_condivisa(id_transazione_condivisa):
+def elimina_transazione_condivisa(id_transazione_condivisa, master_key_b64=None):
     try:
         with get_db_connection() as con:
             cur = con.cursor()
+            # Fetch data for history update before delete
+            cur.execute("SELECT id_conto_condiviso, data FROM TransazioniCondivise WHERE id_transazione_condivisa = %s", (id_transazione_condivisa,))
+            row = cur.fetchone()
+            
+            if not row: return False
+            
+            # Get family ID from shared account
+            cur.execute("SELECT id_famiglia FROM ContiCondivisi WHERE id_conto_condiviso = %s", (row['id_conto_condiviso'],))
+            row_fam = cur.fetchone()
+            idf = row_fam['id_famiglia'] if row_fam else None
+            
             cur.execute("DELETE FROM TransazioniCondivise WHERE id_transazione_condivisa = %s", (id_transazione_condivisa,))
-            return cur.rowcount > 0
+            success = cur.rowcount > 0
+            
+            if success and idf:
+                try:
+                    trigger_budget_history_update(idf, row['data'], master_key_b64, None)
+                except Exception as e:
+                    print(f"[WARN] Auto-history failed in delete shared: {e}")
+                    
+            return success
     except Exception as e:
         print(f"[ERRORE] Errore generico durante l'eliminazione transazione condivisa: {e}")
         return False

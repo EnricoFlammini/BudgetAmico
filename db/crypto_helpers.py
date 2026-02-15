@@ -378,8 +378,8 @@ crypto = CryptoManager()
 # per evitare import circolari.
 
 # Cache per le chiavi famiglia per evitare continue query al DB
-# {(id_famiglia, id_utente): family_key_bytes}
 _family_key_cache = {}
+_FAMILY_KEY_CACHE_LOCK = threading.Lock()
 
 
 def _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto_instance=None):
@@ -393,8 +393,9 @@ def _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto_instance
 
     # Check cache first
     cache_key = (id_famiglia, id_utente)
-    if cache_key in _family_key_cache:
-        return _family_key_cache[cache_key]
+    with _FAMILY_KEY_CACHE_LOCK:
+        if cache_key in _family_key_cache:
+            return _family_key_cache[cache_key]
 
     if not crypto_instance:
         crypto_instance = CryptoManager()
@@ -409,7 +410,8 @@ def _get_family_key_for_user(id_famiglia, id_utente, master_key, crypto_instance
                 family_key = base64.b64decode(fk_b64)
                 
                 # Update cache
-                _family_key_cache[cache_key] = family_key
+                with _FAMILY_KEY_CACHE_LOCK:
+                    _family_key_cache[cache_key] = family_key
                 return family_key
             else:
                 logger.warning(f"_get_family_key_for_user: No chiave_famiglia_criptata for user {id_utente} in famiglia {id_famiglia}")
