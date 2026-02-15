@@ -12,6 +12,7 @@ from dialogs.prestito_dialogs import PrestitoDialogs
 from dialogs.portafoglio_dialogs import PortafoglioDialogs
 from dialogs.card_dialog import CardDialog
 from dialogs.admin_dialogs import AdminDialogs
+from dialogs.onboarding_dialog import OnboardingDialog
 from views.auth_view import AuthView
 from views.privacy_view import PrivacyView
 from views.export_view import ExportView
@@ -49,6 +50,7 @@ class WebAppController(AppController):
         self.prestito_dialogs = PrestitoDialogs(self)
         self.portafoglio_dialogs = PortafoglioDialogs(self)
         self.admin_dialogs = AdminDialogs(self)
+        self.onboarding_dialog = OnboardingDialog(self)
         
         # Init Views
         self.auth_view = AuthView(self)
@@ -100,6 +102,7 @@ class WebAppController(AppController):
             self.portafoglio_dialogs.dialog_modifica_asset,
             self.file_picker,
             self.file_picker_salva_excel,
+            self.onboarding_dialog,
             # self.loading_overlay is dynamic
         ])
 
@@ -122,3 +125,6 @@ class WebAppController(AppController):
         # Load data
         self.update_all_views(is_initial_load=True)
         self.page.update()
+        
+        # Prova Onboarding
+        self._check_onboarding()

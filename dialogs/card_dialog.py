@@ -8,9 +8,10 @@ import os
 from utils.styles import AppStyles
 
 class CardDialog:
-    def __init__(self, page, callback, card=None):
+    def __init__(self, page, callback, card=None, on_close=None):
         self.page = page
         self.callback = callback
+        self.on_close = on_close
         self.card = card  # If provided, internal edit mode
         self.is_edit = card is not None
         
@@ -212,6 +213,9 @@ class CardDialog:
         print("[DEBUG] Closing CardDialog")
         self.dlg.open = False
         self.page.update()
+        if self.on_close:
+            self.on_close()
+            self.on_close = None
 
     def _save(self, e):
         # Validation
@@ -306,6 +310,7 @@ class CardDialog:
         if success:
             self.callback()
             self._close(None)
+            # _close deals with calling on_close
         else:
             print("[ERRORE] Error saving card") 
             # Non chiudere il dialogo in caso di errore

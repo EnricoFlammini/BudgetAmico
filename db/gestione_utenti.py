@@ -20,7 +20,7 @@ from db.crypto_helpers import (
     _encrypt_if_key, _decrypt_if_key, 
     _get_crypto_and_key, _valida_id_int,
     compute_blind_index, encrypt_system_data, decrypt_system_data,
-    generate_unique_code, verify_password_hash,
+    generate_unique_code, verify_password_hash, hash_password,
     SERVER_SECRET_KEY,
     crypto as _crypto_instance
 )
@@ -532,78 +532,6 @@ def registra_utente(nome: str, cognome: str, username: str, password: str, email
         print(f"[ERRORE] Errore durante la registrazione: {e}")
         return None
 
-def cambia_password(id_utente: str, vecchia_password_hash: str, nuova_password_hash: str) -> bool:
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            cur.execute("UPDATE Utenti SET password_hash = %s WHERE id_utente = %s AND password_hash = %s",
-                        (nuova_password_hash, id_utente, vecchia_password_hash))
-            return cur.rowcount > 0
-    except Exception as e:
-        print(f"[ERRORE] Errore cambio password: {e}")
-        return False
-
-def imposta_password_temporanea(id_utente: str, temp_password_raw: str) -> bool:
-    """
-    Imposta una password temporanea e ripristina la Master Key usando il backup del server.
-    N.B. Richiede temp_password_raw (stringa in chiaro), non l'hash!
-    """
-    try:
-        if not SERVER_SECRET_KEY:
-            print("[ERRORE] SERVER_SECRET_KEY mancante. Impossibile ripristinare password criptata correttamente.")
-            return False
-
-        with get_db_connection() as con:
-            cur = con.cursor()
-            
-            # Fetch backup key and salt
-            cur.execute("SELECT encrypted_master_key_backup, salt FROM Utenti WHERE id_utente = %s", (id_utente,))
-            res = cur.fetchone()
-            
-            if not res or not res['encrypted_master_key_backup']:
-                print("[ERRORE] Backup key non trovata per questo utente.")
-                return False
-                
-            enc_backup_b64 = res['encrypted_master_key_backup']
-            salt_b64 = res['salt']
-
-            # Decrypt Master Key using Server Key
-            import hashlib
-            srv_key_bytes = hashlib.sha256(SERVER_SECRET_KEY.encode()).digest()
-            srv_fernet_key = base64.urlsafe_b64encode(srv_key_bytes)
-            
-            crypto = CryptoManager()
-            try:
-                enc_backup = base64.urlsafe_b64decode(enc_backup_b64.encode())
-                master_key = crypto.decrypt_master_key(enc_backup, srv_fernet_key)
-            except Exception as e_dec:
-                print(f"[ERRORE] Fallita decriptazione backup key: {e_dec}")
-                return False
-
-            # Re-encrypt Master Key with new temp password
-            salt = base64.urlsafe_b64decode(salt_b64.encode())
-            kek = crypto.derive_key(temp_password_raw, salt)
-            encrypted_mk = crypto.encrypt_master_key(master_key, kek)
-            encrypted_mk_b64 = base64.urlsafe_b64encode(encrypted_mk).decode()
-            
-            # Hash new password
-            temp_password_hash = hash_password(temp_password_raw)
-
-            cur.execute("""
-                UPDATE Utenti 
-                SET password_hash = %s, 
-                    password_algo = 'pbkdf2',
-                    encrypted_master_key = %s,
-                    forza_cambio_password = TRUE 
-                WHERE id_utente = %s
-            """, (temp_password_hash, encrypted_mk_b64, id_utente))
-            
-            con.commit()
-            return True
-            
-    except Exception as e:
-        print(f"[ERRORE] Errore impostazione password temporanea con recovery: {e}")
-        return False
 
 def trova_utente_per_email(email: str) -> Optional[Dict[str, str]]:
     try:

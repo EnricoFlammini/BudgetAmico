@@ -6,7 +6,12 @@ Tutte le modifiche notevoli a questo progetto saranno documentate in questo file
 
 ## 📅 Changelog
  
-### v0.53.01 (15/02/2026)
+### v0.53.02 (15/02/2026)
+- **Onboarding Web**:
+    - **Integrazione Web**: Spostata e attivata la logica di onboarding in `WebAppController` per la versione browser.
+    - **Fix Crash**: Risolto `TypeError` (TextButton color) e `TypeError` (parametri mancanti in `ottieni_tutti_i_conti_famiglia`).
+    - **Gestione Dialoghi**: Implementato sistema di **Callback on_close** per coordinare l'onboarding con i dialoghi di creazione (Conto/Carta), evitando chiusure síncrone errate.
+    - **Persistenza**: Introdotto **Key Prefixing** (`user:{id}:...`) per le configurazioni individuali nel database.
 - **Fix Critici**:
     - **Auto-history**: Risolto errore `NameError: name '_get_family_key_for_user' is not defined` in `gestione_budget.py` che impediva l'aggiornamento dello storico budget.
     - **Integrità Codice**: Rimossa definizione duplicata di `trigger_budget_history_update` e consolidata la logica di sincronizzazione storico (limiti e spese).

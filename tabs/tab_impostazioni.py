@@ -3,7 +3,8 @@ import datetime
 from utils.styles import AppColors, AppStyles, PageConstants
 from db.gestione_db import (
     imposta_conto_default_utente, aggiorna_profilo_utente, cambia_password, hash_password,
-    ottieni_tutti_i_conti_utente, ottieni_conto_default_utente, ottieni_dettagli_utente, ottieni_carte_utente
+    ottieni_tutti_i_conti_utente, ottieni_conto_default_utente, ottieni_dettagli_utente, ottieni_carte_utente,
+    get_user_onboarding_preference, set_user_onboarding_preference
 )
 from utils.async_task import AsyncTask
 from utils.logger import setup_logger
@@ -28,12 +29,26 @@ class ImpostazioniTab(ft.Container):
             horizontal_alignment=ft.CrossAxisAlignment.START,
         )
 
+        # Inizializza switch per stabilità (evita NameError se build_controls ritarda)
+        self.sw_show_onboarding = ft.Switch(
+            label="Mostra Onboarding all'accesso",
+            value=True,
+            on_change=self._onboarding_toggle_changed
+        )
+
     def _lingua_cambiata(self, e):
         """Callback per il cambio lingua."""
         lang_code = e.control.value
         self.controller.loc.set_language(lang_code)
         self.controller.page.client_storage.set("settings.language", lang_code)
         self.controller.update_all_views(is_initial_load=True)
+
+    def _onboarding_toggle_changed(self, e):
+        """Salva la preferenza dell'onboarding al cambio dello switch."""
+        id_utente = self.controller.get_user_id()
+        if id_utente:
+            set_user_onboarding_preference(id_utente, self.sw_show_onboarding.value)
+            logger.info(f"User {id_utente} changed onboarding preference to {self.sw_show_onboarding.value}")
 
     def _valuta_cambiata(self, e):
         """Callback per il cambio valuta."""
@@ -139,6 +154,9 @@ class ImpostazioniTab(ft.Container):
             border_color=ft.Colors.OUTLINE
         )
 
+        self.sw_show_onboarding.label = "Mostra Onboarding all'accesso"
+        self.sw_show_onboarding.on_change = self._onboarding_toggle_changed
+
         self.dd_conto_default = ft.Dropdown(label=loc.get("account"), border_color=ft.Colors.OUTLINE)
         
         self.btn_salva_conto_default = ft.ElevatedButton(
@@ -229,6 +247,8 @@ class ImpostazioniTab(ft.Container):
                 ft.Column([self.dd_lingua], col={"xs": 12, "sm": 6}),
                 ft.Column([self.dd_valuta], col={"xs": 12, "sm": 6}),
             ]),
+            
+            ft.Row([self.sw_show_onboarding], alignment=ft.MainAxisAlignment.START),
 
             ft.Divider(height=30, color=ft.Colors.TRANSPARENT),
 
@@ -406,6 +426,7 @@ class ImpostazioniTab(ft.Container):
         master_key_b64 = self.controller.page.session.get("master_key")
 
         # Avvia Task
+        logger.info(f"Fetching data for ImpostazioniTab (user: {utente_id})")
         task = AsyncTask(
             target=self._fetch_data,
             args=(utente_id, master_key_b64),
@@ -429,6 +450,9 @@ class ImpostazioniTab(ft.Container):
             
             # 4. Dati Profilo
             data['dati_utente'] = ottieni_dettagli_utente(utente_id, master_key_b64)
+            
+            # 5. Preferenza Onboarding
+            data['onboarding_pref'] = get_user_onboarding_preference(utente_id)
         return data
 
     def _on_data_loaded(self, result):
@@ -479,6 +503,11 @@ class ImpostazioniTab(ft.Container):
                 self.txt_data_nascita.value = dati_utente.get("data_nascita", "")
                 self.txt_codice_fiscale.value = dati_utente.get("codice_fiscale", "")
                 self.txt_indirizzo.value = dati_utente.get("indirizzo", "")
+
+            # Preferenza Onboarding
+            pref = result.get('onboarding_pref', True)
+            self.sw_show_onboarding.value = pref
+            logger.info(f"ImpostazioniTab loaded. Onboarding preference: {pref}")
 
             if self.controller.page:
                 self.controller.page.update()

@@ -42,6 +42,7 @@ class ContoDialog(ft.AlertDialog):
         self.conto_id_in_modifica = None
         self.is_condiviso_in_modifica = False
         self.is_shared_mode = False # Toggle state
+        self.on_close_callback = None
 
         # Dialogo Rettifica Saldo (Admin)
         self.txt_nuovo_saldo = ft.TextField(keyboard_type=ft.KeyboardType.NUMBER, label="Nuovo Saldo Reale")
@@ -572,8 +573,12 @@ class ContoDialog(ft.AlertDialog):
         print("[DEBUG] _chiudi_dialog_conto called")
         self.open = False
         self.controller.page.update()
+        if self.on_close_callback:
+            self.on_close_callback()
+            self.on_close_callback = None # Consuma callback
 
-    def apri_dialog_conto(self, e, conto_data=None, escludi_investimento=False, is_shared_edit=False, shared_default=False):
+    def apri_dialog_conto(self, e, conto_data=None, escludi_investimento=False, is_shared_edit=False, shared_default=False, on_close_callback=None):
+        self.on_close_callback = on_close_callback
         self.open = False  # Reset state for fresh setup
         self._update_texts()
         
@@ -947,7 +952,14 @@ class ContoDialog(ft.AlertDialog):
                 self.controller.page.update()
                 if self in self.controller.page.overlay:
                     self.controller.page.overlay.remove(self)
-                self.controller.update_all_views(target_tab="conti")  # Aggiorna tutte le viste e sincronizza
+                
+                # Sincronizza vista
+                self.controller.update_all_views(target_tab="conti")
+                
+                # Callback Onboarding
+                if self.on_close_callback:
+                    self.on_close_callback()
+                    self.on_close_callback = None
             else:
                 if not self.conto_id_in_modifica and not new_conto_id:
                     self.txt_conto_iban.error_text = self.loc.get("iban_in_use_or_invalid")

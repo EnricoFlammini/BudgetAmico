@@ -367,24 +367,37 @@ class AppController:
 
     def _check_onboarding(self):
         """Controlla se mostrare il tutorial di onboarding."""
-        family_id = self.get_family_id()
-        if not family_id:
+        user_id = self.get_user_id()
+        if not user_id:
+            logger.debug("Onboarding check skipped: no user_id found.")
             return
-
-        from db.gestione_config import is_onboarding_completed
-        if not is_onboarding_completed(family_id):
+            
+        from db.gestione_config import get_user_onboarding_preference
+        pref = get_user_onboarding_preference(user_id)
+        logger.info(f"Checking onboarding for user {user_id}. Preference: {pref}")
+        
+        if pref:
+            # Se l'utente vuole vedere l'onboarding, controlliamo se ha senso farlo partire.
+            # (es. se non ha conti)
+            family_id = self.get_family_id()
+            if not family_id:
+                logger.warning(f"Onboarding check: user {user_id} has no family_id.")
+                return
             # Se siamo qui, il tutorial non è marchiato come completato.
             # Vediamo se ci sono conti. Se non ce ne sono, partiamo.
             from db.gestione_conti import ottieni_tutti_i_conti_famiglia
-            conti = ottieni_tutti_i_conti_famiglia(family_id)
+            mk_b64 = self.page.session.get("master_key")
+            conti = ottieni_tutti_i_conti_famiglia(family_id, user_id, master_key_b64=mk_b64)
             if not conti:
-                logger.info(f"Triggering onboarding for family {family_id}")
+                logger.info(f"Triggering onboarding (new user/no accounts) for user {user_id} in family {family_id}")
                 self.onboarding_dialog.show()
             else:
-                # Se ci sono conti ma non è marcato, forse l'utente ha fatto da solo.
-                # Marchiamolo come completato per non disturbare.
-                from db.gestione_config import set_onboarding_completed
-                set_onboarding_completed(family_id)
+                # Se ci sono conti ma l'onboarding è attivo, forse è stato riattivato
+                # dalle impostazioni. Lo mostriamo comunque.
+                logger.info(f"Triggering manual/requested onboarding for user {user_id}")
+                self.onboarding_dialog.show()
+        else:
+            logger.debug(f"Onboarding skipped for user {user_id}: preference is False.")
 
     def _aggiorna_prezzi_asset_in_background(self):
         # ... (rest of the file)
@@ -966,22 +979,22 @@ class AppController:
         finally:
             self.hide_loading()
 
-    def open_new_account_dialog(self):
+    def open_new_account_dialog(self, on_close=None):
         """Apre il dialogo Nuovo Conto."""
         self.show_loading("Apertura dialogo...")
         try:
-            self.conto_dialog.apri_dialog_conto(None)
+            self.conto_dialog.apri_dialog_conto(None, on_close_callback=on_close)
         finally:
             self.hide_loading()
 
-    def open_new_card_dialog(self):
+    def open_new_card_dialog(self, on_close=None):
         """Apre il dialogo Nuova Carta."""
         self.show_loading("Apertura dialogo...")
         try:
             def callback():
                 self.update_all_views(target_tab="carte")
                 
-            dlg = CardDialog(self.page, callback)
+            dlg = CardDialog(self.page, callback, on_close=on_close)
             dlg.open()
         finally:
             self.hide_loading()

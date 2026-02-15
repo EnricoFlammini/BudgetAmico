@@ -19,11 +19,15 @@ class OnboardingDialog(ft.AlertDialog):
         
         self.btn_next = ft.ElevatedButton(text="Avanti", on_click=self._next_step)
         self.btn_prev = ft.TextButton(text="Indietro", on_click=self._prev_step, visible=False)
-        self.btn_skip = ft.TextButton(text="Salta Tutorial", on_click=self._skip_tutorial, color=ft.Colors.GREY_400)
+        self.btn_skip = ft.TextButton(text="Salta Tutorial", on_click=self._skip_tutorial, style=ft.ButtonStyle(color=ft.Colors.GREY_400))
+        
+        # Opzione per non mostrare più
+        self.chk_donotshow = ft.Checkbox(label="Non mostrare più al prossimo accesso", value=False, visible=False)
         
         self.content = ft.Column([
             self.image,
             self.content_text,
+            self.chk_donotshow
         ], tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
         
         self.actions = [
@@ -66,6 +70,7 @@ class OnboardingDialog(ft.AlertDialog):
             self.content_text.value = "Ora puoi iniziare ad aggiungere le tue prime transazioni dalla Home."
             self.btn_next.text = "Chiudi e Inizia"
             self.btn_skip.visible = False
+            self.chk_donotshow.visible = True
             
         self.controller.page.update()
 
@@ -78,18 +83,15 @@ class OnboardingDialog(ft.AlertDialog):
             self.open = False
             self.controller.page.update()
             self.current_step = 3
-            self.controller.open_new_account_dialog()
-            # The controller should call back or we wait?
-            # For simplicity, we'll re-open after dialog closes if we can hook it.
-            # but usually, we just go to the next step.
-            self.show_next_automatic()
+            self.controller.open_new_account_dialog(on_close=self.show_next_automatic)
+            # show_next_automatic will be called by account dialog when closed
         elif self.current_step == 3:
             # Open Card Dialog
             self.open = False
             self.controller.page.update()
             self.current_step = 4
-            self.controller.open_new_card_dialog()
-            self.show_next_automatic()
+            self.controller.open_new_card_dialog(on_close=self.show_next_automatic)
+            # show_next_automatic will be called by card dialog when closed
         elif self.current_step == 4:
             self._finish()
 
@@ -100,9 +102,6 @@ class OnboardingDialog(ft.AlertDialog):
 
     def show_next_automatic(self):
         """Called by controller to show next step after an operation."""
-        # Wait a bit for the UI to settle
-        import time
-        time.sleep(0.5)
         self.show_direct(self.current_step)
 
     def show_direct(self, step):
@@ -116,7 +115,17 @@ class OnboardingDialog(ft.AlertDialog):
 
     def _finish(self):
         self.open = False
-        from db.gestione_config import set_onboarding_completed
+        
+        # Salva stato completamento per la famiglia (legacy/compatibilità)
+        from db.gestione_config import set_onboarding_completed, set_user_onboarding_preference
         set_onboarding_completed(self.controller.get_family_id())
+        
+        # Salva preferenza utente (se ha spuntato "non mostrare più")
+        if self.chk_donotshow.value:
+            id_utente = self.controller.get_user_id()
+            if id_utente:
+                set_user_onboarding_preference(id_utente, False)
+                logger.info(f"User {id_utente} opted out of onboarding.")
+        
         self.controller.page.update()
         self.controller.show_snack_bar("Tutorial completato! Buona gestione!", success=True)

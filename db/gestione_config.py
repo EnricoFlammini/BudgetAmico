@@ -12,6 +12,8 @@ import os
 from utils.cache_manager import cache_manager
 import json
 
+logger = setup_logger(__name__)
+
 from db.crypto_helpers import (
     _encrypt_if_key, _decrypt_if_key, 
     _get_crypto_and_key, _valida_id_int,
@@ -28,32 +30,36 @@ def get_configurazione(chiave: str, id_famiglia: Optional[str] = None, master_ke
     """
     try:
         def fetch_from_db():
+            # Se id_utente è fornito, usiamo una chiave prefissata e id_famiglia NULL
+            query_chiave = f"user:{id_utente}:{chiave}" if id_utente else chiave
+            query_id_famiglia = None if id_utente else id_famiglia
+            
             with get_db_connection() as con:
                 cur = con.cursor()
-                if id_famiglia is None:
-                    cur.execute("SELECT valore FROM Configurazioni WHERE chiave = %s AND id_famiglia IS NULL", (chiave,))
+                if query_id_famiglia is None:
+                    cur.execute("SELECT valore FROM Configurazioni WHERE chiave = %s AND id_famiglia IS NULL", (query_chiave,))
                 else:
-                    cur.execute("SELECT valore FROM Configurazioni WHERE chiave = %s AND id_famiglia = %s", (chiave, id_famiglia))
+                    cur.execute("SELECT valore FROM Configurazioni WHERE chiave = %s AND id_famiglia = %s", (query_chiave, query_id_famiglia))
                 
                 res = cur.fetchone()
                 if not res:
                     return None
                 
                 valore = res['valore']
-                
+                # ... (rest of decryption logic remains same)
                 sensitive_keys = ['smtp_server', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_from_email', 'smtp_sender']
                 
-                if chiave in sensitive_keys:
+                if query_chiave in sensitive_keys:
                     try:
                         decrypted = decrypt_system_data(valore)
                         if decrypted:
                             valore = decrypted
                     except Exception as e:
-                        logger.warning(f"Failed to system-decrypt {chiave}: {e}")
+                        logger.warning(f"Failed to system-decrypt {query_chiave}: {e}")
                 return valore
 
         # Usa get_or_compute per cache in-memory (TTL 10 minuti)
-        cache_key = f"db_config:{chiave}"
+        cache_key = f"db_config:{id_utente}:{id_famiglia}:{chiave}" if id_utente else f"db_config:{id_famiglia}:{chiave}"
         return cache_manager.get_or_compute(
             key=cache_key,
             compute_fn=fetch_from_db,
@@ -79,26 +85,31 @@ def set_configurazione(chiave: str, valore: str, id_famiglia: Optional[str] = No
             except Exception as e:
                 logger.warning(f"Failed to system-encrypt {chiave}: {e}")
         
+        # Se id_utente è fornito, usiamo una chiave prefissata e id_famiglia NULL
+        query_chiave = f"user:{id_utente}:{chiave}" if id_utente else chiave
+        query_id_famiglia = None if id_utente else id_famiglia
+        
         with get_db_connection() as con:
             cur = con.cursor()
-            if id_famiglia is None:
+            if query_id_famiglia is None:
                 cur.execute("""
                     INSERT INTO Configurazioni (chiave, valore, id_famiglia) 
                     VALUES (%s, %s, NULL)
                     ON CONFLICT (chiave) WHERE id_famiglia IS NULL
                     DO UPDATE SET valore = EXCLUDED.valore
-                """, (chiave, encrypted_valore))
+                """, (query_chiave, encrypted_valore))
             else:
                 cur.execute("""
                     INSERT INTO Configurazioni (chiave, valore, id_famiglia) 
                     VALUES (%s, %s, %s)
                     ON CONFLICT (chiave, id_famiglia) 
                     DO UPDATE SET valore = EXCLUDED.valore
-                """, (chiave, encrypted_valore, id_famiglia))
+                """, (query_chiave, encrypted_valore, query_id_famiglia))
             con.commit()
             
             # Invalida cache
-            cache_manager.invalidate(f"db_config:{chiave}", id_famiglia)
+            cache_key = f"db_config:{id_utente}:{id_famiglia}:{chiave}" if id_utente else f"db_config:{id_famiglia}:{chiave}"
+            cache_manager.invalidate(cache_key, query_id_famiglia)
             return True
     except Exception as e:
         logger.error(f"Errore salvataggio configurazione {chiave}: {e}")
@@ -272,4 +283,19 @@ def is_onboarding_completed(id_famiglia: str) -> bool:
 def set_onboarding_completed(id_famiglia: str) -> bool:
     """Segna il tutorial di onboarding come completato per la famiglia."""
     return set_configurazione('onboarding_completed', 'true', id_famiglia=id_famiglia)
+
+def get_user_onboarding_preference(id_utente: str) -> bool:
+    """
+    Verifica se l'utente vuole vedere l'onboarding all'accesso.
+    Default: True (se non specificato).
+    """
+    val = get_configurazione('show_onboarding', id_utente=id_utente)
+    if val is None:
+        return True # Default per nuovi utenti o se non impostato
+    return val == 'true'
+
+def set_user_onboarding_preference(id_utente: str, show: bool) -> bool:
+    """Salva la preferenza dell'utente per la visualizzazione dell'onboarding."""
+    val_str = 'true' if show else 'false'
+    return set_configurazione('show_onboarding', val_str, id_utente=id_utente)
 

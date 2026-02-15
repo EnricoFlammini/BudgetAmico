@@ -32,8 +32,6 @@ def verifica_admin_sistema(username: str, password: str) -> bool:
     
     return username == admin_username and password == admin_password
 
-    return username == admin_username and password == admin_password
-
 
 # Whitelist delle tabelle da mostrare nelle statistiche
 PROGRAM_TABLES = [
